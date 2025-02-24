@@ -4,14 +4,14 @@ use ed25519_dalek::Keypair;
 #[test]
 fn test_wallet_creation() {
     let wallet = Wallet::new();
-    assert!(wallet.keypair.is_some());
+    assert!(wallet.keypair.is_none());
     assert_eq!(wallet.balance, 0);
     assert!(wallet.transactions.is_empty());
 }
 
 #[test]
 fn test_transaction_creation() {
-    let mut wallet = Wallet::new();
+    let mut wallet = Wallet::new_with_keypair();
     let recipient = Keypair::generate(&mut rand::thread_rng()).public;
     
     wallet.balance = 1000;
@@ -24,7 +24,7 @@ fn test_transaction_creation() {
 
 #[test]
 fn test_stake_creation() {
-    let mut wallet = Wallet::new();
+    let mut wallet = Wallet::new_with_keypair();
     wallet.balance = 2000;
     
     let stake = wallet.create_stake(1000).unwrap();

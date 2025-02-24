@@ -1,4 +1,5 @@
 use super::*;
+use crate::tests::common::create_test_transaction;
 use std::time::Duration;
 
 #[test]
@@ -7,7 +8,7 @@ fn test_stem_phase() {
     let tx = create_test_transaction();
     
     // Test stem phase routing
-    let next_node = node.get_stem_successor();
+    let _next_node = node.get_stem_successor();
     node.route_transaction_stem(&tx);
     
     assert_eq!(node.stem_transactions.len(), 1);

@@ -1,5 +1,17 @@
 use super::*;
-use ed25519_dalek::{Keypair, Signer};
+use ed25519_dalek::{Keypair, PublicKey, Signer, Verifier};
+
+pub fn validate_signature(input: &TransactionInput, message: &[u8], public_key: &PublicKey) -> bool {
+    if input.signature_script.len() != 64 {
+        return false;
+    }
+    let mut signature_bytes = [0u8; 64];
+    signature_bytes.copy_from_slice(&input.signature_script);
+    match ed25519_dalek::Signature::from_bytes(&signature_bytes) {
+        Ok(signature) => public_key.verify(message, &signature).is_ok(),
+        Err(_) => false
+    }
+}
 
 #[test]
 fn test_transaction_creation() {

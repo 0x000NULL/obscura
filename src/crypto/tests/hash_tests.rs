@@ -1,11 +1,19 @@
 use super::*;
+use crate::blockchain::{Transaction, calculate_merkle_root};
 
 #[test]
 fn test_merkle_tree_creation() {
-    let transactions = vec![
-        hash_transaction(&create_test_transaction()),
-        hash_transaction(&create_test_transaction()),
-    ];
+    let tx1 = Transaction {
+        inputs: vec![],
+        outputs: vec![],
+        lock_time: 0,
+    };
+    let tx2 = Transaction {
+        inputs: vec![],
+        outputs: vec![],
+        lock_time: 0,
+    };
+    let transactions = vec![tx1, tx2];
     
     let merkle_root = calculate_merkle_root(&transactions);
     assert_ne!(merkle_root, [0u8; 32]);

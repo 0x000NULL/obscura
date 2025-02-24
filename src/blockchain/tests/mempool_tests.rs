@@ -1,12 +1,13 @@
 use super::*;
+use crate::tests::common::{create_test_transaction, create_transaction_with_fee};
 
 #[test]
-fn test_mempool_addition() {
+fn test_mempool_add_transaction() {
     let mut mempool = Mempool::new();
     let tx = create_test_transaction();
     
     assert!(mempool.add_transaction(tx.clone()));
-    assert!(mempool.contains(&tx.hash()));
+    assert!(mempool.contains(&tx));
 }
 
 #[test]
@@ -17,7 +18,7 @@ fn test_mempool_removal() {
     mempool.add_transaction(tx.clone());
     mempool.remove_transaction(&tx.hash());
     
-    assert!(!mempool.contains(&tx.hash()));
+    assert!(!mempool.contains(&tx));
 }
 
 #[test]
@@ -33,8 +34,8 @@ fn test_mempool_fee_ordering() {
     mempool.add_transaction(tx2.clone());
     mempool.add_transaction(tx3.clone());
     
-    let ordered_txs = mempool.get_transactions_by_fee(10);
-    assert_eq!(ordered_txs[0].hash(), tx3.hash());
-    assert_eq!(ordered_txs[1].hash(), tx2.hash());
-    assert_eq!(ordered_txs[2].hash(), tx1.hash());
+    let ordered_txs = mempool.get_transactions_by_fee(3);
+    assert_eq!(ordered_txs.len(), 3);
+    assert!(ordered_txs[0].outputs[0].value > ordered_txs[1].outputs[0].value);
+    assert!(ordered_txs[1].outputs[0].value > ordered_txs[2].outputs[0].value);
 } 

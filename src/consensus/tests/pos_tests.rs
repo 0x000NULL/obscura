@@ -1,5 +1,6 @@
 use super::*;
 use ed25519_dalek::{Keypair, Signer};
+use crate::consensus::pos::{validate_stake, calculate_stake_reward};
 
 #[test]
 fn test_stake_validation() {

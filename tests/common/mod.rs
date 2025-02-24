@@ -1,23 +1,12 @@
-use obscura::blockchain::{Block, Transaction};
+use obscura::blockchain::{Block, BlockHeader, Transaction};
 use obscura::consensus::StakeProof;
+use obscura::networking::Node;
 use ed25519_dalek::Keypair;
 use std::time::{SystemTime, UNIX_EPOCH};
+use rand::thread_rng;
 
 pub fn create_test_block(nonce: u64) -> Block {
-    Block {
-        header: BlockHeader {
-            version: 1,
-            previous_hash: [0u8; 32],
-            merkle_root: [0u8; 32],
-            timestamp: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-            difficulty_target: 0x207fffff,
-            nonce,
-        },
-        transactions: Vec::new(),
-    }
+    Block::new([0u8; 32])
 }
 
 pub fn create_test_stake_proof() -> StakeProof {
@@ -52,5 +41,38 @@ impl TestNetwork {
     
     pub fn nodes(&self) -> &[Node] {
         &self.nodes
+    }
+
+    pub fn broadcast_transaction(&self, tx: &Transaction) {
+        for node in &self.nodes {
+            // In a real implementation, this would use networking
+            // For tests, we can directly add to mempool
+            let mempool = node.mempool();
+            if !mempool.contains(&tx) {
+                node.add_transaction(tx.clone());
+            }
+        }
+    }
+
+    pub fn broadcast_block(&self, block: &Block) {
+        for node in &self.nodes {
+            // In a real implementation, this would use networking
+            // For tests, we directly add the block
+            node.process_block(block.clone());
+        }
+    }
+}
+
+pub fn create_test_transaction() -> Transaction {
+    let keypair = Keypair::generate(&mut thread_rng());
+    let output = TransactionOutput {
+        value: 50,
+        public_key_script: keypair.public.as_bytes().to_vec(),
+    };
+    
+    Transaction {
+        inputs: vec![],
+        outputs: vec![output],
+        lock_time: 0,
     }
 } 

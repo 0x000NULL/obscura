@@ -1,10 +1,12 @@
 use super::*;
+use crate::tests::common::{create_test_block, create_test_transaction};
 
 #[test]
 fn test_block_header_validation() {
     let prev_block = create_test_block(0);
     let mut block = create_test_block(1);
     block.header.previous_hash = prev_block.hash();
+    block.header.timestamp = prev_block.header.timestamp + 1;  // Ensure valid timestamp
     
     assert!(validate_block_header(&block.header, &prev_block.header));
     

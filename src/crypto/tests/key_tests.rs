@@ -1,5 +1,5 @@
 use super::*;
-use ed25519_dalek::{Keypair, Signer, Verifier};
+use ed25519_dalek::{Signer, Verifier};
 
 #[test]
 fn test_key_generation() {
@@ -7,7 +7,7 @@ fn test_key_generation() {
     assert!(keypair.is_some());
     
     let message = b"test message";
-    let signature = keypair.unwrap().sign(message);
+    let signature = keypair.as_ref().unwrap().sign(message);
     assert!(keypair.unwrap().public.verify(message, &signature).is_ok());
 }
 

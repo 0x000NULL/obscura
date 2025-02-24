@@ -1,15 +1,17 @@
 use super::*;
+use crate::tests::common::create_test_transaction;
 
 #[test]
-fn test_utxo_addition() {
+fn test_utxo_add_and_spend() {
     let mut utxo_set = UTXOSet::new();
     let tx = create_test_transaction();
+    
     let outpoint = OutPoint {
         transaction_hash: tx.hash(),
         index: 0,
     };
     
-    utxo_set.add_utxo(outpoint, tx.outputs[0].clone());
+    utxo_set.add_utxo(outpoint.clone(), tx.outputs[0].clone());
     assert!(utxo_set.contains(&outpoint));
 }
 
@@ -22,7 +24,7 @@ fn test_utxo_spending() {
         index: 0,
     };
     
-    utxo_set.add_utxo(outpoint, tx.outputs[0].clone());
+    utxo_set.add_utxo(outpoint.clone(), tx.outputs[0].clone());
     utxo_set.spend_utxo(&outpoint);
     
     assert!(!utxo_set.contains(&outpoint));

@@ -54,16 +54,22 @@ impl ProofOfStake {
 }
 
 impl super::ConsensusEngine for ProofOfStake {
-    fn validate_block(&self, block: &Block) -> bool {
-        // TODO: Implement full PoS validation
-        // This will include:
-        // 1. Verify stake amount
-        // 2. Verify stake age
-        // 3. Verify stake signature
+    fn validate_block(&self, _block: &Block) -> bool {
+        // TODO: Implement full validation
         true
     }
 
     fn calculate_next_difficulty(&self) -> u32 {
         self.current_difficulty
     }
+}
+
+pub fn validate_stake(proof: &StakeProof) -> bool {
+    let pos = ProofOfStake::new();
+    pos.validate_stake(proof.stake_amount, proof.stake_age)
+}
+
+pub fn calculate_stake_reward(stake_amount: u64, stake_time: u64) -> u64 {
+    let pos = ProofOfStake::new();
+    pos.calculate_stake_reward(stake_amount, stake_time)
 } 
