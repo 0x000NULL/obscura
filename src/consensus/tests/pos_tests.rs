@@ -1,21 +1,16 @@
 use super::*;
-use ed25519_dalek::{Keypair, Signer};
-use crate::consensus::pos::{validate_stake, calculate_stake_reward};
+use crate::consensus::pos::{calculate_stake_reward, ProofOfStake};
 
 #[test]
 fn test_stake_validation() {
-    let keypair = Keypair::generate(&mut rand::thread_rng());
-    let stake_amount = 1000;
-    let stake_age = 24 * 60 * 60; // 24 hours in seconds
-    
-    let stake_proof = StakeProof {
-        public_key: keypair.public,
-        signature: keypair.sign(b"test_message"),
-        stake_amount,
-        stake_age,
+    let pos = ProofOfStake::new();
+    let proof = StakeProof {
+        stake_amount: 2000,
+        stake_age: 24 * 60 * 60,
+        signature: vec![0u8; 64],
     };
     
-    assert!(validate_stake(&stake_proof));
+    assert!(pos.validate_stake_proof(&proof, b"test_data"));
 }
 
 #[test]

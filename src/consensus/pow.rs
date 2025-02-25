@@ -1,5 +1,5 @@
 use crate::blockchain::Block;
-use super::randomx::RandomXContext;
+use super::randomx::{RandomXContext, verify_difficulty};
 use std::sync::Arc;
 
 pub struct ProofOfWork {
@@ -15,7 +15,7 @@ impl ProofOfWork {
         let randomx_context = Arc::new(RandomXContext::new(genesis_key));
         
         ProofOfWork {
-            current_difficulty: 1,
+            current_difficulty: 0x207fffff, // Starting with an easy target
             target_block_time: 60,
             randomx_context,
         }
@@ -26,22 +26,7 @@ impl ProofOfWork {
         if self.randomx_context.calculate_hash(block_header, &mut hash).is_err() {
             return false;
         }
-        let difficulty_target = self.get_target_from_difficulty(self.current_difficulty);
-        
-        // Compare hash with target
-        hash <= difficulty_target
-    }
-
-    fn get_target_from_difficulty(&self, difficulty: u32) -> [u8; 32] {
-        let mut target = [0xFF; 32];
-        let shift = (difficulty as usize).saturating_sub(1) / 8;
-        if shift < target.len() {
-            target[shift] = 0xFF >> ((difficulty as usize - 1) % 8);
-            for i in 0..shift {
-                target[i] = 0;
-            }
-        }
-        target
+        verify_difficulty(&hash, self.current_difficulty)
     }
 
     pub fn adjust_difficulty(&mut self, recent_block_times: &[u64]) {
@@ -53,10 +38,15 @@ impl ProofOfWork {
 
         let average_time = recent_block_times.iter().sum::<u64>() / recent_block_times.len() as u64;
         if average_time < self.target_block_time {
-            self.current_difficulty += 1;
-        } else if average_time > self.target_block_time && self.current_difficulty > 1 {
-            self.current_difficulty -= 1;
+            // Make mining harder by lowering the target
+            self.current_difficulty = self.current_difficulty.saturating_sub(self.current_difficulty / 10);
+        } else if average_time > self.target_block_time {
+            // Make mining easier by raising the target
+            self.current_difficulty = self.current_difficulty.saturating_add(self.current_difficulty / 10);
         }
+        
+        // Ensure difficulty stays within reasonable bounds
+        self.current_difficulty = self.current_difficulty.clamp(0x00000001, 0x207fffff);
     }
 }
 

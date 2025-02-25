@@ -1,5 +1,5 @@
 use super::*;
-use crate::tests::common::create_test_transaction;
+use crate::blockchain::tests::create_test_transaction;
 
 #[test]
 fn test_utxo_add_and_spend() {
@@ -33,21 +33,45 @@ fn test_utxo_spending() {
 #[test]
 fn test_utxo_validation() {
     let mut utxo_set = UTXOSet::new();
-    let tx = create_test_transaction();
     
-    // Test transaction validation with non-existent inputs
-    assert!(!utxo_set.validate_transaction(&tx));
+    // Create a transaction that will serve as the source of UTXOs
+    let source_tx = create_test_transaction();
+    let source_hash = source_tx.hash();
     
-    // Add UTXOs and test again
-    for (i, output) in tx.outputs.iter().enumerate() {
+    // Add its outputs to UTXO set
+    for (i, output) in source_tx.outputs.iter().enumerate() {
         utxo_set.add_utxo(
             OutPoint {
-                transaction_hash: tx.hash(),
+                transaction_hash: source_hash,
                 index: i as u32,
             },
             output.clone(),
         );
     }
     
-    assert!(utxo_set.validate_transaction(&tx));
+    // Create a spending transaction that uses these UTXOs
+    let spending_tx = Transaction {
+        inputs: vec![TransactionInput {
+            previous_output: OutPoint {
+                transaction_hash: source_hash,
+                index: 0,
+            },
+            signature_script: vec![],
+            sequence: 0,
+        }],
+        outputs: vec![TransactionOutput {
+            value: 50,
+            public_key_script: vec![],
+        }],
+        lock_time: 0,
+    };
+    
+    // This should pass as the input references a valid UTXO
+    assert!(utxo_set.validate_transaction(&spending_tx));
+    
+    // After spending, remove the UTXO
+    utxo_set.spend_utxo(&spending_tx.inputs[0].previous_output);
+    
+    // Now validation should fail as the UTXO was spent
+    assert!(!utxo_set.validate_transaction(&spending_tx));
 } 

@@ -26,12 +26,40 @@ impl HybridConsensus {
 pub use self::pos::StakeProof;
 
 pub fn validate_block_hybrid(block: &crate::blockchain::Block, randomx: &Arc<randomx::RandomXContext>, stake_proof: &StakeProof) -> bool {
-    // Implement hybrid validation
-    // 70% PoW / 30% PoS weight distribution
-    let pow_valid = validate_pow(block, randomx);
-    let pos_valid = validate_pos(block, stake_proof);
+    // Validate PoW component
+    let header_bytes = block.serialize_header();
+    let mut hash = [0u8; 32];
     
-    pow_valid && pos_valid
+    println!("Validating block with nonce: {}", block.header.nonce);
+    println!("Target difficulty: {:#x}", block.header.difficulty_target);
+    
+    if let Err(e) = randomx.calculate_hash(&header_bytes, &mut hash) {
+        println!("RandomX hash calculation failed: {:?}", e);
+        return false;
+    }
+
+    // Check if hash meets difficulty target
+    let hash_value = u32::from_be_bytes([hash[0], hash[1], hash[2], hash[3]]);
+    println!("Calculated hash value: {:#x}", hash_value);
+    
+    if hash_value > block.header.difficulty_target {
+        println!("Hash value too high: {:#x} > {:#x}", hash_value, block.header.difficulty_target);
+        return false;
+    }
+
+    // Validate PoS component
+    println!("Validating PoS - stake amount: {}, stake age: {}", stake_proof.stake_amount, stake_proof.stake_age);
+    if stake_proof.stake_amount < 100_000 {
+        println!("Stake amount too low: {} < 100,000", stake_proof.stake_amount);
+        return false;
+    }
+    if stake_proof.stake_age < 12 * 60 * 60 {
+        println!("Stake age too low: {} < {}", stake_proof.stake_age, 12 * 60 * 60);
+        return false;
+    }
+
+    println!("Block validation successful!");
+    true
 }
 
 fn validate_pow(block: &crate::blockchain::Block, randomx: &Arc<randomx::RandomXContext>) -> bool {

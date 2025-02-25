@@ -1,5 +1,5 @@
 use super::*;
-use crate::tests::common::{create_test_block, create_test_transaction};
+use crate::blockchain::tests::{create_test_block, create_test_transaction};
 
 #[test]
 fn test_block_header_validation() {

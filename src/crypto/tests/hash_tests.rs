@@ -21,14 +21,23 @@ fn test_merkle_tree_creation() {
 
 #[test]
 fn test_hash_to_difficulty() {
-    let hash = [0u8; 32];
-    let difficulty = calculate_hash_difficulty(&hash);
-    assert!(difficulty > 0);
+    let best_hash = [0u8; 32];
+    let worst_hash = [0xFF; 32];
+    
+    let best_difficulty = calculate_hash_difficulty(&best_hash);
+    let worst_difficulty = calculate_hash_difficulty(&worst_hash);
+    
+    assert_eq!(best_difficulty, 0);
+    assert_eq!(worst_difficulty, 0xFFFFFFFF);
 }
 
 #[test]
 fn test_difficulty_validation() {
-    let hash = [0xFF; 32];
-    assert!(validate_hash_difficulty(&hash, 0x207fffff));
-    assert!(!validate_hash_difficulty(&hash, 0x00000001));
+    let easy_hash = [0x20, 0x7F, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+    let hard_hash = [0xFF; 32];
+    
+    // Easy target should pass for easy hash
+    assert!(validate_hash_difficulty(&easy_hash, 0x207FFFFF));
+    // Hard target should fail for hard hash
+    assert!(!validate_hash_difficulty(&hard_hash, 0x207FFFFF));
 } 

@@ -1,12 +1,23 @@
-use std::ffi::c_void;
+use std::os::raw::c_void;
 
-#[link(name = "randomx")]
+#[link(name = "randomx", kind = "static")]
 extern "C" {
+    #[link_name = "randomx_alloc_cache"]
     fn randomx_alloc_cache(flags: u32) -> *mut c_void;
+    
+    #[link_name = "randomx_init_cache"]
     fn randomx_init_cache(cache: *mut c_void, key: *const u8, key_size: usize);
+    
+    #[link_name = "randomx_create_vm"]
     fn randomx_create_vm(flags: u32, cache: *mut c_void, dataset: *mut c_void) -> *mut c_void;
+    
+    #[link_name = "randomx_calculate_hash"]
     fn randomx_calculate_hash(vm: *mut c_void, input: *const u8, input_size: usize, output: *mut u8);
+    
+    #[link_name = "randomx_destroy_vm"]
     fn randomx_destroy_vm(vm: *mut c_void);
+    
+    #[link_name = "randomx_release_cache"]
     fn randomx_release_cache(cache: *mut c_void);
 }
 
@@ -53,9 +64,10 @@ impl Drop for RandomXContext {
 }
 
 pub fn verify_difficulty(hash: &[u8; 32], target: u32) -> bool {
-    let difficulty_bytes = target.to_be_bytes();
-    let hash_start = &hash[0..4];
-    hash_start <= &difficulty_bytes
+    // Convert first 4 bytes of hash to u32 in big-endian order
+    let hash_value = u32::from_be_bytes([hash[0], hash[1], hash[2], hash[3]]);
+    // For PoW, lower hash values are better (need to be below target)
+    hash_value <= target
 }
 
 #[derive(Debug)]

@@ -1,5 +1,5 @@
 use super::*;
-use crate::tests::common::{create_test_transaction, create_transaction_with_fee};
+use crate::blockchain::tests::{create_test_transaction, create_transaction_with_fee};
 
 #[test]
 fn test_mempool_add_transaction() {

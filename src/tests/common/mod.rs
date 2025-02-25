@@ -1,7 +1,7 @@
-use crate::blockchain::{Block, Transaction, TransactionOutput};
+use crate::blockchain::{Block, Transaction, TransactionOutput, TransactionInput, OutPoint};
 use crate::consensus::StakeProof;
 use ed25519_dalek::{Keypair, Signer};
-use rand::thread_rng;
+use rand::rngs::OsRng;
 
 pub fn create_test_block(nonce: u64) -> Block {
     let mut block = Block::new([0u8; 32]);
@@ -10,37 +10,37 @@ pub fn create_test_block(nonce: u64) -> Block {
     block
 }
 
-pub fn create_test_stake_proof() -> StakeProof {
-    let keypair = Keypair::generate(&mut thread_rng());
-    StakeProof {
-        public_key: keypair.public,
-        signature: keypair.sign(b"test_block"),
-        stake_amount: 1000,
-        stake_age: 24 * 60 * 60,
-    }
-}
-
 pub fn create_test_transaction() -> Transaction {
-    let keypair = Keypair::generate(&mut thread_rng());
-    let output = TransactionOutput {
-        value: 50,
-        public_key_script: keypair.public.as_bytes().to_vec(),
-    };
+    let mut csprng = OsRng;
+    let keypair = Keypair::generate(&mut csprng);
     
     Transaction {
-        inputs: vec![],
-        outputs: vec![output],
-        lock_time: 0,
-    }
-}
-
-pub fn create_transaction_with_fee(fee: u64) -> Transaction {
-    Transaction {
-        inputs: vec![],
+        inputs: vec![TransactionInput {
+            previous_output: OutPoint {
+                transaction_hash: [0u8; 32],
+                index: 0,
+            },
+            signature_script: keypair.sign(b"test_block").to_bytes().to_vec(),
+            sequence: 0,
+        }],
         outputs: vec![TransactionOutput {
-            value: fee,
+            value: 100,
             public_key_script: vec![],
         }],
         lock_time: 0,
     }
+}
+
+pub fn create_test_stake_proof() -> StakeProof {
+    StakeProof {
+        stake_amount: 1_000_000,
+        stake_age: 24 * 60 * 60, // 24 hours
+        signature: vec![0u8; 64], // Dummy signature for testing
+    }
+}
+
+pub fn create_transaction_with_fee(fee: u64) -> Transaction {
+    let mut tx = create_test_transaction();
+    tx.outputs[0].value = fee;
+    tx
 } 

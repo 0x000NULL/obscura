@@ -1,16 +1,38 @@
-use obscura::consensus::{RandomXContext, StakeProof, validate_block_hybrid};
-use obscura::blockchain::{Block, BlockHeader};
+use obscura::consensus::randomx::RandomXContext;
+use obscura::consensus::validate_block_hybrid;
+use obscura::blockchain::Block;
+use obscura::blockchain::test_helpers::create_test_block;
 use std::sync::Arc;
 use crate::common::create_test_stake_proof;
-use crate::blockchain::tests::create_test_block;
 
 #[test]
 fn test_hybrid_consensus_validation() {
-    let randomx = Arc::new(RandomXContext::new("test_key").unwrap());
-    let block = Block::new([0u8; 32]);
-    let stake_proof = create_test_stake_proof();
+    // Create a valid block with proper header
+    let mut block = create_test_block(0);
     
-    assert!(validate_block_hybrid(&block, &randomx, &stake_proof));
+    // Initialize RandomX with a known key
+    let randomx = Arc::new(RandomXContext::new(b"test_key"));
+    
+    // Create a valid stake proof with significant stake
+    let mut stake_proof = create_test_stake_proof();
+    stake_proof.stake_amount = 1_000_000; // High stake amount
+    stake_proof.stake_age = 24 * 60 * 60; // 24 hours
+    
+    // Mine the block until we find a valid hash
+    let mut found_valid = false;
+    for nonce in 0..1000 {
+        block.header.nonce = nonce;
+        println!("Trying nonce: {}", nonce);
+        
+        // Try validating with current nonce
+        if validate_block_hybrid(&block, &randomx, &stake_proof) {
+            found_valid = true;
+            println!("Found valid nonce: {}", nonce);
+            break;
+        }
+    }
+    
+    assert!(found_valid, "Failed to find valid block within 1000 attempts");
 }
 
 #[test]

@@ -1,22 +1,52 @@
-use obscura::blockchain::{Block, BlockHeader, Transaction};
+use obscura::blockchain::{Block, Transaction, TransactionOutput, TransactionInput, OutPoint};
 use obscura::consensus::StakeProof;
+use obscura::consensus::randomx::RandomXContext;
 use obscura::networking::Node;
-use ed25519_dalek::Keypair;
+use ed25519_dalek::{Keypair, Signer};
+use rand::rngs::OsRng;
 use std::time::{SystemTime, UNIX_EPOCH};
 use rand::thread_rng;
 
 pub fn create_test_block(nonce: u64) -> Block {
-    Block::new([0u8; 32])
+    let mut block = Block::new([0u8; 32]);
+    block.header.nonce = nonce;
+    block.header.difficulty_target = 0x207fffff;
+    block
+}
+
+pub fn create_test_transaction() -> Transaction {
+    let mut csprng = OsRng;
+    let keypair = Keypair::generate(&mut csprng);
+    
+    Transaction {
+        inputs: vec![TransactionInput {
+            previous_output: OutPoint {
+                transaction_hash: [0u8; 32],
+                index: 0,
+            },
+            signature_script: keypair.sign(b"test_block").to_bytes().to_vec(),
+            sequence: 0,
+        }],
+        outputs: vec![TransactionOutput {
+            value: 100,
+            public_key_script: vec![],
+        }],
+        lock_time: 0,
+    }
 }
 
 pub fn create_test_stake_proof() -> StakeProof {
-    let keypair = Keypair::generate(&mut rand::thread_rng());
     StakeProof {
-        public_key: keypair.public,
-        signature: keypair.sign(b"test_block"),
-        stake_amount: 1000,
-        stake_age: 24 * 60 * 60,
+        stake_amount: 1_000_000,
+        stake_age: 24 * 60 * 60, // 24 hours
+        signature: vec![0u8; 64], // Dummy signature for testing
     }
+}
+
+pub fn create_transaction_with_fee(fee: u64) -> Transaction {
+    let mut tx = create_test_transaction();
+    tx.outputs[0].value = fee;
+    tx
 }
 
 pub struct TestNetwork {
@@ -43,36 +73,15 @@ impl TestNetwork {
         &self.nodes
     }
 
-    pub fn broadcast_transaction(&self, tx: &Transaction) {
-        for node in &self.nodes {
-            // In a real implementation, this would use networking
-            // For tests, we can directly add to mempool
-            let mempool = node.mempool();
-            if !mempool.contains(&tx) {
-                node.add_transaction(tx.clone());
-            }
+    pub fn broadcast_transaction(&mut self, tx: &Transaction) {
+        for node in &mut self.nodes {
+            node.add_transaction(tx.clone());
         }
     }
 
-    pub fn broadcast_block(&self, block: &Block) {
-        for node in &self.nodes {
-            // In a real implementation, this would use networking
-            // For tests, we directly add the block
+    pub fn broadcast_block(&mut self, block: &Block) {
+        for node in &mut self.nodes {
             node.process_block(block.clone());
         }
-    }
-}
-
-pub fn create_test_transaction() -> Transaction {
-    let keypair = Keypair::generate(&mut thread_rng());
-    let output = TransactionOutput {
-        value: 50,
-        public_key_script: keypair.public.as_bytes().to_vec(),
-    };
-    
-    Transaction {
-        inputs: vec![],
-        outputs: vec![output],
-        lock_time: 0,
     }
 } 

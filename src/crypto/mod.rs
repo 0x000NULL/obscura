@@ -18,18 +18,34 @@ pub fn deserialize_keypair(bytes: &[u8]) -> Option<Keypair> {
     if bytes.len() != 64 {
         return None;
     }
-    // Implementation details omitted for brevity
-    None // TODO: Implement proper deserialization
+    
+    let public_key = &bytes[0..32];
+    let secret_key = &bytes[32..64];
+    
+    Keypair::from_bytes(&[secret_key, public_key].concat()).ok()
 }
 
-pub fn encrypt_keypair(keypair: &Keypair, _password: &[u8]) -> Vec<u8> {
-    // TODO: Implement proper encryption
-    serialize_keypair(keypair)
+pub fn encrypt_keypair(keypair: &Keypair, password: &[u8]) -> Vec<u8> {
+    let serialized = serialize_keypair(keypair);
+    let mut encrypted = serialized.clone();
+    
+    // Simple XOR encryption (NOT secure for production!)
+    for (i, byte) in encrypted.iter_mut().enumerate() {
+        *byte ^= password[i % password.len()];
+    }
+    
+    encrypted
 }
 
-pub fn decrypt_keypair(encrypted: &[u8], _password: &[u8]) -> Option<Keypair> {
-    // TODO: Implement proper decryption
-    deserialize_keypair(encrypted)
+pub fn decrypt_keypair(encrypted: &[u8], password: &[u8]) -> Option<Keypair> {
+    let mut decrypted = encrypted.to_vec();
+    
+    // Simple XOR decryption (NOT secure for production!)
+    for (i, byte) in decrypted.iter_mut().enumerate() {
+        *byte ^= password[i % password.len()];
+    }
+    
+    deserialize_keypair(&decrypted)
 }
 
 pub fn hash_transaction(tx: &Transaction) -> [u8; 32] {
@@ -37,21 +53,21 @@ pub fn hash_transaction(tx: &Transaction) -> [u8; 32] {
 }
 
 pub fn calculate_hash_difficulty(hash: &[u8; 32]) -> u32 {
-    // Simple difficulty calculation
-    let mut difficulty = 0u32;
-    for byte in hash.iter() {
-        if *byte == 0 {
-            difficulty += 8;
-        } else {
-            difficulty += byte.leading_zeros();
-            break;
-        }
-    }
-    difficulty
+    // Convert first 4 bytes of hash to u32 in big-endian order
+    let mut value = 0u32;
+    value |= (hash[0] as u32) << 24;
+    value |= (hash[1] as u32) << 16;
+    value |= (hash[2] as u32) << 8;
+    value |= hash[3] as u32;
+    // For a hash of all zeros (best possible), this returns 0
+    // For a hash of all ones (worst possible), this returns 0xFFFFFFFF
+    value
 }
 
 pub fn validate_hash_difficulty(hash: &[u8; 32], target: u32) -> bool {
-    calculate_hash_difficulty(hash) >= target
+    let hash_value = calculate_hash_difficulty(hash);
+    // For PoW, lower hash values are better (need to be below target)
+    hash_value <= target
 }
 
 #[cfg(test)]

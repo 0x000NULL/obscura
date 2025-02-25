@@ -1,5 +1,5 @@
 use super::*;
-use crate::tests::common::create_test_transaction;
+use crate::blockchain::tests::create_test_transaction;
 use std::time::Duration;
 
 #[test]

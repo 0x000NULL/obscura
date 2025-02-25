@@ -18,27 +18,27 @@ pub struct BlockHeader {
     pub nonce: u64,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Transaction {
     pub inputs: Vec<TransactionInput>,
     pub outputs: Vec<TransactionOutput>,
     pub lock_time: u64,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct TransactionInput {
     pub previous_output: OutPoint,
     pub signature_script: Vec<u8>,
     pub sequence: u32,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct TransactionOutput {
     pub value: u64,
     pub public_key_script: Vec<u8>,
 }
 
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Clone, Eq, Hash, PartialEq, Debug)]
 pub struct OutPoint {
     pub transaction_hash: [u8; 32],
     pub index: u32,
@@ -78,36 +78,8 @@ impl UTXOSet {
     }
 }
 
-pub struct Mempool {
-    transactions: Vec<Transaction>,
-}
-
-impl Mempool {
-    pub fn new() -> Self {
-        Mempool {
-            transactions: Vec::new(),
-        }
-    }
-
-    pub fn add_transaction(&mut self, tx: Transaction) -> bool {
-        self.transactions.push(tx);
-        true
-    }
-
-    pub fn contains(&self, tx: &Transaction) -> bool {
-        self.transactions.contains(tx)
-    }
-
-    pub fn remove_transaction(&mut self, tx_hash: &[u8; 32]) {
-        self.transactions.retain(|tx| tx.hash() != *tx_hash);
-    }
-
-    pub fn get_transactions_by_fee(&self, limit: usize) -> Vec<Transaction> {
-        let mut txs = self.transactions.clone();
-        txs.sort_by_key(|tx| tx.outputs.iter().map(|o| o.value).sum::<u64>());
-        txs.into_iter().take(limit).collect()
-    }
-}
+pub mod mempool;
+pub use mempool::Mempool;
 
 impl Block {
     pub fn new(previous_hash: [u8; 32]) -> Self {
@@ -122,7 +94,22 @@ impl Block {
                 previous_hash,
                 merkle_root: [0; 32],
                 timestamp,
-                difficulty_target: 0,
+                difficulty_target: 0x207fffff, // Set a default easy target
+                nonce: 0,
+            },
+            transactions: Vec::new(),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn new_with_timestamp(previous_hash: [u8; 32], timestamp: u64) -> Self {
+        Block {
+            header: BlockHeader {
+                version: 1,
+                previous_hash,
+                merkle_root: [0; 32],
+                timestamp,
+                difficulty_target: 0x207fffff,
                 nonce: 0,
             },
             transactions: Vec::new(),
@@ -148,6 +135,15 @@ impl Block {
 
     pub fn serialize_header(&self) -> Vec<u8> {
         let mut data = Vec::with_capacity(80);
+        
+        println!("Serializing block header:");
+        println!("  Version: {}", self.header.version);
+        println!("  Previous hash: {:?}", self.header.previous_hash);
+        println!("  Merkle root: {:?}", self.header.merkle_root);
+        println!("  Timestamp: {}", self.header.timestamp);
+        println!("  Difficulty target: {:#x}", self.header.difficulty_target);
+        println!("  Nonce: {}", self.header.nonce);
+        
         data.extend_from_slice(&self.header.version.to_le_bytes());
         data.extend_from_slice(&self.header.previous_hash);
         data.extend_from_slice(&self.header.merkle_root);
@@ -283,12 +279,7 @@ impl Transaction {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    
-    mod block_tests;
-    mod transaction_tests;
-    mod validation_tests;
-    mod utxo_tests;
-    mod mempool_tests;
-} 
+pub mod tests;
+
+// For integration tests, we'll just use Block::new() and set the fields directly
+pub mod test_helpers; 

@@ -62,7 +62,13 @@ impl Node {
     }
 
     pub fn process_fluff_queue(&mut self) {
-        // Implementation needed
+        // Move transactions from stem phase to broadcast phase
+        let stem_txs = std::mem::take(&mut self.stem_transactions);
+        self.broadcast_transactions.extend(stem_txs);
+        
+        // Process any queued transactions
+        let queued = std::mem::take(&mut self.fluff_queue);
+        self.broadcast_transactions.extend(queued);
     }
 }
 
