@@ -1,4 +1,4 @@
-use crate::blockchain::{Block, Transaction, TransactionOutput, TransactionInput, OutPoint};
+use crate::blockchain::{Block, OutPoint, Transaction, TransactionInput, TransactionOutput};
 use crate::consensus::StakeProof;
 use ed25519_dalek::{Keypair, Signer};
 use rand::rngs::OsRng;
@@ -14,7 +14,7 @@ pub fn create_test_block(nonce: u64) -> Block {
 pub fn create_test_transaction() -> Transaction {
     let mut csprng = OsRng;
     let keypair = Keypair::generate(&mut csprng);
-    
+
     Transaction {
         inputs: vec![TransactionInput {
             previous_output: OutPoint {
@@ -35,7 +35,7 @@ pub fn create_test_transaction() -> Transaction {
 pub fn create_test_stake_proof() -> StakeProof {
     StakeProof {
         stake_amount: 1_000_000,
-        stake_age: 24 * 60 * 60, // 24 hours
+        stake_age: 24 * 60 * 60,  // 24 hours
         signature: vec![0u8; 64], // Dummy signature for testing
     }
 }
@@ -45,4 +45,4 @@ pub fn create_transaction_with_fee(fee: u64) -> Transaction {
     let mut tx = create_test_transaction();
     tx.outputs[0].value = fee;
     tx
-} 
+}

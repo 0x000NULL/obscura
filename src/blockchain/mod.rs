@@ -1,6 +1,6 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Clone)]
 pub struct Block {
@@ -66,7 +66,7 @@ impl UTXOSet {
     pub fn spend_utxo(&mut self, outpoint: &OutPoint) {
         self.utxos.remove(outpoint);
     }
-    
+
     pub fn get_utxo(&self, outpoint: &OutPoint) -> Option<&TransactionOutput> {
         self.utxos.get(outpoint)
     }
@@ -122,7 +122,7 @@ impl Block {
 
     pub fn hash(&self) -> [u8; 32] {
         let mut hasher = Sha256::new();
-        
+
         // Hash block header components
         hasher.update(&self.header.version.to_le_bytes());
         hasher.update(&self.header.previous_hash);
@@ -139,7 +139,7 @@ impl Block {
 
     pub fn serialize_header(&self) -> Vec<u8> {
         let mut data = Vec::with_capacity(80);
-        
+
         println!("Serializing block header:");
         println!("  Version: {}", self.header.version);
         println!("  Previous hash: {:?}", self.header.previous_hash);
@@ -147,7 +147,7 @@ impl Block {
         println!("  Timestamp: {}", self.header.timestamp);
         println!("  Difficulty target: {:#x}", self.header.difficulty_target);
         println!("  Nonce: {}", self.header.nonce);
-        
+
         data.extend_from_slice(&self.header.version.to_le_bytes());
         data.extend_from_slice(&self.header.previous_hash);
         data.extend_from_slice(&self.header.merkle_root);
@@ -181,7 +181,7 @@ pub fn validate_block_header(header: &BlockHeader, prev_header: &BlockHeader) ->
     hasher.update(&prev_header.timestamp.to_le_bytes());
     hasher.update(&prev_header.difficulty_target.to_le_bytes());
     hasher.update(&prev_header.nonce.to_le_bytes());
-    
+
     let prev_hash = hasher.finalize();
     if header.previous_hash != prev_hash.as_slice() {
         return false;
@@ -245,7 +245,7 @@ pub fn calculate_merkle_root(transactions: &[Transaction]) -> [u8; 32] {
 
 pub fn create_coinbase_transaction(reward: u64) -> Transaction {
     Transaction {
-        inputs: vec![],  // Coinbase has no inputs
+        inputs: vec![], // Coinbase has no inputs
         outputs: vec![TransactionOutput {
             value: reward,
             public_key_script: vec![], // Will be set by miner
@@ -258,28 +258,39 @@ pub fn validate_coinbase_transaction(tx: &Transaction, expected_reward: u64) -> 
     if tx.inputs.len() != 0 {
         return false; // Coinbase must have no inputs
     }
-    
+
     if tx.outputs.len() != 1 {
         return false; // Coinbase should have exactly one output
     }
-    
+
     tx.outputs[0].value == expected_reward
 }
 
 impl Transaction {
     pub fn hash(&self) -> [u8; 32] {
         let mut hasher = Sha256::new();
-        hasher.update(&self.lock_time.to_le_bytes());
+        
+        // Hash inputs
         for input in &self.inputs {
             hasher.update(&input.previous_output.transaction_hash);
             hasher.update(&input.previous_output.index.to_le_bytes());
+            hasher.update(&input.signature_script);
+            hasher.update(&input.sequence.to_le_bytes());
         }
+        
+        // Hash outputs
         for output in &self.outputs {
             hasher.update(&output.value.to_le_bytes());
             hasher.update(&output.public_key_script);
         }
+        
+        // Hash lock_time
+        hasher.update(&self.lock_time.to_le_bytes());
+        
+        // Finalize hash
+        let result = hasher.finalize();
         let mut hash = [0u8; 32];
-        hash.copy_from_slice(&hasher.finalize());
+        hash.copy_from_slice(&result);
         hash
     }
 }
@@ -288,4 +299,4 @@ impl Transaction {
 pub mod tests;
 
 // For integration tests, we'll just use Block::new() and set the fields directly
-pub mod test_helpers; 
+pub mod test_helpers;

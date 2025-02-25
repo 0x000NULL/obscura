@@ -8,7 +8,7 @@ pub fn create_test_transaction() -> Transaction {
         value: 50,
         public_key_script: keypair.public.as_bytes().to_vec(),
     };
-    
+
     Transaction {
         inputs: vec![],
         outputs: vec![output],
@@ -27,7 +27,11 @@ pub fn create_transaction_with_fee(fee: u64) -> Transaction {
     }
 }
 
-pub fn validate_signature(input: &TransactionInput, message: &[u8], public_key: &PublicKey) -> bool {
+pub fn validate_signature(
+    input: &TransactionInput,
+    message: &[u8],
+    public_key: &PublicKey,
+) -> bool {
     use ed25519_dalek::Verifier;
     if input.signature_script.len() != 64 {
         return false;
@@ -36,7 +40,7 @@ pub fn validate_signature(input: &TransactionInput, message: &[u8], public_key: 
     signature_bytes.copy_from_slice(&input.signature_script);
     match ed25519_dalek::Signature::from_bytes(&signature_bytes) {
         Ok(signature) => public_key.verify(message, &signature).is_ok(),
-        Err(_) => false
+        Err(_) => false,
     }
 }
 
@@ -45,4 +49,4 @@ pub fn create_test_block(nonce: u64) -> Block {
     block.header.nonce = nonce;
     block.header.difficulty_target = 0x207fffff;
     block
-} 
+}

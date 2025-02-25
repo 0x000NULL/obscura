@@ -1,6 +1,6 @@
-use ed25519_dalek::{Keypair, PublicKey, Signer};
-use crate::blockchain::{Transaction, TransactionInput, TransactionOutput, OutPoint};
+use crate::blockchain::{OutPoint, Transaction, TransactionInput, TransactionOutput};
 use crate::consensus::StakeProof;
+use ed25519_dalek::{Keypair, PublicKey, Signer};
 use rand;
 
 pub struct Wallet {
@@ -32,7 +32,7 @@ impl Wallet {
         }
 
         let keypair = self.keypair.as_ref().unwrap();
-        
+
         // Create recipient output
         let recipient_output = TransactionOutput {
             value: amount,
@@ -72,7 +72,7 @@ impl Wallet {
         if amount > self.balance {
             return None;
         }
-        
+
         self.balance -= amount;
         self.staked_amount += amount;
 
@@ -88,4 +88,4 @@ impl Wallet {
 mod tests {
     use super::*;
     mod wallet_tests;
-} 
+}

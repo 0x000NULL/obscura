@@ -2,6 +2,38 @@
 
 All notable changes to the Obscura project will be documented in this file.
 
+## [0.1.8] - 2024-02-26
+
+### Added
+- Implemented Child-Pays-For-Parent (CPFP) mechanism
+  - Added `calculate_ancestor_set` and `calculate_descendant_set` functions to identify transaction relationships
+  - Implemented `calculate_package_fee` and `calculate_package_size` for transaction package calculations
+  - Created `calculate_package_fee_rate` to determine effective fee rates for transaction packages
+  - Enhanced mempool with `get_transactions_by_effective_fee_rate` method for CPFP-aware transaction ordering
+  - Updated transaction prioritization to consider package fee rates
+  - Modified block creation to utilize CPFP relationships for transaction selection
+
+### Enhanced
+- Improved transaction selection for block creation
+  - Updated `prioritize_transactions` to use CPFP-aware fee rate calculations
+  - Modified `create_block_with_size_limit` to integrate with CPFP mechanism
+  - Ensured parent transactions are included before their descendants
+  - Optimized block space usage by considering transaction relationships
+
+### Testing
+- Added comprehensive test suite for CPFP functionality
+  - Created `test_cpfp_transaction_prioritization` to verify correct transaction ordering
+  - Implemented tests for ancestor and descendant set calculations
+  - Added tests for package fee and size calculations
+  - Verified correct behavior with complex transaction relationships
+
+### Documentation
+- Added detailed documentation for CPFP mechanism
+  - Created comprehensive guide in `docs/consensus/cpfp.md`
+  - Updated related documentation to reference CPFP functionality
+  - Added code comments explaining CPFP implementation details
+  - Updated mining rewards documentation to include CPFP information
+
 ## [0.1.7] - 2024-02-25
 
 ### Added

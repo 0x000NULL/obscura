@@ -34,7 +34,7 @@ impl ProofOfStake {
     pub fn validate_stake_proof(&self, proof: &StakeProof, _block_data: &[u8]) -> bool {
         // For testing purposes, just validate stake requirements
         self.validate_stake(proof.stake_amount, proof.stake_age)
-        
+
         // In production, you would verify the signature:
         // let public_key = PublicKey::from_bytes(&proof.public_key)?;
         // public_key.verify(block_data, &Signature::from_bytes(&proof.signature)?).is_ok()
@@ -43,7 +43,8 @@ impl ProofOfStake {
     pub fn calculate_stake_reward(&self, stake_amount: u64, stake_age: u64) -> u64 {
         // Basic annual reward of 5%
         let annual_rate = 0.05;
-        let reward = (stake_amount as f64 * annual_rate * stake_age as f64) / (365.0 * 24.0 * 60.0 * 60.0);
+        let reward =
+            (stake_amount as f64 * annual_rate * stake_age as f64) / (365.0 * 24.0 * 60.0 * 60.0);
         reward as u64
     }
 }
@@ -67,4 +68,4 @@ pub fn validate_stake(proof: &StakeProof) -> bool {
 pub fn calculate_stake_reward(stake_amount: u64, stake_time: u64) -> u64 {
     let pos = ProofOfStake::new();
     pos.calculate_stake_reward(stake_amount, stake_time)
-} 
+}

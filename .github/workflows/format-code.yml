@@ -1,0 +1,43 @@
+name: Format Code
+
+on:
+  # Run on demand via workflow_dispatch
+  workflow_dispatch:
+  # Run on schedule (weekly)
+  schedule:
+    - cron: '0 0 * * 0'  # Run at midnight on Sundays
+
+jobs:
+  format:
+    name: Format Code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt
+      
+      - name: Format code
+        run: cargo fmt --all
+      
+      - name: Check for changes
+        id: git-check
+        run: |
+          git diff --exit-code || echo "changes=true" >> $GITHUB_OUTPUT
+      
+      - name: Create Pull Request
+        if: steps.git-check.outputs.changes == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'style: format code with rustfmt'
+          title: 'Auto-format code with rustfmt'
+          body: |
+            This PR was automatically created to apply code formatting with `rustfmt`.
+            
+            The formatting is done according to the Rust style guidelines to ensure consistent code style across the project.
+          branch: auto-format-code
+          base: ${{ github.ref }} 

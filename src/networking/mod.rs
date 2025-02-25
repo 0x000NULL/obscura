@@ -1,5 +1,5 @@
-use std::net::SocketAddr;
 use crate::blockchain::{Block, Transaction};
+use std::net::SocketAddr;
 
 #[derive(Clone)]
 #[allow(dead_code)]
@@ -65,7 +65,7 @@ impl Node {
         // Move transactions from stem phase to broadcast phase
         let stem_txs = std::mem::take(&mut self.stem_transactions);
         self.broadcast_transactions.extend(stem_txs);
-        
+
         // Process any queued transactions
         let queued = std::mem::take(&mut self.fluff_queue);
         self.broadcast_transactions.extend(queued);
@@ -83,4 +83,4 @@ pub enum NodeError {
 mod tests {
     use super::*;
     mod dandelion_tests;
-} 
+}

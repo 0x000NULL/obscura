@@ -31,14 +31,26 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
       
+      # Make sure rustfmt is available
+      - name: Verify rustfmt installation
+        run: rustfmt --version
+      
+      # First build the project to ensure dependencies are available
+      - name: Build
+        run: cargo build --verbose
+      
+      # Run formatting check with more verbose output
       - name: Check code formatting
-        run: cargo fmt --all -- --check
+        run: |
+          echo "Running cargo fmt check..."
+          cargo fmt --all -- --check || {
+            echo "Formatting check failed. Running with verbose output to show issues:"
+            cargo fmt --all -- --check -v
+            exit 1
+          }
       
       - name: Lint with clippy
         run: cargo clippy -- -D warnings
-      
-      - name: Build
-        run: cargo build --verbose
       
       - name: Run tests
         run: cargo test --verbose

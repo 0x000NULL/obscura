@@ -162,6 +162,29 @@ Initial development is led by core developers, with transition to DAO governance
 4. Push to the branch: git push origin feature/amazing-feature
 5. Open a Pull Request
 
+### Code Formatting
+
+This project uses `rustfmt` to maintain consistent code style. Before submitting a PR, please format your code:
+
+```bash
+# Using the provided script (Unix/macOS)
+./scripts/format.sh
+
+# Using the provided script (Windows)
+.\scripts\format.bat
+
+# Or manually
+cargo fmt --all
+```
+
+You can also run the formatting check to see if your code needs formatting:
+
+```bash
+cargo fmt --all -- --check
+```
+
+Our CI pipeline will verify that all code follows the formatting standards.
+
 ## Security
 
 To report security vulnerabilities, please email security@obscura.com (do not create public issues).
@@ -172,10 +195,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Contact & Resources
 
-- Website: https://obscura.com
-- Documentation: https://docs.obscura.com
-- Twitter: @ObscuraOBX
-- Discord: https://discord.gg/obscura
+- Website: Coming Soon
+- Documentation: /docs
+- Twitter: Coming Soon
+- Discord: Coming Soon
 
 ## Acknowledgments
 
@@ -250,7 +273,7 @@ Detailed documentation is available in the `docs/` directory:
 Our documentation is available as a searchable, browsable book using mdBook:
 
 - **GitHub Pages**: A clean, book-like interface optimized for technical documentation
-  - URL: https://your-org.github.io/obscura/
+  - URL: https://0x000null.github.io/obscura/
 
 For more details on our documentation system, see [Documentation Guide](docs/DOCUMENTATION_OPTIONS.md).
 
@@ -282,18 +305,6 @@ This project uses GitHub Actions for continuous integration and documentation de
    - Deploys to: GitHub Pages
 
 To manually trigger these workflows, go to the Actions tab in the GitHub repository.
-
-## Contributing
-
-Contributions are welcome! Please read our contributing guidelines and code of conduct before submitting pull requests.
-
-## License
-
-[Insert License Information]
-
-## Security
-
-If you discover a security vulnerability, please follow our security policy for responsible disclosure.
 
 ## Changelog
 

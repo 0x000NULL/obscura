@@ -7,4 +7,4 @@ mod wallet;
 fn main() {
     println!("Obscura OBX Node Starting...");
     // TODO: Initialize node components
-} 
+}

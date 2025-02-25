@@ -25,7 +25,7 @@ This document serves as an index for all documentation related to mining rewards
 ## Transaction Features
 
 - [Replace-By-Fee (RBF)](../consensus/replace_by_fee.md): Documentation on the Replace-By-Fee mechanism, which allows users to replace an unconfirmed transaction with a new version that pays a higher fee.
-- [Child-Pays-For-Parent (CPFP)](../consensus/cpfp.md): Documentation on the Child-Pays-For-Parent mechanism.
+- [Child-Pays-For-Parent (CPFP)](../consensus/cpfp.md): Documentation on the Child-Pays-For-Parent mechanism, which allows a child transaction to pay a higher fee to incentivize the confirmation of its parent.
 
 ## Implementation Details
 
@@ -56,10 +56,9 @@ These parameters can be adjusted through governance mechanisms to respond to net
 Potential future enhancements to the mining reward system include:
 
 1. **Advanced Fee Estimation**: More sophisticated fee estimation algorithms based on historical data and machine learning.
-2. **Child-Pays-For-Parent (CPFP)**: Allow a child transaction to pay a higher fee to incentivize the confirmation of its parent.
-3. **Fee Sponsorship**: Allow third parties to sponsor transaction fees for other users.
-4. **Time-Locked Fee Adjustments**: Allow transactions to automatically increase their fee after a certain time if not confirmed.
-5. **Fee Markets for Different Transaction Types**: Separate fee markets for different types of transactions (e.g., standard transactions vs. smart contract interactions).
+2. **Fee Sponsorship**: Allow third parties to sponsor transaction fees for other users.
+3. **Time-Locked Fee Adjustments**: Allow transactions to automatically increase their fee after a certain time if not confirmed.
+4. **Fee Markets for Different Transaction Types**: Separate fee markets for different types of transactions (e.g., standard transactions vs. smart contract interactions).
 
 ## Related Documentation
 

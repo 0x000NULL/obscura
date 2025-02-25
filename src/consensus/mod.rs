@@ -1,54 +1,25 @@
 use std::sync::Arc;
-pub mod pow;
-pub mod pos;
-pub mod randomx;
 pub mod difficulty;
 pub mod mining_reward;
+pub mod pos;
+pub mod pow;
+pub mod randomx;
 
-pub use randomx::{RandomXContext, RandomXError, verify_difficulty};
 pub use difficulty::DifficultyAdjuster;
 pub use mining_reward::{
-    calculate_block_reward, 
-    create_coinbase_transaction, 
-    validate_coinbase_transaction,
-    calculate_transaction_fees,
-    create_coinbase_transaction_with_fees,
-    validate_coinbase_transaction_with_fees,
-    calculate_transaction_fees_with_utxo,
-    create_coinbase_transaction_with_utxo,
-    validate_coinbase_transaction_with_utxo,
-    PoolParticipant,
-    create_mining_pool_coinbase,
-    validate_mining_pool_coinbase,
-    create_mining_pool_coinbase_with_utxo,
-    COINBASE_MATURITY,
-    is_coinbase_mature,
-    validate_coinbase_maturity,
-    calculate_mining_reward,
-    validate_mining_reward,
-    calculate_mining_reward_with_fees,
-    calculate_transaction_fees,
-    create_coinbase_transaction_with_fees,
-    validate_mining_reward_with_fees,
-    calculate_transaction_fees_with_utxo,
-    create_coinbase_transaction_with_utxo_fees,
-    create_mining_pool_coinbase_transaction,
-    validate_mining_pool_reward,
-    is_coinbase_transaction,
-    TARGET_BLOCK_SIZE,
-    MIN_FEE_RATE,
-    MAX_FEE_RATE,
-    calculate_min_fee_rate,
-    estimate_transaction_size,
-    calculate_transaction_fee_rate,
-    calculate_single_transaction_fee,
-    prioritize_transactions,
-    create_block_with_size_limit,
-    validate_block_size,
-    MIN_RBF_FEE_INCREASE,
-    can_replace_by_fee,
-    process_rbf_in_mempool
+    calculate_block_reward, calculate_block_reward_by_time, calculate_min_fee_rate,
+    calculate_single_transaction_fee, calculate_transaction_fee_rate, calculate_transaction_fees,
+    calculate_transaction_fees_with_utxo, can_replace_by_fee, create_block_with_size_limit,
+    create_mining_pool_coinbase, create_mining_pool_coinbase_with_utxo, estimate_transaction_size,
+    is_coinbase_mature, prioritize_transactions, process_rbf_in_mempool, validate_block_size,
+    validate_coinbase_maturity, validate_mining_pool_coinbase, PoolParticipant, COINBASE_MATURITY,
+    GENESIS_TIMESTAMP, HALVING_INTERVAL, INITIAL_BLOCK_REWARD, MAX_FEE_RATE, MIN_FEE_RATE, 
+    MIN_RBF_FEE_INCREASE, TARGET_BLOCK_SIZE,
 };
+pub use randomx::{verify_difficulty, RandomXContext, RandomXError};
+
+// Import blockchain functions that are referenced in the consensus module
+pub use crate::blockchain::{Block, BlockHeader, Transaction, TransactionOutput, create_coinbase_transaction, validate_coinbase_transaction};
 
 pub trait ConsensusEngine {
     fn validate_block(&self, block: &crate::blockchain::Block) -> bool;
@@ -72,14 +43,18 @@ impl HybridConsensus {
 
 pub use self::pos::StakeProof;
 
-pub fn validate_block_hybrid(block: &crate::blockchain::Block, randomx: &Arc<randomx::RandomXContext>, stake_proof: &StakeProof) -> bool {
+pub fn validate_block_hybrid(
+    block: &crate::blockchain::Block,
+    randomx: &Arc<randomx::RandomXContext>,
+    stake_proof: &StakeProof,
+) -> bool {
     // Validate PoW component
     let header_bytes = block.serialize_header();
     let mut hash = [0u8; 32];
-    
+
     println!("Validating block with nonce: {}", block.header.nonce);
     println!("Target difficulty: {:#x}", block.header.difficulty_target);
-    
+
     if let Err(e) = randomx.calculate_hash(&header_bytes, &mut hash) {
         println!("RandomX hash calculation failed: {:?}", e);
         return false;
@@ -88,20 +63,33 @@ pub fn validate_block_hybrid(block: &crate::blockchain::Block, randomx: &Arc<ran
     // Check if hash meets difficulty target
     let hash_value = u32::from_be_bytes([hash[0], hash[1], hash[2], hash[3]]);
     println!("Calculated hash value: {:#x}", hash_value);
-    
+
     if hash_value > block.header.difficulty_target {
-        println!("Hash value too high: {:#x} > {:#x}", hash_value, block.header.difficulty_target);
+        println!(
+            "Hash value too high: {:#x} > {:#x}",
+            hash_value, block.header.difficulty_target
+        );
         return false;
     }
 
     // Validate PoS component
-    println!("Validating PoS - stake amount: {}, stake age: {}", stake_proof.stake_amount, stake_proof.stake_age);
+    println!(
+        "Validating PoS - stake amount: {}, stake age: {}",
+        stake_proof.stake_amount, stake_proof.stake_age
+    );
     if stake_proof.stake_amount < 100_000 {
-        println!("Stake amount too low: {} < 100,000", stake_proof.stake_amount);
+        println!(
+            "Stake amount too low: {} < 100,000",
+            stake_proof.stake_amount
+        );
         return false;
     }
     if stake_proof.stake_age < 12 * 60 * 60 {
-        println!("Stake age too low: {} < {}", stake_proof.stake_age, 12 * 60 * 60);
+        println!(
+            "Stake age too low: {} < {}",
+            stake_proof.stake_age,
+            12 * 60 * 60
+        );
         return false;
     }
 
@@ -113,11 +101,11 @@ pub fn validate_block_hybrid(block: &crate::blockchain::Block, randomx: &Arc<ran
 fn validate_pow(block: &crate::blockchain::Block, randomx: &Arc<randomx::RandomXContext>) -> bool {
     let mut hash = [0u8; 32];
     let block_header = block.serialize_header();
-    
+
     if randomx.calculate_hash(&block_header, &mut hash).is_err() {
         return false;
     }
-    
+
     randomx::verify_difficulty(&hash, block.header.difficulty_target)
 }
 
@@ -135,7 +123,10 @@ pub fn verify_block_hash(randomx: &RandomXContext, block_header: &[u8], target: 
     verify_difficulty(&hash, target)
 }
 
-pub fn calculate_block_hash(randomx: &RandomXContext, header_bytes: &[u8]) -> Result<[u8; 32], RandomXError> {
+pub fn calculate_block_hash(
+    randomx: &RandomXContext,
+    header_bytes: &[u8],
+) -> Result<[u8; 32], RandomXError> {
     let mut hash = [0u8; 32];
     randomx.calculate_hash(header_bytes, &mut hash)?;
     Ok(hash)
@@ -144,8 +135,8 @@ pub fn calculate_block_hash(randomx: &RandomXContext, header_bytes: &[u8]) -> Re
 #[cfg(test)]
 mod tests {
     use super::*;
-    
-    mod randomx_tests;
-    mod pos_tests;
+
     mod mining_reward_tests;
-} 
+    mod pos_tests;
+    mod randomx_tests;
+}

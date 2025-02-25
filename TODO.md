@@ -36,7 +36,7 @@
     - [x] Implement coinbase maturity requirement
     - [x] Create dynamic fee market
     - [x] Add Replace-By-Fee (RBF) mechanism
-    - [ ] Implement Child-Pays-For-Parent (CPFP) mechanism
+    - [x] Implement Child-Pays-For-Parent (CPFP) mechanism
     - [ ] Add fee sponsorship for transactions
     - [ ] Implement time-locked fee adjustments
 - [ ] Implement PoS mechanism

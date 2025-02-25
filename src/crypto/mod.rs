@@ -1,6 +1,6 @@
+use crate::blockchain::Transaction;
 use ed25519_dalek::Keypair;
 use rand::rngs::OsRng;
-use crate::blockchain::Transaction;
 
 pub fn generate_keypair() -> Option<Keypair> {
     let mut csprng = OsRng;
@@ -18,33 +18,33 @@ pub fn deserialize_keypair(bytes: &[u8]) -> Option<Keypair> {
     if bytes.len() != 64 {
         return None;
     }
-    
+
     let public_key = &bytes[0..32];
     let secret_key = &bytes[32..64];
-    
+
     Keypair::from_bytes(&[secret_key, public_key].concat()).ok()
 }
 
 pub fn encrypt_keypair(keypair: &Keypair, password: &[u8]) -> Vec<u8> {
     let serialized = serialize_keypair(keypair);
     let mut encrypted = serialized.clone();
-    
+
     // Simple XOR encryption (NOT secure for production!)
     for (i, byte) in encrypted.iter_mut().enumerate() {
         *byte ^= password[i % password.len()];
     }
-    
+
     encrypted
 }
 
 pub fn decrypt_keypair(encrypted: &[u8], password: &[u8]) -> Option<Keypair> {
     let mut decrypted = encrypted.to_vec();
-    
+
     // Simple XOR decryption (NOT secure for production!)
     for (i, byte) in decrypted.iter_mut().enumerate() {
         *byte ^= password[i % password.len()];
     }
-    
+
     deserialize_keypair(&decrypted)
 }
 
@@ -73,6 +73,6 @@ pub fn validate_hash_difficulty(hash: &[u8; 32], target: u32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    mod key_tests;
     mod hash_tests;
-} 
+    mod key_tests;
+}

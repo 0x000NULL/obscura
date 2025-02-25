@@ -1,11 +1,11 @@
-use obscura::blockchain::{Block, Transaction, TransactionOutput, TransactionInput, OutPoint};
-use obscura::consensus::StakeProof;
-use obscura::consensus::randomx::RandomXContext;
-use obscura::networking::Node;
 use ed25519_dalek::{Keypair, Signer};
+use obscura::blockchain::{Block, OutPoint, Transaction, TransactionInput, TransactionOutput};
+use obscura::consensus::randomx::RandomXContext;
+use obscura::consensus::StakeProof;
+use obscura::networking::Node;
 use rand::rngs::OsRng;
-use std::time::{SystemTime, UNIX_EPOCH};
 use rand::thread_rng;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn create_test_block(nonce: u64) -> Block {
     let mut block = Block::new([0u8; 32]);
@@ -17,7 +17,7 @@ pub fn create_test_block(nonce: u64) -> Block {
 pub fn create_test_transaction() -> Transaction {
     let mut csprng = OsRng;
     let keypair = Keypair::generate(&mut csprng);
-    
+
     Transaction {
         inputs: vec![TransactionInput {
             previous_output: OutPoint {
@@ -38,7 +38,7 @@ pub fn create_test_transaction() -> Transaction {
 pub fn create_test_stake_proof() -> StakeProof {
     StakeProof {
         stake_amount: 1_000_000,
-        stake_age: 24 * 60 * 60, // 24 hours
+        stake_age: 24 * 60 * 60,  // 24 hours
         signature: vec![0u8; 64], // Dummy signature for testing
     }
 }
@@ -61,14 +61,14 @@ impl TestNetwork {
         }
         TestNetwork { nodes }
     }
-    
+
     pub fn add_mining_node(&mut self) -> &mut Node {
         let mut node = Node::new();
         node.enable_mining();
         self.nodes.push(node);
         self.nodes.last_mut().unwrap()
     }
-    
+
     pub fn nodes(&self) -> &[Node] {
         &self.nodes
     }
@@ -84,4 +84,4 @@ impl TestNetwork {
             node.process_block(block.clone());
         }
     }
-} 
+}
