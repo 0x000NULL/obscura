@@ -3,9 +3,52 @@ pub mod pow;
 pub mod pos;
 pub mod randomx;
 pub mod difficulty;
+pub mod mining_reward;
 
 pub use randomx::{RandomXContext, RandomXError, verify_difficulty};
 pub use difficulty::DifficultyAdjuster;
+pub use mining_reward::{
+    calculate_block_reward, 
+    create_coinbase_transaction, 
+    validate_coinbase_transaction,
+    calculate_transaction_fees,
+    create_coinbase_transaction_with_fees,
+    validate_coinbase_transaction_with_fees,
+    calculate_transaction_fees_with_utxo,
+    create_coinbase_transaction_with_utxo,
+    validate_coinbase_transaction_with_utxo,
+    PoolParticipant,
+    create_mining_pool_coinbase,
+    validate_mining_pool_coinbase,
+    create_mining_pool_coinbase_with_utxo,
+    COINBASE_MATURITY,
+    is_coinbase_mature,
+    validate_coinbase_maturity,
+    calculate_mining_reward,
+    validate_mining_reward,
+    calculate_mining_reward_with_fees,
+    calculate_transaction_fees,
+    create_coinbase_transaction_with_fees,
+    validate_mining_reward_with_fees,
+    calculate_transaction_fees_with_utxo,
+    create_coinbase_transaction_with_utxo_fees,
+    create_mining_pool_coinbase_transaction,
+    validate_mining_pool_reward,
+    is_coinbase_transaction,
+    TARGET_BLOCK_SIZE,
+    MIN_FEE_RATE,
+    MAX_FEE_RATE,
+    calculate_min_fee_rate,
+    estimate_transaction_size,
+    calculate_transaction_fee_rate,
+    calculate_single_transaction_fee,
+    prioritize_transactions,
+    create_block_with_size_limit,
+    validate_block_size,
+    MIN_RBF_FEE_INCREASE,
+    can_replace_by_fee,
+    process_rbf_in_mempool
+};
 
 pub trait ConsensusEngine {
     fn validate_block(&self, block: &crate::blockchain::Block) -> bool;
@@ -104,4 +147,5 @@ mod tests {
     
     mod randomx_tests;
     mod pos_tests;
+    mod mining_reward_tests;
 } 

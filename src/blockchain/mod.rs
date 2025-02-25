@@ -66,6 +66,10 @@ impl UTXOSet {
     pub fn spend_utxo(&mut self, outpoint: &OutPoint) {
         self.utxos.remove(outpoint);
     }
+    
+    pub fn get_utxo(&self, outpoint: &OutPoint) -> Option<&TransactionOutput> {
+        self.utxos.get(outpoint)
+    }
 
     pub fn validate_transaction(&self, tx: &Transaction) -> bool {
         // Check if all inputs exist in UTXO set
@@ -251,12 +255,14 @@ pub fn create_coinbase_transaction(reward: u64) -> Transaction {
 }
 
 pub fn validate_coinbase_transaction(tx: &Transaction, expected_reward: u64) -> bool {
-    if !tx.inputs.is_empty() {
-        return false;
+    if tx.inputs.len() != 0 {
+        return false; // Coinbase must have no inputs
     }
+    
     if tx.outputs.len() != 1 {
-        return false;
+        return false; // Coinbase should have exactly one output
     }
+    
     tx.outputs[0].value == expected_reward
 }
 

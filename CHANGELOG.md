@@ -2,7 +2,67 @@
 
 All notable changes to the Obscura project will be documented in this file.
 
-## [0.1.5] - 2024-02-26
+## [0.1.7] - 2024-02-25
+
+### Added
+- Comprehensive documentation structure and organization
+  - Created main documentation index file
+  - Added directory-specific index files for all major sections
+  - Implemented consistent documentation structure
+  - Added README.md explaining documentation organization
+  - Created cross-referenced documentation system
+
+### Enhanced
+- Mining rewards and transaction fee documentation
+  - Added detailed documentation for dynamic fee market
+  - Created comprehensive mining pool support documentation
+  - Added coinbase maturity documentation
+  - Implemented Replace-By-Fee (RBF) documentation
+  - Created mining rewards index for easy navigation
+
+### Improved
+- Documentation organization and accessibility
+  - Reorganized documentation into logical sections
+  - Added consistent navigation structure
+  - Implemented clear cross-references between related topics
+  - Created detailed index files for each section
+  - Added configuration parameter documentation
+
+## [0.1.6] - 2024-02-25
+
+### Added
+- Implemented dynamic fee market for transaction processing
+  - Added TARGET_BLOCK_SIZE constant (1,000,000 bytes)
+  - Implemented MIN_FEE_RATE and MAX_FEE_RATE parameters
+  - Created calculate_min_fee_rate function for dynamic fee adjustment
+  - Added transaction size estimation functionality
+  - Implemented transaction prioritization based on fee rate
+
+### Enhanced
+- Mining reward distribution system
+  - Added mining pool support with PoolParticipant structure
+  - Implemented reward distribution for pool participants
+  - Created validation for mining pool coinbase transactions
+  - Added UTXO-based fee calculation for accurate rewards
+  - Implemented coinbase maturity requirement (100 blocks)
+
+### Security
+- Added Replace-By-Fee (RBF) mechanism
+  - Implemented MIN_RBF_FEE_INCREASE parameter (10% minimum)
+  - Created transaction replacement validation
+  - Added mempool processing for replacement transactions
+  - Implemented double-spend protection for RBF
+  - Added security measures against transaction pinning
+
+### Testing
+- Added comprehensive test suite for new features
+  - Created tests for mining pool reward distribution
+  - Implemented coinbase maturity validation tests
+  - Added dynamic fee market calculation tests
+  - Created RBF validation test cases
+  - Implemented edge case testing for all new features
+
+## [0.1.5] - 2024-02-25
 
 ### Added
 - Implemented complete difficulty adjustment mechanism

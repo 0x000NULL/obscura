@@ -27,10 +27,18 @@
     - [x] Add moving average calculation
     - [x] Implement difficulty retargeting algorithm
     - [x] Add emergency difficulty adjustment rules
-  - [ ] Add mining reward distribution logic
-    - [ ] Implement coinbase transaction
-    - [ ] Create block reward calculation
-    - [ ] Add halving mechanism (5-year intervals)
+  - [x] Add mining reward distribution logic
+    - [x] Implement coinbase transaction
+    - [x] Create block reward calculation
+    - [x] Add halving mechanism (5-year intervals)
+    - [x] Implement transaction fee calculation
+    - [x] Add mining pool reward distribution
+    - [x] Implement coinbase maturity requirement
+    - [x] Create dynamic fee market
+    - [x] Add Replace-By-Fee (RBF) mechanism
+    - [ ] Implement Child-Pays-For-Parent (CPFP) mechanism
+    - [ ] Add fee sponsorship for transactions
+    - [ ] Implement time-locked fee adjustments
 - [ ] Implement PoS mechanism
   - [ ] Create staking contract
     - [ ] Implement stake locking mechanism
@@ -539,15 +547,25 @@
   - [ ] Create security validation suite
 
 ### Documentation
-- [x] Update technical documentation
-  - [x] Document ChaCha20 implementation
-  - [x] Add security considerations
-  - [x] Document performance optimizations
-  - [x] Update API documentation
-- [ ] Create developer guides
-  - [ ] Add implementation examples
-  - [ ] Create troubleshooting guide
-  - [ ] Document best practices
+- [x] Core Documentation
+  - [x] Create main documentation index
+  - [x] Add architecture documentation
+  - [x] Create development guide
+  - [x] Add README for documentation structure
+- [x] Feature Documentation
+  - [x] Document consensus mechanisms
+  - [x] Add mining documentation
+  - [x] Create transaction documentation
+  - [x] Document mining rewards and fee market
+  - [x] Add wallet documentation
+  - [ ] Complete smart contract documentation
+  - [ ] Add DEX documentation
+  - [ ] Create governance documentation
+- [ ] API Documentation
+  - [ ] Document RPC API
+  - [ ] Add REST API documentation
+  - [ ] Create WebSocket API documentation
+  - [ ] Document CLI commands
 
 ### Future Features
 - [ ] Implement Extended Functionality

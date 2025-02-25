@@ -1,6 +1,7 @@
 use crate::blockchain::Block;
 use super::randomx::{RandomXContext, verify_difficulty};
 use super::difficulty::DifficultyAdjuster;
+use super::mining_reward;
 use std::sync::Arc;
 use crate::consensus::ConsensusEngine;
 
@@ -33,6 +34,77 @@ impl ProofOfWork {
 
     pub fn adjust_difficulty(&mut self, block_timestamp: u64) -> u32 {
         self.difficulty_adjuster.add_block_time(block_timestamp)
+    }
+    
+    /// Creates a new block with a coinbase transaction for the given miner
+    pub fn create_mining_block(&self, previous_hash: [u8; 32], block_height: u64, miner_public_key: &[u8]) -> Block {
+        let mut block = Block::new(previous_hash);
+        
+        // Create coinbase transaction with appropriate reward
+        let coinbase = mining_reward::create_coinbase_transaction(block_height, miner_public_key);
+        
+        // Add coinbase as the first transaction
+        block.transactions.push(coinbase);
+        
+        // Calculate merkle root
+        block.calculate_merkle_root();
+        
+        block
+    }
+    
+    /// Creates a new block with a coinbase transaction that includes transaction fees
+    pub fn create_mining_block_with_transactions(
+        &self, 
+        previous_hash: [u8; 32], 
+        block_height: u64, 
+        miner_public_key: &[u8],
+        transactions: Vec<crate::blockchain::Transaction>
+    ) -> Block {
+        let mut block = Block::new(previous_hash);
+        
+        // Create coinbase transaction with appropriate reward including fees
+        let coinbase = mining_reward::create_coinbase_transaction_with_fees(
+            block_height, 
+            miner_public_key,
+            &transactions
+        );
+        
+        // Add coinbase as the first transaction
+        block.transactions.push(coinbase);
+        
+        // Add the rest of the transactions
+        block.transactions.extend(transactions);
+        
+        // Calculate merkle root
+        block.calculate_merkle_root();
+        
+        block
+    }
+    
+    /// Validates that a block contains a valid coinbase transaction
+    pub fn validate_mining_reward(&self, block: &Block, block_height: u64) -> bool {
+        if block.transactions.is_empty() {
+            return false;
+        }
+        
+        // The first transaction must be a coinbase
+        let coinbase = &block.transactions[0];
+        mining_reward::validate_coinbase_transaction(coinbase, block_height)
+    }
+    
+    /// Validates that a block contains a valid coinbase transaction including transaction fees
+    pub fn validate_mining_reward_with_fees(&self, block: &Block, block_height: u64) -> bool {
+        if block.transactions.is_empty() {
+            return false;
+        }
+        
+        // The first transaction must be a coinbase
+        let coinbase = &block.transactions[0];
+        
+        // Create a slice of all transactions except the coinbase for fee calculation
+        let transactions = &block.transactions[1..];
+        
+        mining_reward::validate_coinbase_transaction_with_fees(coinbase, block_height, transactions)
     }
 }
 
