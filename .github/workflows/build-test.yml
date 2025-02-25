@@ -15,11 +15,9 @@ jobs:
       - uses: actions/checkout@v3
       
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          profile: minimal
           toolchain: stable
-          override: true
           components: rustfmt, clippy
       
       - name: Cache dependencies
@@ -34,31 +32,16 @@ jobs:
             ${{ runner.os }}-cargo-
       
       - name: Check code formatting
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+        run: cargo fmt --all -- --check
       
       - name: Lint with clippy
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: -- -D warnings
+        run: cargo clippy -- -D warnings
       
       - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --verbose
+        run: cargo build --verbose
       
       - name: Run tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --verbose
+        run: cargo test --verbose
       
       - name: Run benchmarks
-        uses: actions-rs/cargo@v1
-        with:
-          command: bench
-          args: --verbose 
+        run: cargo bench --verbose 
