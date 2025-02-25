@@ -245,6 +245,50 @@ Detailed documentation is available in the `docs/` directory:
 - Implementation details
 - Security considerations
 
+### Documentation Options
+
+We provide multiple ways to browse the Obscura documentation:
+
+1. **GitHub Pages with mdBook** (Recommended): A clean, book-like interface optimized for technical documentation
+   - URL: https://your-org.github.io/obscura/docs/
+
+2. **GitHub Wiki**: Documentation integrated directly with GitHub
+   - URL: https://github.com/your-org/obscura/wiki
+
+3. **Docusaurus**: Feature-rich documentation platform with advanced capabilities
+   - URL: https://your-org.github.io/obscura/docusaurus/
+
+For more details on these options, including pros and cons, see [Documentation Options](docs/DOCUMENTATION_OPTIONS.md).
+
+### Local Documentation Preview
+
+To preview documentation locally with mdBook:
+
+```bash
+# Install mdBook and plugins
+cargo install mdbook
+cargo install mdbook-mermaid
+cargo install mdbook-toc
+
+# Create a book.toml file (copy from .mdbook/book.toml in the repo)
+# Build and serve
+mdbook serve
+```
+
+## GitHub Workflows
+
+This project uses GitHub Actions for continuous integration and documentation deployment:
+
+1. **Build and Test**: Automatically builds the codebase, runs tests, and performs linting
+   - Triggered on: Push to main/master/develop branches, pull requests, manual dispatch
+   - Includes: Code formatting check, clippy linting, build, tests, benchmarks
+
+2. **Documentation**: Builds and deploys documentation to GitHub Pages
+   - Triggered on: Push to main/master branches with changes in docs directory, manual dispatch
+   - Deploys to: GitHub Pages, GitHub Wiki, and Docusaurus site
+
+To manually trigger these workflows, go to the Actions tab in the GitHub repository.
+
 ## Contributing
 
 Contributions are welcome! Please read our contributing guidelines and code of conduct before submitting pull requests.

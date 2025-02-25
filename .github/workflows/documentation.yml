@@ -1,0 +1,129 @@
+name: Documentation
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'docs/**'
+  workflow_dispatch:
+
+jobs:
+  # Option 1: GitHub Pages with mdBook
+  deploy-mdbook:
+    name: Deploy mdBook Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup mdBook
+        uses: peaceiris/actions-mdbook@v1
+        with:
+          mdbook-version: 'latest'
+      
+      - name: Setup mdBook plugins
+        run: |
+          cargo install mdbook-mermaid
+          cargo install mdbook-toc
+      
+      - name: Build mdBook
+        run: |
+          mkdir -p .mdbook
+          cat > .mdbook/book.toml << EOF
+          [book]
+          authors = ["Obscura Team"]
+          language = "en"
+          multilingual = false
+          src = "docs"
+          title = "Obscura Documentation"
+          
+          [output.html]
+          git-repository-url = "https://github.com/your-org/obscura"
+          edit-url-template = "https://github.com/your-org/obscura/edit/main/{path}"
+          
+          [preprocessor.mermaid]
+          command = "mdbook-mermaid"
+          
+          [preprocessor.toc]
+          command = "mdbook-toc"
+          renderer = ["html"]
+          EOF
+          
+          mdbook build .mdbook
+      
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./.mdbook/book
+          destination_dir: docs
+  
+  # Option 2: GitHub Wiki Sync
+  sync-wiki:
+    name: Sync Documentation to Wiki
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Sync docs to wiki
+        uses: SwiftDocOrg/github-wiki-publish-action@v1
+        with:
+          path: "docs"
+        env:
+          GH_PERSONAL_ACCESS_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+  
+  # Option 3: Docusaurus Deployment
+  deploy-docusaurus:
+    name: Deploy Docusaurus Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install Docusaurus
+        run: |
+          mkdir -p docusaurus
+          cd docusaurus
+          npm init -y
+          npm install @docusaurus/core @docusaurus/preset-classic
+          npx @docusaurus/init@latest init . classic
+      
+      - name: Copy documentation
+        run: |
+          cp -r docs/* docusaurus/docs/
+          # Update sidebar configuration
+          cat > docusaurus/sidebars.js << EOF
+          module.exports = {
+            docs: [
+              'index',
+              'architecture',
+              'consensus',
+              'development',
+              'networking',
+              'transactions',
+              {
+                type: 'category',
+                label: 'Mining',
+                items: ['mining_rewards_index'],
+              },
+            ],
+          };
+          EOF
+      
+      - name: Build Docusaurus
+        run: |
+          cd docusaurus
+          npm run build
+      
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docusaurus/build
+          destination_dir: docusaurus 
