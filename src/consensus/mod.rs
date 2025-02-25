@@ -2,8 +2,10 @@ use std::sync::Arc;
 pub mod pow;
 pub mod pos;
 pub mod randomx;
+pub mod difficulty;
 
 pub use randomx::{RandomXContext, RandomXError, verify_difficulty};
+pub use difficulty::DifficultyAdjuster;
 
 pub trait ConsensusEngine {
     fn validate_block(&self, block: &crate::blockchain::Block) -> bool;

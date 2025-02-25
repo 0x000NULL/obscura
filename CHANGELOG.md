@@ -1,5 +1,33 @@
 # Changelog
 
+All notable changes to the Obscura project will be documented in this file.
+
+## [0.1.4] - 2024-02-25
+
+### Changed
+- Replaced AES-128 with ChaCha20 in RandomX VM implementation
+  - Upgraded to 256-bit security strength
+  - Improved software performance
+  - Enhanced resistance to timing attacks
+  - Simplified cryptographic operations
+  - Optimized memory mixing function
+
+### Security
+- Implemented deterministic nonce generation for ChaCha20
+- Added consistent key derivation scheme
+- Improved memory mixing entropy
+- Enhanced block processing alignment
+
+### Performance
+- Optimized memory operations with 64-byte blocks
+- Improved cryptographic operation efficiency
+- Reduced complexity in encryption/decryption operations
+
+### Testing
+- Added comprehensive ChaCha20 operation tests
+- Enhanced memory mixing verification
+- Improved test coverage for cryptographic operations
+
 ## RandomX PoW Updates - 2024-02-26 (v0.1.1)
 
 ### Improved

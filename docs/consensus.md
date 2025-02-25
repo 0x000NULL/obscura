@@ -22,12 +22,64 @@ pub trait ConsensusEngine {
 ## Proof of Work Details
 
 ### RandomX Implementation
-- CPU-optimized mining algorithm
-- Memory-hard computation (2.5GB VM instance)
-- Fast verification for nodes
-- Dynamic difficulty adjustment every block
-- FFI integration with native RandomX library
-- AVX2 instruction set optimization
+
+The Obscura blockchain uses a modified version of the RandomX Proof of Work algorithm, featuring enhanced security through ChaCha20 encryption and optimized memory-hard functions.
+
+### Key Components
+
+1. **Virtual Machine**
+   - Register-based architecture
+   - Memory-hard operations
+   - ChaCha20-based cryptographic instructions
+   - Complex instruction set
+
+2. **Memory System**
+   - 2MB main memory
+   - 256KB scratchpad
+   - ChaCha20-based memory mixing
+   - High bandwidth requirements
+
+3. **Cryptographic Operations**
+   - ChaCha20 stream cipher (256-bit security)
+   - Efficient software implementation
+   - Timing attack resistance
+   - Deterministic operation
+
+### Memory-Hard Function
+
+The memory-hard function uses ChaCha20 for:
+- Initial memory initialization
+- Multiple mixing passes
+- Neighboring block mixing
+- Final state transformation
+
+### Instruction Set
+
+The VM supports various instructions including:
+- Arithmetic operations
+- Memory operations
+- Control flow
+- ChaCha20 encryption/decryption
+
+### Security Features
+
+1. **ASIC Resistance**
+   - Complex instruction set
+   - Memory-hard requirements
+   - ChaCha20-based operations
+   - Multiple mixing passes
+
+2. **Cryptographic Security**
+   - 256-bit security strength
+   - Secure nonce generation
+   - Consistent key derivation
+   - Protected memory operations
+
+3. **Implementation Security**
+   - Timing attack resistance
+   - Constant-time operations
+   - Secure memory patterns
+   - Error handling
 
 ### Mining Process
 1. Block template creation

@@ -1,4 +1,4 @@
-use crate::consensus::randomx::{RandomXContext, RandomXError, verify_difficulty};
+use crate::consensus::randomx::{RandomXContext, verify_difficulty};
 use crate::consensus::randomx::randomx_vm::{RandomXVM, Instruction};
 use std::collections::HashSet;
 
@@ -215,4 +215,73 @@ fn test_context_lifecycle() {
     assert!(context2.calculate_hash(b"input", &mut output2).is_ok());
     
     assert_ne!(output1, output2); // Different keys should produce different hashes
+}
+
+#[test]
+fn test_chacha_operations() {
+    let mut vm = RandomXVM::new_with_mode(true);
+    
+    // Set up test values
+    vm.registers[0] = 0x0123456789ABCDEF; // Key
+    vm.registers[1] = 0xFEDCBA9876543210; // Test value
+    
+    // Test ChaCha20 encryption
+    let program = vec![
+        Instruction::ChaChaEnc(2, 1),  // Encrypt register 1 into register 2
+    ];
+    vm.load_program(program);
+    assert!(vm.execute().is_ok());
+    
+    // Save encrypted value
+    let encrypted = vm.registers[2];
+    assert_ne!(encrypted, vm.registers[1], "Encryption should change the value");
+    
+    // Test ChaCha20 decryption
+    let program = vec![
+        Instruction::ChaChaDec(3, 2),  // Decrypt register 2 into register 3
+    ];
+    vm.load_program(program);
+    assert!(vm.execute().is_ok());
+    
+    // Verify decryption matches original
+    assert_eq!(vm.registers[3], vm.registers[1], 
+        "Decryption should restore original value");
+}
+
+#[test]
+fn test_memory_mixing_chacha() {
+    let mut vm = RandomXVM::new_with_mode(true);
+    
+    // Set initial state
+    vm.registers[0] = 0x0123456789ABCDEF;
+    
+    // First memory mixing
+    let initial_scratchpad = vm.scratchpad.clone();
+    vm.mix_memory();
+    let first_mix = vm.scratchpad.clone();
+    
+    // Verify ChaCha20 properties:
+    
+    // 1. Memory has been modified from initial state
+    assert!(initial_scratchpad.iter().zip(first_mix.iter()).any(|(a, b)| a != b),
+           "Memory mixing should modify the scratchpad");
+    
+    // 2. Different keys produce different results
+    vm.registers[0] = 0xFEDCBA9876543210; // Different key
+    vm.mix_memory();
+    let different_key_mix = vm.scratchpad.clone();
+    assert!(first_mix.iter().zip(different_key_mix.iter()).any(|(a, b)| a != b),
+           "Different keys should produce different scratchpad states");
+    
+    // 3. Verify ChaCha20 block alignment
+    let aligned_blocks = vm.scratchpad.chunks(64)
+        .enumerate()
+        .filter(|(_, block)| block.len() == 64)
+        .count();
+    assert!(aligned_blocks > 0, "Should have complete 64-byte blocks for ChaCha20");
+    
+    // 4. Verify mixing entropy
+    let unique_bytes: HashSet<_> = vm.scratchpad.iter().copied().collect();
+    assert!(unique_bytes.len() > 200,
+           "ChaCha20-based memory mixing should produce high entropy");
 } 

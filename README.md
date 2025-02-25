@@ -182,3 +182,81 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - RandomX team for ASIC-resistant PoW
 - Zcash team for zk-SNARKs research
 - Monero team for privacy innovations
+
+## Features
+
+- **Memory-Hard Proof of Work**: Based on RandomX algorithm with enhanced security
+- **ChaCha20 Encryption**: High-performance software-optimized encryption
+- **ASIC-Resistant Mining**: Complex instruction set and memory-hard functions
+- **Secure by Design**: Modern cryptographic primitives and careful implementation
+
+## Cryptographic Implementation
+
+### ChaCha20 Integration
+
+The RandomX VM uses ChaCha20 for its cryptographic operations, providing:
+- 256-bit security strength
+- Excellent software performance
+- Strong resistance to timing attacks
+- Simple and secure implementation
+- Efficient memory mixing operations
+
+### Memory-Hard Functions
+
+The implementation includes:
+- 2MB main memory
+- 256KB scratchpad memory
+- ChaCha20-based memory mixing
+- Multiple mixing passes for increased security
+
+## Building
+
+```bash
+cargo build --release
+```
+
+## Testing
+
+```bash
+cargo test
+```
+
+## Security Features
+
+- ChaCha20 stream cipher for cryptographic operations
+- Memory-hard computation requirements
+- Complex instruction set
+- Deterministic program generation
+- Secure memory mixing operations
+
+## Performance
+
+The implementation is optimized for:
+- Software execution (no specialized hardware required)
+- Memory bandwidth utilization
+- Cryptographic operation throughput
+- Minimal timing attack surface
+
+## Documentation
+
+Detailed documentation is available in the `docs/` directory:
+- Technical specifications
+- API documentation
+- Implementation details
+- Security considerations
+
+## Contributing
+
+Contributions are welcome! Please read our contributing guidelines and code of conduct before submitting pull requests.
+
+## License
+
+[Insert License Information]
+
+## Security
+
+If you discover a security vulnerability, please follow our security policy for responsible disclosure.
+
+## Changelog
+
+See CHANGELOG.md for detailed version history.

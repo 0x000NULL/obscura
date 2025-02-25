@@ -105,22 +105,18 @@ impl RandomXContext {
                     value >> 16
                 )),
                 4 => program.push(Instruction::ScratchpadWrite(
-                    value >> 8,
+                    value >> 16,
                     (value >> 24) as u8 % 16
                 )),
-                5 => program.push(Instruction::AesEnc(
+                5 => program.push(Instruction::ChaChaEnc(
                     (value >> 8) as u8 % 16,
                     (value >> 16) as u8 % 16
                 )),
-                6 => program.push(Instruction::Load(
+                6 => program.push(Instruction::ChaChaDec(
                     (value >> 8) as u8 % 16,
-                    value >> 16
+                    (value >> 16) as u8 % 16
                 )),
-                7 => program.push(Instruction::Store(
-                    value >> 8,
-                    (value >> 24) as u8 % 16
-                )),
-                _ => unreachable!(),
+                _ => program.push(Instruction::Jump(value >> 16)),
             }
         }
         

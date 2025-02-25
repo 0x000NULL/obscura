@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+use chacha20::{
+    ChaCha20,
+    cipher::{KeyIvInit, StreamCipher},
+};
 
 /// Represents a RandomX VM instruction
 /// 
@@ -25,9 +28,9 @@ pub enum Instruction {
     ScratchpadRead(u8, u32),  // dest, address
     ScratchpadWrite(u32, u8), // address, src
     
-    /// Cryptographic operations using AES
-    AesEnc(u8, u8),     // dest, src
-    AesDec(u8, u8),     // dest, src
+    /// Cryptographic operations using ChaCha20
+    ChaChaEnc(u8, u8),     // dest, src
+    ChaChaDec(u8, u8),     // dest, src
 }
 
 /// RandomX VM state
@@ -100,6 +103,27 @@ impl RandomXVM {
         }
     }
     
+    fn create_chacha_cipher(value: u64, key: u64) -> ChaCha20 {
+        // Create a 32-byte key from the input key
+        let mut full_key = [0u8; 32];
+        full_key[..8].copy_from_slice(&key.to_le_bytes());
+        full_key[8..16].copy_from_slice(&value.to_le_bytes());
+        // Fill remaining bytes with a fixed pattern for consistency
+        for i in 16..32 {
+            full_key[i] = (i as u8).wrapping_mul(0xAA);
+        }
+
+        // Create a 12-byte nonce (96 bits) that is deterministic based on the key
+        // This ensures the same nonce is used for encryption and decryption
+        let mut nonce = [0u8; 12];
+        let key_bytes = key.to_le_bytes();
+        nonce[..8].copy_from_slice(&key_bytes);
+        // Use fixed pattern for last 4 bytes
+        nonce[8..12].copy_from_slice(&[0xCC, 0xDD, 0xEE, 0xFF]);
+
+        ChaCha20::new(&full_key.into(), &nonce.into())
+    }
+
     /// Executes a single instruction and updates VM state
     /// 
     /// Returns an error if the program counter is out of bounds or
@@ -161,15 +185,27 @@ impl RandomXVM {
                 let value = self.registers[*src as usize];
                 self.scratchpad[addr..addr+8].copy_from_slice(&value.to_le_bytes());
             },
-            Instruction::AesEnc(dest, src) => {
-                // Simple XOR-based simulation of AES for testing
+            Instruction::ChaChaEnc(dest, src) => {
                 let value = self.registers[*src as usize];
-                self.registers[*dest as usize] = value ^ 0x0123456789ABCDEF;
+                let key = self.registers[0];
+                
+                // Create cipher and encrypt the value
+                let mut cipher = Self::create_chacha_cipher(key, key);  // Use key for both parameters
+                let mut data = value.to_le_bytes();
+                cipher.apply_keystream(&mut data);
+                
+                self.registers[*dest as usize] = u64::from_le_bytes(data);
             },
-            Instruction::AesDec(dest, src) => {
-                // Simple XOR-based simulation of AES for testing
+            Instruction::ChaChaDec(dest, src) => {
                 let value = self.registers[*src as usize];
-                self.registers[*dest as usize] = value ^ 0x0123456789ABCDEF;
+                let key = self.registers[0];
+                
+                // Create cipher and decrypt the value
+                let mut cipher = Self::create_chacha_cipher(key, key);  // Use key for both parameters
+                let mut data = value.to_le_bytes();
+                cipher.apply_keystream(&mut data);
+                
+                self.registers[*dest as usize] = u64::from_le_bytes(data);
             },
         }
         
@@ -195,29 +231,30 @@ impl RandomXVM {
     /// to ensure high memory bandwidth requirements and complex dependencies.
     pub fn mix_memory(&mut self) {
         let seed = self.registers[0];
-        let seed_bytes = seed.to_le_bytes();
+        let mut cipher = Self::create_chacha_cipher(seed, seed);
         
         // Initialize scratchpad with program-dependent values
-        for i in 0..self.scratchpad.len() {
-            // Use seed and position to generate initial values
-            // Prime numbers are used to ensure good distribution
-            let mixed = seed_bytes[i % 8]
-                .wrapping_add((i % 251) as u8)  // Use prime number for better distribution
-                .wrapping_mul(self.registers[i % 8] as u8);
-            
-            self.scratchpad[i] = mixed;
+        for chunk in self.scratchpad.chunks_mut(64) {
+            cipher.apply_keystream(chunk);
         }
 
         // Multiple mixing passes to increase entropy and create dependencies
         for pass in 0..4 {
+            // Create a new cipher for each pass with different parameters
+            let mut pass_cipher = Self::create_chacha_cipher(seed.wrapping_add(pass as u64), seed);
+            
+            // Process scratchpad in 64-byte blocks (ChaCha20 block size)
+            for chunk in self.scratchpad.chunks_mut(64) {
+                pass_cipher.apply_keystream(chunk);
+            }
+
+            // Additional mixing with neighboring blocks
             for i in 0..self.scratchpad.len() {
                 let prev = if i == 0 { self.scratchpad[self.scratchpad.len() - 1] } else { self.scratchpad[i - 1] };
                 let next = if i == self.scratchpad.len() - 1 { self.scratchpad[0] } else { self.scratchpad[i + 1] };
                 
-                // Complex mixing operation using neighboring values
-                // Uses prime multiplier and rotation for better diffusion
                 let mixed = self.scratchpad[i]
-                    .wrapping_mul(167)  // Prime multiplier
+                    .wrapping_mul(167)
                     .wrapping_add(prev)
                     .rotate_left((i + pass) as u32 % 8)
                     ^ next;
@@ -227,7 +264,6 @@ impl RandomXVM {
         }
 
         if self.test_mode {
-            // In test mode, ensure values are modified deterministically
             for i in 0..self.scratchpad.len() {
                 self.scratchpad[i] = self.scratchpad[i].wrapping_add((i % 251) as u8);
             }

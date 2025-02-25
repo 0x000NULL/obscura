@@ -1,12 +1,20 @@
 [package]
 name = "obscura"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
+authors = ["Ethan Aldrich <Add.email.here>"]
+description = "A Rust implementation of the Obscura blockchain protocol."
+repository = "https://github.com/0x000null/obscura"
 
 [dependencies]
 ed25519-dalek = "1.0"
 rand = "0.7"
+rand_core = "0.5"
 sha2 = "0.9"
+chacha20 = "0.9"
+typenum = "1.16"
+log = "0.4"
+serde_json = "1.0"
 
 [build-dependencies]
 cc = "1.0" 
