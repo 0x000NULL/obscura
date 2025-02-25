@@ -69,9 +69,16 @@ impl Wallet {
     }
 
     pub fn create_stake(&mut self, amount: u64) -> Option<StakeProof> {
+        if amount > self.balance {
+            return None;
+        }
+        
+        self.balance -= amount;
+        self.staked_amount += amount;
+
         Some(StakeProof {
             stake_amount: amount,
-            stake_age: 24 * 60 * 60, // 24 hours
+            stake_age: 0,
             signature: vec![0u8; 64], // In production, this would be a real signature
         })
     }

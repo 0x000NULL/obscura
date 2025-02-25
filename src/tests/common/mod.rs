@@ -10,6 +10,7 @@ pub fn create_test_block(nonce: u64) -> Block {
     block
 }
 
+#[allow(dead_code)]
 pub fn create_test_transaction() -> Transaction {
     let mut csprng = OsRng;
     let keypair = Keypair::generate(&mut csprng);
@@ -39,6 +40,7 @@ pub fn create_test_stake_proof() -> StakeProof {
     }
 }
 
+#[allow(dead_code)]
 pub fn create_transaction_with_fee(fee: u64) -> Transaction {
     let mut tx = create_test_transaction();
     tx.outputs[0].value = fee;

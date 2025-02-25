@@ -1,6 +1,3 @@
-use std::env;
-use std::path::PathBuf;
-
 fn main() {
     // Tell cargo to look for static libraries in the specified directory
     println!("cargo:rustc-link-search=native=lib");
@@ -18,5 +15,4 @@ fn main() {
 
     // Rebuild if the build script changes
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=lib/randomx.lib");
 } 

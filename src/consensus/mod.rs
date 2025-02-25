@@ -3,6 +3,8 @@ pub mod pow;
 pub mod pos;
 pub mod randomx;
 
+pub use randomx::{RandomXContext, RandomXError, verify_difficulty};
+
 pub trait ConsensusEngine {
     fn validate_block(&self, block: &crate::blockchain::Block) -> bool;
     fn calculate_next_difficulty(&self) -> u32;
@@ -62,6 +64,7 @@ pub fn validate_block_hybrid(block: &crate::blockchain::Block, randomx: &Arc<ran
     true
 }
 
+#[allow(dead_code)]
 fn validate_pow(block: &crate::blockchain::Block, randomx: &Arc<randomx::RandomXContext>) -> bool {
     let mut hash = [0u8; 32];
     let block_header = block.serialize_header();
@@ -73,9 +76,24 @@ fn validate_pow(block: &crate::blockchain::Block, randomx: &Arc<randomx::RandomX
     randomx::verify_difficulty(&hash, block.header.difficulty_target)
 }
 
+#[allow(dead_code)]
 fn validate_pos(block: &crate::blockchain::Block, stake_proof: &StakeProof) -> bool {
     let pos = pos::ProofOfStake::new();
     pos.validate_stake_proof(stake_proof, &block.serialize_header())
+}
+
+pub fn verify_block_hash(randomx: &RandomXContext, block_header: &[u8], target: u32) -> bool {
+    let mut hash = [0u8; 32];
+    if randomx.calculate_hash(block_header, &mut hash).is_err() {
+        return false;
+    }
+    verify_difficulty(&hash, target)
+}
+
+pub fn calculate_block_hash(randomx: &RandomXContext, header_bytes: &[u8]) -> Result<[u8; 32], RandomXError> {
+    let mut hash = [0u8; 32];
+    randomx.calculate_hash(header_bytes, &mut hash)?;
+    Ok(hash)
 }
 
 #[cfg(test)]
