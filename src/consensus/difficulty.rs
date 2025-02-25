@@ -982,37 +982,81 @@ impl DifficultyAdjuster {
 
     /// Calculate next difficulty with enhanced controls
     fn calculate_next_difficulty(&mut self) -> u32 {
+        // Check for emergency adjustment first
+        if let Some(emergency_diff) = self.check_emergency_adjustment() {
+            debug!("Emergency difficulty adjustment triggered: {}", emergency_diff);
+            self.current_difficulty = emergency_diff;
+            return emergency_diff;
+        }
+
         // Calculate SMA and EMA adjustments
         let sma = self.calculate_moving_average() as f64;
         let ema = self.ema_times.back().unwrap_or(&(TARGET_BLOCK_TIME as f64));
 
-        // Weighted combination of SMA and EMA
-        let weighted_time = 0.7 * sma + 0.3 * *ema;
+        // Weighted combination of SMA and EMA with adaptive weights
+        // Use more EMA weight when network is unstable to reduce oscillation
+        let stability_factor = self.metrics.oscillation.stability_score.clamp(0.0, 1.0);
+        let ema_weight = 0.3 + (0.2 * (1.0 - stability_factor));
+        let sma_weight = 1.0 - ema_weight;
+        
+        let weighted_time = sma_weight * sma + ema_weight * *ema;
         let target_time = TARGET_BLOCK_TIME as f64;
 
         // Calculate adjustment factor with oscillation dampening and network health
         let raw_adjustment = target_time / weighted_time;
-        let dampened_adjustment = raw_adjustment.powf(self.oscillation_dampener);
-        let adjustment_factor = dampened_adjustment * (1.0 - self.metrics.network.network_stress_level);
+        
+        // Apply dampening based on network conditions
+        // More dampening when oscillation is detected
+        let adaptive_dampener = self.oscillation_dampener * 
+            (1.0 + (1.0 - stability_factor) * 0.5);
+            
+        let dampened_adjustment = raw_adjustment.powf(adaptive_dampener);
+        
+        // Apply network stress adjustment
+        // Reduce adjustment magnitude when network is under stress
+        // Ensure network_stress_level is in [0, 1] range to prevent overflow
+        let network_stress = self.metrics.network.network_stress_level.clamp(0.0, 1.0);
+        let stress_adjusted = dampened_adjustment * (1.0 - network_stress * 0.5);
+            
+        // Track consecutive significant adjustments to prevent manipulation
+        let is_significant = (stress_adjusted - 1.0).abs() > ADAPTIVE_WEIGHT_THRESHOLD;
+        if is_significant {
+            self.consecutive_adjustments += 1;
+        } else {
+            self.consecutive_adjustments = 0;
+        }
+        
+        // Limit adjustment if too many consecutive significant changes
+        let adjustment_factor = if self.consecutive_adjustments > MAX_CONSECUTIVE_ADJUSTMENTS {
+            debug!("Limiting adjustment factor due to too many consecutive significant changes");
+            1.0 + (stress_adjusted - 1.0) * 0.5
+        } else {
+            stress_adjusted
+        };
 
         // Calculate new difficulty with overflow protection
         let current_diff = self.current_difficulty as f64;
         
         // Clamp adjustment factor to prevent extreme values
+        // Use tighter bounds when network conditions are unstable
+        let stability_multiplier = 0.5 + (stability_factor * 0.5);
+        let max_increase = 2.0 * stability_multiplier; // Reduced from 4.0 to prevent overflow
+        let max_decrease = 0.25 / stability_multiplier.max(0.1); // Prevent division by zero
+        
         let clamped_adjustment = if adjustment_factor > 1.0 {
             // For increases, limit maximum adjustment to avoid overflow
-            let max_adjustment = ((u32::MAX as f64) / current_diff).min(4.0);
+            let max_adjustment = ((MAX_DIFFICULTY as f64) / current_diff).min(max_increase);
             adjustment_factor.min(max_adjustment)
         } else {
             // For decreases, limit minimum adjustment to avoid underflow
-            adjustment_factor.max(0.25)
+            adjustment_factor.max(max_decrease)
         };
 
         // Calculate new difficulty with careful conversion
         let new_diff_f64 = current_diff * clamped_adjustment;
-        let new_diff = if new_diff_f64 > u32::MAX as f64 {
+        let new_diff = if new_diff_f64 >= MAX_DIFFICULTY as f64 {
             MAX_DIFFICULTY
-        } else if new_diff_f64 < MIN_DIFFICULTY as f64 {
+        } else if new_diff_f64 <= MIN_DIFFICULTY as f64 {
             MIN_DIFFICULTY
         } else {
             new_diff_f64.round() as u32
@@ -1021,6 +1065,21 @@ impl DifficultyAdjuster {
         // Update metrics
         self.metrics.current_difficulty = new_diff;
         self.metrics.adjustment_factor = clamped_adjustment;
+        
+        // Log significant difficulty changes
+        if (clamped_adjustment - 1.0).abs() > 0.1 {
+            info!("Difficulty adjusted by factor {:.4}: {} -> {}", 
+                clamped_adjustment, self.current_difficulty, new_diff);
+        }
+        
+        // Update current difficulty
+        self.current_difficulty = new_diff;
+        
+        // Record difficulty in history for trend analysis
+        if self.difficulty_history.len() >= DIFFICULTY_WINDOW {
+            self.difficulty_history.pop_front();
+        }
+        self.difficulty_history.push_back(new_diff);
 
         new_diff
     }

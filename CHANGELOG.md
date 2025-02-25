@@ -2,6 +2,40 @@
 
 All notable changes to the Obscura project will be documented in this file.
 
+## [0.1.5] - 2024-02-26
+
+### Added
+- Implemented complete difficulty adjustment mechanism
+  - Added moving average calculation for block times
+  - Implemented adaptive difficulty retargeting algorithm
+  - Added emergency difficulty adjustment rules
+  - Implemented oscillation dampening to prevent difficulty swings
+  - Added network health monitoring for adjustment tuning
+
+### Enhanced
+- Improved difficulty calculation with multiple safeguards:
+  - Added stability-based adaptive weights for SMA/EMA combination
+  - Implemented consecutive adjustment limiting to prevent manipulation
+  - Added bounds checking to prevent overflow/underflow
+  - Enhanced protection against time warp attacks
+  - Implemented network stress detection and adjustment
+
+### Security
+- Added comprehensive attack detection mechanisms:
+  - Time warp attack detection
+  - Hashrate manipulation detection
+  - Difficulty manipulation detection
+  - Combined attack probability calculation
+  - Emergency difficulty adjustment for extreme conditions
+
+### Testing
+- Added extensive test suite for difficulty adjustment:
+  - Normal adjustment scenarios
+  - Fast/slow block scenarios
+  - Emergency adjustment conditions
+  - Difficulty bounds verification
+  - Attack detection validation
+
 ## [0.1.4] - 2024-02-25
 
 ### Changed

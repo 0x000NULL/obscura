@@ -23,10 +23,10 @@
     - [x] Implement random program generation
     - [x] Add memory-hard computation requirements
     - [x] Create ChaCha20 encryption layer
-  - [ ] Implement difficulty adjustment mechanism
-    - [ ] Add moving average calculation
-    - [ ] Implement difficulty retargeting algorithm
-    - [ ] Add emergency difficulty adjustment rules
+  - [x] Implement difficulty adjustment mechanism
+    - [x] Add moving average calculation
+    - [x] Implement difficulty retargeting algorithm
+    - [x] Add emergency difficulty adjustment rules
   - [ ] Add mining reward distribution logic
     - [ ] Implement coinbase transaction
     - [ ] Create block reward calculation
