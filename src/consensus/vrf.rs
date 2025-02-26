@@ -3,8 +3,8 @@ use sha2::{Digest, Sha256};
 
 /// VRF (Verifiable Random Function) implementation for validator selection
 /// This is a simplified implementation based on the ed25519 signature scheme
-pub struct Vrf {
-    keypair: Keypair,
+pub struct Vrf<'a> {
+    keypair: &'a Keypair,
 }
 
 /// VRF proof that can be verified by others
@@ -19,9 +19,9 @@ pub struct VrfProof {
     pub output: [u8; 32],
 }
 
-impl Vrf {
+impl<'a> Vrf<'a> {
     /// Create a new VRF instance with the given keypair
-    pub fn new(keypair: Keypair) -> Self {
+    pub fn new(keypair: &'a Keypair) -> Self {
         Vrf { keypair }
     }
 
@@ -100,7 +100,7 @@ mod tests {
         let keypair = Keypair::generate(&mut csprng);
 
         // Create a VRF instance
-        let vrf = Vrf::new(keypair);
+        let vrf = Vrf::new(&keypair);
 
         // Generate a proof
         let message = b"test message";
@@ -124,7 +124,7 @@ mod tests {
         let keypair = Keypair::generate(&mut csprng);
 
         // Create a VRF instance
-        let vrf = Vrf::new(keypair);
+        let vrf = Vrf::new(&keypair);
 
         // Generate proofs for different messages
         let message1 = b"message 1";
@@ -148,7 +148,7 @@ mod tests {
         let keypair = Keypair::generate(&mut csprng);
 
         // Create a VRF instance
-        let vrf = Vrf::new(keypair);
+        let vrf = Vrf::new(&keypair);
 
         // Generate a proof
         let message = b"test message";

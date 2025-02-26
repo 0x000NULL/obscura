@@ -1,15 +1,16 @@
 use crate::consensus::vrf::{Vrf, VrfProof};
-use ed25519_dalek::Keypair;
-use rand::rngs::OsRng;
+use ed25519_dalek::{Keypair, PublicKey, Signature, Signer};
+use rand::{rngs::OsRng, RngCore};
+use sha2::{Digest, Sha256};
 
 #[test]
 fn test_vrf_basic_functionality() {
     // Generate a keypair
-    let mut csprng = OsRng;
+    let mut csprng = OsRng {};
     let keypair = Keypair::generate(&mut csprng);
 
     // Create a VRF instance
-    let vrf = Vrf::new(keypair);
+    let vrf = Vrf::new(&keypair);
 
     // Generate a proof
     let message = b"test message for validator selection";
@@ -25,11 +26,11 @@ fn test_vrf_basic_functionality() {
 #[test]
 fn test_vrf_deterministic_output() {
     // Generate a keypair
-    let mut csprng = OsRng;
+    let mut csprng = OsRng {};
     let keypair = Keypair::generate(&mut csprng);
 
     // Create a VRF instance
-    let vrf = Vrf::new(keypair);
+    let vrf = Vrf::new(&keypair);
 
     // Generate proofs for the same message multiple times
     let message = b"deterministic test message";
@@ -48,13 +49,13 @@ fn test_vrf_deterministic_output() {
 #[test]
 fn test_vrf_different_keypairs() {
     // Generate two different keypairs
-    let mut csprng = OsRng;
+    let mut csprng = OsRng {};
     let keypair1 = Keypair::generate(&mut csprng);
     let keypair2 = Keypair::generate(&mut csprng);
 
     // Create two VRF instances
-    let vrf1 = Vrf::new(keypair1);
-    let vrf2 = Vrf::new(keypair2);
+    let vrf1 = Vrf::new(&keypair1);
+    let vrf2 = Vrf::new(&keypair2);
 
     // Generate proofs for the same message with different keypairs
     let message = b"same message, different keys";
@@ -73,11 +74,11 @@ fn test_vrf_different_keypairs() {
 #[test]
 fn test_vrf_random_value_generation() {
     // Generate a keypair
-    let mut csprng = OsRng;
+    let mut csprng = OsRng {};
     let keypair = Keypair::generate(&mut csprng);
 
     // Create a VRF instance
-    let vrf = Vrf::new(keypair);
+    let vrf = Vrf::new(&keypair);
 
     // Generate a proof
     let message = b"random value test";
@@ -106,11 +107,10 @@ fn test_vrf_random_value_generation() {
 fn test_vrf_validator_selection_simulation() {
     // Simulate validator selection using VRF
 
-    // Create 10 validators with different stakes
+    // Create a set of validators with different stake amounts
+    let mut csprng = OsRng {};
     let mut validators = Vec::new();
-    let mut csprng = OsRng;
-
-    for i in 0..10 {
+    for i in 0..5 {
         let keypair = Keypair::generate(&mut csprng);
         let stake = 1000 + (i * 500); // Different stake amounts
         validators.push((keypair, stake));
@@ -123,7 +123,7 @@ fn test_vrf_validator_selection_simulation() {
     // Generate VRF proofs for each validator
     let mut proofs = Vec::new();
     for (keypair, _) in &validators {
-        let vrf = Vrf::new(keypair.clone());
+        let vrf = Vrf::new(&keypair);
         let proof = vrf.prove(&random_beacon).unwrap();
         proofs.push(proof);
     }

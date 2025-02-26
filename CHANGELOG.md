@@ -433,3 +433,43 @@ All notable changes to the Obscura project will be documented in this file.
 - Memory-hard functions designed for ASIC resistance
 - Instruction set supports future extensions
 - Test suite verifies core functionality
+
+## [Unreleased]
+
+### Fixed
+- Fixed unused assignments in `src/consensus/difficulty.rs` by using the variables with `let _ = variable` pattern to avoid warnings
+- Fixed borrowing issues in `src/consensus/pos.rs` in the `rotate_shards` method by:
+  - Extracting necessary data from `self` before proceeding
+  - Cloning `active_validators` and `validators` to avoid borrowing `self` multiple times
+  - Creating a simplified version of `StakingContract` with only the necessary fields
+  - Updating the call to `shard_manager.rotate_shards` to pass the simplified contract
+- Added `#[derive(Clone)]` to the `ValidatorInfo` struct in `src/consensus/pos.rs` to enable cloning in the `rotate_shards` method
+- Fixed unused variable in `ShardManager::new()` by using `current_time` to initialize both `last_shard_rotation` and `last_rotation`
+
+### Improvements
+- Code now compiles successfully with `cargo build`
+- Fixed critical borrowing issues that were preventing compilation
+- Improved code structure in the `rotate_shards` method to avoid borrowing conflicts
+
+### Known Issues
+- Multiple unused constants, fields, and methods throughout the codebase (72 Clippy warnings)
+- Unnecessary borrows in `src/blockchain/mod.rs` (15+ instances)
+- Missing `Default` trait implementations for several structs:
+  - `UTXOSet`, `Mempool`, `DifficultyAdjuster`, `HybridValidator`, `ProofOfStake`
+  - `ProofOfWork`, `RandomXVM`, `ShardManager`, `HybridConsensus`, `Node`, `Wallet`
+- Improper `Arc` usage with types that are not `Send` and `Sync` in `src/consensus/pow.rs`
+- Code simplifications needed in various places:
+  - Using `is_empty()` instead of comparing lengths to zero
+  - Using `clamp` instead of chained `min` and `max` calls
+  - Replacing manual range contains checks with `RangeInclusive::contains`
+  - Optimizing loops with iterators
+  - Fixing redundant closures
+  - Replacing manual memcpy with `copy_from_slice`
+  - Using assignment operators (`+=`, `-=`, etc.) where appropriate
+- Dropping references issue in `src/consensus/pos.rs`
+
+### Next Steps
+- Address the remaining Clippy warnings to improve code quality
+- Implement `Default` traits for all structs with `new()` methods
+- Fix unnecessary borrows and optimize code based on Clippy suggestions
+- Address the `Arc` usage issue with types that are not `Send` and `Sync`

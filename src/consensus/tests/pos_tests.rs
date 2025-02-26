@@ -1,7 +1,12 @@
 use super::*;
-use crate::consensus::pos::{calculate_stake_reward, ProofOfStake, StakeProof, StakingContract};
+use crate::blockchain::{Block, BlockHeader};
 use crate::consensus::threshold_sig::{ThresholdError, ValidatorAggregation};
 use ed25519_dalek::{Keypair, Signer};
+use crate::consensus::pos::{
+    BftMessageType, ChainInfo, MAX_CONSECUTIVE_EPOCHS, ROTATION_INTERVAL,
+    INSURANCE_POOL_FEE, INSURANCE_COVERAGE_PERCENTAGE
+};
+use crate::consensus::pos::{ProofOfStake, StakeProof, StakingContract, SlashingOffense};
 use rand::rngs::OsRng;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -46,13 +51,13 @@ fn test_staking_contract_operations() {
     let bob_key = vec![5, 6, 7, 8];
     let charlie_key = vec![9, 10, 11, 12];
 
-    assert!(contract.create_stake(alice_key.clone(), 2000).is_ok());
-    assert!(contract.create_stake(bob_key.clone(), 3000).is_ok());
-    assert!(contract.create_stake(charlie_key.clone(), 1500).is_ok());
+    assert!(contract.create_stake(alice_key.clone(), 2000, true).is_ok());
+    assert!(contract.create_stake(bob_key.clone(), 3000, true).is_ok());
+    assert!(contract.create_stake(charlie_key.clone(), 1500, true).is_ok());
 
     // Register validators
-    assert!(contract.register_validator(alice_key.clone(), 0.1).is_ok());
-    assert!(contract.register_validator(bob_key.clone(), 0.05).is_ok());
+    assert!(contract.register_validator(alice_key.clone(), 0.1, None).is_ok());
+    assert!(contract.register_validator(bob_key.clone(), 0.05, None).is_ok());
 
     // Test delegation
     assert!(contract
@@ -75,10 +80,10 @@ fn test_staking_contract_operations() {
     assert!(contract.undelegate_stake(charlie_key.clone()).is_ok());
 
     // Test slashing
-    let slash_amount = contract
-        .slash_validator(alice_key.clone(), "Double signing")
+    let slash_result = contract
+        .slash_validator(&alice_key, SlashingOffense::Downtime)
         .unwrap();
-    assert!(slash_amount > 0);
+    assert!(slash_result > 0);
 
     // After slashing, only Bob should be selected
     let selected_after_slash = contract.select_validators(2);
@@ -120,7 +125,7 @@ fn test_enhanced_security_features() {
     assert_eq!(selected.len(), 2);
 
     // Test tiered slashing
-    let slash_result = contract.slash_validator(public_key1.clone(), SlashingOffense::Downtime);
+    let slash_result = contract.slash_validator(&public_key1, SlashingOffense::Downtime);
     assert!(slash_result.is_ok());
     let slashed_amount = slash_result.unwrap();
 
@@ -130,7 +135,7 @@ fn test_enhanced_security_features() {
     assert!(!validator.slashed); // Downtime doesn't permanently slash
 
     // Test progressive slashing
-    let slash_result2 = contract.slash_validator(public_key1.clone(), SlashingOffense::Downtime);
+    let slash_result2 = contract.slash_validator(&public_key1, SlashingOffense::Downtime);
     assert!(slash_result2.is_ok());
     let slashed_amount2 = slash_result2.unwrap();
 
@@ -138,7 +143,7 @@ fn test_enhanced_security_features() {
     assert!(slashed_amount2 > slashed_amount);
 
     // Test severe slashing
-    let slash_result3 = contract.slash_validator(public_key2.clone(), SlashingOffense::DoubleSign);
+    let slash_result3 = contract.slash_validator(&public_key2, SlashingOffense::DoubleSign);
     assert!(slash_result3.is_ok());
 
     // Verify that the validator was permanently slashed for double signing
@@ -629,10 +634,10 @@ fn test_validator_exit_queue() {
 
     // Register validators and create stakes
     for (validator, amount) in &validators {
-        let result = contract.create_stake(validator, *amount);
+        let result = contract.create_stake(validator.to_vec(), *amount, true);
         assert!(result.is_ok());
 
-        let result = contract.register_validator(validator, 10);
+        let result = contract.register_validator(validator.to_vec(), 10.0, None);
         assert!(result.is_ok());
     }
 
@@ -723,10 +728,10 @@ fn test_performance_based_rewards() {
 
     // Register validators and create stakes
     for (validator, amount) in &validators {
-        let result = contract.create_stake(validator, *amount);
+        let result = contract.create_stake(validator.to_vec(), *amount, true);
         assert!(result.is_ok());
 
-        let result = contract.register_validator(validator, 10);
+        let result = contract.register_validator(validator.to_vec(), 10.0, None);
         assert!(result.is_ok());
     }
 
@@ -735,17 +740,17 @@ fn test_performance_based_rewards() {
     let delegator2 = b"delegator2".to_vec();
 
     // Create stakes for delegators
-    let result = contract.create_stake(&delegator1, 500);
+    let result = contract.create_stake(delegator1.clone(), 5000, false);
     assert!(result.is_ok());
 
-    let result = contract.create_stake(&delegator2, 500);
+    let result = contract.create_stake(delegator2.clone(), 5000, false);
     assert!(result.is_ok());
 
     // Delegate stakes
-    let result = contract.delegate_stake(&delegator1, &validators[0].0);
+    let result = contract.delegate_stake(delegator1.clone(), validators[0].0.clone());
     assert!(result.is_ok());
 
-    let result = contract.delegate_stake(&delegator2, &validators[2].0);
+    let result = contract.delegate_stake(delegator2.clone(), validators[2].0.clone());
     assert!(result.is_ok());
 
     // Set performance metrics for validators
@@ -897,27 +902,24 @@ fn test_performance_based_rewards() {
 
     // Apply performance multipliers
     let multiplier1 = contract
-        .apply_performance_reward_multiplier(&validators[0].0, 100.0)
-        .unwrap();
+        .apply_performance_reward_multiplier(&validators[0].0, 100);
     let multiplier2 = contract
-        .apply_performance_reward_multiplier(&validators[1].0, 100.0)
-        .unwrap();
+        .apply_performance_reward_multiplier(&validators[1].0, 100);
     let multiplier3 = contract
-        .apply_performance_reward_multiplier(&validators[2].0, 100.0)
-        .unwrap();
+        .apply_performance_reward_multiplier(&validators[2].0, 100);
 
     // Verify multipliers
     assert!(
-        multiplier1 > 100.0,
-        "High performance validator should have multiplier > 100.0"
+        multiplier1 > 100,
+        "High performance validator should have multiplier > 100"
     );
     assert!(
-        multiplier2 >= 100.0 && multiplier2 < multiplier1,
+        multiplier2 >= 100 && multiplier2 < multiplier1,
         "Medium performance validator should have multiplier between base and high"
     );
     assert!(
-        multiplier3 < 100.0,
-        "Low performance validator should have multiplier < 100.0"
+        multiplier3 < 100,
+        "Low performance validator should have multiplier < 100"
     );
 
     // Set last reward time to trigger reward calculation
@@ -978,10 +980,10 @@ fn test_slashing_insurance_mechanism() {
 
     // Register validators and create stakes
     for (validator, amount) in &validators {
-        let result = contract.create_stake(validator, *amount);
+        let result = contract.create_stake(validator.to_vec(), *amount, true);
         assert!(result.is_ok());
 
-        let result = contract.register_validator(validator, 10);
+        let result = contract.register_validator(validator.to_vec(), 10.0, None);
         assert!(result.is_ok());
     }
 
@@ -1014,13 +1016,13 @@ fn test_slashing_insurance_mechanism() {
     assert_eq!(validator2_info.insurance_coverage, expected_coverage2);
 
     // Slash validator1 for a minor offense (with insurance)
-    let slash_amount = contract
-        .slash_validator(&validators[0].0, "Missed blocks")
+    let slashed_amount = contract
+        .slash_validator(&validators[0].0, SlashingOffense::Downtime)
         .unwrap();
 
     // Verify slash amount is less than stake due to insurance
     let validator1_stake_after = contract.stakes.get(&validators[0].0).unwrap().amount;
-    let expected_stake_after = validators[0].1 - slash_amount;
+    let expected_stake_after = validators[0].1 - slashed_amount;
     assert_eq!(validator1_stake_after, expected_stake_after);
 
     // Verify insurance claim was created
@@ -1049,21 +1051,21 @@ fn test_slashing_insurance_mechanism() {
     assert!(claim.processed);
 
     // Slash validator3 for a major offense (without insurance)
-    let slash_amount = contract
-        .slash_validator(&validators[2].0, "Double signing")
+    let slashed_amount = contract
+        .slash_validator(&validators[2].0, SlashingOffense::DoubleSign)
         .unwrap();
 
     // Verify full slash amount was applied
     let validator3_stake_after = contract.stakes.get(&validators[2].0).unwrap().amount;
-    let expected_stake_after = validators[2].1 - slash_amount;
+    let expected_stake_after = validators[2].1 - slashed_amount;
     assert_eq!(validator3_stake_after, expected_stake_after);
 
     // Verify no new insurance claim was created
     assert_eq!(contract.insurance_pool.claims.len(), 1);
 
-    // Manually file an insurance claim for validator2
+    // File an insurance claim for validator1
     let claim_amount = 1000;
-    let result = contract.file_insurance_claim(&validators[1].0, claim_amount);
+    let result = contract.file_insurance_claim(&validators[1].0, claim_amount, vec![1, 2, 3]);
     assert!(result.is_ok());
 
     // Verify claim was created
@@ -1089,13 +1091,13 @@ fn test_slashing_insurance_mechanism() {
         .unwrap();
     assert!(claim.processed);
 
-    // Try to file a claim that exceeds coverage
-    let excessive_claim = validator2_info.insurance_coverage + 1000;
-    let result = contract.file_insurance_claim(&validators[1].0, excessive_claim);
+    // Try to file an excessive claim
+    let excessive_claim = 100000; // More than coverage
+    let result = contract.file_insurance_claim(&validators[1].0, excessive_claim, vec![1, 2, 3]);
     assert!(result.is_err());
 
-    // Try to file a claim for validator3 (not in insurance pool)
-    let result = contract.file_insurance_claim(&validators[2].0, 1000);
+    // Try to file a claim for a validator not in the insurance pool
+    let result = contract.file_insurance_claim(&validators[2].0, 1000, vec![1, 2, 3]);
     assert!(result.is_err());
 
     // Verify insurance pool balance decreased after processing claims
@@ -1118,10 +1120,10 @@ fn test_validator_enhancements_integration() {
 
     // Register validators and create stakes
     for (validator, amount) in &validators {
-        let result = contract.create_stake(validator, *amount);
+        let result = contract.create_stake(validator.to_vec(), *amount, true);
         assert!(result.is_ok());
 
-        let result = contract.register_validator(validator, 10);
+        let result = contract.register_validator(validator.to_vec(), 10.0, None);
         assert!(result.is_ok());
     }
 
@@ -1130,17 +1132,17 @@ fn test_validator_enhancements_integration() {
     let delegator2 = b"delegator2".to_vec();
 
     // Create stakes for delegators
-    let result = contract.create_stake(&delegator1, 5000);
+    let result = contract.create_stake(delegator1.clone(), 5000, false);
     assert!(result.is_ok());
 
-    let result = contract.create_stake(&delegator2, 5000);
+    let result = contract.create_stake(delegator2.clone(), 5000, false);
     assert!(result.is_ok());
 
     // Delegate stakes
-    let result = contract.delegate_stake(&delegator1, &validators[0].0); // To high performer
+    let result = contract.delegate_stake(delegator1.clone(), validators[0].0.clone());
     assert!(result.is_ok());
 
-    let result = contract.delegate_stake(&delegator2, &validators[2].0); // To low performer
+    let result = contract.delegate_stake(delegator2.clone(), validators[2].0.clone());
     assert!(result.is_ok());
 
     // Join insurance pool for validators 0, 1, and 2
@@ -1351,13 +1353,13 @@ fn test_validator_enhancements_integration() {
     );
 
     // Slash validator2 (medium performer with insurance)
-    let slash_amount = contract
-        .slash_validator(&validators[1].0, "Missed blocks")
+    let slashed_amount = contract
+        .slash_validator(&validators[1].0, SlashingOffense::Downtime)
         .unwrap();
 
     // Verify slash amount is less than stake due to insurance
     let validator2_stake_after = contract.stakes.get(&validators[1].0).unwrap().amount;
-    let expected_stake_after = validators[1].1 - slash_amount;
+    let expected_stake_after = validators[1].1 - slashed_amount;
     assert_eq!(validator2_stake_after, expected_stake_after);
 
     // Verify insurance claim was created
@@ -1385,13 +1387,13 @@ fn test_validator_enhancements_integration() {
     assert!(claim.processed);
 
     // Slash validator4 (high performer without insurance)
-    let slash_amount = contract
-        .slash_validator(&validators[3].0, "Missed blocks")
+    let slashed_amount = contract
+        .slash_validator(&validators[3].0, SlashingOffense::Downtime)
         .unwrap();
 
     // Verify full slash amount was applied (no insurance)
     let validator4_stake_after = contract.stakes.get(&validators[3].0).unwrap().amount;
-    let expected_stake_after = validators[3].1 - slash_amount;
+    let expected_stake_after = validators[3].1 - slashed_amount;
     assert_eq!(validator4_stake_after, expected_stake_after);
 
     // Verify no new insurance claim was created
@@ -1482,10 +1484,10 @@ fn test_threshold_signature_integration() {
         let stake_amount = 1000 + (i as u64 * 500);
 
         contract
-            .create_stake(public_key.clone(), stake_amount)
+            .create_stake(public_key.clone(), stake_amount, false)
             .unwrap();
         contract
-            .register_validator(public_key.clone(), 0.1)
+            .register_validator(public_key.clone(), 0.1, None)
             .unwrap();
 
         validators.push(public_key);
@@ -1566,7 +1568,7 @@ fn create_mock_block(
         timestamp,
         height,
         nonce: 0,
-        difficulty: 1,
+        difficulty_target: 1,
         miner: Some(miner),
     };
 

@@ -920,3 +920,52 @@
   - [ ] Create changelog for PoS parameter changes
   - [ ] Add documentation for governance proposals affecting PoS
   - [ ] Document network upgrades related to PoS 
+
+## Completed Tasks
+- [x] Fixed unused assignments in `src/consensus/difficulty.rs` by using the variables to avoid warnings
+- [x] Fixed borrowing issues in `src/consensus/pos.rs` in the `rotate_shards` method by cloning necessary data
+- [x] Added `#[derive(Clone)]` to the `ValidatorInfo` struct in `src/consensus/pos.rs`
+- [x] Fixed unused variable in `ShardManager::new()` by using `current_time` to initialize both `last_shard_rotation` and `last_rotation`
+
+## Remaining Tasks
+- [ ] Address remaining Clippy warnings (72 errors reported)
+- [ ] Fix unused constants in `src/consensus/difficulty.rs`:
+  - [ ] `LOG_INTERVAL_BLOCKS`
+  - [ ] `WARNING_HEALTH_THRESHOLD`
+  - [ ] `TREND_WINDOW_SIZE`
+  - [ ] `ALERT_COOLDOWN_BLOCKS`
+- [ ] Fix unused fields in the `DifficultyAdjuster` struct:
+  - [ ] `last_adjustment_time`
+  - [ ] `adaptive_weights`
+- [ ] Fix unused methods in the `DifficultyAdjuster` implementation:
+  - [ ] `update_oscillation_dampener`
+  - [ ] `detect_advanced_time_warp`
+  - [ ] `detect_hashrate_manipulation`
+  - [ ] And many others (20+ methods)
+- [ ] Fix unused fields in other structs:
+  - [ ] `pow` in `HybridValidator`
+  - [ ] `target_block_time` in `ProofOfWork`
+- [ ] Fix unused function `randomx_calculate_hash` in `src/consensus/randomx/mod.rs`
+- [ ] Fix unnecessary borrows in `src/blockchain/mod.rs` (15+ instances)
+- [ ] Implement `Default` traits for several structs:
+  - [ ] `UTXOSet`
+  - [ ] `Mempool`
+  - [ ] `DifficultyAdjuster`
+  - [ ] `HybridValidator`
+  - [ ] `ProofOfStake`
+  - [ ] `ProofOfWork`
+  - [ ] `RandomXVM`
+  - [ ] `ShardManager`
+  - [ ] `HybridConsensus`
+  - [ ] `Node`
+  - [ ] `Wallet`
+- [ ] Fix `Arc` usage with types that are not `Send` and `Sync` in `src/consensus/pow.rs`
+- [ ] Optimize code by implementing suggested simplifications:
+  - [ ] Using `is_empty()` instead of comparing lengths to zero
+  - [ ] Using `clamp` instead of chained `min` and `max` calls
+  - [ ] Replacing manual range contains checks with `RangeInclusive::contains`
+  - [ ] Optimizing loops with iterators
+  - [ ] Fixing redundant closures
+  - [ ] Replacing manual memcpy with `copy_from_slice`
+  - [ ] Using assignment operators (`+=`, `-=`, etc.) where appropriate
+- [ ] Fix dropping references issue in `src/consensus/pos.rs` 

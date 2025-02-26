@@ -1,4 +1,4 @@
-use ed25519_dalek::{Keypair, PublicKey, Signature, Signer, Verifier};
+use ed25519_dalek::{PublicKey, Signature, Verifier};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 

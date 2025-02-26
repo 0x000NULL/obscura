@@ -73,8 +73,7 @@ fn test_threshold_signature_complete_flow() {
 
 #[test]
 fn test_threshold_signature_different_participants() {
-    // Create keypairs for participants
-    let mut csprng = OsRng;
+    let mut csprng = OsRng {};
     let keypair1 = Keypair::generate(&mut csprng);
     let keypair2 = Keypair::generate(&mut csprng);
     let keypair3 = Keypair::generate(&mut csprng);
@@ -85,7 +84,7 @@ fn test_threshold_signature_different_participants() {
     let message = b"test message for different participants".to_vec();
 
     // Create a 2-of-3 threshold signature scheme
-    let mut threshold_sig = ThresholdSignature::new(2, participants, message.clone()).unwrap();
+    let mut threshold_sig = ThresholdSignature::new(2, participants.clone(), message.clone()).unwrap();
 
     // Test with participants 0 and 1
     let sig1 = keypair1.sign(&message);

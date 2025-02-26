@@ -1,6 +1,6 @@
 use super::pos::{StakeProof, StakingContract};
 use super::randomx::{verify_difficulty, RandomXContext};
-use super::{pos::ProofOfStake, pow::ProofOfWork, ConsensusEngine};
+use super::{pos::ProofOfStake, pow::ProofOfWork};
 use crate::blockchain::Block;
 use std::sync::{Arc, Mutex};
 
@@ -74,7 +74,9 @@ impl HybridValidator {
         // Check if validator is active in the staking contract
         let is_active_validator = {
             let staking_contract = self.staking_contract.lock().unwrap();
-            staking_contract.active_validators.contains(&stake_proof.public_key)
+            staking_contract
+                .active_validators
+                .contains(&stake_proof.public_key)
         };
 
         if !is_active_validator {
@@ -152,7 +154,9 @@ mod tests {
         let public_key = vec![1, 2, 3, 4];
         {
             let mut contract = staking_contract.lock().unwrap();
-            contract.create_stake(public_key.clone(), 2000, false).unwrap();
+            contract
+                .create_stake(public_key.clone(), 2000, false)
+                .unwrap();
             contract
                 .register_validator(public_key.clone(), 0.1, None)
                 .unwrap();
