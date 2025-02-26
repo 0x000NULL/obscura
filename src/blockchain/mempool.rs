@@ -2,9 +2,29 @@ use crate::blockchain::Transaction;
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 
+#[derive(Debug, Clone)]
+pub struct SponsoredTransaction {
+    pub transaction: Transaction,
+    pub sponsor_fee: u64,
+    pub sponsor_pubkey: Vec<u8>,
+    pub sponsor_signature: Vec<u8>,
+}
+
+impl PartialEq for SponsoredTransaction {
+    fn eq(&self, other: &Self) -> bool {
+        self.transaction == other.transaction &&
+        self.sponsor_fee == other.sponsor_fee &&
+        self.sponsor_pubkey == other.sponsor_pubkey &&
+        self.sponsor_signature == other.sponsor_signature
+    }
+}
+
+impl Eq for SponsoredTransaction {}
+
 #[derive(Debug)]
 pub struct Mempool {
     transactions: HashMap<[u8; 32], Transaction>,
+    sponsored_transactions: HashMap<[u8; 32], SponsoredTransaction>,
     fee_ordered: BinaryHeap<TransactionWithFee>,
 }
 
@@ -13,6 +33,7 @@ pub struct Mempool {
 struct TransactionWithFee {
     hash: [u8; 32],
     fee: u64,
+    is_sponsored: bool,
 }
 
 impl PartialEq for TransactionWithFee {
@@ -29,11 +50,17 @@ impl PartialOrd for TransactionWithFee {
 
 impl Ord for TransactionWithFee {
     fn cmp(&self, other: &Self) -> Ordering {
-        // Order by fee (higher fee first), then by hash for deterministic ordering
-        self.fee
-            .cmp(&other.fee)
-            .reverse()
-            .then_with(|| self.hash.cmp(&other.hash))
+        // Order by fee (higher fee first), then by sponsored status (sponsored first), then by hash
+        match self.fee.cmp(&other.fee).reverse() {
+            Ordering::Equal => {
+                match (self.is_sponsored, other.is_sponsored) {
+                    (true, false) => Ordering::Less,
+                    (false, true) => Ordering::Greater,
+                    _ => self.hash.cmp(&other.hash)
+                }
+            }
+            ord => ord
+        }
     }
 }
 
@@ -41,42 +68,100 @@ impl Mempool {
     pub fn new() -> Self {
         Mempool {
             transactions: HashMap::new(),
+            sponsored_transactions: HashMap::new(),
             fee_ordered: BinaryHeap::new(),
         }
     }
 
-    pub fn add_transaction(&mut self, tx: Transaction) -> bool {
-        let hash = tx.hash();
-        if self.transactions.contains_key(&hash) {
+    pub fn add_sponsored_transaction(&mut self, sponsored_tx: SponsoredTransaction) -> bool {
+        let hash = sponsored_tx.transaction.hash();
+        
+        // Check if transaction already exists
+        if self.transactions.contains_key(&hash) || self.sponsored_transactions.contains_key(&hash) {
             return false;
         }
 
-        // Calculate total fee (value of outputs)
+        // Verify sponsor signature
+        if !self.verify_sponsor_signature(&sponsored_tx) {
+            return false;
+        }
+
+        // Calculate total fee (base fee + sponsor fee)
+        let base_fee = sponsored_tx.transaction.outputs.iter().fold(0, |acc, output| acc + output.value);
+        let total_fee = base_fee + sponsored_tx.sponsor_fee;
+
+        self.fee_ordered.push(TransactionWithFee { 
+            hash, 
+            fee: total_fee,
+            is_sponsored: true 
+        });
+        self.sponsored_transactions.insert(hash, sponsored_tx);
+        true
+    }
+
+    pub fn add_transaction(&mut self, tx: Transaction) -> bool {
+        let hash = tx.hash();
+        if self.transactions.contains_key(&hash) || self.sponsored_transactions.contains_key(&hash) {
+            return false;
+        }
+
+        // Calculate fee
         let fee = tx.outputs.iter().fold(0, |acc, output| acc + output.value);
 
-        self.fee_ordered.push(TransactionWithFee { hash, fee });
+        self.fee_ordered.push(TransactionWithFee { 
+            hash, 
+            fee,
+            is_sponsored: false 
+        });
         self.transactions.insert(hash, tx);
         true
     }
 
     pub fn remove_transaction(&mut self, hash: &[u8; 32]) {
-        if let Some(_tx) = self.transactions.remove(hash) {
-            // Rebuild fee_ordered without the removed transaction
-            self.fee_ordered = self
-                .fee_ordered
-                .drain()
-                .filter(|tx_fee| &tx_fee.hash != hash)
-                .collect();
+        self.transactions.remove(hash);
+        self.sponsored_transactions.remove(hash);
+        // Rebuild fee_ordered without the removed transaction
+        self.fee_ordered = self
+            .fee_ordered
+            .drain()
+            .filter(|tx_fee| &tx_fee.hash != hash)
+            .collect();
+    }
+
+    pub fn get_transaction(&self, hash: &[u8; 32]) -> Option<&Transaction> {
+        self.transactions
+            .get(hash)
+            .or_else(|| self.sponsored_transactions.get(hash).map(|s| &s.transaction))
+    }
+
+    fn verify_sponsor_signature(&self, _sponsored_tx: &SponsoredTransaction) -> bool {
+        // In a real implementation, this would verify the sponsor's signature
+        // using their public key and the transaction data
+        // For now, we'll just return true as a placeholder
+        true
+    }
+
+    pub fn get_transactions_by_fee(&self, limit: usize) -> Vec<Transaction> {
+        let mut result = Vec::with_capacity(limit);
+        let mut fee_ordered = self.fee_ordered.clone();
+
+        while result.len() < limit && !fee_ordered.is_empty() {
+            if let Some(tx_fee) = fee_ordered.pop() {
+                if tx_fee.is_sponsored {
+                    if let Some(sponsored_tx) = self.sponsored_transactions.get(&tx_fee.hash) {
+                        result.push(sponsored_tx.transaction.clone());
+                    }
+                } else if let Some(tx) = self.transactions.get(&tx_fee.hash) {
+                    result.push(tx.clone());
+                }
+            }
         }
+
+        result
     }
 
     pub fn contains(&self, tx: &Transaction) -> bool {
         self.transactions.contains_key(&tx.hash())
-    }
-
-    /// Get a transaction by its hash
-    pub fn get_transaction(&self, hash: &[u8; 32]) -> Option<&Transaction> {
-        self.transactions.get(hash)
     }
 
     /// Get all transactions in the mempool
@@ -108,28 +193,6 @@ impl Mempool {
         }
         
         descendants
-    }
-
-    pub fn get_transactions_by_fee(&self, limit: usize) -> Vec<Transaction> {
-        let mut result = Vec::new();
-        let mut fee_ordered = self.fee_ordered.clone();
-
-        while result.len() < limit && !fee_ordered.is_empty() {
-            if let Some(tx_fee) = fee_ordered.pop() {
-                if let Some(tx) = self.transactions.get(&tx_fee.hash) {
-                    result.push(tx.clone());
-                }
-            }
-        }
-
-        // Sort by fee (output value) in descending order
-        result.sort_by(|a, b| {
-            let a_fee = a.outputs.iter().map(|o| o.value).sum::<u64>();
-            let b_fee = b.outputs.iter().map(|o| o.value).sum::<u64>();
-            b_fee.cmp(&a_fee) // Reverse order for highest fees first
-        });
-
-        result
     }
 
     /// Get transactions ordered by effective fee rate (CPFP)

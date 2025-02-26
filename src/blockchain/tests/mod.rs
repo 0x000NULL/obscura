@@ -1,6 +1,7 @@
 use super::*;
 use ed25519_dalek::{Keypair, PublicKey};
 use rand::thread_rng;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn create_test_transaction() -> Transaction {
     let keypair = Keypair::generate(&mut thread_rng());
@@ -13,6 +14,7 @@ pub fn create_test_transaction() -> Transaction {
         inputs: vec![],
         outputs: vec![output],
         lock_time: 0,
+        fee_adjustments: None,
     }
 }
 
@@ -24,6 +26,7 @@ pub fn create_transaction_with_fee(fee: u64) -> Transaction {
             public_key_script: vec![],
         }],
         lock_time: 0,
+        fee_adjustments: None,
     }
 }
 
@@ -49,4 +52,96 @@ pub fn create_test_block(nonce: u64) -> Block {
     block.header.nonce = nonce;
     block.header.difficulty_target = 0x207fffff;
     block
+}
+
+#[cfg(test)]
+mod fee_adjustment_tests {
+    use super::*;
+
+    fn get_current_timestamp() -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+    }
+
+    #[test]
+    fn test_fee_adjustment_within_window() {
+        let current_time = get_current_timestamp();
+        let tx = Transaction {
+            inputs: vec![],
+            outputs: vec![TransactionOutput {
+                value: 100,
+                public_key_script: vec![],
+            }],
+            lock_time: 0,
+            fee_adjustments: Some(FeeAdjustment {
+                adjustment_factor: 1.5,
+                lock_time: current_time - 100,  // Started 100 seconds ago
+                expiry_time: current_time + 100,  // Expires in 100 seconds
+            }),
+        };
+
+        let adjusted_fee = tx.calculate_adjusted_fee(current_time);
+        assert_eq!(adjusted_fee, 150); // 100 * 1.5 = 150
+    }
+
+    #[test]
+    fn test_fee_adjustment_before_window() {
+        let current_time = get_current_timestamp();
+        let tx = Transaction {
+            inputs: vec![],
+            outputs: vec![TransactionOutput {
+                value: 100,
+                public_key_script: vec![],
+            }],
+            lock_time: 0,
+            fee_adjustments: Some(FeeAdjustment {
+                adjustment_factor: 1.5,
+                lock_time: current_time + 100,  // Starts in 100 seconds
+                expiry_time: current_time + 200,  // Expires in 200 seconds
+            }),
+        };
+
+        let adjusted_fee = tx.calculate_adjusted_fee(current_time);
+        assert_eq!(adjusted_fee, 100); // No adjustment applied
+    }
+
+    #[test]
+    fn test_fee_adjustment_after_window() {
+        let current_time = get_current_timestamp();
+        let tx = Transaction {
+            inputs: vec![],
+            outputs: vec![TransactionOutput {
+                value: 100,
+                public_key_script: vec![],
+            }],
+            lock_time: 0,
+            fee_adjustments: Some(FeeAdjustment {
+                adjustment_factor: 1.5,
+                lock_time: current_time - 200,  // Started 200 seconds ago
+                expiry_time: current_time - 100,  // Expired 100 seconds ago
+            }),
+        };
+
+        let adjusted_fee = tx.calculate_adjusted_fee(current_time);
+        assert_eq!(adjusted_fee, 100); // No adjustment applied
+    }
+
+    #[test]
+    fn test_fee_adjustment_no_adjustment() {
+        let current_time = get_current_timestamp();
+        let tx = Transaction {
+            inputs: vec![],
+            outputs: vec![TransactionOutput {
+                value: 100,
+                public_key_script: vec![],
+            }],
+            lock_time: 0,
+            fee_adjustments: None,
+        };
+
+        let adjusted_fee = tx.calculate_adjusted_fee(current_time);
+        assert_eq!(adjusted_fee, 100); // No adjustment applied
+    }
 }

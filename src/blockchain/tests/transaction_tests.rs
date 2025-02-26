@@ -34,6 +34,7 @@ fn test_transaction_creation() {
         inputs: vec![input],
         outputs: vec![output],
         lock_time: 0,
+        fee_adjustments: None,
     };
     
     assert_eq!(tx.inputs.len(), 1);

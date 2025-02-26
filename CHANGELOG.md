@@ -2,6 +2,24 @@
 
 All notable changes to the Obscura project will be documented in this file.
 
+## [0.1.9] - 2024-02-27
+
+### Improved
+- Optimized test performance for hybrid consensus validation
+  - Added test mode support for RandomX context in consensus tests
+  - Implemented deterministic test mode for faster validation
+  - Modified `test_hybrid_consensus_validation` to use test-specific RandomX context
+  - Set maximum difficulty target (0xFFFFFFFF) for test mode to ensure consistent results
+  - Removed brute-force nonce testing loop for faster test execution
+  - Added detailed logging for test validation steps
+
+### Testing
+- Enhanced test suite performance
+  - Reduced test execution time for RandomX-based tests
+  - Improved deterministic behavior in test environment
+  - Added consistent test key for reproducible results
+  - Fixed transaction fee calculation in tests
+
 ## [0.1.8] - 2024-02-26
 
 ### Added

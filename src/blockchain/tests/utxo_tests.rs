@@ -64,6 +64,7 @@ fn test_utxo_validation() {
             public_key_script: vec![],
         }],
         lock_time: 0,
+        fee_adjustments: None,
     };
     
     // This should pass as the input references a valid UTXO

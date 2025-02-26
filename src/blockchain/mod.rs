@@ -19,10 +19,18 @@ pub struct BlockHeader {
 }
 
 #[derive(Clone, PartialEq, Debug)]
+pub struct FeeAdjustment {
+    pub adjustment_factor: f64,  // Multiplier for the base fee (e.g. 1.5 = 50% increase)
+    pub lock_time: u64,         // Unix timestamp when adjustment becomes active
+    pub expiry_time: u64,       // Unix timestamp when adjustment expires
+}
+
+#[derive(Clone, PartialEq, Debug)]
 pub struct Transaction {
     pub inputs: Vec<TransactionInput>,
     pub outputs: Vec<TransactionOutput>,
     pub lock_time: u64,
+    pub fee_adjustments: Option<FeeAdjustment>,  // Optional time-locked fee adjustment
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -251,6 +259,7 @@ pub fn create_coinbase_transaction(reward: u64) -> Transaction {
             public_key_script: vec![], // Will be set by miner
         }],
         lock_time: 0,
+        fee_adjustments: None,
     }
 }
 
@@ -292,6 +301,21 @@ impl Transaction {
         let mut hash = [0u8; 32];
         hash.copy_from_slice(&result);
         hash
+    }
+
+    pub fn calculate_adjusted_fee(&self, current_time: u64) -> u64 {
+        let base_fee = self.outputs.iter().fold(0, |acc, output| acc + output.value);
+        
+        if let Some(adjustment) = &self.fee_adjustments {
+            if current_time >= adjustment.lock_time && current_time < adjustment.expiry_time {
+                // Apply the fee adjustment if within the valid time window
+                (base_fee as f64 * adjustment.adjustment_factor) as u64
+            } else {
+                base_fee
+            }
+        } else {
+            base_fee
+        }
     }
 }
 

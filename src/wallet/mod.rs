@@ -65,6 +65,7 @@ impl Wallet {
             inputs: vec![input],
             outputs,
             lock_time: 0,
+            fee_adjustments: None,
         })
     }
 

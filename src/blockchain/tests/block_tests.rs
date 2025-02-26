@@ -25,11 +25,13 @@ fn test_merkle_root_calculation() {
         inputs: vec![],
         outputs: vec![],
         lock_time: 0,
+        fee_adjustments: None,
     };
     let tx2 = Transaction {
         inputs: vec![],
         outputs: vec![],
         lock_time: 0,
+        fee_adjustments: None,
     };
     
     block.transactions = vec![tx1, tx2];

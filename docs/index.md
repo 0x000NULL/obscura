@@ -1,19 +1,48 @@
 # Obscura Documentation
 
-Welcome to the Obscura blockchain documentation. This documentation provides comprehensive information about the Obscura blockchain, its architecture, features, and how to use it.
+Welcome to the Obscura blockchain documentation. This documentation provides comprehensive information about the Obscura blockchain, its architecture, components, and how to use it.
 
-## Core Concepts
+## Recent Updates
 
-- [Architecture](architecture.md): Overview of Obscura's architecture and design principles.
-- [Consensus Mechanism](consensus/index.md): Details about Obscura's consensus mechanism.
-- [Transaction Processing](transactions/index.md): Information about transaction processing in Obscura.
-- [Mining and Rewards](mining_rewards/index.md): Documentation on mining, rewards, and fee mechanisms.
-- [Networking](networking/index.md): Information about Obscura's peer-to-peer network.
+- **Test Optimization (v0.1.9)**: Improved test performance for RandomX consensus validation with deterministic test mode. [Learn more](testing/test_optimization.md).
+- **CPFP Implementation (v0.1.8)**: Added Child-Pays-For-Parent mechanism for transaction fee prioritization.
+- **Documentation Structure (v0.1.7)**: Comprehensive documentation organization and structure.
+- **Dynamic Fee Market (v0.1.6)**: Implementation of dynamic fee market for transaction processing.
 
-## Development
+## Contents
 
-- [Development Guide](development.md): Guide for developers working with Obscura.
-- [Testing](testing/index.md): Information about testing Obscura.
+- [Architecture](architecture.md): Overview of the Obscura blockchain architecture.
+- [Consensus](consensus.md): Documentation for the consensus mechanism.
+- [Transactions](transactions.md): Documentation for transactions.
+- [Networking](networking.md): Documentation for the networking layer.
+- [Development](development.md): Guide for developers working with Obscura.
+
+## Components
+
+- [Consensus](consensus/): Documentation for the consensus mechanism.
+  - [Proof of Work](consensus/pow.md): Documentation for the Proof of Work mechanism.
+  - [Proof of Stake](consensus/pos.md): Documentation for the Proof of Stake mechanism.
+  - [Hybrid Consensus](consensus/hybrid.md): Documentation for the hybrid consensus mechanism.
+  - [Difficulty Adjustment](consensus/difficulty.md): Documentation for the difficulty adjustment mechanism.
+
+- [Mining](mining/): Documentation for mining.
+  - [Mining Rewards](mining_rewards/): Documentation for mining rewards.
+  - [Mining Pool](mining/pool.md): Documentation for mining pools.
+
+- [Transactions](transactions/): Documentation for transactions.
+  - [Transaction Structure](transactions/structure.md): Documentation for transaction structure.
+  - [Transaction Validation](transactions/validation.md): Documentation for transaction validation.
+  - [Fee Market](transactions/fee_market.md): Documentation for the fee market.
+
+- [Networking](networking/): Documentation for the networking layer.
+  - [P2P Protocol](networking/p2p.md): Documentation for the P2P protocol.
+  - [Node Discovery](networking/discovery.md): Documentation for node discovery.
+  - [Block Propagation](networking/propagation.md): Documentation for block propagation.
+
+- [Testing](testing/): Documentation for testing.
+  - [Test Strategy](testing/test_strategy.md): Overview of the testing approach.
+  - [Consensus Tests](testing/consensus_tests.md): Documentation for consensus tests.
+  - [Test Optimization](testing/test_optimization.md): Techniques for optimizing test performance.
 
 ## Features
 

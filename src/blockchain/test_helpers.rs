@@ -13,6 +13,7 @@ pub fn create_test_transaction() -> Transaction {
         inputs: vec![],
         outputs: vec![output],
         lock_time: 0,
+        fee_adjustments: None,
     }
 }
 

@@ -29,6 +29,7 @@ pub fn create_test_transaction() -> Transaction {
             public_key_script: vec![],
         }],
         lock_time: 0,
+        fee_adjustments: None,
     }
 }
 

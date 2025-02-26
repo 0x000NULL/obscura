@@ -125,7 +125,6 @@ fn test_reward_halving() {
 
 #[test]
 fn test_transaction_fee_calculation() {
-    // Create a transaction with inputs and outputs
     let tx = Transaction {
         inputs: vec![TransactionInput {
             previous_output: OutPoint {
@@ -136,10 +135,11 @@ fn test_transaction_fee_calculation() {
             sequence: 0,
         }],
         outputs: vec![TransactionOutput {
-            value: 90,
+            value: 100,
             public_key_script: vec![],
         }],
         lock_time: 0,
+        fee_adjustments: None,
     };
 
     // In a real implementation, the input value would be looked up from the UTXO set
@@ -155,6 +155,7 @@ fn test_transaction_fee_calculation() {
                 public_key_script: vec![],
             }],
             lock_time: 0,
+            fee_adjustments: None,
         },
         // Regular transaction
         tx,
@@ -209,6 +210,7 @@ fn test_pow_mining_block_with_transactions() {
             public_key_script: vec![],
         }],
         lock_time: 0,
+        fee_adjustments: None,
     }];
 
     // Create a mining block with transactions
@@ -255,6 +257,7 @@ fn test_coinbase_maturity() {
             public_key_script: vec![4, 5, 6],
         }],
         lock_time: 0,
+        fee_adjustments: None,
     };
 
     // Create a map of coinbase heights
@@ -297,6 +300,7 @@ fn test_coinbase_maturity() {
             public_key_script: vec![4, 5, 6],
         }],
         lock_time: 0,
+        fee_adjustments: None,
     };
 
     // Should be valid regardless of height
@@ -351,6 +355,7 @@ fn test_transaction_size_estimation() {
             public_key_script: vec![5, 6, 7], // 3 bytes
         }],
         lock_time: 0,
+        fee_adjustments: None,
     };
 
     // Expected size calculation:
@@ -391,6 +396,7 @@ fn test_transaction_size_estimation() {
             },
         ],
         lock_time: 0,
+        fee_adjustments: None,
     };
 
     // Expected size calculation:
@@ -448,13 +454,12 @@ fn test_transaction_prioritization() {
             signature_script: vec![],
             sequence: 0,
         }],
-        outputs: vec![
-            TransactionOutput {
-                value: 900,
-                public_key_script: vec![],
-            }, // Fee: 100
-        ],
+        outputs: vec![TransactionOutput {
+            value: 900,  // 100 fee
+            public_key_script: vec![],
+        }],
         lock_time: 0,
+        fee_adjustments: None,
     };
 
     let tx2 = Transaction {
@@ -466,13 +471,12 @@ fn test_transaction_prioritization() {
             signature_script: vec![],
             sequence: 0,
         }],
-        outputs: vec![
-            TransactionOutput {
-                value: 1800,
-                public_key_script: vec![],
-            }, // Fee: 200
-        ],
+        outputs: vec![TransactionOutput {
+            value: 1800,  // 200 fee
+            public_key_script: vec![],
+        }],
         lock_time: 0,
+        fee_adjustments: None,
     };
 
     let tx3 = Transaction {
@@ -484,13 +488,12 @@ fn test_transaction_prioritization() {
             signature_script: vec![],
             sequence: 0,
         }],
-        outputs: vec![
-            TransactionOutput {
-                value: 2700,
-                public_key_script: vec![],
-            }, // Fee: 300
-        ],
+        outputs: vec![TransactionOutput {
+            value: 2700,  // 300 fee
+            public_key_script: vec![],
+        }],
         lock_time: 0,
+        fee_adjustments: None,
     };
 
     // Create a list of transactions
@@ -528,6 +531,7 @@ fn test_block_size_validation() {
             public_key_script: vec![1, 2, 3],
         }],
         lock_time: 0,
+        fee_adjustments: None,
     };
 
     // Create a UTXO set for testing
@@ -621,6 +625,7 @@ fn test_cpfp_transaction_prioritization() {
             },
         ],
         lock_time: 0,
+        fee_adjustments: None,
     };
     
     // Add the parent's output to the UTXO set
@@ -644,6 +649,7 @@ fn test_cpfp_transaction_prioritization() {
             },
         ],
         lock_time: 0,
+        fee_adjustments: None,
     };
     
     // Create some other transactions with medium fees
@@ -663,6 +669,7 @@ fn test_cpfp_transaction_prioritization() {
             },
         ],
         lock_time: 0,
+        fee_adjustments: None,
     };
     
     let tx2 = Transaction {
@@ -681,6 +688,7 @@ fn test_cpfp_transaction_prioritization() {
             },
         ],
         lock_time: 0,
+        fee_adjustments: None,
     };
     
     // Create a mempool and add all transactions

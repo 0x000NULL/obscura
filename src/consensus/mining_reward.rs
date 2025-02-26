@@ -193,10 +193,11 @@ pub fn prioritize_transactions(
 }
 
 /// Calculates the total transaction fees from a list of transactions
-/// Skips the first transaction if it's a coinbase
+/// Skips the first transaction if it's a coinbase (has no inputs)
 pub fn calculate_transaction_fees(transactions: &[crate::blockchain::Transaction]) -> u64 {
     transactions
         .iter()
+        .filter(|tx| !tx.inputs.is_empty()) // Only process transactions that are not coinbase (have inputs)
         .map(|tx| {
             tx.inputs
                 .iter()
@@ -276,6 +277,7 @@ pub fn create_mining_pool_coinbase(
         inputs: vec![], // Coinbase has no inputs
         outputs,
         lock_time: 0,
+        fee_adjustments: None,
     }
 }
 
@@ -353,6 +355,7 @@ pub fn create_mining_pool_coinbase_with_utxo(
         inputs: vec![], // Coinbase has no inputs
         outputs,
         lock_time: 0,
+        fee_adjustments: None,
     }
 }
 
@@ -822,6 +825,30 @@ pub fn calculate_package_fee_rate(
     package_fee / package_size as u64
 }
 
+pub fn create_coinbase_transaction(reward: u64) -> crate::blockchain::Transaction {
+    crate::blockchain::Transaction {
+        inputs: vec![],
+        outputs: vec![crate::blockchain::TransactionOutput {
+            value: reward,
+            public_key_script: vec![],
+        }],
+        lock_time: 0,
+        fee_adjustments: None,
+    }
+}
+
+pub fn create_test_transaction(value: u64) -> crate::blockchain::Transaction {
+    crate::blockchain::Transaction {
+        inputs: vec![],
+        outputs: vec![crate::blockchain::TransactionOutput {
+            value,
+            public_key_script: vec![],
+        }],
+        lock_time: 0,
+        fee_adjustments: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -866,6 +893,7 @@ mod tests {
                 public_key_script: vec![1, 2, 3], // Dummy public key
             }],
             lock_time: 0,
+            fee_adjustments: None,
         };
 
         // Test valid coinbase
@@ -879,6 +907,7 @@ mod tests {
                 public_key_script: vec![1, 2, 3],
             }],
             lock_time: 0,
+            fee_adjustments: None,
         };
 
         // Test invalid reward
@@ -892,6 +921,7 @@ mod tests {
                 public_key_script: vec![1, 2, 3],
             }],
             lock_time: 0,
+            fee_adjustments: None,
         };
 
         assert!(validate_coinbase_transaction(
