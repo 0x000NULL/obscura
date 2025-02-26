@@ -6,6 +6,6 @@ src = "."
 language = "en"
 
 [output.html]
-git-repository-url = "https://github.com/your-username/obscura"
-edit-url-template = "https://github.com/your-username/obscura/edit/main/docs/{path}"
+git-repository-url = "https://github.com/0x000NULL/obscura"
+edit-url-template = "https://github.com/0x000NULL/obscura/edit/main/docs/{path}"
 site-url = "/" 
