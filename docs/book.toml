@@ -1,0 +1,11 @@
+[book]
+title = "Obscura Documentation"
+authors = ["Obscura Team"]
+description = "Documentation for the Obscura project"
+src = "."
+language = "en"
+
+[output.html]
+git-repository-url = "https://github.com/your-username/obscura"
+edit-url-template = "https://github.com/your-username/obscura/edit/main/docs/{path}"
+site-url = "/" 
