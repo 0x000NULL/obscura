@@ -1,5 +1,5 @@
 use crate::blockchain::{Block, OutPoint, Transaction, TransactionOutput};
-use crate::consensus::sharding::ShardManager;
+use crate::consensus::sharding::{ShardManager, Shard, CrossShardCommittee};
 use bincode;
 use ed25519_dalek::{Keypair, PublicKey, Signature, Signer, Verifier};
 use sha2::{Digest, Sha256};
@@ -2241,19 +2241,34 @@ impl StakingContract {
 
     // Apply performance-based reward multiplier
     pub fn apply_performance_reward_multiplier(&self, validator: &[u8], base_reward: u64) -> u64 {
-        let validator_info = match self.validators.get(validator) {
-            Some(info) => info,
-            None => return base_reward, // No adjustment if validator not found
-        };
+        if let Some(validator_info) = self.validators.get(validator) {
+            // Apply multiplier based on performance score
+            let multiplier = validator_info.performance_score;
+            
+            // Clamp multiplier between min and max values
+            let clamped_multiplier = multiplier.max(PERFORMANCE_REWARD_MULTIPLIER_MIN)
+                                              .min(PERFORMANCE_REWARD_MULTIPLIER_MAX);
+            
+            // Apply multiplier to base reward
+            (base_reward as f64 * clamped_multiplier) as u64
+        } else {
+            base_reward // No adjustment if validator not found
+        }
+    }
 
-        // Calculate multiplier based on performance score
-        // Performance score is 0.0-1.0, map to PERFORMANCE_REWARD_MULTIPLIER_MIN-PERFORMANCE_REWARD_MULTIPLIER_MAX
-        let multiplier = PERFORMANCE_REWARD_MULTIPLIER_MIN
-            + (validator_info.performance_score
-                * (PERFORMANCE_REWARD_MULTIPLIER_MAX - PERFORMANCE_REWARD_MULTIPLIER_MIN));
-
-        // Apply multiplier to base reward
-        (base_reward as f64 * multiplier) as u64
+    // Calculate reward for a specific stake amount and age
+    pub fn calculate_stake_reward(&self, stake_amount: u64, stake_age: u64) -> u64 {
+        // Base reward rate (e.g., 5% annual)
+        const BASE_REWARD_RATE: f64 = 0.05;
+        
+        // Convert to per-epoch rate (assuming ~365 epochs per year)
+        const EPOCHS_PER_YEAR: f64 = 365.0;
+        let per_epoch_rate = BASE_REWARD_RATE / EPOCHS_PER_YEAR;
+        
+        // Calculate reward with compound interest
+        let reward = stake_amount as f64 * (1.0 + per_epoch_rate).powi(stake_age as i32) - stake_amount as f64;
+        
+        reward as u64
     }
 
     // Calculate rewards for all active validators and their delegators
@@ -2370,17 +2385,20 @@ impl StakingContract {
         }
         
         // Check if there are sufficient funds in the insurance pool
-        if claim_amount > self.insurance_pool {
+        if claim_amount > self.insurance_pool.balance {
             return Err("Insufficient funds in insurance pool");
         }
         
-        // Create and add the claim to pending claims
+        // Create insurance claim
         let claim = InsuranceClaim {
             validator: validator.clone(),
-            amount: claim_amount,
-            evidence: evidence,
-            timestamp: self.current_time,
-            status: ClaimStatus::Pending,
+            amount_requested: claim_amount,
+            amount_approved: 0, // Will be set during claim processing
+            amount: claim_amount, // For backward compatibility
+            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+            evidence,
+            status: InsuranceClaimStatus::Pending,
+            processed: false,
         };
         
         self.pending_insurance_claims.push(claim);

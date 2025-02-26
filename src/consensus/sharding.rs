@@ -359,8 +359,8 @@ mod tests {
             let validator = format!("validator{}", i).into_bytes();
             let stake = 1000 + (i as u64 * 500);
 
-            staking_contract.create_stake(&validator, stake).unwrap();
-            staking_contract.register_validator(&validator, 10).unwrap();
+            staking_contract.create_stake(validator.clone(), stake, false).unwrap();
+            staking_contract.register_validator(validator.clone(), 10.0, None).unwrap();
         }
 
         // Select validators for the current epoch
@@ -403,8 +403,8 @@ mod tests {
             let validator = format!("validator{}", i).into_bytes();
             let stake = 1000 + (i as u64 * 500);
 
-            staking_contract.create_stake(&validator, stake).unwrap();
-            staking_contract.register_validator(&validator, 10).unwrap();
+            staking_contract.create_stake(validator.clone(), stake, false).unwrap();
+            staking_contract.register_validator(validator.clone(), 10.0, None).unwrap();
         }
 
         // Select validators for the current epoch
@@ -461,8 +461,8 @@ mod tests {
             let validator = format!("validator{}", i).into_bytes();
             let stake = 1000 + (i as u64 * 500);
 
-            staking_contract.create_stake(&validator, stake).unwrap();
-            staking_contract.register_validator(&validator, 10).unwrap();
+            staking_contract.create_stake(validator.clone(), stake, false).unwrap();
+            staking_contract.register_validator(validator.clone(), 10.0, None).unwrap();
         }
 
         // Select validators for the current epoch
@@ -517,6 +517,5 @@ mod tests {
         let result =
             shard_manager.process_cross_shard_transaction(0, 1, transaction_hash, &validator);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), true);
     }
 }

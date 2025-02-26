@@ -548,6 +548,8 @@ fn test_block_size_validation() {
             timestamp: 0,
             difficulty_target: 1,
             nonce: 0,
+            height: 1,
+            miner: Some(vec![1, 2, 3]),
         },
         transactions: vec![tx.clone()],
     };
@@ -574,6 +576,8 @@ fn test_block_size_validation() {
             timestamp: 0,
             difficulty_target: 1,
             nonce: 0,
+            height: 1,
+            miner: Some(vec![1, 2, 3]),
         },
         transactions: large_transactions,
     };
@@ -590,6 +594,8 @@ fn test_block_size_validation() {
             timestamp: 0,
             difficulty_target: 1,
             nonce: 0,
+            height: 1,
+            miner: Some(vec![1, 2, 3]),
         },
         transactions: vec![tx.clone(); (TARGET_BLOCK_SIZE / tx_size) as usize],
     };
