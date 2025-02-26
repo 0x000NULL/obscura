@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::consensus::pos::StakingContract;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};

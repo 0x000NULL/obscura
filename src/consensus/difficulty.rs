@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use log::{debug, error, info, trace, warn};
 // use rand::Rng;
 use serde_json::json;

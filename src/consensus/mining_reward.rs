@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 // Remove unused imports
 // use std::time::{SystemTime, UNIX_EPOCH};
 

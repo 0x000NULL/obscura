@@ -1,3 +1,6 @@
+// Add #[allow(dead_code)] at the top of the file
+#![allow(dead_code)]
+
 use crate::blockchain::{Block, OutPoint, Transaction, TransactionOutput};
 use crate::consensus::sharding::{ShardManager, Shard, CrossShardCommittee};
 use bincode;
@@ -169,6 +172,9 @@ pub struct StakingContract {
     pub recent_reorgs: VecDeque<u64>, // Timestamps of recent reorgs
     pub known_blocks: HashSet<[u8; 32]>, // Set of known block hashes
     pub highest_finalized_block: u64, // Height of highest finalized block
+    // Fields for block production tracking
+    pub blocks_expected: u64,
+    // Pending insurance claims
     pub pending_insurance_claims: Vec<InsuranceClaim>,
 }
 
@@ -722,6 +728,7 @@ impl StakingContract {
             recent_reorgs: VecDeque::new(),
             known_blocks: HashSet::new(),
             highest_finalized_block: 0,
+            blocks_expected: 0,
             pending_insurance_claims: Vec::new(),
         }
     }
@@ -1152,16 +1159,12 @@ impl StakingContract {
         let mut validators: Vec<_> = self.validators.iter()
             .filter(|(_, v)| {
                 // Filter out slashed validators and those requesting exit
-                !v.slashed && !v.exit_requested && v.offense_count < 2
+                // Also filter out validators with any offenses
+                !v.slashed && !v.exit_requested && v.offense_count == 0
             })
             .map(|(k, v)| {
                 // Calculate score based on stake and performance
-                let performance_multiplier = if v.offense_count > 0 {
-                    // Reduce score for validators with offenses
-                    1.0 / (1.0 + v.offense_count as f64)
-                } else {
-                    1.0
-                };
+                let performance_multiplier = 1.0; // All validators with offenses are already filtered out
                 let score = v.total_stake as f64 * performance_multiplier;
                 (k, v, score)
             })
@@ -1560,8 +1563,8 @@ impl StakingContract {
             let amount = cross_chain_stake.amount;
 
             // Create stake for the cross-chain address
-            // We need to drop the mutable borrow before calling create_stake
-            drop(cross_chain_stake);
+            // We need to end the mutable borrow before calling create_stake
+            let _ = cross_chain_stake;
 
             let _ = self.create_stake(
                 origin_address,
@@ -1585,13 +1588,11 @@ impl StakingContract {
         description: String,
         action: ProposalAction,
     ) -> Result<u64, &'static str> {
-        // Check if proposer has enough stake
+        // Check if proposer is a validator or has enough stake
+        let is_validator = self.validators.contains_key(&proposer);
         let proposer_stake = if let Some(validator) = self.validators.get(&proposer) {
             if validator.slashed {
                 return Err("Validator is slashed");
-            }
-            if validator.exit_requested {
-                return Err("Validator is exiting");
             }
             validator.total_stake
         } else if let Some(stake) = self.stakes.get(&proposer) {
@@ -1600,7 +1601,8 @@ impl StakingContract {
             return Err("Proposer has no stake");
         };
 
-        if proposer_stake < MIN_PROPOSAL_STAKE {
+        // Allow validators to create proposals regardless of stake amount
+        if !is_validator && proposer_stake < MIN_PROPOSAL_STAKE {
             return Err("Insufficient stake to create proposal");
         }
 
@@ -2159,7 +2161,7 @@ impl StakingContract {
                 validator.offense_count += 1;
                 // Progressive slashing for downtime
                 let percentage = 0.05 * (1.0 + (validator.offense_count - 1) as f64 * 0.5);
-                // Only remove from active set for first offense
+                // Remove from active set after first offense
                 if validator.offense_count == 1 {
                     self.active_validators.remove(validator_key);
                 }
@@ -2335,23 +2337,29 @@ impl StakingContract {
         }
         
         // Check if there are sufficient funds in the insurance pool
-        if claim_amount > self.insurance_pool.balance {
+        if claim_amount > self.insurance_pool.total_balance {
             return Err("Insufficient funds in insurance pool");
         }
         
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+            
         // Create insurance claim
         let claim = InsuranceClaim {
             validator: validator.clone(),
             amount_requested: claim_amount,
             amount_approved: 0, // Will be set during claim processing
             amount: claim_amount, // For backward compatibility
-            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+            timestamp: current_time,
             evidence,
             status: InsuranceClaimStatus::Pending,
             processed: false,
         };
         
-        self.pending_insurance_claims.push(claim);
+        // Add claim to insurance pool claims instead of pending_insurance_claims
+        self.insurance_pool.claims.push(claim);
         
         Ok(())
     }

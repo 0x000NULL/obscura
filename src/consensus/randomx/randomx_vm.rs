@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use chacha20::{
     cipher::{KeyIvInit, StreamCipher},
     ChaCha20,

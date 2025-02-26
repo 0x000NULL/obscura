@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::blockchain::{Block, Transaction};
 use std::net::SocketAddr;
 

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use super::pos::{StakeProof, StakingContract};
 use super::randomx::{verify_difficulty, RandomXContext};
 use super::{pos::ProofOfStake, pow::ProofOfWork};
