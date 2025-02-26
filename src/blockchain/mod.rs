@@ -16,11 +16,13 @@ pub struct BlockHeader {
     pub timestamp: u64,
     pub difficulty_target: u32,
     pub nonce: u64,
+    pub height: u64,
+    pub miner: Option<Vec<u8>>, // Optional miner public key
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct FeeAdjustment {
-    pub adjustment_factor: f64,  // Multiplier for the base fee (e.g. 1.5 = 50% increase)
+    pub adjustment_factor: f64, // Multiplier for the base fee (e.g. 1.5 = 50% increase)
     pub lock_time: u64,         // Unix timestamp when adjustment becomes active
     pub expiry_time: u64,       // Unix timestamp when adjustment expires
 }
@@ -30,7 +32,7 @@ pub struct Transaction {
     pub inputs: Vec<TransactionInput>,
     pub outputs: Vec<TransactionOutput>,
     pub lock_time: u64,
-    pub fee_adjustments: Option<FeeAdjustment>,  // Optional time-locked fee adjustment
+    pub fee_adjustments: Option<FeeAdjustment>, // Optional time-locked fee adjustment
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -108,6 +110,8 @@ impl Block {
                 timestamp,
                 difficulty_target: 0x207fffff, // Set a default easy target
                 nonce: 0,
+                height: 0,
+                miner: None,
             },
             transactions: Vec::new(),
         }
@@ -123,6 +127,8 @@ impl Block {
                 timestamp,
                 difficulty_target: 0x207fffff,
                 nonce: 0,
+                height: 0,
+                miner: None,
             },
             transactions: Vec::new(),
         }
@@ -278,7 +284,7 @@ pub fn validate_coinbase_transaction(tx: &Transaction, expected_reward: u64) -> 
 impl Transaction {
     pub fn hash(&self) -> [u8; 32] {
         let mut hasher = Sha256::new();
-        
+
         // Hash inputs
         for input in &self.inputs {
             hasher.update(&input.previous_output.transaction_hash);
@@ -286,16 +292,16 @@ impl Transaction {
             hasher.update(&input.signature_script);
             hasher.update(&input.sequence.to_le_bytes());
         }
-        
+
         // Hash outputs
         for output in &self.outputs {
             hasher.update(&output.value.to_le_bytes());
             hasher.update(&output.public_key_script);
         }
-        
+
         // Hash lock_time
         hasher.update(&self.lock_time.to_le_bytes());
-        
+
         // Finalize hash
         let result = hasher.finalize();
         let mut hash = [0u8; 32];
@@ -304,8 +310,11 @@ impl Transaction {
     }
 
     pub fn calculate_adjusted_fee(&self, current_time: u64) -> u64 {
-        let base_fee = self.outputs.iter().fold(0, |acc, output| acc + output.value);
-        
+        let base_fee = self
+            .outputs
+            .iter()
+            .fold(0, |acc, output| acc + output.value);
+
         if let Some(adjustment) = &self.fee_adjustments {
             if current_time >= adjustment.lock_time && current_time < adjustment.expiry_time {
                 // Apply the fee adjustment if within the valid time window

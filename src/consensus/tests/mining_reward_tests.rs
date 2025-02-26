@@ -1,15 +1,17 @@
 // use super::*;
-use crate::blockchain::{OutPoint, Transaction, TransactionInput, TransactionOutput, UTXOSet, Mempool};
+use crate::blockchain::{
+    Mempool, OutPoint, Transaction, TransactionInput, TransactionOutput, UTXOSet,
+};
+use crate::consensus::pow::ProofOfWork;
 use crate::consensus::{
     calculate_block_reward, calculate_block_reward_by_time, calculate_min_fee_rate,
     calculate_single_transaction_fee, calculate_transaction_fee_rate, calculate_transaction_fees,
-    create_block_with_size_limit, create_coinbase_transaction, estimate_transaction_size,
-    prioritize_transactions, process_rbf_in_mempool, validate_block_size, validate_coinbase_maturity,
-    validate_coinbase_transaction, can_replace_by_fee, Block, BlockHeader,
-    COINBASE_MATURITY, GENESIS_TIMESTAMP, HALVING_INTERVAL, INITIAL_BLOCK_REWARD,
-    MAX_FEE_RATE, MIN_FEE_RATE, TARGET_BLOCK_SIZE, MIN_RBF_FEE_INCREASE,
+    can_replace_by_fee, create_block_with_size_limit, create_coinbase_transaction,
+    estimate_transaction_size, prioritize_transactions, process_rbf_in_mempool,
+    validate_block_size, validate_coinbase_maturity, validate_coinbase_transaction, Block,
+    BlockHeader, COINBASE_MATURITY, GENESIS_TIMESTAMP, HALVING_INTERVAL, INITIAL_BLOCK_REWARD,
+    MAX_FEE_RATE, MIN_FEE_RATE, MIN_RBF_FEE_INCREASE, TARGET_BLOCK_SIZE,
 };
-use crate::consensus::pow::ProofOfWork;
 use std::collections::HashMap;
 
 #[test]
@@ -170,10 +172,10 @@ fn test_transaction_fee_calculation() {
 fn test_coinbase_with_fees() {
     let _block_height = 0;
     let _miner_public_key = vec![1, 2, 3];
-    
+
     // Create some test transactions
     let _transactions: Vec<Transaction> = vec![];
-    
+
     // ... rest of the test ...
 }
 
@@ -181,7 +183,7 @@ fn test_coinbase_with_fees() {
 fn test_coinbase_creation() {
     // Create a coinbase transaction
     let coinbase = create_coinbase_transaction(INITIAL_BLOCK_REWARD);
-    
+
     // Verify it has the correct structure
     assert_eq!(coinbase.inputs.len(), 0);
     assert_eq!(coinbase.outputs.len(), 1);
@@ -455,7 +457,7 @@ fn test_transaction_prioritization() {
             sequence: 0,
         }],
         outputs: vec![TransactionOutput {
-            value: 900,  // 100 fee
+            value: 900, // 100 fee
             public_key_script: vec![],
         }],
         lock_time: 0,
@@ -472,7 +474,7 @@ fn test_transaction_prioritization() {
             sequence: 0,
         }],
         outputs: vec![TransactionOutput {
-            value: 1800,  // 200 fee
+            value: 1800, // 200 fee
             public_key_script: vec![],
         }],
         lock_time: 0,
@@ -489,7 +491,7 @@ fn test_transaction_prioritization() {
             sequence: 0,
         }],
         outputs: vec![TransactionOutput {
-            value: 2700,  // 300 fee
+            value: 2700, // 300 fee
             public_key_script: vec![],
         }],
         lock_time: 0,
@@ -599,7 +601,7 @@ fn test_block_size_validation() {
 #[test]
 fn test_replace_by_fee() {
     let _utxo_set = UTXOSet::new();
-    
+
     // ... rest of the test ...
 }
 
@@ -607,7 +609,7 @@ fn test_replace_by_fee() {
 fn test_cpfp_transaction_prioritization() {
     // Create a test UTXO set
     let mut utxo_set = UTXOSet::new();
-    
+
     // Create a parent transaction with a low fee
     let parent_tx = Transaction {
         inputs: vec![TransactionInput {
@@ -618,20 +620,24 @@ fn test_cpfp_transaction_prioritization() {
             signature_script: vec![1, 2, 3],
             sequence: 0xFFFFFFFF,
         }],
-        outputs: vec![
-            TransactionOutput {
-                value: 90_000, // 100k - 10k fee
-                public_key_script: vec![4, 5, 6],
-            },
-        ],
+        outputs: vec![TransactionOutput {
+            value: 90_000, // 100k - 10k fee
+            public_key_script: vec![4, 5, 6],
+        }],
         lock_time: 0,
         fee_adjustments: None,
     };
-    
+
     // Add the parent's output to the UTXO set
     let parent_hash = parent_tx.hash();
-    utxo_set.add_utxo(OutPoint { transaction_hash: parent_hash, index: 0 }, parent_tx.outputs[0].clone());
-    
+    utxo_set.add_utxo(
+        OutPoint {
+            transaction_hash: parent_hash,
+            index: 0,
+        },
+        parent_tx.outputs[0].clone(),
+    );
+
     // Create a child transaction with a high fee that spends the parent
     let child_tx = Transaction {
         inputs: vec![TransactionInput {
@@ -642,16 +648,14 @@ fn test_cpfp_transaction_prioritization() {
             signature_script: vec![7, 8, 9],
             sequence: 0xFFFFFFFF,
         }],
-        outputs: vec![
-            TransactionOutput {
-                value: 40_000, // 90k - 50k fee (very high fee)
-                public_key_script: vec![10, 11, 12],
-            },
-        ],
+        outputs: vec![TransactionOutput {
+            value: 40_000, // 90k - 50k fee (very high fee)
+            public_key_script: vec![10, 11, 12],
+        }],
         lock_time: 0,
         fee_adjustments: None,
     };
-    
+
     // Create some other transactions with medium fees
     let tx1 = Transaction {
         inputs: vec![TransactionInput {
@@ -662,16 +666,14 @@ fn test_cpfp_transaction_prioritization() {
             signature_script: vec![13, 14, 15],
             sequence: 0xFFFFFFFF,
         }],
-        outputs: vec![
-            TransactionOutput {
-                value: 80_000, // 100k - 20k fee
-                public_key_script: vec![16, 17, 18],
-            },
-        ],
+        outputs: vec![TransactionOutput {
+            value: 80_000, // 100k - 20k fee
+            public_key_script: vec![16, 17, 18],
+        }],
         lock_time: 0,
         fee_adjustments: None,
     };
-    
+
     let tx2 = Transaction {
         inputs: vec![TransactionInput {
             previous_output: OutPoint {
@@ -681,42 +683,63 @@ fn test_cpfp_transaction_prioritization() {
             signature_script: vec![19, 20, 21],
             sequence: 0xFFFFFFFF,
         }],
-        outputs: vec![
-            TransactionOutput {
-                value: 85_000, // 100k - 15k fee
-                public_key_script: vec![22, 23, 24],
-            },
-        ],
+        outputs: vec![TransactionOutput {
+            value: 85_000, // 100k - 15k fee
+            public_key_script: vec![22, 23, 24],
+        }],
         lock_time: 0,
         fee_adjustments: None,
     };
-    
+
     // Create a mempool and add all transactions
     let mut mempool = Mempool::new();
     mempool.add_transaction(parent_tx.clone());
     mempool.add_transaction(child_tx.clone());
     mempool.add_transaction(tx1.clone());
     mempool.add_transaction(tx2.clone());
-    
+
     // Get transactions ordered by effective fee rate (CPFP)
     let prioritized_txs = mempool.get_transactions_by_effective_fee_rate(&utxo_set, 10);
-    
+
     // Verify that the parent transaction is prioritized higher than tx1 and tx2
     // despite having a lower individual fee, because of its high-fee child
-    let parent_index = prioritized_txs.iter().position(|tx| tx.hash() == parent_tx.hash()).unwrap();
-    let tx1_index = prioritized_txs.iter().position(|tx| tx.hash() == tx1.hash()).unwrap();
-    
+    let parent_index = prioritized_txs
+        .iter()
+        .position(|tx| tx.hash() == parent_tx.hash())
+        .unwrap();
+    let tx1_index = prioritized_txs
+        .iter()
+        .position(|tx| tx.hash() == tx1.hash())
+        .unwrap();
+
     // The parent should come before tx1 due to CPFP
-    assert!(parent_index < tx1_index, "Parent transaction should be prioritized higher than tx1 due to CPFP");
-    
+    assert!(
+        parent_index < tx1_index,
+        "Parent transaction should be prioritized higher than tx1 due to CPFP"
+    );
+
     // Also test the prioritize_transactions function
-    let all_txs = vec![parent_tx.clone(), child_tx.clone(), tx1.clone(), tx2.clone()];
+    let all_txs = vec![
+        parent_tx.clone(),
+        child_tx.clone(),
+        tx1.clone(),
+        tx2.clone(),
+    ];
     let prioritized = super::prioritize_transactions(&all_txs, &utxo_set, 1_000_000);
-    
+
     // Verify that both parent and child are included and in the correct order
-    let parent_pos = prioritized.iter().position(|tx| tx.hash() == parent_tx.hash()).unwrap();
-    let child_pos = prioritized.iter().position(|tx| tx.hash() == child_tx.hash()).unwrap();
-    
+    let parent_pos = prioritized
+        .iter()
+        .position(|tx| tx.hash() == parent_tx.hash())
+        .unwrap();
+    let child_pos = prioritized
+        .iter()
+        .position(|tx| tx.hash() == child_tx.hash())
+        .unwrap();
+
     // The parent must come before the child
-    assert!(parent_pos < child_pos, "Parent transaction must come before child transaction");
+    assert!(
+        parent_pos < child_pos,
+        "Parent transaction must come before child transaction"
+    );
 }

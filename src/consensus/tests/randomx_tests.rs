@@ -164,7 +164,7 @@ fn test_hash_generation() {
 
     // Just test that we can generate a hash without error
     assert!(context.calculate_hash(b"test_input", &mut output).is_ok());
-    
+
     // Basic check that the output contains non-zero values
     assert!(output.iter().any(|&x| x != 0));
 }

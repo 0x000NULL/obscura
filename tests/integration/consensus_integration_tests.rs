@@ -15,15 +15,17 @@ fn test_hybrid_consensus_validation() {
 
     // Set the maximum difficulty target (0xFFFFFFFF) which will always pass in test mode
     block.header.difficulty_target = 0xFFFFFFFF;
-    
+
     // Create a valid stake proof with significant stake
     let mut stake_proof = create_test_stake_proof();
     stake_proof.stake_amount = 1_000_000; // High stake amount
     stake_proof.stake_age = 24 * 60 * 60; // 24 hours
 
     // In test mode with maximum difficulty, this should pass immediately
-    assert!(validate_block_hybrid(&block, &randomx, &stake_proof),
-        "Block validation failed even with test mode and maximum difficulty");
+    assert!(
+        validate_block_hybrid(&block, &randomx, &stake_proof),
+        "Block validation failed even with test mode and maximum difficulty"
+    );
 }
 
 #[test]

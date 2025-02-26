@@ -77,9 +77,16 @@ impl Wallet {
         self.balance -= amount;
         self.staked_amount += amount;
 
+        // Get the public key from the keypair
+        let public_key = match &self.keypair {
+            Some(keypair) => keypair.public.to_bytes().to_vec(),
+            None => return None, // Can't create a stake without a keypair
+        };
+
         Some(StakeProof {
             stake_amount: amount,
             stake_age: 0,
+            public_key,
             signature: vec![0u8; 64], // In production, this would be a real signature
         })
     }

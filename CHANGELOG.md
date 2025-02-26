@@ -2,6 +2,146 @@
 
 All notable changes to the Obscura project will be documented in this file.
 
+## [0.3.3] - 2024-03-03
+
+### Added
+- Implemented threshold signature scheme for validator aggregation
+  - Added basic threshold signature implementation (t-of-n signatures)
+  - Created validator aggregation mechanism for block signatures
+  - Implemented Shamir's Secret Sharing for threshold cryptography
+  - Added comprehensive test suite for threshold signatures
+  - Integrated threshold signatures with validator management
+- Implemented sharded validator sets for scalability
+  - Created shard management system with configurable shard count
+  - Added validator assignment to shards based on stake and randomness
+  - Implemented cross-shard committees for transaction validation
+  - Added shard rotation mechanism for security
+  - Created comprehensive test suite for sharding functionality
+
+### Improved
+- Enhanced consensus security and efficiency
+  - Reduced network communication with signature aggregation
+  - Improved block finality with threshold signatures
+  - Enhanced scalability with sharded validator sets
+  - Increased security with validator rotation across shards
+
+### Testing
+- Added comprehensive test suite for new features
+  - Created tests for threshold signature scheme
+  - Implemented tests for validator aggregation
+  - Added tests for sharded validator sets
+  - Created integration tests for all new features
+
+## [0.3.2] - 2024-03-02
+
+### Added
+- Implemented validator performance-based rewards
+  - Added performance metrics tracking (uptime, block production, latency, vote participation)
+  - Created performance score calculation with configurable weights
+  - Implemented reward multiplier based on performance score
+  - Added historical performance data tracking
+  - Created performance assessment period configuration
+  - Integrated performance-based rewards into reward calculation
+- Implemented slashing insurance mechanism
+  - Created insurance pool with fee-based participation
+  - Added coverage calculation based on stake amount
+  - Implemented claim filing and processing system
+  - Created automatic claim generation for slashed validators
+  - Added claim validation and approval process
+  - Integrated insurance with slashing mechanism
+- Added validator exit queue for orderly exits
+  - Implemented exit request system with estimated wait times
+  - Created queue processing with configurable intervals
+  - Added stake-based queue ordering (smaller stakes exit first)
+  - Implemented exit status checking and cancellation
+  - Created orderly validator deregistration process
+  - Added minimum and maximum wait time configuration
+
+### Improved
+- Enhanced validator management system
+  - Improved validator lifecycle management
+  - Added comprehensive validator metrics tracking
+  - Enhanced security with orderly validator exits
+  - Improved fairness with performance-based rewards
+  - Added risk mitigation with slashing insurance
+
+### Testing
+- Added comprehensive test suite for new features
+  - Created tests for performance-based rewards
+  - Implemented slashing insurance mechanism tests
+  - Added validator exit queue tests
+  - Created integration tests for all new features
+  - Added edge case testing for validator management
+
+## [0.3.1] - 2024-03-01
+
+### Added
+- Implemented BFT finality gadget for PoS
+  - Added Byzantine Fault Tolerance consensus for block finality
+  - Created committee selection mechanism for BFT
+  - Implemented prepare and commit phases for BFT
+  - Added view change protocol for leader failures
+  - Created finalized block tracking system
+  - Implemented time-based finality mechanism
+- Enhanced fork choice rules
+  - Added weighted fork choice based on stake and chain length
+  - Implemented chain reorganization limits
+  - Created economic finality thresholds
+  - Added attack detection mechanisms
+  - Implemented nothing-at-stake violation detection
+- Added validator rotation mechanism
+  - Implemented periodic validator set rotation
+  - Created consecutive epoch tracking for validators
+  - Added forced rotation for long-serving validators
+  - Implemented stake-based validator selection for rotation
+  - Created rotation percentage and interval configuration
+
+### Improved
+- Enhanced PoS security
+  - Added protection against long-range attacks
+  - Implemented chain reorganization tracking
+  - Created attack detection and reporting system
+  - Added finalized block protection
+  - Enhanced validator selection security
+
+### Testing
+- Added comprehensive test suite for BFT finality
+  - Created tests for BFT message processing
+  - Added tests for finality verification
+  - Implemented fork choice rule testing
+  - Created chain reorganization tests
+  - Added validator rotation tests
+
+## [0.2.0] - 2024-02-28
+
+### Added
+- Implemented complete Proof of Stake (PoS) mechanism
+  - Created staking contract with stake locking mechanism
+  - Added slashing conditions for validator misbehavior
+  - Implemented withdrawal delay mechanism for security
+  - Added validator selection algorithm using stake-weighted selection
+  - Implemented VRF (Verifiable Random Function) for validator selection
+  - Created reward distribution system for stakers
+  - Added delegation mechanism for stake delegation
+  - Implemented compound interest calculation for rewards
+
+### Enhanced
+- Improved hybrid consensus mechanism
+  - Integrated PoW and PoS validation
+  - Added stake-adjusted difficulty target
+  - Implemented validator statistics tracking
+  - Enhanced security with active validator verification
+  - Added validator uptime monitoring
+
+### Testing
+- Added comprehensive test suite for PoS functionality
+  - Created tests for stake validation
+  - Added tests for reward calculation
+  - Implemented tests for delegation mechanism
+  - Added tests for validator selection
+  - Created tests for VRF functionality
+  - Implemented tests for hybrid consensus validation
+
 ## [0.1.9] - 2024-02-27
 
 ### Improved

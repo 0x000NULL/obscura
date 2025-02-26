@@ -39,16 +39,19 @@ fn test_hybrid_consensus_validation() {
     // Set the maximum difficulty target (0xFFFFFFFF) which will always pass in test mode
     // according to the verify_difficulty function
     block.header.difficulty_target = 0xFFFFFFFF;
-    println!("Using difficulty target: {:#x}", block.header.difficulty_target);
+    println!(
+        "Using difficulty target: {:#x}",
+        block.header.difficulty_target
+    );
 
     // Use a simple nonce
     block.header.nonce = 1;
-    
+
     // Create a valid stake proof with high values to easily pass
     let mut stake_proof = create_test_stake_proof();
     stake_proof.stake_amount = 1_000_000; // Well above minimum 100,000
     stake_proof.stake_age = 24 * 60 * 60; // 24 hours, above minimum 12 hours
-    
+
     // This should pass immediately with the maximum difficulty target in test mode
     assert!(validate_block_hybrid(&block, &randomx, &stake_proof));
 }

@@ -77,8 +77,8 @@ mod fee_adjustment_tests {
             lock_time: 0,
             fee_adjustments: Some(FeeAdjustment {
                 adjustment_factor: 1.5,
-                lock_time: current_time - 100,  // Started 100 seconds ago
-                expiry_time: current_time + 100,  // Expires in 100 seconds
+                lock_time: current_time - 100, // Started 100 seconds ago
+                expiry_time: current_time + 100, // Expires in 100 seconds
             }),
         };
 
@@ -98,8 +98,8 @@ mod fee_adjustment_tests {
             lock_time: 0,
             fee_adjustments: Some(FeeAdjustment {
                 adjustment_factor: 1.5,
-                lock_time: current_time + 100,  // Starts in 100 seconds
-                expiry_time: current_time + 200,  // Expires in 200 seconds
+                lock_time: current_time + 100, // Starts in 100 seconds
+                expiry_time: current_time + 200, // Expires in 200 seconds
             }),
         };
 
@@ -119,8 +119,8 @@ mod fee_adjustment_tests {
             lock_time: 0,
             fee_adjustments: Some(FeeAdjustment {
                 adjustment_factor: 1.5,
-                lock_time: current_time - 200,  // Started 200 seconds ago
-                expiry_time: current_time - 100,  // Expired 100 seconds ago
+                lock_time: current_time - 200, // Started 200 seconds ago
+                expiry_time: current_time - 100, // Expired 100 seconds ago
             }),
         };
 

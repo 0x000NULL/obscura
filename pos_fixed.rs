@@ -3,9 +3,7 @@ use crate::consensus::sharding::ShardManager;
 use crate::consensus::threshold_sig::{ThresholdError, ThresholdSignature, ValidatorAggregation};
 use crate::crypto;
 use bincode;
-use ed25519_dalek::{Keypair, PublicKey, Signature, Signer, Verifier};
-use rand;
-use rand::Rng;
+use ed25519_dalek::{Keypair, PublicKey, Signature, Verifier};
 use rand_core::{OsRng, RngCore};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -1240,9 +1238,46 @@ impl StakingContract {
         }
     }
 
-    // Deregister a validator - REMOVED (duplicate method)\n    // This method is replaced by the implementation at line 3228
+    // Deregister a validator
+    pub fn deregister_validator(&mut self, validator: &[u8]) -> Result<(), &'static str> {
+        if !self.validators.contains_key(validator) {
+            return Err("Validator not found");
+        }
 
-    // Implement lazy reward calculation - REMOVED (duplicate method)\n    // This method is replaced by the implementation at line 2645
+        // Remove from active validators if present
+        self.active_validators.remove(validator);
+
+        // Remove from validators map
+        self.validators.remove(validator);
+
+        // Undelegate all stakes delegated to this validator
+        for (delegator_key, stake) in &mut self.stakes {
+            if let Some(delegated_to) = &stake.delegated_to {
+                if delegated_to == validator {
+                    stake.delegated_to = None;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    // Implement lazy reward calculation
+    pub fn calculate_rewards(&mut self) {
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        // Only calculate rewards if enough time has passed
+        if current_time - self.last_reward_calculation < COMPOUND_INTERVAL {
+            return;
+        }
+
+        self.last_reward_calculation = current_time;
+
+        for validator_key in &self.active_validators {
+            if let Some(validator) = self.validators.get(validator_key) {
                 // Calculate validator's own reward
                 if let Some(stake) = self.stakes.get(validator_key) {
                     let stake_age = current_time - stake.timestamp;
@@ -1736,7 +1771,21 @@ impl StakingContract {
         self.treasury.balance += amount;
     }
 
-    // Calculate rewards with treasury allocation - REMOVED (duplicate method)\n    // This method is replaced by the implementation at line 2645
+    // Calculate rewards with treasury allocation
+    pub fn calculate_rewards(&mut self) {
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        // Only calculate rewards if enough time has passed
+        if current_time - self.last_reward_calculation < COMPOUND_INTERVAL {
+            return;
+        }
+
+        self.last_reward_calculation = current_time;
+
+        for validator_key in &self.active_validators {
             if let Some(validator) = self.validators.get(validator_key) {
                 // Calculate validator's own reward
                 if let Some(stake) = self.stakes.get(validator_key) {
@@ -3343,7 +3392,3 @@ mod tests {
         assert_eq!(selected[0], public_key);
     }
 }
-
-
-
-

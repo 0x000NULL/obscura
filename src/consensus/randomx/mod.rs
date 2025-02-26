@@ -72,17 +72,17 @@ impl RandomXContext {
             let mut combined = Vec::with_capacity(self.key.len() + input.len());
             combined.extend_from_slice(&self.key);
             combined.extend_from_slice(input);
-            
+
             // Use a simple hash function for testing that's more deterministic
             for i in 0..32 {
                 output[i] = ((i as u8).wrapping_add(combined[i % combined.len()])) % 255;
             }
-            
+
             // For nonce-based inputs, make the hash value dependent on the nonce
             if input.len() >= 8 {
                 let nonce_bytes = &input[input.len() - 8..];
                 let nonce = u64::from_le_bytes(nonce_bytes.try_into().unwrap_or([0; 8]));
-                
+
                 // Make the first 4 bytes of the hash dependent on the nonce
                 // This ensures different nonces produce different hashes
                 output[0] = (nonce & 0xFF) as u8;
@@ -90,7 +90,7 @@ impl RandomXContext {
                 output[2] = ((nonce >> 16) & 0xFF) as u8;
                 output[3] = ((nonce >> 24) & 0xFF) as u8;
             }
-            
+
             return Ok(());
         }
 
@@ -191,12 +191,12 @@ impl Drop for RandomXContext {
 pub fn verify_difficulty(hash: &[u8; 32], target: u32) -> bool {
     // Convert first 4 bytes of hash to u32 in big-endian order
     let hash_value = u32::from_be_bytes([hash[0], hash[1], hash[2], hash[3]]);
-    
+
     // For testing with 0xFFFFFFFF target, always return true
     if target == 0xFFFFFFFF {
         return true;
     }
-    
+
     // For PoW, lower hash values are better (need to be below target)
     hash_value <= target
 }

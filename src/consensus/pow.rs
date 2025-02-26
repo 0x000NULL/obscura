@@ -52,7 +52,7 @@ impl ProofOfWork {
         // Create coinbase transaction with appropriate reward
         let reward = mining_reward::calculate_block_reward(block_height);
         let mut coinbase = crate::blockchain::create_coinbase_transaction(reward);
-        
+
         // Set the miner's public key in the coinbase output
         if !coinbase.outputs.is_empty() {
             coinbase.outputs[0].public_key_script = miner_public_key.to_vec();
@@ -86,7 +86,7 @@ impl ProofOfWork {
         // Create coinbase transaction with reward + fees
         let total_reward = block_reward + tx_fees;
         let mut coinbase = crate::blockchain::create_coinbase_transaction(total_reward);
-        
+
         // Set the miner's public key in the coinbase output
         if !coinbase.outputs.is_empty() {
             coinbase.outputs[0].public_key_script = miner_public_key.to_vec();
@@ -164,13 +164,13 @@ mod tests {
         // Create a ProofOfWork instance with a test RandomXContext
         let genesis_key = b"OBX Genesis Key";
         let randomx_context = Arc::new(RandomXContext::new_for_testing(genesis_key));
-        
+
         let pow = ProofOfWork {
             difficulty_adjuster: DifficultyAdjuster::new(),
             target_block_time: 60,
             randomx_context,
         };
-        
+
         let mut block = Block::new([0u8; 32]);
 
         // Set timestamp to current time
@@ -178,7 +178,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         // Set a very high difficulty target (very easy to mine) for testing
         block.header.difficulty_target = 0xFFFFFFFF;
 

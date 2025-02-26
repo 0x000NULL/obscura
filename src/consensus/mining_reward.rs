@@ -163,32 +163,33 @@ pub fn prioritize_transactions(
 ) -> Vec<crate::blockchain::Transaction> {
     // Create a temporary mempool to utilize CPFP functions
     let mut mempool = crate::blockchain::Mempool::new();
-    
+
     // Add all transactions to the mempool
     for tx in transactions {
         mempool.add_transaction(tx.clone());
     }
-    
+
     // Get transactions ordered by effective fee rate (CPFP)
-    let prioritized_txs = mempool.get_transactions_by_effective_fee_rate(utxo_set, transactions.len());
-    
+    let prioritized_txs =
+        mempool.get_transactions_by_effective_fee_rate(utxo_set, transactions.len());
+
     // Select transactions up to the maximum block size
     let mut selected_txs = Vec::new();
     let mut total_size = 0;
-    
+
     for tx in prioritized_txs {
         let tx_size = estimate_transaction_size(&tx);
-        
+
         // Check if adding this transaction would exceed the block size limit
         if total_size + tx_size > max_block_size {
             continue;
         }
-        
+
         // Add transaction and update total size
         selected_txs.push(tx);
         total_size += tx_size;
     }
-    
+
     selected_txs
 }
 
@@ -430,16 +431,16 @@ pub fn create_block_with_size_limit(
 
     // Calculate total fees including CPFP relationships
     let total_fees = calculate_transaction_fees(&prioritized_txs);
-    
+
     // Add the coinbase transaction with block reward + fees
     let block_reward = calculate_block_reward(height);
     let mut coinbase = crate::blockchain::create_coinbase_transaction(block_reward + total_fees);
-    
+
     // Set the miner's address in the coinbase output
     if !coinbase.outputs.is_empty() {
         coinbase.outputs[0].public_key_script = miner_address.to_vec();
     }
-    
+
     block.transactions.push(coinbase);
 
     // Add the prioritized transactions
@@ -572,19 +573,19 @@ pub fn calculate_effective_fee_rate(
     // Get the transaction's own fee
     let tx_fee = calculate_single_transaction_fee(tx, utxo_set);
     let tx_size = estimate_transaction_size(tx) as u64;
-    
+
     // If the transaction has no inputs or size is zero, return 0
     if tx.inputs.is_empty() || tx_size == 0 {
         return 0;
     }
-    
+
     // Check if this transaction spends outputs from any unconfirmed transactions in the mempool
     let mut parent_fees = 0;
     let mut parent_sizes = 0;
-    
+
     for input in &tx.inputs {
         let parent_hash = input.previous_output.transaction_hash;
-        
+
         // Check if the parent transaction is in the mempool
         if let Some(parent_tx) = mempool.get_transaction(&parent_hash) {
             // Add the parent's fee and size
@@ -592,15 +593,15 @@ pub fn calculate_effective_fee_rate(
             parent_sizes += estimate_transaction_size(parent_tx) as u64;
         }
     }
-    
+
     // Calculate the effective fee rate including parents
     let total_fee = tx_fee + parent_fees;
     let total_size = tx_size + parent_sizes;
-    
+
     if total_size == 0 {
         return 0;
     }
-    
+
     total_fee / total_size
 }
 
@@ -625,7 +626,7 @@ pub fn prioritize_transactions_with_cpfp(
     // Select transactions up to max block size
     let mut selected_transactions = Vec::new();
     let mut current_size = 0;
-    
+
     // Track which transactions have been selected
     let mut selected_indices = std::collections::HashSet::new();
 
@@ -643,11 +644,11 @@ pub fn prioritize_transactions_with_cpfp(
         selected_indices.insert(*idx);
         current_size += tx_size;
     }
-    
+
     // Second pass: ensure parent transactions are included before their children
     let mut ordered_transactions = Vec::new();
     let mut processed = std::collections::HashSet::new();
-    
+
     // Helper function to add a transaction and its ancestors recursively
     fn add_with_ancestors(
         tx_idx: usize,
@@ -661,26 +662,33 @@ pub fn prioritize_transactions_with_cpfp(
         if processed.contains(&tx_idx) {
             return;
         }
-        
+
         let tx = &transactions[tx_idx];
-        
+
         // Process ancestors first
         for input in &tx.inputs {
             let parent_hash = input.previous_output.transaction_hash;
-            
+
             // Find the parent transaction in our selection
             for (parent_idx, parent_tx) in transactions.iter().enumerate() {
                 if parent_tx.hash() == parent_hash && selected_indices.contains(&parent_idx) {
-                    add_with_ancestors(parent_idx, transactions, mempool, selected_indices, processed, ordered);
+                    add_with_ancestors(
+                        parent_idx,
+                        transactions,
+                        mempool,
+                        selected_indices,
+                        processed,
+                        ordered,
+                    );
                 }
             }
         }
-        
+
         // Add this transaction
         processed.insert(tx_idx);
         ordered.push(tx.clone());
     }
-    
+
     // Process all selected transactions
     for idx in &selected_indices {
         add_with_ancestors(
@@ -692,7 +700,7 @@ pub fn prioritize_transactions_with_cpfp(
             &mut ordered_transactions,
         );
     }
-    
+
     ordered_transactions
 }
 
@@ -704,22 +712,22 @@ pub fn calculate_ancestor_set(
 ) -> std::collections::HashSet<[u8; 32]> {
     let mut ancestors = std::collections::HashSet::new();
     let mut to_process = Vec::new();
-    
+
     // Add direct parents to processing queue
     for input in &tx.inputs {
         to_process.push(input.previous_output.transaction_hash);
     }
-    
+
     // Process the queue
     while let Some(tx_hash) = to_process.pop() {
         // Skip if already processed
         if ancestors.contains(&tx_hash) {
             continue;
         }
-        
+
         // Add to ancestor set
         ancestors.insert(tx_hash);
-        
+
         // Get the transaction from mempool
         if let Some(parent_tx) = mempool.get_transaction(&tx_hash) {
             // Add its parents to the processing queue
@@ -728,7 +736,7 @@ pub fn calculate_ancestor_set(
             }
         }
     }
-    
+
     ancestors
 }
 
@@ -740,19 +748,19 @@ pub fn calculate_descendant_set(
 ) -> std::collections::HashSet<[u8; 32]> {
     let mut descendants = std::collections::HashSet::new();
     let mut to_process = vec![*tx_hash];
-    
+
     // Process the queue
     while let Some(current_hash) = to_process.pop() {
         // Skip if already processed
         if descendants.contains(&current_hash) {
             continue;
         }
-        
+
         // Add to descendant set (except the original transaction)
         if current_hash != *tx_hash {
             descendants.insert(current_hash);
         }
-        
+
         // Find children in the mempool
         for (child_hash, child_tx) in mempool.get_all_transactions() {
             // Check if this transaction spends from the current one
@@ -764,7 +772,7 @@ pub fn calculate_descendant_set(
             }
         }
     }
-    
+
     descendants
 }
 
@@ -775,17 +783,17 @@ pub fn calculate_package_fee(
     mempool: &crate::blockchain::Mempool,
 ) -> u64 {
     let mut total_fee = calculate_single_transaction_fee(tx, utxo_set);
-    
+
     // Calculate ancestor set
     let ancestors = calculate_ancestor_set(tx, mempool);
-    
+
     // Add fees from all ancestors
     for ancestor_hash in &ancestors {
         if let Some(ancestor_tx) = mempool.get_transaction(ancestor_hash) {
             total_fee += calculate_single_transaction_fee(ancestor_tx, utxo_set);
         }
     }
-    
+
     total_fee
 }
 
@@ -795,17 +803,17 @@ pub fn calculate_package_size(
     mempool: &crate::blockchain::Mempool,
 ) -> usize {
     let mut total_size = estimate_transaction_size(tx);
-    
+
     // Calculate ancestor set
     let ancestors = calculate_ancestor_set(tx, mempool);
-    
+
     // Add sizes from all ancestors
     for ancestor_hash in &ancestors {
         if let Some(ancestor_tx) = mempool.get_transaction(ancestor_hash) {
             total_size += estimate_transaction_size(ancestor_tx);
         }
     }
-    
+
     total_size
 }
 
@@ -817,11 +825,11 @@ pub fn calculate_package_fee_rate(
 ) -> u64 {
     let package_fee = calculate_package_fee(tx, utxo_set, mempool);
     let package_size = calculate_package_size(tx, mempool);
-    
+
     if package_size == 0 {
         return 0;
     }
-    
+
     package_fee / package_size as u64
 }
 
@@ -853,10 +861,10 @@ pub fn create_test_transaction(value: u64) -> crate::blockchain::Transaction {
 mod tests {
     use super::*;
     use crate::consensus::validate_coinbase_transaction;
-    
+
     // Remove unused imports
     // use crate::blockchain::{Transaction, TransactionOutput};
-    
+
     #[test]
     fn test_block_reward_calculation() {
         // Test initial reward
@@ -897,7 +905,10 @@ mod tests {
         };
 
         // Test valid coinbase
-        assert!(validate_coinbase_transaction(&valid_coinbase, INITIAL_BLOCK_REWARD));
+        assert!(validate_coinbase_transaction(
+            &valid_coinbase,
+            INITIAL_BLOCK_REWARD
+        ));
 
         // Create an invalid coinbase with wrong reward
         let invalid_reward = Transaction {
@@ -911,7 +922,10 @@ mod tests {
         };
 
         // Test invalid reward
-        assert!(!validate_coinbase_transaction(&invalid_reward, INITIAL_BLOCK_REWARD));
+        assert!(!validate_coinbase_transaction(
+            &invalid_reward,
+            INITIAL_BLOCK_REWARD
+        ));
 
         // Test coinbase at halving interval
         let halving_coinbase = Transaction {
