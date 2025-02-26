@@ -2,6 +2,7 @@ use ed25519_dalek::{PublicKey, Signature, Verifier};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use ed25519_dalek::Keypair;
+use ed25519_dalek::Signer;
 
 // Constants for threshold signatures
 pub const DEFAULT_THRESHOLD: usize = 2; // Default threshold (t) in t-of-n scheme

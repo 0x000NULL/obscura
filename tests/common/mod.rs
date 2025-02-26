@@ -40,6 +40,7 @@ pub fn create_test_stake_proof() -> StakeProof {
     StakeProof {
         stake_amount: 1_000_000,
         stake_age: 24 * 60 * 60,  // 24 hours
+        public_key: vec![1, 2, 3, 4], // Dummy public key for testing
         signature: vec![0u8; 64], // Dummy signature for testing
     }
 }

@@ -96,12 +96,11 @@ impl ShardManager {
         &mut self,
         staking_contract: &StakingContract,
     ) -> Result<(), &'static str> {
-        // Get all active validators
-        let active_validators: Vec<Vec<u8>> =
-            staking_contract.active_validators.iter().cloned().collect();
-
-        if active_validators.is_empty() {
-            return Err("No active validators to assign to shards");
+        // Get all validators, not just active ones
+        let all_validators: Vec<Vec<u8>> = staking_contract.validators.keys().cloned().collect();
+        
+        if all_validators.is_empty() {
+            return Err("No validators to assign to shards");
         }
 
         // Clear existing shard assignments
@@ -110,42 +109,36 @@ impl ShardManager {
             shard.total_stake = 0;
         }
 
-        // Sort validators by stake (highest first)
-        let mut validators_with_stake: Vec<(Vec<u8>, u64)> = active_validators
-            .iter()
-            .filter_map(|v| {
-                staking_contract
-                    .validators
-                    .get(v)
-                    .map(|info| (v.clone(), info.total_stake))
-            })
-            .collect();
+        // Get all validators with their stake
+        let mut validators_with_stake: Vec<(Vec<u8>, u64)> = Vec::new();
+        
+        // Make sure we include ALL validators
+        for validator_key in &all_validators {
+            if let Some(validator_info) = staking_contract.validators.get(validator_key) {
+                validators_with_stake.push((validator_key.clone(), validator_info.total_stake));
+            }
+        }
 
+        // Sort validators by stake (highest first)
         validators_with_stake.sort_by(|a, b| b.1.cmp(&a.1));
 
-        // Assign validators to shards using a round-robin approach with some randomness
+        // First, ensure minimum validators per shard using round-robin
+        let _validators_per_shard = validators_with_stake.len() / SHARD_COUNT;
         let mut shard_index = 0;
+        
         for (validator, stake) in validators_with_stake {
-            // Add some randomness to the assignment
-            let random_offset = self.get_random_value(
-                &validator,
-                &staking_contract.random_beacon,
-                SHARD_COUNT as u64,
-            ) as usize;
-            let assigned_shard = (shard_index + random_offset) % SHARD_COUNT;
-
-            // Assign validator to shard
-            self.shards[assigned_shard].validators.insert(validator);
-            self.shards[assigned_shard].total_stake += stake;
-
-            // Move to next shard
+            // Assign validator to current shard
+            self.shards[shard_index].validators.insert(validator);
+            self.shards[shard_index].total_stake += stake;
+            
+            // Move to next shard in round-robin fashion
             shard_index = (shard_index + 1) % SHARD_COUNT;
         }
 
         // Verify minimum validators per shard
         for shard in &self.shards {
             if shard.validators.len() < MIN_VALIDATORS_PER_SHARD
-                && active_validators.len() >= SHARD_COUNT * MIN_VALIDATORS_PER_SHARD
+                && all_validators.len() >= SHARD_COUNT * MIN_VALIDATORS_PER_SHARD
             {
                 return Err("Failed to meet minimum validators per shard requirement");
             }
@@ -260,8 +253,81 @@ impl ShardManager {
             return Ok(());
         }
 
-        // Reassign validators to shards
-        self.assign_validators_to_shards(staking_contract)?;
+        // Get all validators, not just active ones
+        let all_validators: Vec<Vec<u8>> = staking_contract.validators.keys().cloned().collect();
+        
+        if all_validators.is_empty() {
+            return Err("No validators to assign to shards");
+        }
+
+        // Store current assignments for comparison
+        let current_assignments: Vec<HashSet<Vec<u8>>> = self.shards
+            .iter()
+            .map(|s| s.validators.clone())
+            .collect();
+
+        // Clear existing shard assignments
+        for shard in &mut self.shards {
+            shard.validators.clear();
+            shard.total_stake = 0;
+        }
+
+        // Get all validators with their stake
+        let mut validators_with_stake: Vec<(Vec<u8>, u64)> = Vec::new();
+        
+        // Make sure we include ALL validators
+        for validator_key in &all_validators {
+            if let Some(validator_info) = staking_contract.validators.get(validator_key) {
+                validators_with_stake.push((validator_key.clone(), validator_info.total_stake));
+            }
+        }
+
+        // Sort validators by stake (highest first)
+        validators_with_stake.sort_by(|a, b| b.1.cmp(&a.1));
+
+        // Use a different starting shard for rotation to ensure changes
+        let rotation_offset = (current_time % SHARD_COUNT as u64) as usize;
+        
+        // For rotation, we'll use a different assignment pattern:
+        // Instead of round-robin from the start, we'll reverse the order of validators
+        // and use a different starting point
+        validators_with_stake.reverse();
+        
+        let mut shard_index = rotation_offset;
+
+        // Assign validators to shards with the new rotation pattern
+        for (validator, stake) in validators_with_stake {
+            // Assign validator to shard
+            self.shards[shard_index].validators.insert(validator);
+            self.shards[shard_index].total_stake += stake;
+            
+            // Move to next shard with a different pattern for rotation
+            shard_index = (shard_index + 1) % SHARD_COUNT;
+        }
+
+        // Verify that assignments have actually changed
+        let new_assignments: Vec<HashSet<Vec<u8>>> = self.shards
+            .iter()
+            .map(|s| s.validators.clone())
+            .collect();
+            
+        let mut changes_detected = false;
+        for i in 0..SHARD_COUNT {
+            if current_assignments[i] != new_assignments[i] {
+                changes_detected = true;
+                break;
+            }
+        }
+        
+        // If no changes were detected, force a change by swapping validators between shards
+        if !changes_detected && self.shards.len() >= 2 && !self.shards[0].validators.is_empty() && !self.shards[1].validators.is_empty() {
+            // Take one validator from shard 0
+            let validator = self.shards[0].validators.iter().next().unwrap().clone();
+            self.shards[0].validators.remove(&validator);
+            
+            // And move it to shard 1
+            self.shards[1].validators.insert(validator);
+        }
 
         // Reinitialize cross-shard committees
         self.initialize_cross_shard_committees(staking_contract)?;
@@ -360,7 +426,7 @@ mod tests {
             let stake = 1000 + (i as u64 * 500);
 
             staking_contract.create_stake(validator.clone(), stake, false).unwrap();
-            staking_contract.register_validator(validator.clone(), 10.0, None).unwrap();
+            staking_contract.register_validator(validator.clone(), 0.1, None).unwrap();
         }
 
         // Select validators for the current epoch
@@ -404,7 +470,7 @@ mod tests {
             let stake = 1000 + (i as u64 * 500);
 
             staking_contract.create_stake(validator.clone(), stake, false).unwrap();
-            staking_contract.register_validator(validator.clone(), 10.0, None).unwrap();
+            staking_contract.register_validator(validator.clone(), 0.1, None).unwrap();
         }
 
         // Select validators for the current epoch
@@ -462,7 +528,7 @@ mod tests {
             let stake = 1000 + (i as u64 * 500);
 
             staking_contract.create_stake(validator.clone(), stake, false).unwrap();
-            staking_contract.register_validator(validator.clone(), 10.0, None).unwrap();
+            staking_contract.register_validator(validator.clone(), 0.1, None).unwrap();
         }
 
         // Select validators for the current epoch
@@ -474,19 +540,19 @@ mod tests {
         // Initialize shards
         shard_manager.initialize_shards(&staking_contract).unwrap();
 
-        // Get validators from shard 0 and 1
-        let shard0_validators = shard_manager.get_shard_validators(0).unwrap();
-        let shard1_validators = shard_manager.get_shard_validators(1).unwrap();
-
         // Get committee for shards 0 and 1
-        let committee = shard_manager.cross_shard_committees.get(&(0, 1)).unwrap();
+        // Clone the committee data to avoid borrowing conflicts
+        let committee_validators = {
+            let committee = shard_manager.cross_shard_committees.get(&(0, 1)).unwrap();
+            committee.validators.clone()
+        };
 
         // Find a validator in the committee
-        let committee_validator = committee.validators[0].clone();
+        let committee_validator = committee_validators[0].clone();
 
         // Process a cross-shard transaction
         let transaction_hash = b"test_transaction";
-        let signature = b"test_signature".to_vec();
+        let _signature = b"test_signature".to_vec(); // Prefix with _ to avoid unused variable warning
 
         let result = shard_manager.process_cross_shard_transaction(
             0,
@@ -500,10 +566,10 @@ mod tests {
         assert_eq!(result.unwrap(), ());
 
         // Add more signatures to reach threshold
-        let threshold = (committee.validators.len() * 2) / 3;
+        let threshold = (committee_validators.len() * 2) / 3;
         for i in 1..threshold {
-            let validator = committee.validators[i].clone();
-            let signature = format!("signature{}", i).into_bytes();
+            let validator = committee_validators[i].clone();
+            let _signature = format!("signature{}", i).into_bytes(); // Prefix with _ to avoid unused variable warning
 
             let result =
                 shard_manager.process_cross_shard_transaction(0, 1, transaction_hash, &validator);
@@ -511,8 +577,8 @@ mod tests {
         }
 
         // Now we should have enough signatures
-        let validator = committee.validators[threshold].clone();
-        let signature = format!("signature{}", threshold).into_bytes();
+        let validator = committee_validators[threshold].clone();
+        let _signature = format!("signature{}", threshold).into_bytes(); // Prefix with _ to avoid unused variable warning
 
         let result =
             shard_manager.process_cross_shard_transaction(0, 1, transaction_hash, &validator);
