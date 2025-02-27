@@ -1,16 +1,24 @@
 use crate::consensus::pos::*;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+// Re-export all functions and constants from the original pos_fixes.rs file
+pub use crate::consensus::pos_old::{
+    MAX_ASSETS_PER_VALIDATOR,
+    ASSET_EXCHANGE_RATE_UPDATE_INTERVAL,
+    ASSET_WEIGHT_DEFAULT,
+    ASSET_WEIGHT_NATIVE,
+    MIN_SECONDARY_ASSET_STAKE_PERCENTAGE,
+};
+
 // Constants for multi-asset staking
 pub const STAKE_LOCK_PERIOD: u64 = 14 * 24 * 60 * 60; // 14 days in seconds
 pub const WITHDRAWAL_DELAY: u64 = 2 * 24 * 60 * 60; // 2 days in seconds
 pub const MINIMUM_STAKE: u64 = 1000; // Minimum stake amount for native token
 pub const LIQUID_STAKING_FEE: f64 = 0.05; // 5% fee for liquid staking
-pub const MAX_ASSETS_PER_VALIDATOR: usize = 5; // Maximum number of different assets a validator can stake
 
 // Constants for oracle integration
 pub const ORACLE_UPDATE_INTERVAL: u64 = 3600; // 1 hour in seconds
-pub const MAX_RATE_CHANGE_PERCENTAGE: f64 = 0.1; // 10% maximum change per update
+pub const MAX_RATE_CHANGE_PERCENTAGE: f64 = 0.05; // Maximum 5% change in exchange rate per update
 pub const MIN_ORACLE_CONFIRMATIONS: usize = 3; // Minimum number of oracle confirmations required
 
 /// Represents an oracle price feed
@@ -21,6 +29,9 @@ pub struct OraclePriceFeed {
     pub source: String,
     pub signature: Vec<u8>,
 }
+
+// Re-export the StakingContract implementation with multi-asset support
+pub use crate::consensus::pos_old::StakingContract;
 
 impl StakingContract {
     // Fixed implementation of file_insurance_claim
@@ -95,81 +106,24 @@ impl StakingContract {
             .unwrap()
             .as_secs();
 
-        let mut contract = StakingContract {
-            stakes: HashMap::new(),
-            validators: HashMap::new(),
-            active_validators: HashSet::new(),
-            current_epoch: 0,
-            epoch_duration,
-            random_beacon: [0; 32],
-            shard_manager: None,
-            validator_selection_cache: None,
-            pending_validator_updates: Vec::new(),
-            unclaimed_rewards: HashMap::new(),
-            last_reward_calculation: current_time,
-            liquid_staking_pool: LiquidStakingPool {
-                total_staked: 0,
-                liquid_tokens_issued: 0,
-                exchange_rate: 1.0,
-                fee_rate: LIQUID_STAKING_FEE,
-                stakers: HashMap::new(),
-            },
-            treasury: Treasury {
-                balance: 0,
-                allocations: Vec::new(),
-            },
-            governance: Governance {
-                proposals: Vec::new(),
-                votes: HashMap::new(),
-                executed_proposals: HashSet::new(),
-                next_proposal_id: 1,
-            },
-            cross_chain_stakes: HashMap::new(),
-            last_rotation_time: current_time,
-            insurance_pool: InsurancePool {
-                total_balance: 0,
-                balance: 0, // For backward compatibility
-                coverage_percentage: INSURANCE_COVERAGE_PERCENTAGE,
-                claims: Vec::new(),
-                participants: HashMap::new(),
-            },
-            exit_queue: ExitQueue {
-                queue: Vec::new(),
-                last_processed: 0,
-                max_size: EXIT_QUEUE_MAX_SIZE,
-            },
-            last_reward_time: current_time,
-            shards: Vec::new(),
-            cross_shard_committees: HashMap::new(),
-            last_shard_rotation: current_time,
-            performance_metrics: HashMap::new(),
-            bft_consensus: None,
-            recent_reorgs: VecDeque::new(),
-            known_blocks: HashSet::new(),
-            highest_finalized_block: 0,
-            
-            // Initialize multi-asset staking fields
-            supported_assets: HashMap::new(),
-            multi_asset_stakes: HashMap::new(),
-            asset_exchange_rates: HashMap::new(),
-            last_exchange_rate_update: current_time,
-        };
+        let mut contract = StakingContract::new(epoch_duration);
         
-        // Register the native token as the first supported asset
-        let native_asset = AssetInfo {
+        // Initialize the native token (OBX)
+        let native_token = AssetInfo {
             asset_id: "OBX".to_string(),
             name: "Obscura".to_string(),
             symbol: "OBX".to_string(),
             decimals: 8,
-            min_stake: MINIMUM_STAKE,
-            weight: 1.5, // Higher weight for native token
+            min_stake: 1000,
+            weight: ASSET_WEIGHT_NATIVE,
             exchange_rate: 1.0,
             last_rate_update: current_time,
             total_staked: 0,
             is_native: true,
         };
         
-        contract.register_asset(native_asset).unwrap();
+        contract.supported_assets.insert("OBX".to_string(), native_token);
+        contract.last_exchange_rate_update = current_time;
         
         contract
     }

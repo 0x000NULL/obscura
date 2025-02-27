@@ -550,6 +550,8 @@ fn test_block_size_validation() {
             nonce: 0,
             height: 1,
             miner: Some(vec![1, 2, 3]),
+            privacy_flags: 0,
+            padding_commitment: None,
         },
         transactions: vec![tx.clone()],
     };
@@ -578,6 +580,8 @@ fn test_block_size_validation() {
             nonce: 0,
             height: 1,
             miner: Some(vec![1, 2, 3]),
+            privacy_flags: 0,
+            padding_commitment: None,
         },
         transactions: large_transactions,
     };
@@ -596,6 +600,8 @@ fn test_block_size_validation() {
             nonce: 0,
             height: 1,
             miner: Some(vec![1, 2, 3]),
+            privacy_flags: 0,
+            padding_commitment: None,
         },
         transactions: vec![tx.clone(); (TARGET_BLOCK_SIZE / tx_size) as usize],
     };

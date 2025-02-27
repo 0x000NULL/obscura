@@ -2,6 +2,12 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+// Add the new module
+pub mod block_structure;
+pub mod mempool;
+pub mod tests;
+pub mod test_helpers;
+
 #[derive(Clone)]
 pub struct Block {
     pub header: BlockHeader,
@@ -18,6 +24,9 @@ pub struct BlockHeader {
     pub nonce: u64,
     pub height: u64,
     pub miner: Option<Vec<u8>>, // Optional miner public key
+    // Add new fields for privacy features
+    pub privacy_flags: u32,     // Flags for privacy features enabled in this block
+    pub padding_commitment: Option<[u8; 32]>, // Commitment to padding data for privacy
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -92,115 +101,139 @@ impl UTXOSet {
     }
 }
 
-pub mod mempool;
 pub use mempool::Mempool;
 
 impl Block {
     pub fn new(previous_hash: [u8; 32]) -> Self {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
 
-        Block {
+        Self {
             header: BlockHeader {
                 version: 1,
                 previous_hash,
                 merkle_root: [0; 32],
                 timestamp,
-                difficulty_target: 0x207fffff, // Set a default easy target
+                difficulty_target: 0,
                 nonce: 0,
                 height: 0,
                 miner: None,
+                privacy_flags: 0,
+                padding_commitment: None,
             },
             transactions: Vec::new(),
         }
     }
 
-    #[cfg(test)]
     pub fn new_with_timestamp(previous_hash: [u8; 32], timestamp: u64) -> Self {
-        Block {
+        Self {
             header: BlockHeader {
                 version: 1,
                 previous_hash,
                 merkle_root: [0; 32],
                 timestamp,
-                difficulty_target: 0x207fffff,
+                difficulty_target: 0,
                 nonce: 0,
                 height: 0,
                 miner: None,
+                privacy_flags: 0,
+                padding_commitment: None,
             },
             transactions: Vec::new(),
         }
     }
 
     pub fn hash(&self) -> [u8; 32] {
+        let serialized = self.serialize_header();
         let mut hasher = Sha256::new();
-
-        // Hash block header components
-        hasher.update(&self.header.version.to_le_bytes());
-        hasher.update(&self.header.previous_hash);
-        hasher.update(&self.header.merkle_root);
-        hasher.update(&self.header.timestamp.to_le_bytes());
-        hasher.update(&self.header.difficulty_target.to_le_bytes());
-        hasher.update(&self.header.nonce.to_le_bytes());
-
+        hasher.update(&serialized);
         let result = hasher.finalize();
+        
         let mut hash = [0u8; 32];
         hash.copy_from_slice(&result);
         hash
     }
 
     pub fn serialize_header(&self) -> Vec<u8> {
-        let mut data = Vec::with_capacity(80);
-
-        println!("Serializing block header:");
-        println!("  Version: {}", self.header.version);
-        println!("  Previous hash: {:?}", self.header.previous_hash);
-        println!("  Merkle root: {:?}", self.header.merkle_root);
-        println!("  Timestamp: {}", self.header.timestamp);
-        println!("  Difficulty target: {:#x}", self.header.difficulty_target);
-        println!("  Nonce: {}", self.header.nonce);
-
-        data.extend_from_slice(&self.header.version.to_le_bytes());
-        data.extend_from_slice(&self.header.previous_hash);
-        data.extend_from_slice(&self.header.merkle_root);
-        data.extend_from_slice(&self.header.timestamp.to_le_bytes());
-        data.extend_from_slice(&self.header.difficulty_target.to_le_bytes());
-        data.extend_from_slice(&self.header.nonce.to_le_bytes());
-        data
+        let mut buffer = Vec::new();
+        buffer.extend_from_slice(&self.header.version.to_le_bytes());
+        buffer.extend_from_slice(&self.header.previous_hash);
+        buffer.extend_from_slice(&self.header.merkle_root);
+        buffer.extend_from_slice(&self.header.timestamp.to_le_bytes());
+        buffer.extend_from_slice(&self.header.difficulty_target.to_le_bytes());
+        buffer.extend_from_slice(&self.header.nonce.to_le_bytes());
+        buffer.extend_from_slice(&self.header.height.to_le_bytes());
+        
+        // Add miner public key if present
+        if let Some(miner_key) = &self.header.miner {
+            buffer.push(1); // Indicator that miner key is present
+            buffer.extend_from_slice(&(miner_key.len() as u32).to_le_bytes());
+            buffer.extend_from_slice(miner_key);
+        } else {
+            buffer.push(0); // Indicator that miner key is not present
+        }
+        
+        // Add privacy flags
+        buffer.extend_from_slice(&self.header.privacy_flags.to_le_bytes());
+        
+        // Add padding commitment if present
+        if let Some(commitment) = &self.header.padding_commitment {
+            buffer.push(1); // Indicator that commitment is present
+            buffer.extend_from_slice(commitment);
+        } else {
+            buffer.push(0); // Indicator that commitment is not present
+        }
+        
+        buffer
     }
 
     pub fn calculate_merkle_root(&mut self) {
         self.header.merkle_root = calculate_merkle_root(&self.transactions);
     }
+
+    // Add new method to calculate privacy-enhanced merkle root
+    pub fn calculate_privacy_merkle_root(&mut self, block_structure_manager: &block_structure::BlockStructureManager) {
+        self.header.merkle_root = block_structure_manager.calculate_privacy_merkle_root(&self.transactions);
+    }
+
+    // Add new method to add privacy padding
+    pub fn add_privacy_padding(&mut self, block_structure_manager: &block_structure::BlockStructureManager) {
+        block_structure_manager.add_privacy_padding(self);
+        // Set privacy flags to indicate padding is used
+        self.header.privacy_flags |= 0x01;
+    }
+
+    // Add new method to validate block timestamp
+    pub fn validate_timestamp(&self, block_structure_manager: &mut block_structure::BlockStructureManager) -> bool {
+        block_structure_manager.validate_timestamp(self.header.timestamp)
+    }
 }
 
-pub fn validate_block_header(header: &BlockHeader, prev_header: &BlockHeader) -> bool {
-    // Verify version
-    if header.version < prev_header.version {
+pub fn validate_block_header(header: &BlockHeader, prev_header: &BlockHeader, block_structure_manager: &mut block_structure::BlockStructureManager) -> bool {
+    // Check if the previous hash matches
+    if header.previous_hash != prev_header.merkle_root {
         return false;
     }
 
-    // Verify timestamp
-    if header.timestamp <= prev_header.timestamp {
+    // Check if the height is correct
+    if header.height != prev_header.height + 1 {
         return false;
     }
 
-    // Verify previous hash
-    let mut hasher = Sha256::new();
-    hasher.update(&prev_header.version.to_le_bytes());
-    hasher.update(&prev_header.previous_hash);
-    hasher.update(&prev_header.merkle_root);
-    hasher.update(&prev_header.timestamp.to_le_bytes());
-    hasher.update(&prev_header.difficulty_target.to_le_bytes());
-    hasher.update(&prev_header.nonce.to_le_bytes());
-
-    let prev_hash = hasher.finalize();
-    if header.previous_hash != prev_hash.as_slice() {
+    // Validate timestamp using the BlockStructureManager
+    if !block_structure_manager.validate_timestamp(header.timestamp) {
         return false;
     }
 
+    // Additional validation for privacy features
+    if header.privacy_flags & 0x01 != 0 && header.padding_commitment.is_none() {
+        // If privacy padding is enabled, padding commitment must be present
+        return false;
+    }
+
+    // Other validations remain unchanged
     true
 }
 
@@ -327,9 +360,3 @@ impl Transaction {
         }
     }
 }
-
-#[cfg(test)]
-pub mod tests;
-
-// For integration tests, we'll just use Block::new() and set the fields directly
-pub mod test_helpers;

@@ -5,9 +5,21 @@ This document serves as an index for all documentation related to consensus mech
 ## Core Consensus Concepts
 
 - [Proof of Work](pow.md): Details about Obscura's Proof of Work algorithm.
+- [Proof of Stake](pos.md): Details about Obscura's Proof of Stake implementation.
+- [Hybrid Consensus](hybrid.md): Information about Obscura's hybrid PoW/PoS consensus.
 - [Block Validation](block_validation.md): Information about how blocks are validated in Obscura.
 - [Transaction Validation](transaction_validation.md): Information about how transactions are validated in Obscura.
 - [Multi-Asset Staking](multi_asset_staking.md): Documentation on staking with multiple asset types.
+- [Threshold Signatures](threshold_signatures.md): Documentation on threshold signature scheme for validator aggregation.
+- [Validator Sharding](sharding.md): Documentation on sharded validator sets for scalability.
+- [BFT Finality](bft_finality.md): Documentation on Byzantine Fault Tolerance consensus for block finality.
+
+## Validator Features
+
+- [Performance-Based Rewards](validator_enhancements.md#performance-based-rewards): Documentation on validator performance-based rewards.
+- [Slashing Insurance](validator_enhancements.md#slashing-insurance): Documentation on the slashing insurance mechanism.
+- [Validator Exit Queue](validator_enhancements.md#validator-exit-queue): Documentation on the validator exit queue for orderly exits.
+- [Validator Rotation](validator_enhancements.md#validator-rotation): Documentation on the validator rotation mechanism.
 
 ## Mining Rewards and Fees
 

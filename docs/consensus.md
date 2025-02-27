@@ -171,8 +171,11 @@ Obscura now supports multi-asset staking, allowing validators to stake with mult
 Key features include:
 - Support for multiple asset types with different weights
 - Oracle-based exchange rate updates
+- Minimum native token requirement (20% of total value)
 - Slashing that works across all staked assets
 - Validator selection based on effective stake value
+- Auto-compounding functionality for staking rewards
+- Safeguards against oracle manipulation with median price calculation
 
 For detailed documentation, see [Multi-Asset Staking](consensus/multi_asset_staking.md).
 

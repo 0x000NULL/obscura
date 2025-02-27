@@ -7,6 +7,15 @@
 - [Consensus](consensus.md)
   - [Consensus Details](consensus/index.md)
   - [Multi-Asset Staking](consensus/multi_asset_staking.md)
+  - [Threshold Signatures](consensus/threshold_signatures.md)
+  - [Validator Sharding](consensus/sharding.md)
+  - [Validator Enhancements](consensus/validator_enhancements.md)
+  - [BFT Finality](consensus/bft_finality.md)
+  - [Difficulty Adjustment](consensus/difficulty.md)
+  - [Fee Market](consensus/fee_market.md)
+  - [Replace-By-Fee](consensus/replace_by_fee.md)
+  - [Child-Pays-For-Parent](consensus/cpfp.md)
+  - [Coinbase Maturity](consensus/coinbase_maturity.md)
 - [Transactions](transactions.md)
   - [Transaction Details](transactions/index.md)
 - [Networking](networking.md)
@@ -32,4 +41,7 @@
   - [Test Optimization](testing/test_optimization.md)
 
 # Additional Resources
+- [FAQ](faq.md)
+- [Release Notes](release_notes.md)
+- [Glossary](glossary.md)
 - [Documentation Options](DOCUMENTATION_OPTIONS.md) 

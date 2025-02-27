@@ -4,10 +4,16 @@ Welcome to the Obscura blockchain documentation. This documentation provides com
 
 ## Recent Updates
 
+- **Multi-Asset Staking (v0.3.4)**: Implemented multi-asset staking with support for multiple asset types, weighted stake calculation, and oracle integration. [Learn more](consensus/multi_asset_staking.md).
+- **Threshold Signatures & Sharding (v0.3.3)**: Implemented threshold signature scheme for validator aggregation and sharded validator sets for scalability.
+- **Validator Enhancements (v0.3.2)**: Added performance-based rewards, slashing insurance, and validator exit queue.
+- **BFT Finality (v0.3.1)**: Implemented Byzantine Fault Tolerance consensus for block finality.
 - **Test Optimization (v0.1.9)**: Improved test performance for RandomX consensus validation with deterministic test mode. [Learn more](testing/test_optimization.md).
 - **CPFP Implementation (v0.1.8)**: Added Child-Pays-For-Parent mechanism for transaction fee prioritization.
 - **Documentation Structure (v0.1.7)**: Comprehensive documentation organization and structure.
 - **Dynamic Fee Market (v0.1.6)**: Implementation of dynamic fee market for transaction processing.
+
+For a complete list of changes, see the [Release Notes](release_notes.md).
 
 ## Contents
 

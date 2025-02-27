@@ -13,6 +13,7 @@ pub const SHARD_ROTATION_INTERVAL: u64 = 14 * 24 * 60 * 60; // Rotate validators
 pub const CROSS_SHARD_COMMITTEE_SIZE: usize = 5; // Number of validators in cross-shard committees
 
 // Shard structure
+#[derive(Clone)]
 pub struct Shard {
     pub id: usize,
     pub validators: HashSet<Vec<u8>>, // Set of validator public keys in this shard
@@ -21,6 +22,7 @@ pub struct Shard {
 }
 
 // Cross-shard committee for cross-shard transactions
+#[derive(Clone)]
 pub struct CrossShardCommittee {
     pub shard1: usize,
     pub shard2: usize,
@@ -30,6 +32,7 @@ pub struct CrossShardCommittee {
 }
 
 // Sharded validator manager
+#[derive(Clone)]
 pub struct ShardManager {
     pub shards: Vec<Shard>,
     pub cross_shard_committees: HashMap<(usize, usize), CrossShardCommittee>, // (shard1, shard2) -> committee

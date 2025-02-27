@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use ed25519_dalek::{PublicKey, Signature, Verifier};
+use ed25519_dalek::{PublicKey, Signature, Verifier, Signer};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 

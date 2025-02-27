@@ -6,6 +6,7 @@ This document describes the advanced validator features implemented in the Obscu
 - [Performance-Based Rewards](#performance-based-rewards)
 - [Slashing Insurance Mechanism](#slashing-insurance-mechanism)
 - [Validator Exit Queue](#validator-exit-queue)
+- [Validator Rotation Mechanism](#validator-rotation-mechanism)
 
 ## Performance-Based Rewards
 
@@ -120,12 +121,106 @@ Validators can check their exit status using `check_exit_status()` and cancel th
 
 After a validator has completed the exit process, they can be fully deregistered from the system. Attempting to deregister before completing the exit process will result in an error.
 
+## Validator Rotation Mechanism
+
+The validator rotation mechanism ensures that the validator set changes over time, preventing long-term collusion and enhancing network security.
+
+### Rotation Process
+
+The rotation process works as follows:
+
+1. Validators are tracked for consecutive epochs of service
+2. After a configurable number of epochs, validators are forced to rotate out
+3. New validators are selected from the waiting pool based on stake
+4. A percentage of validators is rotated in each rotation interval
+
+### Configuration Parameters
+
+The rotation mechanism is configured with the following parameters:
+
+- `VALIDATOR_ROTATION_INTERVAL`: The number of epochs between rotations (default: 30 epochs)
+- `VALIDATOR_ROTATION_PERCENTAGE`: The percentage of validators to rotate in each interval (default: 10%)
+- `VALIDATOR_MAX_CONSECUTIVE_EPOCHS`: The maximum number of consecutive epochs a validator can serve (default: 90 epochs)
+
+### Implementation
+
+```rust
+pub fn rotate_validators(&mut self, current_epoch: u64) -> Result<Vec<Vec<u8>>, &'static str> {
+    // Check if rotation is due
+    if current_epoch % VALIDATOR_ROTATION_INTERVAL != 0 {
+        return Ok(Vec::new());
+    }
+    
+    // Calculate number of validators to rotate
+    let rotation_count = (self.active_validators.len() * VALIDATOR_ROTATION_PERCENTAGE as usize) / 100;
+    if rotation_count == 0 {
+        return Ok(Vec::new());
+    }
+    
+    // Find validators that have served for too long
+    let mut long_serving_validators = self.active_validators.iter()
+        .filter(|(_, info)| info.consecutive_epochs >= VALIDATOR_MAX_CONSECUTIVE_EPOCHS)
+        .map(|(id, _)| id.clone())
+        .collect::<Vec<Vec<u8>>>();
+    
+    // If not enough long-serving validators, select additional validators based on longest service
+    if long_serving_validators.len() < rotation_count {
+        let additional_count = rotation_count - long_serving_validators.len();
+        let mut additional_validators = self.active_validators.iter()
+            .filter(|(id, _)| !long_serving_validators.contains(id))
+            .collect::<Vec<(&Vec<u8>, &ValidatorInfo)>>();
+        
+        // Sort by consecutive epochs (descending)
+        additional_validators.sort_by(|a, b| b.1.consecutive_epochs.cmp(&a.1.consecutive_epochs));
+        
+        // Take the required number of additional validators
+        for i in 0..additional_count.min(additional_validators.len()) {
+            long_serving_validators.push(additional_validators[i].0.clone());
+        }
+    }
+    
+    // Rotate out the selected validators
+    for validator_id in &long_serving_validators {
+        self.deactivate_validator(validator_id)?;
+    }
+    
+    // Select new validators from the waiting pool
+    let new_validators = self.select_validators_from_waiting_pool(rotation_count)?;
+    
+    // Activate the new validators
+    for validator_id in &new_validators {
+        self.activate_validator(validator_id)?;
+    }
+    
+    Ok(long_serving_validators)
+}
+```
+
+### Benefits
+
+The validator rotation mechanism provides several benefits:
+
+1. **Enhanced Security**: Prevents long-term collusion among validators
+2. **Increased Participation**: Gives more validators a chance to participate
+3. **Reduced Centralization**: Prevents a fixed set of validators from controlling the network
+4. **Improved Fault Tolerance**: Regularly introduces fresh validators to the network
+5. **Stake Distribution**: Encourages wider distribution of stake across the network
+
+### Integration with Other Features
+
+The validator rotation mechanism integrates with other validator features:
+
+1. **Performance-Based Rewards**: Performance history is preserved when validators return to the active set
+2. **Slashing Insurance**: Insurance coverage continues during rotation periods
+3. **Exit Queue**: Validators in the exit queue are excluded from forced rotation
+
 ## Integration
 
-These three features work together to create a robust validator management system:
+These four features work together to create a robust validator management system:
 
 1. **Performance-based rewards** incentivize high-quality service
 2. **Slashing insurance** reduces the risk of participation
 3. **Exit queue** ensures network stability during validator transitions
+4. **Validator rotation** prevents long-term collusion and enhances security
 
 Together, they enhance the security, reliability, and fairness of the Obscura blockchain's Proof of Stake system. 

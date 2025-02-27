@@ -128,9 +128,19 @@ The threshold signature scheme provides significant performance benefits:
 3. **Smaller Block Size**: Blocks contain only one signature regardless of the number of validators, reducing blockchain bloat.
 4. **Improved Scalability**: The system can scale to a large number of validators without proportionally increasing signature size or verification time.
 
+## Integration with Validator Sharding
+
+The threshold signature scheme is integrated with validator sharding to further improve scalability:
+
+1. **Shard-Specific Aggregation**: Each shard can produce its own aggregated signature.
+2. **Cross-Shard Verification**: Aggregated signatures from different shards can be efficiently verified.
+3. **Hierarchical Aggregation**: Signatures can be aggregated hierarchically (shard-level, then global).
+4. **Reduced Cross-Shard Communication**: Only aggregated signatures need to be shared across shards.
+
 ## Future Enhancements
 
 1. **BLS Signatures**: Implement BLS (Boneh-Lynn-Shacham) signatures for more efficient aggregation.
 2. **Distributed Key Generation**: Implement distributed key generation to eliminate the need for a trusted dealer.
 3. **Proactive Secret Sharing**: Implement proactive secret sharing to periodically refresh shares without changing the secret.
-4. **Threshold Encryption**: Extend the threshold scheme to support encryption in addition to signatures. 
+4. **Threshold Encryption**: Extend the threshold scheme to support encryption in addition to signatures.
+5. **Dynamic Threshold Adjustment**: Allow the threshold to be adjusted based on network conditions and validator set size. 

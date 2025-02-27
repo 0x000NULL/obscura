@@ -2,6 +2,54 @@
 
 All notable changes to the Obscura project will be documented in this file.
 
+## [0.3.5] - 2024-03-05
+
+### Added
+- Implemented Block Structure component
+  - Added 60-second block time mechanism with timestamp validation
+  - Implemented dynamic block size adjustment with growth rate limiting
+  - Created privacy-enhanced transaction merkle tree structure
+  - Added zero-knowledge friendly hash structures
+  - Implemented privacy-preserving timestamp mechanism with jitter
+  - Added time-based correlation protection
+
+### Improved
+- Enhanced block validation
+  - Added median time past validation for timestamps
+  - Implemented network time synchronization
+  - Created dynamic block size adjustment based on median of recent blocks
+  - Added privacy-enhancing padding for blocks
+  - Implemented transaction batching for improved privacy
+
+### Documentation
+- Added comprehensive documentation for Block Structure
+  - Created detailed documentation in `docs/block_structure.md`
+  - Documented timestamp validation mechanism
+  - Added block size adjustment documentation
+  - Created merkle tree structure documentation
+  - Documented privacy features in block structure
+
+### Testing
+- Added comprehensive test suite for Block Structure
+  - Created tests for timestamp validation
+  - Implemented block size adjustment tests
+  - Added privacy merkle root tests
+  - Created merkle proof verification tests
+  - Implemented tests for all privacy-enhancing features
+
+### Fixed
+- Fixed BlockHeader initializers in test files
+  - Updated initializers to include new privacy_flags and padding_commitment fields
+  - Fixed mining_reward_tests.rs and pos_tests.rs test files
+  - Ensured all test cases use complete BlockHeader initialization
+- Fixed block size adjustment logic
+  - Improved variable naming for clarity (max_size/min_size instead of max_increase/min_decrease)
+  - Fixed calculation of maximum and minimum block sizes
+  - Added proper enforcement of absolute limits
+- Fixed timestamp validation in tests
+  - Added small increment to current time in tests to ensure valid timestamps
+  - Fixed validation for future timestamps
+
 ## [0.3.4] - 2024-03-04
 
 ### Added

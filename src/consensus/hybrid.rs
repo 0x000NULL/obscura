@@ -19,7 +19,7 @@ impl HybridValidator {
             pow: ProofOfWork::new(),
             pos: ProofOfStake::new(),
             pow_weight: 0.7, // 70% PoW, 30% PoS influence
-            staking_contract: Arc::new(Mutex::new(StakingContract::new())), // 1 day epoch
+            staking_contract: Arc::new(Mutex::new(StakingContract::new(24 * 60 * 60))), // 1 day epoch
         }
     }
 
@@ -150,7 +150,7 @@ mod tests {
     #[test]
     fn test_hybrid_validation_with_staking() {
         // Create a staking contract
-        let staking_contract = Arc::new(Mutex::new(StakingContract::new()));
+        let staking_contract = Arc::new(Mutex::new(StakingContract::new(24 * 60 * 60)));
 
         // Create a validator
         let public_key = vec![1, 2, 3, 4];

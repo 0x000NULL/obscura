@@ -322,6 +322,7 @@ pub struct StakingContract {
 }
 
 // Stake information
+#[derive(Clone, Default)]
 pub struct Stake {
     pub amount: u64,
     pub timestamp: u64,
@@ -334,6 +335,7 @@ pub struct Stake {
 }
 
 // Partial undelegation information
+#[derive(Clone)]
 pub struct PartialUndelegation {
     pub amount: u64,
     pub timestamp: u64,
@@ -400,6 +402,7 @@ pub struct VrfOutput {
 }
 
 // Validator update operation
+#[derive(Clone)]
 pub enum ValidatorUpdateOp {
     Register,
     UpdateCommission,
@@ -407,6 +410,7 @@ pub enum ValidatorUpdateOp {
 }
 
 // Pending validator update
+#[derive(Clone)]
 pub struct ValidatorUpdate {
     pub validator: Vec<u8>,
     pub operation: ValidatorUpdateOp,
@@ -415,6 +419,7 @@ pub struct ValidatorUpdate {
 }
 
 // Liquid staking pool
+#[derive(Clone, Default)]
 pub struct LiquidStakingPool {
     pub total_staked: u64,
     pub liquid_tokens_issued: u64,
@@ -424,12 +429,14 @@ pub struct LiquidStakingPool {
 }
 
 // Treasury for funding ecosystem development
+#[derive(Clone, Default)]
 pub struct Treasury {
     pub balance: u64,
     pub allocations: Vec<TreasuryAllocation>,
 }
 
 // Treasury allocation
+#[derive(Clone)]
 pub struct TreasuryAllocation {
     pub recipient: Vec<u8>,
     pub amount: u64,
@@ -438,6 +445,7 @@ pub struct TreasuryAllocation {
 }
 
 // Governance system
+#[derive(Clone, Default)]
 pub struct Governance {
     pub proposals: Vec<Proposal>,
     pub votes: HashMap<u64, HashMap<Vec<u8>, Vote>>, // Proposal ID -> (Voter -> Vote)
@@ -446,6 +454,7 @@ pub struct Governance {
 }
 
 // Governance proposal
+#[derive(Clone)]
 pub struct Proposal {
     pub id: u64,
     pub proposer: Vec<u8>,
@@ -459,6 +468,7 @@ pub struct Proposal {
 }
 
 // Proposal action
+#[derive(Clone)]
 pub enum ProposalAction {
     ChangeParameter(String, Vec<u8>), // Parameter name, new value
     TreasuryAllocation(Vec<u8>, u64, String), // Recipient, amount, purpose
@@ -467,6 +477,7 @@ pub enum ProposalAction {
 }
 
 // Proposal status
+#[derive(Clone)]
 pub enum ProposalStatus {
     Active,
     Passed,
@@ -476,6 +487,7 @@ pub enum ProposalStatus {
 }
 
 // Vote
+#[derive(Clone)]
 pub struct Vote {
     pub voter: Vec<u8>,
     pub proposal_id: u64,
@@ -485,6 +497,7 @@ pub struct Vote {
 }
 
 // Cross-chain stake
+#[derive(Clone)]
 pub struct CrossChainStake {
     pub origin_chain: String,
     pub origin_address: Vec<u8>,
@@ -520,6 +533,7 @@ pub struct BftMessage {
     pub timestamp: u64,
 }
 
+#[derive(Clone, Default)]
 pub struct BftRound {
     pub round_number: usize,
     pub prepare_messages: HashMap<Vec<u8>, BftMessage>, // Validator -> Message
@@ -530,6 +544,7 @@ pub struct BftRound {
     pub start_time: u64,
 }
 
+#[derive(Clone, Default)]
 pub struct BftConsensus {
     pub current_round: BftRound,
     pub finalized_blocks: HashMap<u64, [u8; 32]>, // Height -> Hash
@@ -584,6 +599,7 @@ impl Clone for BlockInfo {
 }
 
 // Insurance pool for validators
+#[derive(Clone, Default)]
 pub struct InsurancePool {
     pub total_balance: u64,
     pub balance: u64, // Add this field for backward compatibility
@@ -593,6 +609,7 @@ pub struct InsurancePool {
 }
 
 // Insurance participation record
+#[derive(Clone)]
 pub struct InsuranceParticipation {
     pub validator: Vec<u8>,
     pub contribution: u64,
@@ -623,6 +640,7 @@ pub struct InsuranceClaim {
 }
 
 // Exit queue for validators
+#[derive(Clone, Default)]
 pub struct ExitQueue {
     pub queue: Vec<ExitRequest>,
     pub last_processed: u64,
@@ -630,6 +648,7 @@ pub struct ExitQueue {
 }
 
 // Exit request
+#[derive(Clone)]
 pub struct ExitRequest {
     pub validator: Vec<u8>,
     pub request_time: u64,
@@ -813,13 +832,13 @@ impl ProofOfStake {
 }
 
 impl StakingContract {
-    pub fn new() -> Self {
+    pub fn new(epoch_duration: u64) -> Self {
         StakingContract {
             stakes: HashMap::new(),
             validators: HashMap::new(),
             active_validators: HashSet::new(),
             current_epoch: 0,
-            epoch_duration: 0,
+            epoch_duration,
             random_beacon: [0; 32],
             shard_manager: None,
             validator_selection_cache: None,
@@ -1381,7 +1400,7 @@ impl StakingContract {
         
         if let Some(shard_manager) = &mut self.shard_manager {
             // Create a simplified version of StakingContract with just what's needed
-            let mut simplified_contract = StakingContract::new();
+            let mut simplified_contract = StakingContract::new(self.epoch_duration);
             simplified_contract.active_validators = active_validators;
             simplified_contract.validators = validators;
             

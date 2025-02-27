@@ -1,7 +1,13 @@
 use std::collections::{HashMap, HashSet, VecDeque};
+use crate::consensus::pos_old::{
+    Treasury, Governance, CrossChainStake, InsurancePool, ExitQueue, BftConsensus,
+    Stake, ValidatorInfo, ValidatorUpdate, LiquidStakingPool
+};
+use crate::consensus::sharding::{Shard, CrossShardCommittee, ShardManager};
 
 // Multi-asset staking structures
 /// Represents information about a stakable asset in the system
+#[derive(Clone, Default)]
 pub struct AssetInfo {
     /// Unique identifier for the asset
     pub asset_id: String,
@@ -26,6 +32,7 @@ pub struct AssetInfo {
 }
 
 /// Represents a stake consisting of multiple assets
+#[derive(Clone, Default)]
 pub struct MultiAssetStake {
     /// Public key of the staker
     pub staker: Vec<u8>,
@@ -587,6 +594,7 @@ impl DiversityMetrics {
     }
 }
 
+#[derive(Clone, Default)]
 pub struct StakingContract {
     // Map of staker public key to their stake
     pub stakes: HashMap<Vec<u8>, Stake>,
