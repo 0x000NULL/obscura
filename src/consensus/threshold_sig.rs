@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use ed25519_dalek::{PublicKey, Signature, Verifier, Signer};
+use ed25519_dalek::{PublicKey, Signature, Verifier};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
@@ -309,7 +309,7 @@ impl ValidatorAggregation {
 mod tests {
     use super::*;
     use rand::rngs::OsRng;
-    use ed25519_dalek::Keypair;
+    use ed25519_dalek::{Keypair, Signer};
 
     #[test]
     fn test_threshold_signature_basic() {

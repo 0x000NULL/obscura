@@ -1,4 +1,4 @@
-use crate::blockchain::{Transaction, TransactionInput, TransactionOutput, OutPoint};
+use crate::blockchain::{Transaction, TransactionOutput};
 use crate::crypto;
 use rand::{Rng, rngs::OsRng};
 use sha2::{Digest, Sha256};
@@ -38,7 +38,7 @@ impl TransactionObfuscator {
         }
         
         // Determine batch size for mixing
-        let batch_size = std::cmp::min(
+        let _batch_size = std::cmp::min(
             transactions.len(),
             MIXING_MAX_TRANSACTIONS
         );
@@ -201,17 +201,17 @@ impl StealthAddressing {
     /// Scan for addresses that belong to this wallet
     pub fn scan_for_addresses(&self, transactions: &[Transaction], secret_key: &SecretKey) -> Vec<TransactionOutput> {
         let mut found_outputs = Vec::new();
-        let recipient_pubkey = PublicKey::from(secret_key);
+        let _recipient_pubkey = PublicKey::from(secret_key);
         
         for tx in transactions {
-            for (i, output) in tx.outputs.iter().enumerate() {
+            for (_i, output) in tx.outputs.iter().enumerate() {
                 // Check if this output's public key script is a one-time address for us
                 // In a real implementation, we would try to derive the address for each
                 // ephemeral public key in the transaction
                 
                 // For simplicity, we'll just check if it's in our mapping
                 if output.public_key_script.len() == 32 {
-                    let mut derived_address = Vec::new();
+                    let mut derived_address;
                     
                     // Try to derive address using each ephemeral key
                     for ephemeral_key in &self.ephemeral_keys {
@@ -230,7 +230,7 @@ impl StealthAddressing {
     }
     
     /// Prevent address reuse
-    pub fn prevent_address_reuse(&self, wallet_pubkey: &PublicKey) -> Vec<u8> {
+    pub fn prevent_address_reuse(&self, _wallet_pubkey: &PublicKey) -> Vec<u8> {
         // Always generate a new one-time address instead of reusing
         let mut rng = OsRng;
         let mut one_time_address = vec![0u8; 32];
@@ -343,9 +343,9 @@ impl ConfidentialTransactions {
     }
     
     /// Verify range proof
-    pub fn verify_range_proof(&self, commitment: &[u8], proof: &[u8]) -> bool {
+    pub fn verify_range_proof(&self, _commitment: &[u8], _proof: &[u8]) -> bool {
         // In a real implementation, this would verify the range proof
-        // For this simplified version, we'll just return true
+        // For this implementation, we'll just return true
         true
     }
 }
@@ -353,6 +353,7 @@ impl ConfidentialTransactions {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::blockchain::{Transaction, TransactionInput, TransactionOutput, OutPoint};
     
     #[test]
     fn test_transaction_obfuscation() {

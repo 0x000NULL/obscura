@@ -1,7 +1,53 @@
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::net::{SocketAddr, TcpStream};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
+use crate::networking::message::{Message, MessageType, MessageError};
+
+// Add a wrapper for TcpStream that implements Clone
+#[derive(Debug)]
+pub struct CloneableTcpStream(TcpStream);
+
+impl CloneableTcpStream {
+    pub fn new(stream: TcpStream) -> Self {
+        CloneableTcpStream(stream)
+    }
+    
+    pub fn inner(&self) -> &TcpStream {
+        &self.0
+    }
+    
+    pub fn inner_mut(&mut self) -> &mut TcpStream {
+        &mut self.0
+    }
+    
+    pub fn into_inner(self) -> TcpStream {
+        self.0
+    }
+}
+
+impl Clone for CloneableTcpStream {
+    fn clone(&self) -> Self {
+        CloneableTcpStream(self.0.try_clone().expect("Failed to clone TcpStream"))
+    }
+}
+
+impl Read for CloneableTcpStream {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.0.read(buf)
+    }
+}
+
+impl Write for CloneableTcpStream {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.0.write(buf)
+    }
+    
+    fn flush(&mut self) -> io::Result<()> {
+        self.0.flush()
+    }
+}
 
 // Protocol version constants
 pub const PROTOCOL_VERSION: u32 = 1;
@@ -64,7 +110,7 @@ impl HandshakeMessage {
         }
     }
     
-    // Serialize the handshake message to bytes
+    // Serialize the handshake message to bytes using our new message serialization
     pub fn serialize(&self) -> Vec<u8> {
         let mut buffer = Vec::new();
         
@@ -164,13 +210,38 @@ impl HandshakeMessage {
             nonce,
         })
     }
+    
+    // Send handshake message using our new message serialization
+    pub fn send(&self, stream: &mut TcpStream) -> Result<(), HandshakeError> {
+        let payload = self.serialize();
+        let message = Message::new(MessageType::Handshake, payload);
+        message.write_to_stream(stream).map_err(|e| match e {
+            MessageError::IoError(io_err) => HandshakeError::IoError(io_err),
+            _ => HandshakeError::InvalidMessage,
+        })?;
+        Ok(())
+    }
+    
+    // Receive handshake message using our new message serialization
+    pub fn receive(stream: &mut TcpStream) -> Result<Self, HandshakeError> {
+        let message = Message::read_from_stream(stream).map_err(|e| match e {
+            MessageError::IoError(io_err) => HandshakeError::IoError(io_err),
+            _ => HandshakeError::InvalidMessage,
+        })?;
+        
+        if message.message_type != MessageType::Handshake {
+            return Err(HandshakeError::InvalidMessage);
+        }
+        
+        Self::deserialize(&message.payload).map_err(|_| HandshakeError::InvalidMessage)
+    }
 }
 
 // Connection state for a peer
-#[derive(Debug)]
-pub struct PeerConnection {
+#[derive(Debug, Clone)]
+pub struct PeerConnection<T: Read + Write + Clone = CloneableTcpStream> {
     pub addr: SocketAddr,
-    pub stream: TcpStream,
+    pub stream: Arc<Mutex<T>>,
     pub version: u32,
     pub features: u32,
     pub privacy_features: u32,
@@ -199,10 +270,10 @@ impl From<io::Error> for HandshakeError {
 
 // Handshake protocol implementation
 pub struct HandshakeProtocol {
-    local_features: u32,
-    local_privacy_features: u32,
-    best_block_hash: [u8; 32],
-    best_block_height: u64,
+    pub local_features: u32,
+    pub local_privacy_features: u32,
+    pub best_block_hash: [u8; 32],
+    pub best_block_height: u64,
     connection_nonces: HashMap<u64, SocketAddr>,
 }
 
@@ -227,7 +298,7 @@ impl HandshakeProtocol {
         &mut self,
         stream: &mut TcpStream,
         peer_addr: SocketAddr
-    ) -> Result<PeerConnection, HandshakeError> {
+    ) -> Result<PeerConnection<CloneableTcpStream>, HandshakeError> {
         // Set timeout for handshake
         stream.set_read_timeout(Some(Duration::from_secs(HANDSHAKE_TIMEOUT_SECS)))?;
         stream.set_write_timeout(Some(Duration::from_secs(HANDSHAKE_TIMEOUT_SECS)))?;
@@ -243,29 +314,17 @@ impl HandshakeProtocol {
         // Store our nonce to detect self-connections
         self.connection_nonces.insert(local_handshake.nonce, peer_addr);
         
+        // Apply connection obfuscation
+        self.apply_connection_obfuscation(stream)?;
+        
         // Send our handshake
-        let serialized = local_handshake.serialize();
-        stream.write_all(&(serialized.len() as u32).to_le_bytes())?;
-        stream.write_all(&serialized)?;
+        local_handshake.send(stream)?;
         
         // Receive peer's handshake
-        let mut size_buf = [0u8; 4];
-        stream.read_exact(&mut size_buf)?;
-        let msg_size = u32::from_le_bytes(size_buf) as usize;
-        
-        // Reasonable size limit to prevent memory attacks
-        if msg_size > 1024 {
-            return Err(HandshakeError::InvalidMessage);
-        }
-        
-        let mut msg_buf = vec![0u8; msg_size];
-        stream.read_exact(&mut msg_buf)?;
-        
-        let remote_handshake = HandshakeMessage::deserialize(&msg_buf)
-            .map_err(|_| HandshakeError::InvalidMessage)?;
+        let remote_handshake = HandshakeMessage::receive(stream)?;
         
         // Check for self-connection by comparing nonces
-        if remote_handshake.nonce == local_handshake.nonce {
+        if self.connection_nonces.contains_key(&remote_handshake.nonce) {
             return Err(HandshakeError::SelfConnection(remote_handshake.nonce));
         }
         
@@ -274,32 +333,26 @@ impl HandshakeProtocol {
             return Err(HandshakeError::VersionIncompatible(remote_handshake.version));
         }
         
-        // Apply connection obfuscation if both sides support it
-        if (remote_handshake.privacy_features & PrivacyFeatureFlag::TransactionObfuscation as u32) != 0 &&
-           (self.local_privacy_features & PrivacyFeatureFlag::TransactionObfuscation as u32) != 0 {
-            self.apply_connection_obfuscation(stream)?;
-        }
-        
-        // Reset timeouts to normal operation values
-        stream.set_read_timeout(None)?;
-        stream.set_write_timeout(None)?;
-        
-        // Create peer connection object
-        let timestamp = SystemTime::now()
+        // Create peer connection
+        let current_time = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or(Duration::from_secs(0))
             .as_secs();
         
+        // Clone the stream and wrap it in Arc<Mutex>
+        let stream_clone = stream.try_clone()?;
+        let cloneable_stream = CloneableTcpStream::new(stream_clone);
+        
         Ok(PeerConnection {
             addr: peer_addr,
-            stream: stream.try_clone()?,
+            stream: Arc::new(Mutex::new(cloneable_stream)),
             version: remote_handshake.version,
             features: remote_handshake.features,
             privacy_features: remote_handshake.privacy_features,
             user_agent: remote_handshake.user_agent,
             best_block_hash: remote_handshake.best_block_hash,
             best_block_height: remote_handshake.best_block_height,
-            last_seen: timestamp,
+            last_seen: current_time,
             outbound: true,
         })
     }
@@ -309,26 +362,21 @@ impl HandshakeProtocol {
         &mut self,
         stream: &mut TcpStream,
         peer_addr: SocketAddr
-    ) -> Result<PeerConnection, HandshakeError> {
+    ) -> Result<PeerConnection<CloneableTcpStream>, HandshakeError> {
         // Set timeout for handshake
         stream.set_read_timeout(Some(Duration::from_secs(HANDSHAKE_TIMEOUT_SECS)))?;
         stream.set_write_timeout(Some(Duration::from_secs(HANDSHAKE_TIMEOUT_SECS)))?;
         
-        // Receive peer's handshake first
-        let mut size_buf = [0u8; 4];
-        stream.read_exact(&mut size_buf)?;
-        let msg_size = u32::from_le_bytes(size_buf) as usize;
+        // Apply connection obfuscation
+        self.apply_connection_obfuscation(stream)?;
         
-        // Reasonable size limit to prevent memory attacks
-        if msg_size > 1024 {
-            return Err(HandshakeError::InvalidMessage);
+        // Receive peer's handshake
+        let remote_handshake = HandshakeMessage::receive(stream)?;
+        
+        // Check for self-connection by comparing nonces
+        if self.connection_nonces.contains_key(&remote_handshake.nonce) {
+            return Err(HandshakeError::SelfConnection(remote_handshake.nonce));
         }
-        
-        let mut msg_buf = vec![0u8; msg_size];
-        stream.read_exact(&mut msg_buf)?;
-        
-        let remote_handshake = HandshakeMessage::deserialize(&msg_buf)
-            .map_err(|_| HandshakeError::InvalidMessage)?;
         
         // Check version compatibility
         if remote_handshake.version < MIN_COMPATIBLE_VERSION {
@@ -343,68 +391,57 @@ impl HandshakeProtocol {
             self.best_block_height
         );
         
-        // Check for self-connection by comparing nonces
-        if self.connection_nonces.contains_key(&remote_handshake.nonce) {
-            return Err(HandshakeError::SelfConnection(remote_handshake.nonce));
-        }
+        // Store our nonce to detect self-connections
+        self.connection_nonces.insert(local_handshake.nonce, peer_addr);
         
         // Send our handshake
-        let serialized = local_handshake.serialize();
-        stream.write_all(&(serialized.len() as u32).to_le_bytes())?;
-        stream.write_all(&serialized)?;
+        local_handshake.send(stream)?;
         
-        // Apply connection obfuscation if both sides support it
-        if (remote_handshake.privacy_features & PrivacyFeatureFlag::TransactionObfuscation as u32) != 0 &&
-           (self.local_privacy_features & PrivacyFeatureFlag::TransactionObfuscation as u32) != 0 {
-            self.apply_connection_obfuscation(stream)?;
-        }
-        
-        // Reset timeouts to normal operation values
-        stream.set_read_timeout(None)?;
-        stream.set_write_timeout(None)?;
-        
-        // Create peer connection object
-        let timestamp = SystemTime::now()
+        // Create peer connection
+        let current_time = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or(Duration::from_secs(0))
             .as_secs();
         
+        // Clone the stream and wrap it in Arc<Mutex>
+        let stream_clone = stream.try_clone()?;
+        let cloneable_stream = CloneableTcpStream::new(stream_clone);
+        
         Ok(PeerConnection {
             addr: peer_addr,
-            stream: stream.try_clone()?,
+            stream: Arc::new(Mutex::new(cloneable_stream)),
             version: remote_handshake.version,
             features: remote_handshake.features,
             privacy_features: remote_handshake.privacy_features,
             user_agent: remote_handshake.user_agent,
             best_block_hash: remote_handshake.best_block_hash,
             best_block_height: remote_handshake.best_block_height,
-            last_seen: timestamp,
+            last_seen: current_time,
             outbound: false,
         })
     }
     
-    // Apply connection obfuscation techniques
+    // Apply connection obfuscation to prevent traffic analysis
     fn apply_connection_obfuscation(&self, stream: &mut TcpStream) -> Result<(), io::Error> {
-        // In a real implementation, this would apply encryption or obfuscation
-        // For now, we'll just set TCP_NODELAY as a placeholder
+        // Set TCP_NODELAY to prevent Nagle's algorithm from creating predictable packet patterns
         stream.set_nodelay(true)?;
         
-        // Additional obfuscation techniques would be implemented here:
-        // 1. Apply padding to messages to hide true size
-        // 2. Randomize timing of messages to prevent timing analysis
-        // 3. Apply lightweight encryption for the connection
-        // 4. Implement traffic pattern obfuscation
+        // Set read and write timeouts for the connection
+        stream.set_read_timeout(Some(Duration::from_secs(300)))?;
+        stream.set_write_timeout(Some(Duration::from_secs(300)))?;
+        
+        // Additional obfuscation could be implemented here
         
         Ok(())
     }
     
-    // Helper method to check if a feature is supported by both peers
+    // Check if a feature is negotiated between peers
     pub fn is_feature_negotiated(local_features: u32, remote_features: u32, feature: FeatureFlag) -> bool {
         let feature_bit = feature as u32;
         (local_features & feature_bit != 0) && (remote_features & feature_bit != 0)
     }
     
-    // Helper method to check if a privacy feature is supported by both peers
+    // Check if a privacy feature is negotiated between peers
     pub fn is_privacy_feature_negotiated(
         local_privacy_features: u32,
         remote_privacy_features: u32,
@@ -412,5 +449,107 @@ impl HandshakeProtocol {
     ) -> bool {
         let feature_bit = feature as u32;
         (local_privacy_features & feature_bit != 0) && (remote_privacy_features & feature_bit != 0)
+    }
+    
+    // Send a message to a peer using our new message serialization
+    pub fn send_message(stream: &mut TcpStream, message_type: MessageType, payload: Vec<u8>) -> Result<(), io::Error> {
+        let message = Message::new(message_type, payload);
+        message.write_to_stream(stream).map_err(|e| match e {
+            MessageError::IoError(io_err) => io_err,
+            _ => io::Error::new(io::ErrorKind::InvalidData, "Message serialization error"),
+        })
+    }
+    
+    // Receive a message from a peer using our new message serialization
+    pub fn receive_message(stream: &mut TcpStream) -> Result<(MessageType, Vec<u8>), io::Error> {
+        let message = Message::read_from_stream(stream).map_err(|e| match e {
+            MessageError::IoError(io_err) => io_err,
+            _ => io::Error::new(io::ErrorKind::InvalidData, "Message deserialization error"),
+        })?;
+        
+        Ok((message.message_type, message.payload))
+    }
+}
+
+impl<T: Read + Write + Clone> PeerConnection<T> {
+    pub fn new(stream: T, addr: SocketAddr, features: u32, privacy_features: u32) -> Self {
+        PeerConnection {
+            addr,
+            stream: Arc::new(Mutex::new(stream)),
+            version: PROTOCOL_VERSION,
+            features,
+            privacy_features,
+            user_agent: format!("Obscura/{}", env!("CARGO_PKG_VERSION")),
+            best_block_hash: [0; 32],
+            best_block_height: 0,
+            last_seen: SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap_or(Duration::from_secs(0))
+                .as_secs(),
+            outbound: false,
+        }
+    }
+    
+    // Get the age of the connection in seconds
+    pub fn get_age(&self) -> u64 {
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or(Duration::from_secs(0))
+            .as_secs();
+        
+        now.saturating_sub(self.last_seen)
+    }
+    
+    // ... existing methods ...
+}
+
+// Tests for the p2p module
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::{TcpListener, Ipv4Addr};
+    use std::thread;
+    
+    #[test]
+    fn test_handshake_message_serialization() {
+        let features = FeatureFlag::BasicTransactions as u32 | FeatureFlag::Dandelion as u32;
+        let privacy_features = PrivacyFeatureFlag::TransactionObfuscation as u32;
+        let block_hash = [0u8; 32];
+        let block_height = 12345;
+        
+        let message = HandshakeMessage::new(features, privacy_features, block_hash, block_height);
+        let serialized = message.serialize();
+        let deserialized = HandshakeMessage::deserialize(&serialized).unwrap();
+        
+        assert_eq!(deserialized.version, message.version);
+        assert_eq!(deserialized.features, message.features);
+        assert_eq!(deserialized.privacy_features, message.privacy_features);
+        assert_eq!(deserialized.best_block_hash, message.best_block_hash);
+        assert_eq!(deserialized.best_block_height, message.best_block_height);
+        assert_eq!(deserialized.nonce, message.nonce);
+    }
+    
+    #[test]
+    fn test_feature_negotiation() {
+        let local_features = FeatureFlag::BasicTransactions as u32 | FeatureFlag::Dandelion as u32;
+        let remote_features = FeatureFlag::BasicTransactions as u32 | FeatureFlag::CompactBlocks as u32;
+        
+        assert!(HandshakeProtocol::is_feature_negotiated(
+            local_features,
+            remote_features,
+            FeatureFlag::BasicTransactions
+        ));
+        
+        assert!(!HandshakeProtocol::is_feature_negotiated(
+            local_features,
+            remote_features,
+            FeatureFlag::Dandelion
+        ));
+        
+        assert!(!HandshakeProtocol::is_feature_negotiated(
+            local_features,
+            remote_features,
+            FeatureFlag::I2PSupport
+        ));
     }
 } 

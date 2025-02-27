@@ -1,7 +1,7 @@
-use crate::blockchain::{Block, Transaction};
-use crate::blockchain::block_structure::BlockStructureManager;
 use std::time::{SystemTime, UNIX_EPOCH};
 use sha2::Digest;
+use crate::blockchain::{Block, Transaction, TransactionOutput, OutPoint, TransactionInput};
+use crate::blockchain::block_structure::BlockStructureManager;
 
 #[test]
 fn test_block_timestamp_validation() {

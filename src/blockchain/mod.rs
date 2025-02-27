@@ -389,7 +389,7 @@ impl Transaction {
         self.outputs = unlinkable_tx.outputs;
         
         // Strip metadata
-        let stripped_tx = obfuscator.strip_metadata(self);
+        let _stripped_tx = obfuscator.strip_metadata(self);
         
         // Set privacy flags
         self.privacy_flags |= 0x01; // Basic transaction obfuscation enabled

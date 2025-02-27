@@ -88,16 +88,16 @@
     - [x] Implement validator performance-based rewards
     - [x] Add slashing insurance mechanism
     - [x] Create validator exit queue for orderly exits
-    - [ ] Implement multi-asset staking support
+    - [x] Implement multi-asset staking support
       - [x] Basic multi-asset staking functionality
       - [x] Validator selection with multi-asset stakes
       - [x] Slashing for multi-asset stakes
       - [x] Oracle integration for exchange rates
-      - [ ] Add validator asset constraints
-      - [ ] Implement governance for asset addition
-      - [ ] Performance optimization for large validator sets
-      - [ ] Risk management for exchange rate fluctuations
-      - [ ] UI/API integration for multi-asset staking
+      - [x] Add validator asset constraints
+      - [x] Implement governance for asset addition
+      - [x] Performance optimization for large validator sets
+      - [x] Risk management for exchange rate fluctuations
+      - [x] UI/API integration for multi-asset staking
     - [ ] Add stake delegation marketplace
     - [ ] Create validator reputation oracle
     - [ ] Implement stake compounding automation
@@ -154,11 +154,11 @@
       - [x] Connection establishment
       - [x] Add privacy feature negotiation
       - [x] Implement connection obfuscation
-    - [ ] Implement message serialization
-      - [ ] Create message framing
-      - [ ] Add checksums and validation
-      - [ ] Implement message padding for privacy
-      - [ ] Add timing attack protection
+    - [x] Implement message serialization
+      - [x] Create message framing
+      - [x] Add checksums and validation
+      - [x] Implement message padding for privacy
+      - [x] Add timing attack protection
     - [ ] Add connection pooling
       - [ ] Implement connection diversity
       - [ ] Add privacy-focused peer selection

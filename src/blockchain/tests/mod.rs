@@ -1,9 +1,9 @@
 use super::*;
 use ed25519_dalek::{Keypair, PublicKey};
 use rand::thread_rng;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 // Include the block structure tests
+#[cfg(test)]
 mod block_structure_tests;
 
 pub fn create_test_transaction() -> Transaction {

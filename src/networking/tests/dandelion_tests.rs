@@ -1,4 +1,4 @@
-use super::*;
+use crate::networking::Node;
 use crate::blockchain::tests::create_test_transaction;
 use std::time::Duration;
 

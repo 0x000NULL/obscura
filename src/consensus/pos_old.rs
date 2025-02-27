@@ -122,6 +122,7 @@ pub const ASSET_EXCHANGE_RATE_UPDATE_INTERVAL: u64 = 1 * 60 * 60; // Update exch
 pub const ASSET_WEIGHT_DEFAULT: f64 = 1.0; // Default weight for assets
 pub const ASSET_WEIGHT_NATIVE: f64 = 1.5; // Higher weight for native token
 pub const MIN_SECONDARY_ASSET_STAKE_PERCENTAGE: f64 = 0.2; // At least 20% must be native token
+pub const MAX_RATE_CHANGE_PERCENTAGE: f64 = 10.0; // Maximum allowed exchange rate change in percentage
 
 // Delegation marketplace constants
 pub const MARKETPLACE_LISTING_DURATION: u64 = 30 * 24 * 60 * 60; // Listings last 30 days
@@ -473,6 +474,9 @@ pub enum ProposalAction {
     ChangeParameter(String, Vec<u8>), // Parameter name, new value
     TreasuryAllocation(Vec<u8>, u64, String), // Recipient, amount, purpose
     ProtocolUpgrade(String, Vec<u8>), // Upgrade name, upgrade data
+    AddAsset(AssetInfo), // Add a new asset for staking
+    UpdateAssetWeight(String, f64), // Asset ID, new weight
+    UpdateAssetExchangeRate(String, f64), // Asset ID, new exchange rate
     Other(String, Vec<u8>),           // Action type, action data
 }
 
@@ -1959,6 +1963,37 @@ impl StakingContract {
                             };
 
                             self.treasury.allocations.push(allocation);
+                        }
+                    }
+                    ProposalAction::AddAsset(asset_info) => {
+                        // Add the new asset to supported assets
+                        if !self.supported_assets.contains_key(&asset_info.asset_id) {
+                            self.supported_assets.insert(asset_info.asset_id.clone(), asset_info.clone());
+                            self.asset_exchange_rates.insert(asset_info.asset_id.clone(), asset_info.exchange_rate);
+                            self.last_exchange_rate_update = current_time;
+                        }
+                    }
+                    ProposalAction::UpdateAssetWeight(asset_id, new_weight) => {
+                        // Update the weight of an existing asset
+                        if let Some(asset) = self.supported_assets.get_mut(asset_id) {
+                            asset.weight = *new_weight;
+                        }
+                    }
+                    ProposalAction::UpdateAssetExchangeRate(asset_id, new_rate) => {
+                        // Update the exchange rate of an existing asset
+                        if let Some(asset) = self.supported_assets.get_mut(asset_id) {
+                            // Apply circuit breaker for extreme rate changes
+                            let max_change = asset.exchange_rate * (MAX_RATE_CHANGE_PERCENTAGE / 100.0);
+                            let min_allowed = asset.exchange_rate - max_change;
+                            let max_allowed = asset.exchange_rate + max_change;
+                            
+                            // Clamp the new rate within allowed range
+                            let clamped_rate = new_rate.max(min_allowed).min(max_allowed);
+                            
+                            asset.exchange_rate = clamped_rate;
+                            asset.last_rate_update = current_time;
+                            self.asset_exchange_rates.insert(asset_id.clone(), clamped_rate);
+                            self.last_exchange_rate_update = current_time;
                         }
                     }
                     // Other action types would be implemented here
