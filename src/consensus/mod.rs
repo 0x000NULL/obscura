@@ -3,6 +3,7 @@ pub mod difficulty;
 pub mod hybrid;
 pub mod mining_reward;
 pub mod pos;
+pub mod pos_old;
 pub mod pow;
 pub mod randomx;
 pub mod sharding;
@@ -21,7 +22,7 @@ pub use mining_reward::{
     GENESIS_TIMESTAMP, HALVING_INTERVAL, INITIAL_BLOCK_REWARD, MAX_FEE_RATE, MIN_FEE_RATE,
     MIN_RBF_FEE_INCREASE, TARGET_BLOCK_SIZE,
 };
-pub use pos::{
+pub use pos_old::{
     ProofOfStake, StakeProof, StakingContract, MINIMUM_STAKE, MINIMUM_STAKE_AGE, STAKE_LOCK_PERIOD,
     WITHDRAWAL_DELAY,
 };
@@ -44,14 +45,14 @@ pub trait ConsensusEngine {
 #[allow(dead_code)]
 pub struct HybridConsensus {
     pow_engine: pow::ProofOfWork,
-    pos_engine: pos::ProofOfStake,
+    pos_engine: pos_old::ProofOfStake,
 }
 
 impl HybridConsensus {
     pub fn new() -> Self {
         HybridConsensus {
             pow_engine: pow::ProofOfWork::new(),
-            pos_engine: pos::ProofOfStake::new(),
+            pos_engine: pos_old::ProofOfStake::new(),
         }
     }
 }
@@ -124,7 +125,7 @@ fn validate_pow(block: &crate::blockchain::Block, randomx: &Arc<randomx::RandomX
 
 #[allow(dead_code)]
 fn validate_pos(block: &crate::blockchain::Block, stake_proof: &StakeProof) -> bool {
-    let pos = pos::ProofOfStake::new();
+    let pos = pos_old::ProofOfStake::new();
     pos.validate_stake_proof(stake_proof, &block.serialize_header())
 }
 

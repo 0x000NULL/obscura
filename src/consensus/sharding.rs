@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::consensus::pos::StakingContract;
+use crate::consensus::pos_old::StakingContract;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -415,7 +415,7 @@ impl ShardManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consensus::pos::StakingContract;
+    use crate::consensus::pos_old::StakingContract;
 
     #[test]
     fn test_shard_initialization() {

@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
-use super::pos::{StakeProof, StakingContract};
+use super::pos_old::{StakeProof, StakingContract};
 use super::randomx::{verify_difficulty, RandomXContext};
-use super::{pos::ProofOfStake, pow::ProofOfWork};
+use super::{pos_old::ProofOfStake, pow::ProofOfWork};
 use crate::blockchain::Block;
 use std::sync::{Arc, Mutex};
 
@@ -19,7 +19,7 @@ impl HybridValidator {
             pow: ProofOfWork::new(),
             pos: ProofOfStake::new(),
             pow_weight: 0.7, // 70% PoW, 30% PoS influence
-            staking_contract: Arc::new(Mutex::new(StakingContract::new(24 * 60 * 60))), // 1 day epoch
+            staking_contract: Arc::new(Mutex::new(StakingContract::new())), // 1 day epoch
         }
     }
 
@@ -145,12 +145,12 @@ pub fn validate_block_hybrid(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consensus::pos::{StakeProof, StakingContract};
+    use crate::consensus::pos_old::{StakeProof, StakingContract};
 
     #[test]
     fn test_hybrid_validation_with_staking() {
         // Create a staking contract
-        let staking_contract = Arc::new(Mutex::new(StakingContract::new(24 * 60 * 60)));
+        let staking_contract = Arc::new(Mutex::new(StakingContract::new()));
 
         // Create a validator
         let public_key = vec![1, 2, 3, 4];

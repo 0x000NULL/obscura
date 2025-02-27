@@ -1,10 +1,12 @@
 // Add #[allow(dead_code)] at the top of the file
 #![allow(dead_code)]
 
-use crate::blockchain::{Block, OutPoint, Transaction, TransactionOutput};
+// Import the PoS enhancements
+use crate::consensus::pos::*;
+
 use crate::consensus::sharding::{ShardManager, Shard, CrossShardCommittee};
 use bincode;
-use ed25519_dalek::{Keypair, PublicKey, Signature, Signer, Verifier};
+use ed25519_dalek::{PublicKey, Signature, Signer, Verifier};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -99,6 +101,95 @@ pub const MAX_VALIDATORS_PER_SHARD: usize = 100; // Maximum validators per shard
 pub const SHARD_ROTATION_INTERVAL: u64 = 14 * 24 * 60 * 60; // Rotate validators between shards every 14 days
 pub const CROSS_SHARD_COMMITTEE_SIZE: usize = 5; // Number of validators in cross-shard committees
 
+// Constants for future PoS enhancements
+pub const MULTI_ASSET_MIN_STAKE: &[(&str, u64)] = &[
+    ("BTC", 100000),
+    ("ETH", 1000000),
+    ("OBSCURA", 10000000),
+];
+pub const MARKETPLACE_FEE_PERCENTAGE: f64 = 0.005; // 0.5% fee for delegation marketplace
+pub const REPUTATION_ORACLE_UPDATE_INTERVAL: u64 = 24 * 60 * 60; // Update reputation oracle daily
+pub const AUTO_COMPOUND_INTERVAL: u64 = 7 * 24 * 60 * 60; // Auto-compound stakes weekly
+pub const DIVERSITY_TARGET_PERCENTAGE: f64 = 0.8; // Target 80% diversity score
+pub const GEO_DISTRIBUTION_BONUS: f64 = 0.02; // 2% bonus for good geographic distribution
+pub const HARDWARE_SECURITY_LEVEL_REQUIRED: u8 = 2; // Level 2 hardware security required (0-3 scale)
+pub const FORMAL_VERIFICATION_REWARD: u64 = 1000; // Reward for formal verification
+pub const QUANTUM_RESISTANT_ALGORITHM: &str = "Falcon-512"; // Default quantum-resistant algorithm
+
+// Multi-asset staking constants
+pub const MAX_ASSETS_PER_VALIDATOR: usize = 5; // Maximum number of different assets a validator can stake
+pub const ASSET_EXCHANGE_RATE_UPDATE_INTERVAL: u64 = 1 * 60 * 60; // Update exchange rates hourly
+pub const ASSET_WEIGHT_DEFAULT: f64 = 1.0; // Default weight for assets
+pub const ASSET_WEIGHT_NATIVE: f64 = 1.5; // Higher weight for native token
+pub const MIN_SECONDARY_ASSET_STAKE_PERCENTAGE: f64 = 0.2; // At least 20% must be native token
+
+// Delegation marketplace constants
+pub const MARKETPLACE_LISTING_DURATION: u64 = 30 * 24 * 60 * 60; // Listings last 30 days
+pub const MARKETPLACE_MIN_REPUTATION: f64 = 0.7; // Minimum reputation to list on marketplace
+pub const MARKETPLACE_ESCROW_PERCENTAGE: f64 = 0.1; // 10% of delegation in escrow
+pub const MARKETPLACE_DISPUTE_WINDOW: u64 = 7 * 24 * 60 * 60; // 7 days to dispute a transaction
+pub const MARKETPLACE_MAX_COMMISSION: f64 = 0.25; // Maximum 25% commission allowed
+
+// Validator reputation oracle constants
+pub const REPUTATION_ORACLE_COMMITTEE_SIZE: usize = 7; // 7 validators in reputation oracle committee
+pub const REPUTATION_ORACLE_ROTATION_INTERVAL: u64 = 30 * 24 * 60 * 60; // Rotate committee monthly
+pub const REPUTATION_ORACLE_THRESHOLD: usize = 5; // Need 5 of 7 to agree on reputation
+pub const REPUTATION_HISTORY_LENGTH: usize = 100; // Store last 100 reputation scores
+pub const REPUTATION_EXTERNAL_WEIGHT: f64 = 0.3; // 30% of reputation from external sources
+
+// Stake compounding automation constants
+pub const AUTO_COMPOUND_MIN_STAKE: u64 = 5000; // Minimum stake for auto-compounding
+pub const AUTO_COMPOUND_FEE: f64 = 0.001; // 0.1% fee for auto-compounding service
+pub const AUTO_COMPOUND_MAX_FREQUENCY: u64 = 1 * 24 * 60 * 60; // Maximum once per day
+pub const AUTO_COMPOUND_THRESHOLD: u64 = 100; // Only compound if rewards >= 100
+pub const AUTO_COMPOUND_DELEGATION_LIMIT: f64 = 0.9; // Only auto-compound up to 90% of stake
+
+// Validator set diversity metrics constants
+pub const DIVERSITY_METRIC_WEIGHT_ENTITY: f64 = 0.4; // 40% weight for entity diversity
+pub const DIVERSITY_METRIC_WEIGHT_GEOGRAPHY: f64 = 0.3; // 30% weight for geographic diversity
+pub const DIVERSITY_METRIC_WEIGHT_STAKE: f64 = 0.2; // 20% weight for stake distribution
+pub const DIVERSITY_METRIC_WEIGHT_CLIENT: f64 = 0.1; // 10% weight for client implementation diversity
+pub const DIVERSITY_ASSESSMENT_INTERVAL: u64 = 7 * 24 * 60 * 60; // Assess diversity weekly
+
+// Geographic distribution constants
+pub const GEO_REGIONS: usize = 8; // Number of geographic regions
+pub const GEO_MIN_REGIONS_REPRESENTED: usize = 4; // Minimum regions that should be represented
+pub const GEO_OPTIMAL_DISTRIBUTION: [f64; 8] = [0.15, 0.15, 0.15, 0.15, 0.1, 0.1, 0.1, 0.1]; // Optimal distribution
+pub const GEO_REGION_BONUS_THRESHOLD: f64 = 0.7; // Need 70% of optimal distribution for bonus
+pub const GEO_REPORTING_INTERVAL: u64 = 7 * 24 * 60 * 60; // Report geographic distribution weekly
+
+// Hardware security constants
+pub const HARDWARE_SECURITY_LEVEL_DESCRIPTIONS: [&str; 4] = [
+    "Basic software security",
+    "Enhanced software security with HSM",
+    "Dedicated hardware security module",
+    "Air-gapped signing with multi-party computation"
+];
+pub const HARDWARE_SECURITY_BONUS: [f64; 4] = [0.0, 0.01, 0.02, 0.03]; // Bonuses for each level
+pub const HARDWARE_SECURITY_ATTESTATION_INTERVAL: u64 = 90 * 24 * 60 * 60; // Attest every 90 days
+pub const HARDWARE_SECURITY_AUDIT_PROBABILITY: f64 = 0.1; // 10% chance of random audit
+
+// Formal verification constants
+pub const FORMAL_VERIFICATION_METHODS: [&str; 3] = [
+    "Model checking",
+    "Theorem proving",
+    "Static analysis"
+];
+pub const FORMAL_VERIFICATION_COVERAGE_REQUIRED: f64 = 0.8; // 80% code coverage required
+pub const FORMAL_VERIFICATION_AUDIT_INTERVAL: u64 = 180 * 24 * 60 * 60; // Audit every 180 days
+pub const FORMAL_VERIFICATION_BONUS_PERCENTAGE: f64 = 0.01; // 1% bonus for verified contracts
+
+// Quantum resistance constants
+pub const QUANTUM_RESISTANT_ALGORITHMS: [&str; 4] = [
+    "Falcon-512",
+    "Dilithium2",
+    "SPHINCS+-128f",
+    "XMSS-SHA2_10_256"
+];
+pub const QUANTUM_RESISTANCE_PHASE_IN_PERIOD: u64 = 365 * 24 * 60 * 60; // 1 year phase-in
+pub const QUANTUM_KEY_ROTATION_INTERVAL: u64 = 30 * 24 * 60 * 60; // Rotate keys monthly
+pub const QUANTUM_HYBRID_MODE_ENABLED: bool = true; // Use both classical and quantum-resistant signatures
+
 pub struct ProofOfStake {
     pub minimum_stake: u64,
     pub current_difficulty: u32,
@@ -176,6 +267,58 @@ pub struct StakingContract {
     pub blocks_expected: u64,
     // Pending insurance claims
     pub pending_insurance_claims: Vec<InsuranceClaim>,
+    
+    // New fields for future PoS enhancements
+    // Multi-asset staking support
+    pub supported_assets: HashMap<String, AssetInfo>,
+    pub multi_asset_stakes: HashMap<Vec<u8>, Vec<MultiAssetStake>>,
+    pub asset_exchange_rates: HashMap<String, f64>,
+    pub last_exchange_rate_update: u64,
+    
+    // Stake delegation marketplace
+    pub marketplace_listings: Vec<MarketplaceListing>,
+    pub marketplace_offers: Vec<MarketplaceOffer>,
+    pub marketplace_transactions: Vec<MarketplaceTransaction>,
+    pub marketplace_disputes: Vec<MarketplaceDispute>,
+    pub marketplace_escrow: u64,
+    
+    // Validator reputation oracle
+    pub reputation_oracle: ReputationOracle,
+    pub reputation_scores: HashMap<Vec<u8>, ReputationScore>,
+    pub last_reputation_update: u64,
+    
+    // Stake compounding automation
+    pub compounding_configs: HashMap<Vec<u8>, CompoundingConfig>,
+    pub compounding_operations: Vec<CompoundingOperation>,
+    pub last_auto_compound_time: u64,
+    
+    // Validator set diversity metrics
+    pub diversity_metrics: DiversityMetrics,
+    pub entity_info: HashMap<String, EntityInfo>,
+    pub client_implementations: HashMap<String, ClientImplementation>,
+    pub last_diversity_assessment: u64,
+    
+    // Geographic distribution incentives
+    pub geo_regions: Vec<GeoRegion>,
+    pub geo_distribution_reports: Vec<GeoDistributionReport>,
+    pub validator_geo_info: HashMap<Vec<u8>, ValidatorGeoInfo>,
+    pub last_geo_report: u64,
+    
+    // Hardware security requirements
+    pub hardware_security_info: HashMap<Vec<u8>, HardwareSecurityInfo>,
+    pub security_attestations: Vec<SecurityAttestation>,
+    pub next_security_audit: u64,
+    
+    // Formal verification of staking contracts
+    pub verified_contracts: HashMap<String, VerifiedContract>,
+    pub formal_verifications: Vec<FormalVerification>,
+    pub verification_bonus_total: u64,
+    
+    // Quantum-resistant staking mechanisms
+    pub quantum_keypairs: HashMap<Vec<u8>, QuantumKeyPair>,
+    pub quantum_signatures: Vec<QuantumSignature>,
+    pub hybrid_signatures: Vec<HybridSignature>,
+    pub quantum_resistance_enabled: bool,
 }
 
 // Stake information
@@ -670,24 +813,19 @@ impl ProofOfStake {
 }
 
 impl StakingContract {
-    pub fn new(epoch_duration: u64) -> Self {
-        let current_time = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-
+    pub fn new() -> Self {
         StakingContract {
             stakes: HashMap::new(),
             validators: HashMap::new(),
             active_validators: HashSet::new(),
             current_epoch: 0,
-            epoch_duration,
+            epoch_duration: 0,
             random_beacon: [0; 32],
             shard_manager: None,
             validator_selection_cache: None,
             pending_validator_updates: Vec::new(),
             unclaimed_rewards: HashMap::new(),
-            last_reward_calculation: current_time,
+            last_reward_calculation: 0,
             liquid_staking_pool: LiquidStakingPool {
                 total_staked: 0,
                 liquid_tokens_issued: 0,
@@ -706,7 +844,7 @@ impl StakingContract {
                 next_proposal_id: 1,
             },
             cross_chain_stakes: HashMap::new(),
-            last_rotation_time: current_time,
+            last_rotation_time: 0,
             insurance_pool: InsurancePool {
                 total_balance: 0,
                 balance: 0, // Add this field for backward compatibility
@@ -719,10 +857,10 @@ impl StakingContract {
                 last_processed: 0,
                 max_size: EXIT_QUEUE_MAX_SIZE,
             },
-            last_reward_time: current_time,
+            last_reward_time: 0,
             shards: Vec::new(),
             cross_shard_committees: HashMap::new(),
-            last_shard_rotation: current_time,
+            last_shard_rotation: 0,
             performance_metrics: HashMap::new(),
             bft_consensus: None,
             recent_reorgs: VecDeque::new(),
@@ -730,6 +868,59 @@ impl StakingContract {
             highest_finalized_block: 0,
             blocks_expected: 0,
             pending_insurance_claims: Vec::new(),
+            
+            // Initialize multi-asset staking fields
+            supported_assets: HashMap::new(),
+            multi_asset_stakes: HashMap::new(),
+            asset_exchange_rates: HashMap::new(),
+            last_exchange_rate_update: 0,
+            
+            // Initialize delegation marketplace fields
+            marketplace_listings: Vec::new(),
+            marketplace_offers: Vec::new(),
+            marketplace_transactions: Vec::new(),
+            marketplace_disputes: Vec::new(),
+            marketplace_escrow: 0,
+            
+            // Initialize validator reputation oracle
+            reputation_oracle: ReputationOracle::new(),
+            reputation_scores: HashMap::new(),
+            last_reputation_update: 0,
+            
+            // Initialize stake compounding automation
+            compounding_configs: HashMap::new(),
+            compounding_operations: Vec::new(),
+            last_auto_compound_time: 0,
+            
+            // Initialize validator set diversity metrics
+            diversity_metrics: DiversityMetrics::new(),
+            entity_info: HashMap::new(),
+            client_implementations: HashMap::new(),
+            last_diversity_assessment: 0,
+            
+            // Initialize geographic distribution incentives
+            geo_regions: Vec::new(),
+            geo_distribution_reports: Vec::new(),
+            validator_geo_info: HashMap::new(),
+            last_geo_report: 0,
+            
+            // Initialize hardware security incentives
+            hardware_security_info: HashMap::new(),
+            security_attestations: Vec::new(),
+            next_security_audit: 0,
+            
+            // Initialize formal verification of staking contracts
+            verified_contracts: HashMap::new(),
+            formal_verifications: Vec::new(),
+            verification_bonus_total: 0,
+            
+            // Initialize quantum-resistant staking mechanisms
+            quantum_keypairs: HashMap::new(),
+            quantum_signatures: Vec::new(),
+            hybrid_signatures: Vec::new(),
+            quantum_resistance_enabled: false,
+            
+            // ... existing code ...
         }
     }
 
@@ -1190,7 +1381,7 @@ impl StakingContract {
         
         if let Some(shard_manager) = &mut self.shard_manager {
             // Create a simplified version of StakingContract with just what's needed
-            let mut simplified_contract = StakingContract::new(self.epoch_duration);
+            let mut simplified_contract = StakingContract::new();
             simplified_contract.active_validators = active_validators;
             simplified_contract.validators = validators;
             
