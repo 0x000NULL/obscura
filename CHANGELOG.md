@@ -2,6 +2,36 @@
 
 All notable changes to the Obscura project will be documented in this file.
 
+## [0.3.7] - 2024-02-26
+
+### Added
+- Enhanced Connection Pool Management
+  - Implemented comprehensive peer scoring system
+  - Added network diversity tracking and enforcement
+  - Created peer rotation mechanism for privacy
+  - Added connection type management (inbound/outbound/feeler)
+  - Implemented ban system for malicious peers
+  - Added feature negotiation system
+  - Created privacy feature support tracking
+
+### Improved
+- Network Management
+  - Enhanced peer selection algorithm with scoring
+  - Improved connection diversity with network type tracking
+  - Added connection limits per network type
+  - Enhanced privacy with periodic peer rotation
+  - Improved connection pool test coverage
+  - Added comprehensive logging for debugging
+
+### Testing
+- Added extensive test suite for connection pool
+  - Created tests for connection management
+  - Added peer rotation tests
+  - Implemented network diversity tests
+  - Added feature support verification tests
+  - Created mock TCP stream for testing
+  - Added comprehensive test logging
+  
 ## [0.3.6] - 2024-02-26
 
 ### Added

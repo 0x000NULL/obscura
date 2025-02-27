@@ -76,23 +76,36 @@ fn create_test_connection_pool(local_features: u32, local_privacy_features: u32)
 
 #[test]
 fn test_connection_pool_add_connection() {
+    // Enable debug logging
+    std::env::set_var("RUST_LOG", "debug");
+    env_logger::init_from_env(env_logger::Env::default().default_filter_or("debug"));
+
+    log::debug!("Starting test_connection_pool_add_connection");
+    
     // Create a connection pool with test settings
     let local_features = FeatureFlag::BasicTransactions as u32 | FeatureFlag::Dandelion as u32;
     let local_privacy_features = PrivacyFeatureFlag::TransactionObfuscation as u32;
     let pool = create_test_connection_pool(local_features, local_privacy_features);
     
+    log::debug!("Created connection pool");
+    
     // Create a test peer connection
     let peer_conn = create_test_peer_connection(8333, local_features, local_privacy_features);
+    log::debug!("Created test peer connection");
     
     // Add the connection to the pool
+    log::debug!("Attempting to add connection to pool");
     let result = pool.add_connection(peer_conn.clone(), ConnectionType::Outbound);
+    log::debug!("Add connection result: {:?}", result);
     assert!(result.is_ok());
     
     // Verify the connection was added
+    log::debug!("Verifying connection was added");
     let conn = pool.get_connection(&peer_conn.addr);
     assert!(conn.is_some());
     
     // Verify connection count
+    log::debug!("Verifying connection counts");
     let all_conns = pool.get_all_connections();
     assert_eq!(all_conns.len(), 1);
     
@@ -103,6 +116,8 @@ fn test_connection_pool_add_connection() {
     // Verify inbound connection count
     let inbound_conns = pool.get_inbound_connections();
     assert_eq!(inbound_conns.len(), 0);
+    
+    log::debug!("Test completed successfully");
 }
 
 #[test]
@@ -188,17 +203,25 @@ fn test_connection_pool_peer_selection() {
     let local_privacy_features = PrivacyFeatureFlag::TransactionObfuscation as u32;
     let pool = create_test_connection_pool(local_features, local_privacy_features);
     
-    // Instead of directly accessing peer_scores, we'll add some connections
-    // and then test the peer selection functionality
-    for i in 0..5 {
-        let peer_conn = create_test_peer_connection(9100 + i, local_features, local_privacy_features);
+    // Add some connected peers (fewer than the network diversity limit)
+    for i in 0..2 {
+        let peer_conn = create_test_peer_connection(9200_u16 + i as u16, local_features, local_privacy_features);
         let _ = pool.add_connection(peer_conn, ConnectionType::Outbound);
+    }
+    
+    // Add some peers that will be disconnected to make them available for selection
+    for i in 0..3 {
+        let peer_conn = create_test_peer_connection(9100_u16 + i as u16, local_features, local_privacy_features);
+        // First add them
+        let _ = pool.add_connection(peer_conn.clone(), ConnectionType::Outbound);
+        // Then remove them to make them available for selection
+        pool.remove_connection(&peer_conn.addr);
     }
     
     // Select an outbound peer
     let selected = pool.select_outbound_peer();
     
-    // Just verify that we get a peer back, we can't control the scoring in this test
+    // We should get a peer back since we have unconnected peers that were previously known
     assert!(selected.is_some());
 }
 
@@ -207,16 +230,29 @@ fn test_connection_pool_peer_rotation() {
     // Create a connection pool with a specific rotation interval
     let pool = Arc::new(ConnectionPool::new(0, 0).with_rotation_interval(TEST_PEER_ROTATION_INTERVAL));
     
-    // Add 5 connections to the pool
-    for i in 0..5 {
-        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, i + 1)), 8333);
+    // Add connections from different network types to avoid hitting the diversity limit
+    let mut connections = Vec::new();
+    
+    // Add IPv4 connections (up to the limit)
+    for i in 0..TEST_MAX_CONNECTIONS_PER_NETWORK {
+        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, i as u8 + 1)), 8333_u16);
         let mock_stream = MockTcpStream::new();
         let peer_conn = PeerConnection::new(mock_stream, addr, FeatureFlag::BasicTransactions as u32, PrivacyFeatureFlag::StealthAddressing as u32);
         pool.add_connection(peer_conn, ConnectionType::Outbound).unwrap();
+        connections.push(addr);
     }
     
-    // Verify we have 5 connections
-    assert_eq!(pool.get_all_connections().len(), 5);
+    // Add IPv6 connections
+    for i in 0..2 {
+        let addr = SocketAddr::new(IpAddr::V6([0, 0, 0, 0, 0, 0, 0, 1].into()), 8333_u16 + i as u16);
+        let mock_stream = MockTcpStream::new();
+        let peer_conn = PeerConnection::new(mock_stream, addr, FeatureFlag::BasicTransactions as u32, PrivacyFeatureFlag::StealthAddressing as u32);
+        pool.add_connection(peer_conn, ConnectionType::Outbound).unwrap();
+        connections.push(addr);
+    }
+    
+    // Verify we have the expected number of connections
+    assert_eq!(pool.get_all_connections().len(), TEST_MAX_CONNECTIONS_PER_NETWORK + 2);
     
     // Initially, should_rotate_peers should return false
     assert!(!pool.should_rotate_peers());

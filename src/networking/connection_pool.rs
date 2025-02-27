@@ -168,39 +168,36 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
     pub fn add_connection(&self, peer_conn: PeerConnection<T>, conn_type: ConnectionType) -> Result<(), ConnectionError> {
         let addr = peer_conn.addr;
         
-        // Check if peer is banned
+        // First check if peer is banned (single lock)
         if let Ok(banned) = self.banned_peers.read() {
             if banned.contains(&addr) {
                 return Err(ConnectionError::PeerBanned);
             }
         }
         
+        // Get all the information we need with a single read lock
+        let (inbound_count, outbound_count, feeler_count) = if let Ok(connections) = self.active_connections.read() {
+            (
+                connections.values().filter(|(_, ctype)| *ctype == ConnectionType::Inbound).count(),
+                connections.values().filter(|(_, ctype)| *ctype == ConnectionType::Outbound).count(),
+                connections.values().filter(|(_, ctype)| *ctype == ConnectionType::Feeler).count()
+            )
+        } else {
+            (0, 0, 0)
+        };
+        
         // Check connection limits based on type
-        if let Ok(connections) = self.active_connections.read() {
-            let inbound_count = connections.values()
-                .filter(|(_, ctype)| *ctype == ConnectionType::Inbound)
-                .count();
-                
-            let outbound_count = connections.values()
-                .filter(|(_, ctype)| *ctype == ConnectionType::Outbound)
-                .count();
-                
-            let feeler_count = connections.values()
-                .filter(|(_, ctype)| *ctype == ConnectionType::Feeler)
-                .count();
-                
-            match conn_type {
-                ConnectionType::Inbound if inbound_count >= MAX_INBOUND_CONNECTIONS => {
-                    return Err(ConnectionError::TooManyConnections);
-                },
-                ConnectionType::Outbound if outbound_count >= MAX_OUTBOUND_CONNECTIONS => {
-                    return Err(ConnectionError::TooManyConnections);
-                },
-                ConnectionType::Feeler if feeler_count >= MAX_FEELER_CONNECTIONS => {
-                    return Err(ConnectionError::TooManyConnections);
-                },
-                _ => {}
-            }
+        match conn_type {
+            ConnectionType::Inbound if inbound_count >= MAX_INBOUND_CONNECTIONS => {
+                return Err(ConnectionError::TooManyConnections);
+            },
+            ConnectionType::Outbound if outbound_count >= MAX_OUTBOUND_CONNECTIONS => {
+                return Err(ConnectionError::TooManyConnections);
+            },
+            ConnectionType::Feeler if feeler_count >= MAX_FEELER_CONNECTIONS => {
+                return Err(ConnectionError::TooManyConnections);
+            },
+            _ => {}
         }
         
         // Check network diversity
@@ -209,6 +206,7 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
             IpAddr::V6(_) => NetworkType::IPv6,
         };
         
+        // Update network counts (single write lock)
         if let Ok(mut network_counts) = self.network_counts.write() {
             let count = network_counts.entry(network_type).or_insert(0);
             if *count >= self.max_connections_per_network && conn_type == ConnectionType::Outbound {
@@ -217,12 +215,52 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
             *count += 1;
         }
         
-        // Add to active connections
+        // Add to active connections (single write lock)
         if let Ok(mut connections) = self.active_connections.write() {
             connections.insert(addr, (peer_conn.clone(), conn_type));
         }
         
-        // Update peer score
+        // Calculate diversity scores first
+        let diversity_scores = {
+            let mut scores = HashMap::new();
+            if let Ok(connections) = self.active_connections.read() {
+                // Count connections by network type
+                let mut network_counts = HashMap::new();
+                for (addr, _) in connections.iter() {
+                    let network_type = match addr.ip() {
+                        IpAddr::V4(_) => NetworkType::IPv4,
+                        IpAddr::V6(_) => NetworkType::IPv6,
+                    };
+                    *network_counts.entry(network_type).or_insert(0) += 1;
+                }
+                
+                // Calculate total connections
+                let total_connections = connections.len() as f64;
+                if total_connections > 0.0 {
+                    for (addr, _) in connections.iter() {
+                        let network_type = match addr.ip() {
+                            IpAddr::V4(_) => NetworkType::IPv4,
+                            IpAddr::V6(_) => NetworkType::IPv6,
+                        };
+                        let network_count = *network_counts.get(&network_type).unwrap_or(&0) as f64;
+                        let network_ratio = network_count / total_connections;
+                        
+                        // Higher score for underrepresented networks
+                        let mut diversity_score = 1.0 - network_ratio;
+                        
+                        // Ensure minimum diversity score
+                        if diversity_score < MIN_PEER_DIVERSITY_SCORE {
+                            diversity_score = MIN_PEER_DIVERSITY_SCORE;
+                        }
+                        
+                        scores.insert(*addr, diversity_score);
+                    }
+                }
+            }
+            scores
+        };
+        
+        // Update peer scores (single write lock)
         if let Ok(mut scores) = self.peer_scores.write() {
             let score = scores.entry(addr).or_insert_with(|| {
                 PeerScore::new(addr, peer_conn.features, peer_conn.privacy_features)
@@ -231,8 +269,10 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
             // Record successful connection with estimated latency
             score.record_successful_connection(Duration::from_millis(100)); // Default latency estimate
             
-            // Update diversity score based on current connections
-            self.update_diversity_scores();
+            // Update diversity score if we calculated one
+            if let Some(diversity_score) = diversity_scores.get(&addr) {
+                score.diversity_score = *diversity_score;
+            }
         }
         
         Ok(())
@@ -397,44 +437,6 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
         result
     }
     
-    // Update diversity scores for all peers
-    fn update_diversity_scores(&self) {
-        if let Ok(mut scores) = self.peer_scores.write() {
-            if let Ok(connections) = self.active_connections.read() {
-                // Count connections by network type
-                let mut network_counts = HashMap::new();
-                for (addr, _) in connections.iter() {
-                    let network_type = match addr.ip() {
-                        IpAddr::V4(_) => NetworkType::IPv4,
-                        IpAddr::V6(_) => NetworkType::IPv6,
-                    };
-                    
-                    *network_counts.entry(network_type).or_insert(0) += 1;
-                }
-                
-                // Calculate total connections
-                let total_connections = connections.len() as f64;
-                if total_connections == 0.0 {
-                    return;
-                }
-                
-                // Update diversity scores
-                for (_, score) in scores.iter_mut() {
-                    let network_count = *network_counts.get(&score.network_type).unwrap_or(&0) as f64;
-                    let network_ratio = network_count / total_connections;
-                    
-                    // Higher score for underrepresented networks
-                    score.diversity_score = 1.0 - network_ratio;
-                    
-                    // Ensure minimum diversity score
-                    if score.diversity_score < MIN_PEER_DIVERSITY_SCORE {
-                        score.diversity_score = MIN_PEER_DIVERSITY_SCORE;
-                    }
-                }
-            }
-        }
-    }
-    
     // Check if it's time to rotate peers
     pub fn should_rotate_peers(&self) -> bool {
         // Get the current time
@@ -493,8 +495,67 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
                 connections.remove(&addr);
             }
             
-            // Update network diversity counts
-            self.update_diversity_scores();
+            // Update network counts
+            let network_type = match addr.ip() {
+                IpAddr::V4(_) => NetworkType::IPv4,
+                IpAddr::V6(_) => NetworkType::IPv6,
+            };
+            if let Ok(mut network_counts) = self.network_counts.write() {
+                if let Some(count) = network_counts.get_mut(&network_type) {
+                    if *count > 0 {
+                        *count -= 1;
+                    }
+                }
+            }
+        }
+        
+        // Calculate new diversity scores
+        let diversity_scores = {
+            let mut scores = HashMap::new();
+            if let Ok(connections) = self.active_connections.read() {
+                // Count connections by network type
+                let mut network_counts = HashMap::new();
+                for (addr, _) in connections.iter() {
+                    let network_type = match addr.ip() {
+                        IpAddr::V4(_) => NetworkType::IPv4,
+                        IpAddr::V6(_) => NetworkType::IPv6,
+                    };
+                    *network_counts.entry(network_type).or_insert(0) += 1;
+                }
+                
+                // Calculate total connections
+                let total_connections = connections.len() as f64;
+                if total_connections > 0.0 {
+                    for (addr, _) in connections.iter() {
+                        let network_type = match addr.ip() {
+                            IpAddr::V4(_) => NetworkType::IPv4,
+                            IpAddr::V6(_) => NetworkType::IPv6,
+                        };
+                        let network_count = *network_counts.get(&network_type).unwrap_or(&0) as f64;
+                        let network_ratio = network_count / total_connections;
+                        
+                        // Higher score for underrepresented networks
+                        let mut diversity_score = 1.0 - network_ratio;
+                        
+                        // Ensure minimum diversity score
+                        if diversity_score < MIN_PEER_DIVERSITY_SCORE {
+                            diversity_score = MIN_PEER_DIVERSITY_SCORE;
+                        }
+                        
+                        scores.insert(*addr, diversity_score);
+                    }
+                }
+            }
+            scores
+        };
+        
+        // Update peer scores with new diversity scores
+        if let Ok(mut scores) = self.peer_scores.write() {
+            for (addr, diversity_score) in diversity_scores {
+                if let Some(score) = scores.get_mut(&addr) {
+                    score.diversity_score = diversity_score;
+                }
+            }
         }
         
         // Return the number of connections that were rotated

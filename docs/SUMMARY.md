@@ -20,6 +20,12 @@
   - [Transaction Details](transactions/index.md)
 - [Networking](networking.md)
   - [Networking Details](networking/index.md)
+  - [Connection Pool](networking/connection_pool.md)
+  - [Peer Management](networking/peer_management.md)
+  - [Network Privacy](networking/network_privacy.md)
+  - [Feature Negotiation](networking/feature_negotiation.md)
+  - [Handshake Protocol](networking/handshake_protocol.md)
+  - [Message Types](networking/message_types.md)
 - [Development](development.md)
 
 # Components
@@ -38,6 +44,7 @@
 - [Testing Guide](testing/index.md)
   - [Test Strategy](testing/test_strategy.md)
   - [Consensus Tests](testing/consensus_tests.md)
+  - [Network Tests](testing/network_tests.md)
   - [Test Optimization](testing/test_optimization.md)
 
 # Additional Resources
