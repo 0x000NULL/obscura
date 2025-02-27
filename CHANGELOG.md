@@ -2,7 +2,7 @@
 
 All notable changes to the Obscura project will be documented in this file.
 
-## [0.3.7] - 2024-02-26
+## [0.3.7] - 2024-02-27
 
 ### Added
 - Enhanced Connection Pool Management
@@ -31,7 +31,7 @@ All notable changes to the Obscura project will be documented in this file.
   - Added feature support verification tests
   - Created mock TCP stream for testing
   - Added comprehensive test logging
-  
+
 ## [0.3.6] - 2024-02-26
 
 ### Added

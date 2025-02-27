@@ -33,6 +33,15 @@ The threshold signature scheme allows a group of validators to collectively sign
 ### What is BFT finality?
 BFT (Byzantine Fault Tolerance) finality provides deterministic finality to Obscura's hybrid consensus mechanism. It ensures that once a block is finalized, it cannot be reverted, providing stronger security guarantees than probabilistic finality.
 
+### How does performance-based rewards work?
+Performance-based rewards incentivize validators based on their performance metrics, including uptime, block production, latency, and vote participation. Validators with better performance receive higher rewards through a multiplier system.
+
+### What is slashing insurance?
+Slashing insurance is a mechanism that protects validators against unintentional slashing events. Validators can participate in an insurance pool by paying fees, and if they are slashed unintentionally, they can file a claim to recover their losses.
+
+### How does the validator exit queue work?
+The validator exit queue manages the orderly exit of validators from the network. Exit requests are processed based on stake size, with smaller stakes exiting first. This prevents network disruption from large validators exiting simultaneously.
+
 ## Mining and Staking
 
 ### How do I mine OBX?
@@ -52,6 +61,17 @@ Yes, Obscura supports multi-asset staking, allowing you to stake multiple types 
 
 ### How are staking rewards calculated?
 Staking rewards are calculated based on the amount staked, the duration of the stake, and the validator's performance. The annual reward rate is 5%, but this can be adjusted through governance.
+
+## Network
+
+### How does the connection pool work?
+The connection pool manages network connections between nodes, implementing peer scoring, network diversity tracking, and privacy features. It ensures a healthy and diverse network of connections while maintaining privacy.
+
+### What is feature negotiation?
+Feature negotiation is a protocol that allows nodes to communicate and agree on supported features during connection establishment. This enables smooth network upgrades and backward compatibility.
+
+### How does network privacy work?
+Network privacy is enhanced through various mechanisms including connection obfuscation, peer rotation, and privacy-preserving message propagation. These features make it harder to track and analyze network activity.
 
 ## Transactions
 

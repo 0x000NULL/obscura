@@ -2,6 +2,94 @@
 
 This document contains the release notes for each version of the Obscura blockchain.
 
+## [0.3.7] - 2024-02-26
+
+### Enhanced Connection Pool Management
+
+This release implements comprehensive connection pool management and network privacy features.
+
+#### Key Features
+- Implemented comprehensive peer scoring system
+- Added network diversity tracking and enforcement
+- Created peer rotation mechanism for privacy
+- Added connection type management (inbound/outbound/feeler)
+- Implemented ban system for malicious peers
+- Added feature negotiation system
+- Created privacy feature support tracking
+
+#### Network Management Improvements
+- Enhanced peer selection algorithm with scoring
+- Improved connection diversity with network type tracking
+- Added connection limits per network type
+- Enhanced privacy with periodic peer rotation
+- Improved connection pool test coverage
+- Added comprehensive logging for debugging
+
+#### Testing
+- Added extensive test suite for connection pool
+- Created tests for connection management
+- Added peer rotation tests
+- Implemented network diversity tests
+- Added feature support verification tests
+- Created mock TCP stream for testing
+- Added comprehensive test logging
+
+## [0.3.6] - 2024-02-26
+
+### Handshake Protocol Implementation
+
+This release implements a comprehensive handshake protocol for network connections.
+
+#### Key Features
+- Added version negotiation mechanism
+- Implemented feature negotiation system
+- Created connection establishment process
+- Added privacy feature negotiation
+- Implemented connection obfuscation techniques
+
+#### Documentation
+- Added detailed networking documentation
+- Created comprehensive handshake protocol documentation
+- Added connection management documentation
+- Updated P2P protocol documentation
+- Documented privacy features in network connections
+
+## [0.3.5] - 2024-02-26
+
+### Block Structure Enhancement
+
+This release implements significant improvements to the block structure.
+
+#### Key Features
+- Added 60-second block time mechanism with timestamp validation
+- Implemented dynamic block size adjustment with growth rate limiting
+- Created privacy-enhanced transaction merkle tree structure
+- Added zero-knowledge friendly hash structures
+- Implemented privacy-preserving timestamp mechanism with jitter
+- Added time-based correlation protection
+
+#### Block Validation Improvements
+- Added median time past validation for timestamps
+- Implemented network time synchronization
+- Created dynamic block size adjustment based on median of recent blocks
+- Added privacy-enhancing padding for blocks
+- Implemented transaction batching for improved privacy
+
+#### Documentation
+- Added comprehensive documentation for Block Structure
+- Documented timestamp validation mechanism
+- Added block size adjustment documentation
+- Created merkle tree structure documentation
+- Documented privacy features in block structure
+
+#### Testing
+- Added comprehensive test suite for Block Structure
+- Created tests for timestamp validation
+- Implemented block size adjustment tests
+- Added privacy merkle root tests
+- Created merkle proof verification tests
+- Implemented tests for all privacy-enhancing features
+
 ## [0.3.4] - 2024-03-04
 
 ### Multi-Asset Staking

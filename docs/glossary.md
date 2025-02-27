@@ -32,6 +32,9 @@ A stream cipher used in Obscura's RandomX implementation for enhanced security a
 ### Coinbase Transaction
 The first transaction in a block, which creates new coins and is used to reward miners.
 
+### Connection Pool
+A component that manages network connections between nodes in the Obscura network, including peer scoring, network diversity, and privacy features.
+
 ### Consensus
 The process by which nodes in a distributed network agree on the state of the blockchain. Obscura uses a hybrid consensus mechanism combining Proof of Work and Proof of Stake.
 
@@ -48,6 +51,9 @@ A value that a block hash must be less than or equal to for the block to be cons
 
 ## F
 
+### Feature Negotiation
+A protocol that allows nodes to communicate and agree on supported features during connection establishment.
+
 ### Fee Market
 The mechanism by which transaction fees are determined based on supply and demand for block space.
 
@@ -58,6 +64,9 @@ The property that once a transaction is confirmed, it cannot be reversed. Obscur
 A situation where the blockchain splits into two or more competing chains. Obscura has mechanisms to resolve forks and determine the valid chain.
 
 ## H
+
+### Handshake Protocol
+The protocol used to establish connections between nodes in the Obscura network, including version negotiation and feature support.
 
 ### Hash
 A fixed-length string of characters generated from an input of any length using a cryptographic hash function. Obscura uses hashing for various purposes, including block validation.
@@ -81,6 +90,9 @@ A feature in Obscura that allows validators to stake multiple types of assets, n
 
 ## N
 
+### Network Privacy
+Features and mechanisms designed to enhance privacy in the Obscura network, including connection obfuscation and peer rotation.
+
 ### Node
 A computer that participates in the Obscura network by validating and relaying transactions and blocks.
 
@@ -96,6 +108,12 @@ The native token of the Obscura blockchain.
 An entity that provides external data to the blockchain. In Obscura, oracles are used to provide exchange rates for multi-asset staking.
 
 ## P
+
+### Peer Management
+The system responsible for managing connections with other nodes in the network, including scoring, banning, and rotation.
+
+### Performance-Based Rewards
+A system that rewards validators based on their performance metrics, including uptime, block production, and vote participation.
 
 ### PoS
 **Proof of Stake** - A consensus mechanism where validators are selected to create blocks based on the amount of cryptocurrency they hold and are willing to "stake" as collateral.
@@ -120,7 +138,10 @@ A subset of the blockchain network that processes a portion of the transactions.
 A cryptographic proof that the owner of a private key has authorized a transaction or message.
 
 ### Slashing
-A penalty imposed on validators who violate the protocol rules, such as double-signing or being offline for extended periods.
+A penalty imposed on validators who misbehave, such as double-signing or being offline for extended periods.
+
+### Slashing Insurance
+A mechanism that provides protection for validators against unintentional slashing events through an insurance pool.
 
 ### Stake
 Cryptocurrency that is locked up as collateral by validators in a Proof of Stake system.
@@ -133,15 +154,16 @@ A cryptographic signature scheme where a group of participants can collectively 
 ### Transaction
 A record of a transfer of value from one address to another on the blockchain.
 
-## U
-
-### UTXO
-**Unspent Transaction Output** - A record of cryptocurrency that can be spent in future transactions.
-
 ## V
 
 ### Validator
 A participant in the Proof of Stake system who is responsible for validating transactions and creating new blocks.
+
+### Validator Exit Queue
+A system that manages the orderly exit of validators from the network, with queue processing based on stake size.
+
+### Validator Rotation
+A mechanism that periodically rotates validators between shards to enhance security and prevent collusion.
 
 ### VRF
 **Verifiable Random Function** - A cryptographic function that provides publicly verifiable proofs of its outputs' correctness. Used in Obscura for validator selection. 
