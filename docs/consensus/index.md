@@ -7,6 +7,7 @@ This document serves as an index for all documentation related to consensus mech
 - [Proof of Work](pow.md): Details about Obscura's Proof of Work algorithm.
 - [Block Validation](block_validation.md): Information about how blocks are validated in Obscura.
 - [Transaction Validation](transaction_validation.md): Information about how transactions are validated in Obscura.
+- [Multi-Asset Staking](multi_asset_staking.md): Documentation on staking with multiple asset types.
 
 ## Mining Rewards and Fees
 

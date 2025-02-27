@@ -2,6 +2,43 @@
 
 All notable changes to the Obscura project will be documented in this file.
 
+## [0.3.4] - 2024-03-04
+
+### Added
+- Implemented multi-asset staking support
+  - Added basic multi-asset staking functionality with support for multiple asset types
+  - Implemented weighted stake calculation based on asset properties
+  - Created exchange rate management system with oracle integration
+  - Added validator selection mechanism that considers multi-asset stakes
+  - Implemented slashing mechanism for multi-asset stakes
+  - Added auto-compounding functionality for staking rewards
+  - Created comprehensive test suite for multi-asset staking
+
+### Improved
+- Enhanced staking flexibility and capital efficiency
+  - Added support for staking with non-native tokens
+  - Implemented minimum native token requirement (20% of total value)
+  - Created asset weight system for validator selection influence
+  - Added safeguards against oracle manipulation
+  - Implemented median price calculation to filter outliers
+
+### Documentation
+- Added comprehensive documentation for multi-asset staking
+  - Created detailed documentation in `docs/consensus/multi_asset_staking.md`
+  - Updated main consensus documentation to reference multi-asset staking
+  - Added multi-asset staking to navigation and index files
+  - Updated README with implementation status and remaining tasks
+  - Added configuration parameters to consensus documentation
+
+### Testing
+- Added comprehensive test suite for multi-asset staking
+  - Created tests for asset registration and management
+  - Implemented tests for multi-asset stake creation and withdrawal
+  - Added tests for effective stake value calculation
+  - Created tests for validator selection with multi-asset stakes
+  - Implemented tests for slashing multi-asset stakes
+  - Added tests for oracle integration and exchange rate updates
+
 ## [0.3.3] - 2024-03-03
 
 ### Added

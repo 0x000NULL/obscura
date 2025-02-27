@@ -382,4 +382,330 @@ impl StakingContract {
 
         validators_to_rotate
     }
+
+    /// Register a new asset for staking
+    pub fn register_asset(&mut self, asset_info: AssetInfo) -> Result<(), &'static str> {
+        if self.supported_assets.contains_key(&asset_info.asset_id) {
+            return Err("Asset already registered");
+        }
+
+        // Validate asset info
+        if asset_info.min_stake == 0 {
+            return Err("Minimum stake amount must be greater than zero");
+        }
+
+        if asset_info.weight <= 0.0 {
+            return Err("Asset weight must be greater than zero");
+        }
+
+        // Add the asset to supported assets
+        self.supported_assets.insert(asset_info.asset_id.clone(), asset_info);
+        Ok(())
+    }
+
+    /// Update the exchange rate for an asset
+    pub fn update_asset_exchange_rate(&mut self, asset_id: &str, new_rate: f64) -> Result<(), &'static str> {
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        if new_rate <= 0.0 {
+            return Err("Exchange rate must be greater than zero");
+        }
+
+        if let Some(asset) = self.supported_assets.get_mut(asset_id) {
+            asset.exchange_rate = new_rate;
+            asset.last_rate_update = current_time;
+            
+            // Update the global exchange rates map
+            self.asset_exchange_rates.insert(asset_id.to_string(), new_rate);
+            self.last_exchange_rate_update = current_time;
+            
+            Ok(())
+        } else {
+            Err("Asset not found")
+        }
+    }
+
+    /// Create a multi-asset stake
+    pub fn create_multi_asset_stake(
+        &mut self,
+        staker: Vec<u8>,
+        assets: HashMap<String, u64>,
+        auto_compound: bool,
+    ) -> Result<(), &'static str> {
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        // Validate assets
+        if assets.is_empty() {
+            return Err("No assets provided for staking");
+        }
+
+        // Check if all assets are supported
+        for (asset_id, amount) in &assets {
+            if !self.supported_assets.contains_key(asset_id) {
+                return Err("Unsupported asset");
+            }
+
+            let asset_info = &self.supported_assets[asset_id];
+            if *amount < asset_info.min_stake {
+                return Err("Stake amount below minimum requirement for asset");
+            }
+        }
+
+        // Check if at least one native token is included (if required)
+        let native_assets: Vec<_> = self.supported_assets
+            .values()
+            .filter(|asset| asset.is_native)
+            .collect();
+
+        if !native_assets.is_empty() {
+            let native_asset_id = &native_assets[0].asset_id;
+            let min_secondary_asset_stake_percentage = 0.2; // At least 20% must be native token
+
+            // Calculate total stake value in native token terms
+            let mut total_value = 0.0;
+            for (asset_id, amount) in &assets {
+                let asset_info = &self.supported_assets[asset_id];
+                total_value += *amount as f64 * asset_info.exchange_rate;
+            }
+
+            // Check if native token meets minimum percentage
+            if let Some(native_amount) = assets.get(native_asset_id) {
+                let native_value = *native_amount as f64;
+                let native_percentage = native_value / total_value;
+                
+                if native_percentage < min_secondary_asset_stake_percentage {
+                    return Err("Native token must be at least 20% of total stake value");
+                }
+            } else {
+                return Err("Native token must be included in multi-asset stake");
+            }
+        }
+
+        // Create the multi-asset stake
+        let multi_asset_stake = MultiAssetStake {
+            staker: staker.clone(),
+            assets: assets.clone(),
+            timestamp: current_time,
+            lock_until: current_time + STAKE_LOCK_PERIOD,
+            auto_compound,
+            last_compound_time: current_time,
+        };
+
+        // Add to multi-asset stakes
+        self.multi_asset_stakes
+            .entry(staker)
+            .or_insert_with(Vec::new)
+            .push(multi_asset_stake);
+
+        // Update total staked amounts for each asset
+        for (asset_id, amount) in assets {
+            if let Some(asset_info) = self.supported_assets.get_mut(&asset_id) {
+                asset_info.total_staked += amount;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Get the effective stake value of a multi-asset stake in terms of native token
+    pub fn get_effective_stake_value(&self, staker: &[u8]) -> Result<u64, &'static str> {
+        if let Some(stakes) = self.multi_asset_stakes.get(staker) {
+            if stakes.is_empty() {
+                return Ok(0);
+            }
+
+            let mut total_value = 0.0;
+            
+            for stake in stakes {
+                for (asset_id, amount) in &stake.assets {
+                    if let Some(asset_info) = self.supported_assets.get(asset_id) {
+                        // Apply asset weight to the value calculation
+                        let weighted_value = *amount as f64 * asset_info.exchange_rate * asset_info.weight;
+                        total_value += weighted_value;
+                    }
+                }
+            }
+            
+            Ok(total_value as u64)
+        } else {
+            Ok(0) // No multi-asset stakes found
+        }
+    }
+
+    /// Request withdrawal of a multi-asset stake
+    pub fn request_multi_asset_withdrawal(
+        &mut self,
+        staker: &[u8],
+        stake_index: usize,
+    ) -> Result<u64, &'static str> {
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        if let Some(stakes) = self.multi_asset_stakes.get_mut(staker) {
+            if stake_index >= stakes.len() {
+                return Err("Invalid stake index");
+            }
+
+            let stake = &mut stakes[stake_index];
+            
+            if stake.lock_until > current_time {
+                return Err("Stake is still locked");
+            }
+
+            // Mark the stake for withdrawal by updating lock_until to a past time
+            // This is a simple approach; in a real implementation, you might want a dedicated field
+            stake.lock_until = 0;
+            
+            // Return the withdrawal time
+            let withdrawal_time = current_time + WITHDRAWAL_DELAY;
+            Ok(withdrawal_time)
+        } else {
+            Err("No stakes found for this staker")
+        }
+    }
+
+    /// Complete withdrawal of a multi-asset stake
+    pub fn complete_multi_asset_withdrawal(
+        &mut self,
+        staker: &[u8],
+        stake_index: usize,
+    ) -> Result<HashMap<String, u64>, &'static str> {
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        if let Some(stakes) = self.multi_asset_stakes.get_mut(staker) {
+            if stake_index >= stakes.len() {
+                return Err("Invalid stake index");
+            }
+
+            // Check if the stake is marked for withdrawal and the delay has passed
+            if stakes[stake_index].lock_until != 0 {
+                return Err("Withdrawal not requested for this stake");
+            }
+
+            if current_time < stakes[stake_index].timestamp + WITHDRAWAL_DELAY {
+                return Err("Withdrawal delay has not passed yet");
+            }
+
+            // Remove the stake and return the assets
+            let stake = stakes.remove(stake_index);
+            
+            // Update total staked amounts for each asset
+            for (asset_id, amount) in &stake.assets {
+                if let Some(asset_info) = self.supported_assets.get_mut(asset_id) {
+                    asset_info.total_staked = asset_info.total_staked.saturating_sub(amount);
+                }
+            }
+
+            Ok(stake.assets)
+        } else {
+            Err("No stakes found for this staker")
+        }
+    }
+
+    /// Calculate and distribute rewards for multi-asset stakes
+    pub fn calculate_multi_asset_rewards(&mut self) -> HashMap<Vec<u8>, HashMap<String, u64>> {
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        
+        let mut rewards: HashMap<Vec<u8>, HashMap<String, u64>> = HashMap::new();
+        
+        // Process each staker's multi-asset stakes
+        for (staker, stakes) in &mut self.multi_asset_stakes {
+            for stake in stakes {
+                // Skip stakes that are marked for withdrawal
+                if stake.lock_until == 0 {
+                    continue;
+                }
+                
+                let stake_age = current_time.saturating_sub(stake.last_compound_time);
+                
+                // Calculate rewards for each asset in the stake
+                for (asset_id, amount) in &stake.assets {
+                    if let Some(asset_info) = self.supported_assets.get(asset_id) {
+                        // Calculate base reward using the annual reward rate
+                        let annual_reward_rate = 0.05; // 5% annual reward rate
+                        let reward = (*amount as f64 * annual_reward_rate * (stake_age as f64 / 31_536_000.0)) as u64;
+                        
+                        if reward > 0 {
+                            // Add to rewards map
+                            rewards
+                                .entry(staker.clone())
+                                .or_insert_with(HashMap::new)
+                                .entry(asset_id.clone())
+                                .and_modify(|e| *e += reward)
+                                .or_insert(reward);
+                            
+                            // If auto-compound is enabled, add rewards directly to the stake
+                            if stake.auto_compound {
+                                *stake.assets.entry(asset_id.clone()).or_insert(0) += reward;
+                                
+                                // Update total staked amount for the asset
+                                if let Some(asset_info) = self.supported_assets.get_mut(asset_id) {
+                                    asset_info.total_staked += reward;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Update last compound time
+                stake.last_compound_time = current_time;
+            }
+        }
+        
+        rewards
+    }
+
+    /// Claim rewards for multi-asset stakes
+    pub fn claim_multi_asset_rewards(
+        &mut self,
+        staker: &[u8],
+    ) -> Result<HashMap<String, u64>, &'static str> {
+        // Calculate rewards first
+        let rewards = self.calculate_multi_asset_rewards();
+        
+        // Get rewards for this staker
+        if let Some(staker_rewards) = rewards.get(staker) {
+            let claimed_rewards = staker_rewards.clone();
+            
+            // Clear rewards for this staker
+            rewards.remove(staker);
+            
+            Ok(claimed_rewards)
+        } else {
+            Err("No rewards to claim")
+        }
+    }
+
+    /// Get the maximum number of assets a validator can stake
+    pub fn get_max_assets_per_validator(&self) -> usize {
+        5 // Maximum number of different assets a validator can stake
+    }
+
+    /// Update exchange rates for all assets
+    pub fn update_all_exchange_rates(&mut self) {
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+            
+        // In a real implementation, this would fetch rates from an oracle or other source
+        // For now, we'll just update the last update time
+        self.last_exchange_rate_update = current_time;
+        
+        // In a real implementation, you would update each asset's exchange rate here
+    }
 } 

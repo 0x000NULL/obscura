@@ -89,6 +89,15 @@
     - [x] Add slashing insurance mechanism
     - [x] Create validator exit queue for orderly exits
     - [ ] Implement multi-asset staking support
+      - [x] Basic multi-asset staking functionality
+      - [x] Validator selection with multi-asset stakes
+      - [x] Slashing for multi-asset stakes
+      - [x] Oracle integration for exchange rates
+      - [ ] Add validator asset constraints
+      - [ ] Implement governance for asset addition
+      - [ ] Performance optimization for large validator sets
+      - [ ] Risk management for exchange rate fluctuations
+      - [ ] UI/API integration for multi-asset staking
     - [ ] Add stake delegation marketplace
     - [ ] Create validator reputation oracle
     - [ ] Implement stake compounding automation

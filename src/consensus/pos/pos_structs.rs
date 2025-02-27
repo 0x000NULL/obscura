@@ -585,4 +585,53 @@ impl DiversityMetrics {
             recommendations: Vec::new(),
         }
     }
+}
+
+pub struct StakingContract {
+    // Map of staker public key to their stake
+    pub stakes: HashMap<Vec<u8>, Stake>,
+    // Map of validator public key to their validator info
+    pub validators: HashMap<Vec<u8>, ValidatorInfo>,
+    // Set of validators selected for the current epoch
+    pub active_validators: HashSet<Vec<u8>>,
+    // Current epoch number
+    pub current_epoch: u64,
+    // Epoch duration in seconds
+    pub epoch_duration: u64,
+    // Random beacon for validator selection
+    pub random_beacon: [u8; 32],
+    pub shard_manager: Option<ShardManager>,
+    // Performance optimization fields
+    pub validator_selection_cache: Option<(Vec<Vec<u8>>, u64)>, // (selected validators, timestamp)
+    pub pending_validator_updates: Vec<ValidatorUpdate>,
+    pub unclaimed_rewards: HashMap<Vec<u8>, u64>,
+    pub last_reward_calculation: u64,
+    // Advanced staking fields
+    pub liquid_staking_pool: LiquidStakingPool,
+    pub treasury: Treasury,
+    pub governance: Governance,
+    pub cross_chain_stakes: HashMap<Vec<u8>, CrossChainStake>,
+    // Validator rotation tracking
+    pub last_rotation_time: u64,
+    // Fields for performance-based rewards, insurance, and exit queue
+    pub insurance_pool: InsurancePool,
+    pub exit_queue: ExitQueue,
+    pub last_reward_time: u64,
+    // Sharded validator sets
+    pub shards: Vec<Shard>,
+    pub cross_shard_committees: HashMap<(usize, usize), CrossShardCommittee>, // (shard1, shard2) -> committee
+    pub last_shard_rotation: u64,
+    // Performance metrics tracking
+    pub performance_metrics: HashMap<Vec<u8>, Vec<(u64, f64)>>, // Validator -> [(timestamp, score)]
+    // BFT consensus fields
+    pub bft_consensus: Option<BftConsensus>,
+    pub recent_reorgs: VecDeque<u64>, // Timestamps of recent reorgs
+    pub known_blocks: HashSet<[u8; 32]>, // Set of known block hashes
+    pub highest_finalized_block: u64, // Height of highest finalized block
+    
+    // Multi-asset staking fields
+    pub supported_assets: HashMap<String, AssetInfo>,
+    pub multi_asset_stakes: HashMap<Vec<u8>, Vec<MultiAssetStake>>,
+    pub asset_exchange_rates: HashMap<String, f64>,
+    pub last_exchange_rate_update: u64,
 } 

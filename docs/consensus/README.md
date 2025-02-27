@@ -8,6 +8,7 @@ This directory contains documentation related to the consensus mechanisms and ru
 - **Difficulty Adjustment**: The network adjusts mining difficulty to maintain a target block time of 60 seconds.
 - **Block Validation**: Rules for validating blocks and ensuring consensus.
 - **Transaction Validation**: Rules for validating transactions and ensuring they follow consensus rules.
+- **Multi-Asset Staking**: Support for staking with multiple asset types beyond the native OBX token.
 
 ## Mining Rewards and Fees
 
@@ -50,6 +51,9 @@ The consensus mechanisms are implemented in the following files:
 - `src/consensus/pow.rs`: Implementation of the Proof of Work consensus mechanism.
 - `src/consensus/difficulty.rs`: Implementation of the difficulty adjustment algorithm.
 - `src/consensus/randomx.rs`: Implementation of the RandomX algorithm for Proof of Work.
+- `src/consensus/pos_methods.rs`: Implementation of the Proof of Stake consensus mechanism.
+- `src/consensus/pos_fixes.rs`: Fixes and enhancements for the Proof of Stake implementation.
+- `src/consensus/pos/pos_structs.rs`: Data structures for the Proof of Stake implementation.
 - `src/blockchain/mempool.rs`: Implementation of the mempool for transaction management.
 
 ## Configuration Parameters
@@ -67,9 +71,17 @@ The consensus mechanisms are configured with the following parameters:
 | `MIN_RBF_FEE_INCREASE` | 1.1 (10%) | Minimum fee increase for RBF |
 | `TARGET_BLOCK_TIME` | 60 seconds | Target time between blocks |
 | `DIFFICULTY_WINDOW` | 10 blocks | Number of blocks to average for difficulty adjustment |
+| `STAKE_LOCK_PERIOD` | 14 days | Duration for which stakes are locked |
+| `WITHDRAWAL_DELAY` | 2 days | Delay between requesting and completing withdrawal |
+| `MINIMUM_STAKE` | 1000 OBX | Minimum stake amount for the native token |
+| `MAX_ASSETS_PER_VALIDATOR` | 5 | Maximum number of different assets a validator can stake |
+| `ORACLE_UPDATE_INTERVAL` | 1 hour | Interval between oracle updates |
+| `MAX_RATE_CHANGE_PERCENTAGE` | 10% | Maximum allowed change in exchange rates per update |
+| `MIN_ORACLE_CONFIRMATIONS` | 3 | Minimum number of oracle confirmations required |
 
 ## Related Documentation
 
 - [Mining Rewards](../mining_rewards/index.md): Documentation on mining rewards and transaction fees.
 - [Transaction Processing](../transactions/index.md): Documentation on transaction processing in Obscura.
-- [Block Structure](../architecture.md#block-structure): Information on the structure of blocks in Obscura. 
+- [Block Structure](../architecture.md#block-structure): Information on the structure of blocks in Obscura.
+- [Multi-Asset Staking](multi_asset_staking.md): Documentation on staking with multiple asset types. 

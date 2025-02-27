@@ -6,6 +6,7 @@
 - [Architecture](architecture.md)
 - [Consensus](consensus.md)
   - [Consensus Details](consensus/index.md)
+  - [Multi-Asset Staking](consensus/multi_asset_staking.md)
 - [Transactions](transactions.md)
   - [Transaction Details](transactions/index.md)
 - [Networking](networking.md)

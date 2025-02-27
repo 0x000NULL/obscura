@@ -22,6 +22,7 @@ Welcome to the Obscura blockchain documentation. This documentation provides com
 - [Consensus](consensus/): Documentation for the consensus mechanism.
   - [Proof of Work](consensus/pow.md): Documentation for the Proof of Work mechanism.
   - [Proof of Stake](consensus/pos.md): Documentation for the Proof of Stake mechanism.
+  - [Multi-Asset Staking](consensus/multi_asset_staking.md): Documentation for staking with multiple asset types.
   - [Hybrid Consensus](consensus/hybrid.md): Documentation for the hybrid consensus mechanism.
   - [Difficulty Adjustment](consensus/difficulty.md): Documentation for the difficulty adjustment mechanism.
 

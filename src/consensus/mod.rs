@@ -155,4 +155,5 @@ mod tests {
     mod randomx_tests;
     mod threshold_sig_tests;
     mod vrf_tests;
+    mod multi_asset_staking_tests;
 }

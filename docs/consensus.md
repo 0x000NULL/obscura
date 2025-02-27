@@ -165,6 +165,17 @@ pub struct StakeProof {
 }
 ```
 
+### Multi-Asset Staking
+Obscura now supports multi-asset staking, allowing validators to stake with multiple types of assets beyond the native OBX token. This enhances capital efficiency and network security.
+
+Key features include:
+- Support for multiple asset types with different weights
+- Oracle-based exchange rate updates
+- Slashing that works across all staked assets
+- Validator selection based on effective stake value
+
+For detailed documentation, see [Multi-Asset Staking](consensus/multi_asset_staking.md).
+
 ### Staking Requirements
 - Minimum: 100,000 tokens
   ```rust
