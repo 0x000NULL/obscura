@@ -142,6 +142,11 @@ fn test_transaction_fee_calculation() {
         }],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     };
 
     // In a real implementation, the input value would be looked up from the UTXO set
@@ -158,6 +163,11 @@ fn test_transaction_fee_calculation() {
             }],
             lock_time: 0,
             fee_adjustments: None,
+            privacy_flags: 0,
+            obfuscated_id: None,
+            ephemeral_pubkey: None,
+            amount_commitments: None,
+            range_proofs: None,
         },
         // Regular transaction
         tx,
@@ -213,6 +223,11 @@ fn test_pow_mining_block_with_transactions() {
         }],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     }];
 
     // Create a mining block with transactions
@@ -260,6 +275,11 @@ fn test_coinbase_maturity() {
         }],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     };
 
     // Create a map of coinbase heights
@@ -303,6 +323,11 @@ fn test_coinbase_maturity() {
         }],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     };
 
     // Should be valid regardless of height
@@ -358,6 +383,11 @@ fn test_transaction_size_estimation() {
         }],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     };
 
     // Expected size calculation:
@@ -399,6 +429,11 @@ fn test_transaction_size_estimation() {
         ],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     };
 
     // Expected size calculation:
@@ -462,6 +497,11 @@ fn test_transaction_prioritization() {
         }],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     };
 
     let tx2 = Transaction {
@@ -479,6 +519,11 @@ fn test_transaction_prioritization() {
         }],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     };
 
     let tx3 = Transaction {
@@ -496,6 +541,11 @@ fn test_transaction_prioritization() {
         }],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     };
 
     // Create a list of transactions
@@ -534,6 +584,11 @@ fn test_block_size_validation() {
         }],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     };
 
     // Create a UTXO set for testing
@@ -638,6 +693,11 @@ fn test_cpfp_transaction_prioritization() {
         }],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     };
 
     // Add the parent's output to the UTXO set
@@ -666,6 +726,11 @@ fn test_cpfp_transaction_prioritization() {
         }],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     };
 
     // Create some other transactions with medium fees
@@ -684,6 +749,11 @@ fn test_cpfp_transaction_prioritization() {
         }],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     };
 
     let tx2 = Transaction {
@@ -701,6 +771,11 @@ fn test_cpfp_transaction_prioritization() {
         }],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     };
 
     // Create a mempool and add all transactions

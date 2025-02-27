@@ -2,6 +2,9 @@ use crate::blockchain::Transaction;
 use ed25519_dalek::Keypair;
 use rand::rngs::OsRng;
 
+// Add the privacy module
+pub mod privacy;
+
 pub fn generate_keypair() -> Option<Keypair> {
     let mut csprng = OsRng;
     Some(Keypair::generate(&mut csprng))

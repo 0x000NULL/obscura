@@ -42,6 +42,12 @@ pub struct Transaction {
     pub outputs: Vec<TransactionOutput>,
     pub lock_time: u64,
     pub fee_adjustments: Option<FeeAdjustment>, // Optional time-locked fee adjustment
+    // Add privacy features
+    pub privacy_flags: u32, // Flags for privacy features enabled in this transaction
+    pub obfuscated_id: Option<[u8; 32]>, // Optional obfuscated transaction ID
+    pub ephemeral_pubkey: Option<Vec<u8>>, // Optional ephemeral public key for stealth addressing
+    pub amount_commitments: Option<Vec<Vec<u8>>>, // Optional commitments for confidential amounts
+    pub range_proofs: Option<Vec<Vec<u8>>>, // Optional range proofs for confidential amounts
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -299,6 +305,11 @@ pub fn create_coinbase_transaction(reward: u64) -> Transaction {
         }],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     }
 }
 
@@ -358,5 +369,89 @@ impl Transaction {
         } else {
             base_fee
         }
+    }
+    
+    /// Apply transaction obfuscation for privacy
+    pub fn obfuscate(&mut self, obfuscator: &mut crate::crypto::privacy::TransactionObfuscator) {
+        // Obfuscate transaction ID
+        let tx_hash = self.hash();
+        let obfuscated_id = obfuscator.obfuscate_tx_id(&tx_hash);
+        self.obfuscated_id = Some(obfuscated_id);
+        
+        // Apply transaction graph protection
+        let protected_tx = obfuscator.protect_transaction_graph(self);
+        self.inputs = protected_tx.inputs;
+        self.outputs = protected_tx.outputs;
+        
+        // Make transaction unlinkable
+        let unlinkable_tx = obfuscator.make_transaction_unlinkable(self);
+        self.inputs = unlinkable_tx.inputs;
+        self.outputs = unlinkable_tx.outputs;
+        
+        // Strip metadata
+        let stripped_tx = obfuscator.strip_metadata(self);
+        
+        // Set privacy flags
+        self.privacy_flags |= 0x01; // Basic transaction obfuscation enabled
+    }
+    
+    /// Apply stealth addressing to transaction outputs
+    pub fn apply_stealth_addressing(&mut self, stealth: &mut crate::crypto::privacy::StealthAddressing, 
+                                   recipient_pubkeys: &[ed25519_dalek::PublicKey]) {
+        if recipient_pubkeys.is_empty() {
+            return;
+        }
+        
+        // Create new outputs with stealth addresses
+        let mut new_outputs = Vec::with_capacity(self.outputs.len());
+        
+        for (i, output) in self.outputs.iter().enumerate() {
+            if i < recipient_pubkeys.len() {
+                // Generate one-time address for recipient
+                let one_time_address = stealth.generate_one_time_address(&recipient_pubkeys[i]);
+                
+                // Create new output with stealth address
+                let mut new_output = output.clone();
+                new_output.public_key_script = one_time_address;
+                new_outputs.push(new_output);
+            } else {
+                new_outputs.push(output.clone());
+            }
+        }
+        
+        self.outputs = new_outputs;
+        
+        // Store ephemeral public key in transaction
+        if let Some(ephemeral_pubkey) = stealth.get_last_ephemeral_pubkey() {
+            self.ephemeral_pubkey = Some(ephemeral_pubkey);
+        }
+        
+        // Set privacy flags
+        self.privacy_flags |= 0x02; // Stealth addressing enabled
+    }
+    
+    /// Apply confidential transactions to hide amounts
+    pub fn apply_confidential_transactions(&mut self, confidential: &mut crate::crypto::privacy::ConfidentialTransactions) {
+        // Create commitments for each output amount
+        let mut commitments = Vec::with_capacity(self.outputs.len());
+        let mut range_proofs = Vec::with_capacity(self.outputs.len());
+        
+        for output in &self.outputs {
+            let commitment = confidential.create_commitment(output.value);
+            let range_proof = confidential.create_range_proof(output.value);
+            
+            commitments.push(commitment);
+            range_proofs.push(range_proof);
+        }
+        
+        self.amount_commitments = Some(commitments);
+        self.range_proofs = Some(range_proofs);
+        
+        // Apply output value obfuscation
+        let obfuscated_tx = confidential.obfuscate_output_value(self);
+        self.outputs = obfuscated_tx.outputs;
+        
+        // Set privacy flags
+        self.privacy_flags |= 0x04; // Confidential transactions enabled
     }
 }

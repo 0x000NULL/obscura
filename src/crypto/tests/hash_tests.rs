@@ -8,12 +8,22 @@ fn test_merkle_tree_creation() {
         outputs: vec![],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     };
     let tx2 = Transaction {
         inputs: vec![],
         outputs: vec![],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     };
     let transactions = vec![tx1, tx2];
 
@@ -58,6 +68,11 @@ fn test_transaction_hash() {
         }],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     };
 
     let tx2 = Transaction {
@@ -68,6 +83,11 @@ fn test_transaction_hash() {
         }],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     };
 
     assert_eq!(hash_transaction(&tx1), tx1.hash());

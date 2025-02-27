@@ -281,6 +281,11 @@ pub fn create_mining_pool_coinbase(
         outputs,
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     }
 }
 
@@ -359,6 +364,11 @@ pub fn create_mining_pool_coinbase_with_utxo(
         outputs,
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     }
 }
 
@@ -844,6 +854,11 @@ pub fn create_coinbase_transaction(reward: u64) -> crate::blockchain::Transactio
         }],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     }
 }
 
@@ -856,6 +871,11 @@ pub fn create_test_transaction(value: u64) -> crate::blockchain::Transaction {
         }],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     }
 }
 
@@ -904,6 +924,11 @@ mod tests {
             }],
             lock_time: 0,
             fee_adjustments: None,
+            privacy_flags: 0,
+            obfuscated_id: None,
+            ephemeral_pubkey: None,
+            amount_commitments: None,
+            range_proofs: None,
         };
 
         // Test valid coinbase
@@ -921,6 +946,11 @@ mod tests {
             }],
             lock_time: 0,
             fee_adjustments: None,
+            privacy_flags: 0,
+            obfuscated_id: None,
+            ephemeral_pubkey: None,
+            amount_commitments: None,
+            range_proofs: None,
         };
 
         // Test invalid reward
@@ -938,6 +968,11 @@ mod tests {
             }],
             lock_time: 0,
             fee_adjustments: None,
+            privacy_flags: 0,
+            obfuscated_id: None,
+            ephemeral_pubkey: None,
+            amount_commitments: None,
+            range_proofs: None,
         };
 
         assert!(validate_coinbase_transaction(

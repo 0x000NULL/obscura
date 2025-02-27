@@ -18,6 +18,11 @@ pub fn create_test_transaction() -> Transaction {
         outputs: vec![output],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     }
 }
 
@@ -30,6 +35,11 @@ pub fn create_transaction_with_fee(fee: u64) -> Transaction {
         }],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     }
 }
 
@@ -83,6 +93,11 @@ mod fee_adjustment_tests {
                 lock_time: current_time - 100, // Started 100 seconds ago
                 expiry_time: current_time + 100, // Expires in 100 seconds
             }),
+            privacy_flags: 0,
+            obfuscated_id: None,
+            ephemeral_pubkey: None,
+            amount_commitments: None,
+            range_proofs: None,
         };
 
         let adjusted_fee = tx.calculate_adjusted_fee(current_time);
@@ -104,6 +119,11 @@ mod fee_adjustment_tests {
                 lock_time: current_time + 100, // Starts in 100 seconds
                 expiry_time: current_time + 200, // Expires in 200 seconds
             }),
+            privacy_flags: 0,
+            obfuscated_id: None,
+            ephemeral_pubkey: None,
+            amount_commitments: None,
+            range_proofs: None,
         };
 
         let adjusted_fee = tx.calculate_adjusted_fee(current_time);
@@ -125,6 +145,11 @@ mod fee_adjustment_tests {
                 lock_time: current_time - 200, // Started 200 seconds ago
                 expiry_time: current_time - 100, // Expired 100 seconds ago
             }),
+            privacy_flags: 0,
+            obfuscated_id: None,
+            ephemeral_pubkey: None,
+            amount_commitments: None,
+            range_proofs: None,
         };
 
         let adjusted_fee = tx.calculate_adjusted_fee(current_time);
@@ -142,6 +167,11 @@ mod fee_adjustment_tests {
             }],
             lock_time: 0,
             fee_adjustments: None,
+            privacy_flags: 0,
+            obfuscated_id: None,
+            ephemeral_pubkey: None,
+            amount_commitments: None,
+            range_proofs: None,
         };
 
         let adjusted_fee = tx.calculate_adjusted_fee(current_time);

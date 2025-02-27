@@ -30,6 +30,11 @@ pub fn create_test_transaction() -> Transaction {
         }],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
     }
 }
 

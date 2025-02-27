@@ -41,6 +41,11 @@ fn test_privacy_merkle_root() {
             outputs: Vec::new(),
             lock_time: i as u64,
             fee_adjustments: None,
+            privacy_flags: 0,
+            obfuscated_id: None,
+            ephemeral_pubkey: None,
+            amount_commitments: None,
+            range_proofs: None,
         };
         block.transactions.push(tx);
     }
@@ -89,6 +94,11 @@ fn test_merkle_proof_verification() {
             outputs: Vec::new(),
             lock_time: i as u64,
             fee_adjustments: None,
+            privacy_flags: 0,
+            obfuscated_id: None,
+            ephemeral_pubkey: None,
+            amount_commitments: None,
+            range_proofs: None,
         };
         transactions.push(tx);
     }
