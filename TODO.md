@@ -115,7 +115,7 @@
     - [x] Add checkpoint system
     - [x] Implement BFT finality gadget
     - [x] Create fork choice rules
-  - [ ] Add security measures against 51% attacks
+  - [x] Add security measures against 51% attacks
     - [x] Implement chain reorganization limits
     - [x] Add economic finality rules
     - [x] Create attack detection mechanisms
@@ -148,12 +148,12 @@
     - [x] Add zero-knowledge friendly structures
 - [ ] Network Layer
   - [ ] Implement P2P networking protocol
-    - [ ] Create node handshake protocol
-      - [ ] Version negotiation
-      - [ ] Feature negotiation
-      - [ ] Connection establishment
-      - [ ] Add privacy feature negotiation
-      - [ ] Implement connection obfuscation
+    - [x] Create node handshake protocol
+      - [x] Version negotiation
+      - [x] Feature negotiation
+      - [x] Connection establishment
+      - [x] Add privacy feature negotiation
+      - [x] Implement connection obfuscation
     - [ ] Implement message serialization
       - [ ] Create message framing
       - [ ] Add checksums and validation
@@ -201,25 +201,25 @@
     - [ ] Add fee obfuscation mechanism
 
 ### Privacy Foundations
-- [ ] Basic Transaction Privacy
-  - [ ] Implement transaction obfuscation
-    - [ ] Create basic transaction mixing mechanism
-    - [ ] Add transaction identifier obfuscation
-    - [ ] Implement transaction graph protection
-    - [ ] Create transaction unlinkability features
-    - [ ] Add metadata stripping for transactions
-  - [ ] Develop preliminary stealth addressing
-    - [ ] Implement basic one-time address generation
-    - [ ] Create address derivation mechanism
-    - [ ] Add address scanning functionality
-    - [ ] Implement address reuse prevention
-    - [ ] Create address ownership proof system
-  - [ ] Add basic confidential transactions
-    - [ ] Implement simple amount hiding mechanism
-    - [ ] Create basic commitment scheme
-    - [ ] Add transaction balance verification
-    - [ ] Implement output value obfuscation
-    - [ ] Create simple range proof system
+- [x] Basic Transaction Privacy
+  - [x] Implement transaction obfuscation
+    - [x] Create basic transaction mixing mechanism
+    - [x] Add transaction identifier obfuscation
+    - [x] Implement transaction graph protection
+    - [x] Create transaction unlinkability features
+    - [x] Add metadata stripping for transactions
+  - [x] Develop preliminary stealth addressing
+    - [x] Implement basic one-time address generation
+    - [x] Create address derivation mechanism
+    - [x] Add address scanning functionality
+    - [x] Implement address reuse prevention
+    - [x] Create address ownership proof system
+  - [x] Add basic confidential transactions
+    - [x] Implement simple amount hiding mechanism
+    - [x] Create basic commitment scheme
+    - [x] Add transaction balance verification
+    - [x] Implement output value obfuscation
+    - [x] Create simple range proof system
   - [ ] Plan for advanced cryptographic primitives
     - [ ] Research Pedersen commitment implementation
       - [ ] Evaluate elliptic curve options (Ristretto, Curve25519)
@@ -1082,6 +1082,10 @@
 - [x] Fixed borrowing issues in `src/consensus/pos.rs` in the `rotate_shards` method by cloning necessary data
 - [x] Added `#[derive(Clone)]` to the `ValidatorInfo` struct in `src/consensus/pos.rs`
 - [x] Fixed unused variable in `ShardManager::new()` by using `current_time` to initialize both `last_shard_rotation` and `last_rotation`
+- [x] Fixed Transaction struct in test files to include new privacy-related fields
+- [x] Implemented basic transaction privacy features including obfuscation, stealth addressing, and confidential transactions
+- [x] Fixed stealth addressing tests to properly handle ephemeral keys
+- [x] Fixed privacy integration tests to verify transaction outputs correctly
 
 ## Remaining Tasks
 - [ ] Address remaining Clippy warnings (72 errors reported)

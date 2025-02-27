@@ -2,7 +2,25 @@
 
 All notable changes to the Obscura project will be documented in this file.
 
-## [0.3.5] - 2024-03-05
+## [0.3.6] - 2024-02-26
+
+### Added
+- Implemented comprehensive handshake protocol
+  - Added version negotiation mechanism
+  - Implemented feature negotiation system
+  - Created connection establishment process
+  - Added privacy feature negotiation
+  - Implemented connection obfuscation techniques
+
+### Documentation
+- Added detailed networking documentation
+  - Created comprehensive handshake protocol documentation in `docs/networking/handshake_protocol.md`
+  - Added connection management documentation in `docs/networking/connection_management.md`
+  - Updated P2P protocol documentation with handshake details
+  - Documented privacy features in network connections
+  - Added cross-references between networking documentation files
+
+## [0.3.5] - 2024-02-26
 
 ### Added
 - Implemented Block Structure component
@@ -50,7 +68,7 @@ All notable changes to the Obscura project will be documented in this file.
   - Added small increment to current time in tests to ensure valid timestamps
   - Fixed validation for future timestamps
 
-## [0.3.4] - 2024-03-04
+## [0.3.4] - 2024-02-26
 
 ### Added
 - Implemented multi-asset staking support
@@ -87,7 +105,7 @@ All notable changes to the Obscura project will be documented in this file.
   - Implemented tests for slashing multi-asset stakes
   - Added tests for oracle integration and exchange rate updates
 
-## [0.3.3] - 2024-03-03
+## [0.3.3] - 2024-02-26
 
 ### Added
 - Implemented threshold signature scheme for validator aggregation
@@ -117,7 +135,7 @@ All notable changes to the Obscura project will be documented in this file.
   - Added tests for sharded validator sets
   - Created integration tests for all new features
 
-## [0.3.2] - 2024-03-02
+## [0.3.2] - 2024-02-26
 
 ### Added
 - Implemented validator performance-based rewards
@@ -158,7 +176,7 @@ All notable changes to the Obscura project will be documented in this file.
   - Created integration tests for all new features
   - Added edge case testing for validator management
 
-## [0.3.1] - 2024-03-01
+## [0.3.1] - 2024-02-26
 
 ### Added
 - Implemented BFT finality gadget for PoS
@@ -197,7 +215,7 @@ All notable changes to the Obscura project will be documented in this file.
   - Created chain reorganization tests
   - Added validator rotation tests
 
-## [0.2.0] - 2024-02-28
+## [0.2.0] - 2024-02-26
 
 ### Added
 - Implemented complete Proof of Stake (PoS) mechanism
@@ -227,7 +245,7 @@ All notable changes to the Obscura project will be documented in this file.
   - Created tests for VRF functionality
   - Implemented tests for hybrid consensus validation
 
-## [0.1.9] - 2024-02-27
+## [0.1.9] - 2024-02-26
 
 ### Improved
 - Optimized test performance for hybrid consensus validation
