@@ -5,6 +5,10 @@ use rand::rngs::OsRng;
 // Add the privacy module
 pub mod privacy;
 
+// Add the new modules for cryptographic privacy features
+pub mod bulletproofs;
+pub mod pedersen;
+
 pub fn generate_keypair() -> Option<Keypair> {
     let mut csprng = OsRng;
     Some(Keypair::generate(&mut csprng))

@@ -677,6 +677,79 @@ fn test_cpfp_transaction_prioritization() {
     // Create a test UTXO set
     let mut utxo_set = UTXOSet::new();
 
+    // Add UTXOs for all transactions first
+    // Add a UTXO for the parent transaction
+    utxo_set.add_utxo(
+        OutPoint {
+            transaction_hash: [0; 32],
+            index: 0,
+        },
+        TransactionOutput {
+            value: 100_000, // Initial value for parent
+            public_key_script: vec![1, 2, 3],
+        },
+    );
+
+    // Add UTXOs for tx1 and tx2
+    utxo_set.add_utxo(
+        OutPoint {
+            transaction_hash: [1; 32],
+            index: 0,
+        },
+        TransactionOutput {
+            value: 100_000,
+            public_key_script: vec![13, 14, 15],
+        },
+    );
+
+    utxo_set.add_utxo(
+        OutPoint {
+            transaction_hash: [2; 32],
+            index: 0,
+        },
+        TransactionOutput {
+            value: 100_000,
+            public_key_script: vec![19, 20, 21],
+        },
+    );
+    
+    // Create a separate UTXO set for later testing
+    let mut test_utxo_set = UTXOSet::new();
+    
+    // Add the same UTXOs to the test UTXO set
+    test_utxo_set.add_utxo(
+        OutPoint {
+            transaction_hash: [0; 32],
+            index: 0,
+        },
+        TransactionOutput {
+            value: 100_000,
+            public_key_script: vec![1, 2, 3],
+        },
+    );
+    
+    test_utxo_set.add_utxo(
+        OutPoint {
+            transaction_hash: [1; 32],
+            index: 0,
+        },
+        TransactionOutput {
+            value: 100_000,
+            public_key_script: vec![13, 14, 15],
+        },
+    );
+    
+    test_utxo_set.add_utxo(
+        OutPoint {
+            transaction_hash: [2; 32],
+            index: 0,
+        },
+        TransactionOutput {
+            value: 100_000,
+            public_key_script: vec![19, 20, 21],
+        },
+    );
+
     // Create a parent transaction with a low fee
     let parent_tx = Transaction {
         inputs: vec![TransactionInput {
@@ -684,7 +757,7 @@ fn test_cpfp_transaction_prioritization() {
                 transaction_hash: [0; 32],
                 index: 0,
             },
-            signature_script: vec![1, 2, 3],
+            signature_script: vec![1, 2, 3], // Match the public_key_script for simplification
             sequence: 0xFFFFFFFF,
         }],
         outputs: vec![TransactionOutput {
@@ -700,24 +773,14 @@ fn test_cpfp_transaction_prioritization() {
         range_proofs: None,
     };
 
-    // Add the parent's output to the UTXO set
-    let parent_hash = parent_tx.hash();
-    utxo_set.add_utxo(
-        OutPoint {
-            transaction_hash: parent_hash,
-            index: 0,
-        },
-        parent_tx.outputs[0].clone(),
-    );
-
     // Create a child transaction with a high fee that spends the parent
     let child_tx = Transaction {
         inputs: vec![TransactionInput {
             previous_output: OutPoint {
-                transaction_hash: parent_hash,
+                transaction_hash: parent_tx.hash(), // Reference the parent hash
                 index: 0,
             },
-            signature_script: vec![7, 8, 9],
+            signature_script: vec![4, 5, 6], // Match parent's output public_key_script
             sequence: 0xFFFFFFFF,
         }],
         outputs: vec![TransactionOutput {
@@ -780,13 +843,40 @@ fn test_cpfp_transaction_prioritization() {
 
     // Create a mempool and add all transactions
     let mut mempool = Mempool::new();
-    mempool.add_transaction(parent_tx.clone());
-    mempool.add_transaction(child_tx.clone());
-    mempool.add_transaction(tx1.clone());
-    mempool.add_transaction(tx2.clone());
+    // Set the UTXO set in the mempool for transaction validation
+    let utxo_set_arc = std::sync::Arc::new(utxo_set);
+    mempool.set_utxo_set(utxo_set_arc);
+    
+    let parent_added = mempool.add_transaction(parent_tx.clone());
+    let child_added = mempool.add_transaction(child_tx.clone());
+    let tx1_added = mempool.add_transaction(tx1.clone());
+    let tx2_added = mempool.add_transaction(tx2.clone());
+    
+    // Debug: Print if transactions were added successfully
+    println!("Transaction addition to mempool:");
+    println!("Parent added: {}", parent_added);
+    println!("Child added: {}", child_added);
+    println!("TX1 added: {}", tx1_added);
+    println!("TX2 added: {}", tx2_added);
+    
+    // Debug: Print transactions in mempool
+    println!("Number of transactions in mempool: {}", mempool.size());
 
     // Get transactions ordered by effective fee rate (CPFP)
-    let prioritized_txs = mempool.get_transactions_by_effective_fee_rate(&utxo_set, 10);
+    let prioritized_txs = mempool.get_transactions_by_effective_fee_rate(&test_utxo_set, 10);
+
+    // Debug: Print the transaction hashes in prioritized_txs
+    println!("Number of prioritized transactions: {}", prioritized_txs.len());
+    println!("Expected transactions:");
+    println!("Parent hash: {:?}", parent_tx.hash());
+    println!("Child hash: {:?}", child_tx.hash());
+    println!("TX1 hash: {:?}", tx1.hash());
+    println!("TX2 hash: {:?}", tx2.hash());
+    
+    println!("Actual transactions in prioritized_txs:");
+    for (i, tx) in prioritized_txs.iter().enumerate() {
+        println!("TX {}: {:?}", i, tx.hash());
+    }
 
     // Verify that the parent transaction is prioritized higher than tx1 and tx2
     // despite having a lower individual fee, because of its high-fee child
@@ -812,7 +902,7 @@ fn test_cpfp_transaction_prioritization() {
         tx1.clone(),
         tx2.clone(),
     ];
-    let prioritized = super::prioritize_transactions(&all_txs, &utxo_set, 1_000_000);
+    let prioritized = super::prioritize_transactions(&all_txs, &test_utxo_set, 1_000_000);
 
     // Verify that both parent and child are included and in the correct order
     let parent_pos = prioritized

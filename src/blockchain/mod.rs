@@ -69,6 +69,7 @@ pub struct OutPoint {
     pub index: u32,
 }
 
+#[derive(Debug)]
 pub struct UTXOSet {
     utxos: HashMap<OutPoint, TransactionOutput>,
 }

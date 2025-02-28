@@ -71,6 +71,43 @@ This update implements comprehensive block propagation features for the Obscura 
 - Added protection against timing-based deanonymization attacks
 - Created foundation for future Graphene block relay implementation
 
+### New Features
+
+#### Transaction Pool Enhancement
+
+The Transaction Pool (mempool) has been completely overhauled with robust privacy features and improved performance:
+
+- **Enhanced Transaction Ordering**: Fee-based transaction ordering with privacy-preserving obfuscation to prevent fee analysis.
+- **Configurable Privacy Levels**: Three privacy levels (Standard, Enhanced, Maximum) allow users to choose their preferred balance of privacy vs. performance.
+- **Advanced Signature Verification**: Complete cryptographic validation of transaction signatures using ED25519.
+- **Zero-Knowledge Proof Support**: Integration of Bulletproofs-style range proofs and Pedersen commitments for confidential transactions.
+- **Fee Obfuscation Mechanism**: Multi-layered fee obfuscation prevents transaction analysis while preserving appropriate prioritization.
+- **Double-Spend Protection**: Advanced tracking of transaction inputs to prevent double-spending attacks.
+- **Dynamic Fee Calculation**: Intelligent fee recommendation system based on mempool congestion.
+- **Size Limits and Eviction**: Configurable size limits with smart eviction policies to maintain optimal performance.
+- **Transaction Expiration**: Automatic expiration of stale transactions to keep the mempool clean.
+- **Sponsored Transactions**: Support for third-party fee sponsorship with cryptographic validation.
+
+#### Cryptography Enhancements
+
+- **Pedersen Commitments**: Implemented fully functional Pedersen commitments for confidential transactions.
+- **Range Proofs**: Added Bulletproofs-style range proofs to ensure transaction validity without revealing amounts.
+- **Transaction Privacy**: Multiple transaction obfuscation techniques including graph protection and metadata stripping.
+
+### Improvements
+
+- Improved transaction validation performance with caching mechanisms
+- Enhanced fee market dynamics for better transaction prioritization
+- Added comprehensive unit tests for the Transaction Pool functionality
+- Improved error handling and validation reporting
+
+### Bug Fixes
+
+- Fixed potential integer overflow in fee calculations
+- Addressed potential timestamp manipulation vulnerabilities
+- Resolved transaction ordering inconsistencies
+- Fixed signature extraction from complex scripts
+
 ## [0.4.1] - 2025-02-27
 
 ### Network Layer Enhancements

@@ -24,6 +24,11 @@ thiserror = "1.0"
 rayon = "1.8"
 num_cpus = "1.16"
 chacha20poly1305 = "0.10.1"
+# Privacy-focused cryptography dependencies
+curve25519-dalek = "3.2"
+merlin = "3.0"
+blake2 = "0.9"
+lazy_static = "1.4"
 
 [build-dependencies]
 cc = "1.0" 

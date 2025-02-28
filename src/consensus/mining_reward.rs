@@ -168,9 +168,12 @@ pub fn prioritize_transactions(
 
     // Add all transactions to the mempool
     for tx in transactions {
-        mempool.add_transaction(tx.clone());
+        let added = mempool.add_transaction(tx.clone());
+        println!("Added transaction {} to mempool: {}", hex::encode(tx.hash()), added);
     }
 
+    println!("Total transactions in mempool after adding: {}", mempool.size());
+    
     // Get transactions ordered by effective fee rate (CPFP)
     let prioritized_txs =
         mempool.get_transactions_by_effective_fee_rate(utxo_set, transactions.len());
@@ -737,12 +740,11 @@ pub fn calculate_ancestor_set(
             continue;
         }
 
-        // Add to ancestor set
+        // Add to ancestor set even if not in mempool
         ancestors.insert(tx_hash);
 
-        // Get the transaction from mempool
+        // If the transaction is in the mempool, add its parents to the processing queue
         if let Some(parent_tx) = mempool.get_transaction(&tx_hash) {
-            // Add its parents to the processing queue
             for input in &parent_tx.inputs {
                 to_process.push(input.previous_output.transaction_hash);
             }

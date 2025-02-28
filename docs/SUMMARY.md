@@ -21,6 +21,18 @@
   - [Coinbase Maturity](consensus/coinbase_maturity.md)
 - [Transactions](transactions.md)
   - [Transaction Details](transactions/index.md)
+  - [Transaction Pool](transaction_pool.md)
+    - [Transaction Ordering](transactions/ordering.md)
+    - [Fee Calculation](transactions/fees.md)
+    - [Transaction Validation](transactions/validation.md)
+- [Privacy Features](privacy_features.md)
+  - [Transaction Obfuscation](crypto/transaction_obfuscation.md)
+  - [Stealth Addressing](crypto/stealth_addressing.md)
+  - [Confidential Transactions](crypto/confidential_transactions.md)
+- [Cryptography](cryptography.md)
+  - [Signature Verification](crypto/signatures.md)
+  - [Zero-Knowledge Proofs](crypto/zero_knowledge_proofs.md)
+  - [Pedersen Commitments](crypto/pedersen_commitments.md)
 - [Networking](networking.md)
   - [Networking Details](networking/index.md)
   - [Connection Pool](networking/connection_pool.md)
@@ -31,6 +43,7 @@
   - [Feature Negotiation](networking/feature_negotiation.md)
   - [Handshake Protocol](networking/handshake_protocol.md)
   - [Message Types](networking/message_types.md)
+  - [Privacy-Enhanced Networking](peer_reputation_privacy.md)
 - [Development](development.md)
 
 # Components
@@ -53,7 +66,9 @@
   - [Test Optimization](testing/test_optimization.md)
 
 # Additional Resources
+- [API Reference](api/README.md)
 - [FAQ](faq.md)
 - [Release Notes](release_notes.md)
 - [Glossary](glossary.md)
-- [Documentation Options](DOCUMENTATION_OPTIONS.md) 
+- [Documentation Options](DOCUMENTATION_OPTIONS.md)
+- [Contributing](contributing.md) 
