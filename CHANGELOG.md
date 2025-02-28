@@ -2,6 +2,35 @@
 
 All notable changes to the Obscura project will be documented in this file.
 
+## [0.4.0] - 2024-02-27
+
+### Added
+- Hybrid Consensus Optimizations
+  - Implemented efficient state management for staking data
+  - Added state pruning mechanisms
+  - Created state snapshots for faster synchronization
+  - Optimized for concurrent operations
+  - Implemented parallel processing of validation tasks
+  - Added comprehensive documentation for hybrid consensus
+
+### Documentation
+- Added new documentation files:
+  - `docs/consensus/HYBRID_CONSENSUS.md`: Comprehensive hybrid consensus documentation
+  - `docs/consensus/STAKING.md`: Detailed staking system documentation
+  - `docs/consensus/BLOCK_STRUCTURE.md`: Block structure documentation
+- Enhanced existing documentation:
+  - Updated main README with documentation links
+  - Added cross-references between consensus components
+  - Created detailed implementation examples
+
+### Improved
+- Documentation Organization
+  - Enhanced cross-referencing between documents
+  - Added detailed examples for each component
+  - Created comprehensive security checklists
+  - Improved code examples with detailed comments
+  - Added implementation patterns and best practices
+
 ## [0.3.9] - 2024-02-27
 
 ### Added

@@ -2,6 +2,61 @@
 
 This document contains the release notes for each version of the Obscura blockchain.
 
+## [0.4.0] - 2024-02-27
+
+### Hybrid Consensus Optimizations
+
+This release implements comprehensive optimizations for the hybrid consensus mechanism, focusing on state management, parallel processing, and documentation.
+
+#### State Management Optimizations
+- Implemented efficient state management for staking data
+  - Thread-safe validator cache using RwLock
+  - Automatic cache updates during validation
+  - Memory optimization through pruning
+  - State snapshots for fast recovery
+- Added state pruning mechanisms
+  - Configurable retention period
+  - Minimum stake thresholds
+  - Storage size limits
+  - Historical data cleanup
+- Created state snapshots for synchronization
+  - Periodic snapshot creation (every 1000 blocks)
+  - Snapshot rotation and management
+  - Fast state recovery
+  - Configurable retention policy
+
+#### Performance Optimizations
+- Optimized for concurrent operations
+  - Thread-safe staking contract access
+  - Parallel stake proof verification
+  - Multi-threaded validation
+  - Atomic state transitions
+- Implemented parallel processing
+  - Multi-threaded block validation
+  - Chunked transaction processing
+  - Configurable thread pool size
+  - Parallel stake verification
+
+#### Documentation
+- Added comprehensive documentation
+  - Detailed hybrid consensus architecture
+  - State management optimizations
+  - Performance considerations
+  - Security measures
+  - Integration guidelines
+- Created implementation examples
+  - State management usage
+  - Parallel processing setup
+  - Configuration options
+  - Integration patterns
+
+#### Key Improvements
+- Enhanced validation performance through parallel processing
+- Improved state management efficiency
+- Reduced memory usage through pruning
+- Faster state synchronization with snapshots
+- Better documentation and examples
+
 ## [0.3.9] - 2024-02-27
 
 ### Documentation and Architecture Enhancement

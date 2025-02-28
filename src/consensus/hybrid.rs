@@ -4,31 +4,36 @@ use super::pos_old::{StakeProof, StakingContract};
 use super::randomx::{verify_difficulty, RandomXContext};
 use super::{pos_old::ProofOfStake, pow::ProofOfWork};
 use crate::blockchain::Block;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
+use super::hybrid_optimizations::HybridStateManager;
 
 pub struct HybridValidator {
     pow: ProofOfWork,
     pos: ProofOfStake,
     pow_weight: f64, // Weight for PoW influence (0.0 - 1.0)
-    staking_contract: Arc<Mutex<StakingContract>>,
+    staking_contract: Arc<RwLock<StakingContract>>,
+    state_manager: HybridStateManager,
 }
 
 impl HybridValidator {
     pub fn new() -> Self {
+        let staking_contract = Arc::new(RwLock::new(StakingContract::new(24 * 60 * 60))); // 1 day epoch
         HybridValidator {
             pow: ProofOfWork::new(),
             pos: ProofOfStake::new(),
             pow_weight: 0.7, // 70% PoW, 30% PoS influence
-            staking_contract: Arc::new(Mutex::new(StakingContract::new(24 * 60 * 60))), // 1 day epoch
+            staking_contract: staking_contract.clone(),
+            state_manager: HybridStateManager::new(staking_contract),
         }
     }
 
-    pub fn with_staking_contract(staking_contract: Arc<Mutex<StakingContract>>) -> Self {
+    pub fn with_staking_contract(staking_contract: Arc<RwLock<StakingContract>>) -> Self {
         HybridValidator {
             pow: ProofOfWork::new(),
             pos: ProofOfStake::new(),
             pow_weight: 0.7,
-            staking_contract,
+            staking_contract: staking_contract.clone(),
+            state_manager: HybridStateManager::new(staking_contract),
         }
     }
 
@@ -63,29 +68,40 @@ impl HybridValidator {
         }
         println!("Passed base PoW check");
 
-        // Validate PoS
-        if !self.pos.validate_stake_proof(stake_proof, &header_bytes) {
-            println!(
-                "Failed PoS validation. Stake amount: {}",
-                stake_proof.stake_amount
-            );
+        // Update validator cache before validation
+        if let Err(e) = self.state_manager.update_validator_cache(stake_proof.public_key.clone()) {
+            println!("Failed to update validator cache: {}", e);
             return false;
         }
-        println!("Passed PoS validation");
 
-        // Check if validator is active in the staking contract
-        let is_active_validator = {
-            let staking_contract = self.staking_contract.lock().unwrap();
-            staking_contract
-                .active_validators
-                .contains(&stake_proof.public_key)
-        };
-
-        if !is_active_validator {
-            println!("Failed validator check. Not an active validator.");
-            return false;
+        // Validate using parallel processing
+        match self.state_manager.validate_block_parallel(block, &[stake_proof.clone()]) {
+            Ok(is_valid) => {
+                if !is_valid {
+                    println!("Failed parallel validation");
+                    return false;
+                }
+                println!("Passed parallel validation");
+            }
+            Err(e) => {
+                println!("Error during parallel validation: {}", e);
+                return false;
+            }
         }
-        println!("Passed active validator check");
+
+        // Create state snapshot periodically
+        if block.header.height % 1000 == 0 {
+            if let Err(e) = self.state_manager.create_snapshot(block.header.height) {
+                println!("Failed to create state snapshot: {}", e);
+            }
+        }
+
+        // Prune old state data periodically
+        if block.header.height % 10000 == 0 {
+            if let Err(e) = self.state_manager.prune_old_state(block.header.height) {
+                println!("Failed to prune old state: {}", e);
+            }
+        }
 
         // Calculate stake-adjusted target
         let stake_factor = self.calculate_stake_factor(stake_proof.stake_amount);
@@ -101,7 +117,7 @@ impl HybridValidator {
 
         if result {
             // Update validator statistics on successful block validation
-            let mut staking_contract = self.staking_contract.lock().unwrap();
+            let mut staking_contract = self.staking_contract.write().unwrap();
             if let Some(validator) = staking_contract.validators.get_mut(&stake_proof.public_key) {
                 validator.blocks_proposed += 1;
                 validator.last_proposed_block = block.header.timestamp;
@@ -117,17 +133,17 @@ impl HybridValidator {
         1.0 + (base_factor * (1.0 - self.pow_weight))
     }
 
-    pub fn get_staking_contract(&self) -> Arc<Mutex<StakingContract>> {
+    pub fn get_staking_contract(&self) -> Arc<RwLock<StakingContract>> {
         self.staking_contract.clone()
     }
 
     pub fn select_validators(&self, max_validators: usize) -> Vec<Vec<u8>> {
-        let mut staking_contract = self.staking_contract.lock().unwrap();
+        let mut staking_contract = self.staking_contract.write().unwrap();
         staking_contract.select_validators(max_validators)
     }
 
     pub fn distribute_rewards(&self) -> std::collections::HashMap<Vec<u8>, u64> {
-        let mut staking_contract = self.staking_contract.lock().unwrap();
+        let mut staking_contract = self.staking_contract.write().unwrap();
         staking_contract.distribute_rewards()
     }
 }
@@ -150,12 +166,12 @@ mod tests {
     #[test]
     fn test_hybrid_validation_with_staking() {
         // Create a staking contract
-        let staking_contract = Arc::new(Mutex::new(StakingContract::new(24 * 60 * 60)));
+        let staking_contract = Arc::new(RwLock::new(StakingContract::new(24 * 60 * 60)));
 
         // Create a validator
         let public_key = vec![1, 2, 3, 4];
         {
-            let mut contract = staking_contract.lock().unwrap();
+            let mut contract = staking_contract.write().unwrap();
             contract
                 .create_stake(public_key.clone(), 2000, false)
                 .unwrap();
