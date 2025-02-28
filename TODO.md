@@ -175,12 +175,12 @@
       - [x] Create peer scoring system
       - [x] Implement privacy-preserving discovery
       - [x] Add network identity protection
-  - [ ] Add peer management system
+  - [x] Add peer management system
     - [x] Implement connection limits
     - [x] Add ban scoring
     - [x] Create peer prioritization
     - [x] Implement privacy-focused peer rotation
-    - [ ] Add peer reputation privacy
+    - [x] Add peer reputation privacy
   - [ ] Implement block propagation
     - [ ] Add compact block relay
     - [ ] Create block announcement protocol

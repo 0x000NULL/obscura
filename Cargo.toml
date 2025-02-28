@@ -23,6 +23,7 @@ byteorder = "1.4"
 thiserror = "1.0"
 rayon = "1.8"
 num_cpus = "1.16"
+chacha20poly1305 = "0.10.1"
 
 [build-dependencies]
 cc = "1.0" 

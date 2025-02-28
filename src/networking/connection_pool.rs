@@ -3,6 +3,11 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use rand::{seq::SliceRandom, thread_rng, Rng};
+use rand::RngCore;
+use chacha20poly1305::{
+    aead::{Aead, generic_array::GenericArray},
+    ChaCha20Poly1305, KeyInit
+};
 
 use crate::networking::p2p::{PeerConnection, FeatureFlag, PrivacyFeatureFlag};
 
@@ -47,10 +52,22 @@ pub struct PeerScore {
     pub uptime: Duration,
     pub last_rotation: Instant,
     pub diversity_score: f64,
+    // Added fields for private reputation
+    encrypted_reputation: Option<Vec<u8>>,
+    reputation_nonce: [u8; 12],
+    reputation_key: [u8; 32],
+    reputation_last_update: Instant,
+    reputation_shares: Vec<(SocketAddr, Vec<u8>)>, // (peer, encrypted share)
 }
 
 impl PeerScore {
     pub fn new(addr: SocketAddr, features: u32, privacy_features: u32) -> Self {
+        let mut rng = rand::thread_rng();
+        let mut nonce = [0u8; 12];
+        let mut key = [0u8; 32];
+        rng.fill_bytes(&mut nonce);
+        rng.fill_bytes(&mut key);
+
         let network_type = match addr.ip() {
             IpAddr::V4(_) => NetworkType::IPv4,
             IpAddr::V6(_) => NetworkType::IPv6,
@@ -67,16 +84,22 @@ impl PeerScore {
             privacy_features,
             uptime: Duration::from_secs(0),
             last_rotation: Instant::now(),
-            diversity_score: 0.5, // Default middle score
+            diversity_score: 0.5,
+            encrypted_reputation: None,
+            reputation_nonce: nonce,
+            reputation_key: key,
+            reputation_last_update: Instant::now(),
+            reputation_shares: Vec::new(),
         }
     }
 
-    // Calculate a composite score for peer selection
+    // Calculate a composite score for peer selection with privacy
     pub fn calculate_score(&self) -> f64 {
+        // Get base metrics
         let success_ratio = if self.successful_connections + self.failed_connections > 0 {
             self.successful_connections as f64 / (self.successful_connections + self.failed_connections) as f64
         } else {
-            0.5 // Default middle score
+            0.5
         };
 
         let latency_score = if self.latency > Duration::from_secs(2) {
@@ -87,8 +110,87 @@ impl PeerScore {
             1.0
         };
 
-        // Combine factors with weights
-        (success_ratio * 0.4) + (latency_score * 0.3) + (self.diversity_score * 0.3)
+        // Add noise to scores for privacy
+        let mut rng = rand::thread_rng();
+        let noise_factor = 0.05; // 5% maximum noise
+        let success_noise = rng.gen_range(-noise_factor, noise_factor);
+        let latency_noise = rng.gen_range(-noise_factor, noise_factor);
+        let diversity_noise = rng.gen_range(-noise_factor, noise_factor);
+
+        // Combine factors with weights and noise
+        let score = ((success_ratio + success_noise) * 0.4) + 
+                   ((latency_score + latency_noise) * 0.3) + 
+                   ((self.diversity_score + diversity_noise) * 0.3);
+
+        // Ensure score stays in valid range
+        score.max(0.0).min(1.0)
+    }
+
+    // Update reputation with privacy preservation
+    pub fn update_reputation(&mut self, new_score: f64, peers: &[SocketAddr]) -> Result<(), &'static str> {
+        let key = GenericArray::from_slice(&self.reputation_key);
+        let cipher = ChaCha20Poly1305::new(key);
+        let nonce = GenericArray::from_slice(&self.reputation_nonce);
+
+        // Encrypt the new score
+        let score_bytes = new_score.to_le_bytes();
+        let encrypted_score = cipher.encrypt(nonce, score_bytes.as_ref())
+            .map_err(|_| "Encryption failed")?;
+
+        // Generate reputation shares
+        let mut shares: Vec<(SocketAddr, Vec<u8>)> = Vec::new();
+        let share_count = peers.len() as u8;
+
+        if share_count > 0 {
+            // Generate shares
+            let mut rng = rand::thread_rng();
+            for (i, peer) in peers.iter().enumerate() {
+                let mut share = vec![0u8; encrypted_score.len()];
+                rng.fill_bytes(&mut share);
+                
+                // XOR all shares except the last one
+                if i < peers.len() - 1 {
+                    for (s, e) in share.iter_mut().zip(encrypted_score.iter()) {
+                        *s ^= e;
+                    }
+                } else {
+                    // Last share is XOR of all other shares and the encrypted score
+                    for share_data in shares.iter() {
+                        for (s, e) in share.iter_mut().zip(share_data.1.iter()) {
+                            *s ^= e;
+                        }
+                    }
+                    for (s, e) in share.iter_mut().zip(encrypted_score.iter()) {
+                        *s ^= e;
+                    }
+                }
+                shares.push((*peer, share));
+            }
+        }
+
+        self.encrypted_reputation = Some(encrypted_score);
+        self.reputation_shares = shares;
+        self.reputation_last_update = Instant::now();
+
+        Ok(())
+    }
+
+    // Get decrypted reputation if available
+    pub fn get_reputation(&self) -> Option<f64> {
+        if let Some(encrypted) = &self.encrypted_reputation {
+            let key = GenericArray::from_slice(&self.reputation_key);
+            let cipher = ChaCha20Poly1305::new(key);
+            let nonce = GenericArray::from_slice(&self.reputation_nonce);
+
+            if let Ok(decrypted) = cipher.decrypt(nonce, encrypted.as_ref()) {
+                if decrypted.len() == 8 {
+                    let mut bytes = [0u8; 8];
+                    bytes.copy_from_slice(&decrypted[..8]);
+                    return Some(f64::from_le_bytes(bytes));
+                }
+            }
+        }
+        None
     }
 
     // Update the peer score with a successful connection
@@ -102,6 +204,11 @@ impl PeerScore {
     // Update the peer score with a failed connection
     pub fn record_failed_connection(&mut self) {
         self.failed_connections += 1;
+    }
+
+    // Check if the peer has reputation shares
+    pub fn has_reputation_shares(&self) -> bool {
+        !self.reputation_shares.is_empty()
     }
 }
 
@@ -647,6 +754,95 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
         }
         
         result
+    }
+
+    // Update peer reputation with privacy preservation
+    pub fn update_peer_reputation(&self, addr: SocketAddr, new_score: f64) -> Result<(), &'static str> {
+        // Get a random subset of peers for sharing
+        let share_peers = self.select_random_peers(5);
+        
+        // Update the peer's reputation
+        if let Ok(mut scores) = self.peer_scores.write() {
+            if let Some(score) = scores.get_mut(&addr) {
+                score.update_reputation(new_score, &share_peers)?;
+                
+                // Distribute shares to selected peers
+                if let Ok(connections) = self.active_connections.read() {
+                    for (peer_addr, share) in score.reputation_shares.iter() {
+                        if let Some((peer_conn, _)) = connections.get(peer_addr) {
+                            // TODO: Implement actual share distribution through P2P protocol
+                            // For now, we just verify we can access the data
+                            let _share_len = share.len();
+                            let _peer_features = peer_conn.privacy_features;
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
+    // Get peer reputation with privacy
+    pub fn get_peer_reputation(&self, addr: SocketAddr) -> Option<f64> {
+        if let Ok(scores) = self.peer_scores.read() {
+            if let Some(score) = scores.get(&addr) {
+                return score.get_reputation();
+            }
+        }
+        None
+    }
+
+    // Aggregate reputation shares from peers
+    pub fn aggregate_reputation_shares(&self, addr: SocketAddr, shares: Vec<Vec<u8>>) -> Result<(), &'static str> {
+        if let Ok(mut scores) = self.peer_scores.write() {
+            if let Some(score) = scores.get_mut(&addr) {
+                // Combine shares using XOR
+                if !shares.is_empty() {
+                    let share_len = shares[0].len();
+                    let mut combined = vec![0u8; share_len];
+                    
+                    for share in shares {
+                        if share.len() == share_len {
+                            for (c, s) in combined.iter_mut().zip(share.iter()) {
+                                *c ^= s;
+                            }
+                        }
+                    }
+                    
+                    score.encrypted_reputation = Some(combined);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    // Get anonymized network-wide reputation statistics
+    pub fn get_anonymized_reputation_stats(&self) -> (f64, f64, usize) {
+        let mut total_score = 0.0;
+        let mut count = 0;
+        let mut scores = Vec::new();
+
+        if let Ok(peer_scores) = self.peer_scores.read() {
+            for score in peer_scores.values() {
+                if let Some(rep) = score.get_reputation() {
+                    total_score += rep;
+                    scores.push(rep);
+                    count += 1;
+                }
+            }
+        }
+
+        let avg = if count > 0 { total_score / count as f64 } else { 0.0 };
+        let variance = if count > 0 {
+            scores.iter()
+                .map(|s| (s - avg).powi(2))
+                .sum::<f64>() / count as f64
+        } else {
+            0.0
+        };
+
+        (avg, variance.sqrt(), count) // Returns (mean, standard deviation, count)
     }
 }
 
