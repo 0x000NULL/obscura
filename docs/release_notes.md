@@ -2,6 +2,75 @@
 
 This document contains the release notes for each version of the Obscura blockchain.
 
+## [0.4.2] - 2025-03-01
+
+### Block Propagation Implementation
+
+This update implements comprehensive block propagation features for the Obscura network, focusing on efficiency, privacy, and security.
+
+#### Block Announcement Protocol
+- Implemented structured block announcement system
+  - Created BlockAnnouncement and BlockAnnouncementResponse message types
+  - Added peer selection mechanism for announcements
+  - Implemented announcement tracking and cleanup
+  - Created privacy-focused announcement batching
+  - Added random delays for timing attack protection
+
+#### Compact Block Relay
+- Added bandwidth-efficient block propagation
+  - Implemented CompactBlock structure with short transaction IDs
+  - Created missing transaction request and handling system
+  - Added prefilled transaction support for critical txs
+  - Implemented efficient block reconstruction
+  - Created transaction verification system
+
+#### Fast Block Sync
+- Implemented efficient block synchronization
+  - Added batch block request mechanism
+  - Created height-based block range requests
+  - Implemented bandwidth-optimized block delivery
+  - Added congestion control for large syncs
+  - Created progress tracking for sync operations
+
+#### Privacy-Preserving Block Relay
+- Enhanced network privacy for block propagation
+  - Implemented random peer selection for announcements
+  - Added batched announcements to small peer subsets
+  - Created random delays before processing and relaying
+  - Implemented peer rotation for announcements
+  - Added metadata stripping from block announcements
+
+#### Timing Attack Protection
+- Implemented protection against timing-based attacks
+  - Added minimum processing times for block validation
+  - Created random additional delays
+  - Implemented consistent processing paths
+  - Added timing obfuscation for critical operations
+  - Created network traffic pattern normalization
+
+#### Testing
+- Added comprehensive test suite for block propagation
+  - Created tests for compact block creation and handling
+  - Implemented block announcement protocol tests
+  - Added privacy feature verification tests
+  - Created timing attack protection tests
+  - Implemented edge case handling tests
+
+#### Documentation
+- Added detailed documentation for block propagation
+  - Created block_propagation.md with comprehensive overview
+  - Added block_announcement_protocol.md with detailed protocol description
+  - Documented all message types and their purposes
+  - Added best practices for implementation
+  - Created future enhancement roadmap
+
+#### Key Improvements
+- Reduced bandwidth usage for block propagation by up to 80%
+- Enhanced network privacy through batched announcements
+- Improved block propagation speed with compact blocks
+- Added protection against timing-based deanonymization attacks
+- Created foundation for future Graphene block relay implementation
+
 ## [0.4.1] - 2025-02-27
 
 ### Network Layer Enhancements

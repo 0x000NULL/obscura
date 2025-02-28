@@ -31,6 +31,12 @@ pub enum MessageType {
     FilterAdd = 0x0F,
     FilterClear = 0x10,
     MerkleBlock = 0x11,
+    BlockAnnouncement = 0x12,
+    BlockAnnouncementResponse = 0x13,
+    GetCompactBlock = 0x14,
+    CompactBlock = 0x15,
+    GetBlockTransactions = 0x16,
+    BlockTransactions = 0x17,
 }
 
 impl MessageType {
@@ -53,6 +59,12 @@ impl MessageType {
             0x0F => Some(MessageType::FilterAdd),
             0x10 => Some(MessageType::FilterClear),
             0x11 => Some(MessageType::MerkleBlock),
+            0x12 => Some(MessageType::BlockAnnouncement),
+            0x13 => Some(MessageType::BlockAnnouncementResponse),
+            0x14 => Some(MessageType::GetCompactBlock),
+            0x15 => Some(MessageType::CompactBlock),
+            0x16 => Some(MessageType::GetBlockTransactions),
+            0x17 => Some(MessageType::BlockTransactions),
             _ => None,
         }
     }
@@ -282,15 +294,55 @@ mod tests {
 
     #[test]
     fn test_message_serialization_deserialization() {
-        let payload = vec![1, 2, 3, 4, 5];
-        let message = Message::new(MessageType::Ping, payload);
+        let message = Message::new(MessageType::Ping, vec![1, 2, 3, 4]);
         
+        // Serialize the message
         let serialized = message.serialize().unwrap();
+        
+        // Deserialize the message
         let deserialized = Message::deserialize(&serialized).unwrap();
         
+        // Verify the deserialized message matches the original
         assert_eq!(deserialized.message_type, MessageType::Ping);
         // Note: The deserialized payload includes padding, so we can't directly compare
-        // In a real implementation, we would need a way to determine the actual payload size
+    }
+
+    #[test]
+    fn test_message_types() {
+        // Test all message types
+        let message_types = [
+            MessageType::Handshake,
+            MessageType::Ping,
+            MessageType::Pong,
+            MessageType::GetBlocks,
+            MessageType::Blocks,
+            MessageType::GetTransactions,
+            MessageType::Transactions,
+            MessageType::Inv,
+            MessageType::GetData,
+            MessageType::NotFound,
+            MessageType::MemPool,
+            MessageType::Alert,
+            MessageType::Reject,
+            MessageType::FilterLoad,
+            MessageType::FilterAdd,
+            MessageType::FilterClear,
+            MessageType::MerkleBlock,
+            MessageType::BlockAnnouncement,
+            MessageType::BlockAnnouncementResponse,
+            MessageType::GetCompactBlock,
+            MessageType::CompactBlock,
+            MessageType::GetBlockTransactions,
+            MessageType::BlockTransactions,
+        ];
+        
+        for message_type in &message_types {
+            let message = Message::new(*message_type, vec![1, 2, 3, 4]);
+            let serialized = message.serialize().unwrap();
+            let deserialized = Message::deserialize(&serialized).unwrap();
+            
+            assert_eq!(deserialized.message_type, *message_type);
+        }
     }
 
     #[test]

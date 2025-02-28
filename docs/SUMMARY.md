@@ -25,6 +25,8 @@
   - [Networking Details](networking/index.md)
   - [Connection Pool](networking/connection_pool.md)
   - [Peer Management](networking/peer_management.md)
+  - [Block Propagation](networking/block_propagation.md)
+  - [Block Announcement Protocol](networking/block_announcement_protocol.md)
   - [Network Privacy](networking/network_privacy.md)
   - [Feature Negotiation](networking/feature_negotiation.md)
   - [Handshake Protocol](networking/handshake_protocol.md)

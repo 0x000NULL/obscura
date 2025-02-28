@@ -181,12 +181,12 @@
     - [x] Create peer prioritization
     - [x] Implement privacy-focused peer rotation
     - [x] Add peer reputation privacy
-  - [ ] Implement block propagation
-    - [ ] Add compact block relay
-    - [ ] Create block announcement protocol
-    - [ ] Implement fast block sync
-    - [ ] Add privacy-preserving block relay
-    - [ ] Implement timing attack protection
+  - [x] Implement block propagation
+    - [x] Add compact block relay
+    - [x] Create block announcement protocol
+    - [x] Implement fast block sync
+    - [x] Add privacy-preserving block relay
+    - [x] Implement timing attack protection
 - [ ] Transaction Pool
   - [ ] Create mempool management
     - [ ] Implement transaction ordering
