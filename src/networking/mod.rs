@@ -4,6 +4,8 @@ use crate::blockchain::{Block, Transaction};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::io;
+use rand;
+use rand::RngCore;
 
 // Add the p2p module
 pub mod p2p;
@@ -11,6 +13,8 @@ pub mod p2p;
 pub mod message;
 // Add the connection_pool module
 pub mod connection_pool;
+// Add the discovery module
+pub mod discovery;
 
 // Re-export key types from p2p module
 pub use p2p::{
@@ -38,6 +42,9 @@ pub use connection_pool::{
     NetworkType
 };
 
+// Re-export key types from discovery module
+pub use discovery::{DiscoveryService, NodeId};
+
 #[derive(Clone)]
 #[allow(dead_code)]
 pub struct Node {
@@ -46,6 +53,8 @@ pub struct Node {
     connection_pool: Arc<ConnectionPool<CloneableTcpStream>>,
     // Add handshake protocol
     handshake_protocol: Arc<Mutex<HandshakeProtocol>>,
+    // Add discovery service
+    discovery_service: Arc<DiscoveryService>,
     mempool: Vec<Transaction>,
     stem_transactions: Vec<Transaction>,
     broadcast_transactions: Vec<Transaction>,
@@ -80,11 +89,29 @@ impl Node {
             supported_features,
             supported_privacy_features
         ));
+
+        // Generate random node ID for discovery
+        let mut local_id = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut local_id);
+
+        // Create discovery service with default bootstrap nodes
+        let bootstrap_nodes = vec![
+            // Add some default bootstrap nodes here
+            "127.0.0.1:8333".parse().unwrap(),  // Example bootstrap node
+        ];
+
+        let discovery_service = Arc::new(DiscoveryService::new(
+            local_id,
+            bootstrap_nodes,
+            connection_pool.get_peer_scores_ref().clone(),
+            true, // Enable privacy by default
+        ));
         
         Node {
             peers: Vec::new(),
             connection_pool,
             handshake_protocol: Arc::new(Mutex::new(handshake_protocol)),
+            discovery_service,
             mempool: Vec::new(),
             stem_transactions: Vec::new(),
             broadcast_transactions: Vec::new(),
@@ -136,7 +163,7 @@ impl Node {
         };
         
         // Add to connection pool
-        self.connection_pool.add_connection(peer_connection, ConnectionType::Outbound)
+        self.connection_pool.add_connection(peer_connection.clone(), ConnectionType::Outbound)
             .map_err(|e| match e {
                 ConnectionError::TooManyConnections => 
                     NodeError::NetworkError("Too many connections".to_string()),
@@ -147,6 +174,19 @@ impl Node {
                 ConnectionError::ConnectionFailed(msg) => 
                     NodeError::NetworkError(format!("Connection failed: {}", msg)),
             })?;
+        
+        // Add to discovery service
+        let mut id = [0u8; 32];
+        let addr_string = addr.to_string();
+        let addr_bytes = addr_string.as_bytes();
+        id[..addr_bytes.len().min(32)].copy_from_slice(&addr_bytes[..addr_bytes.len().min(32)]);
+        
+        self.discovery_service.add_node(
+            id,
+            addr,
+            peer_connection.features,
+            peer_connection.privacy_features,
+        );
         
         // Add to peers list if not already there
         if !self.peers.contains(&addr) {
@@ -272,12 +312,20 @@ impl Node {
             return Ok(());
         }
         
-        // Try to connect to new peers
+        // Try to connect to new peers from discovery
         let mut connected = 0;
         for _ in 0..num_peers_to_disconnect {
-            if let Some(new_peer) = self.connection_pool.select_outbound_peer() {
-                if let Ok(()) = self.connect_to_peer(new_peer) {
-                    connected += 1;
+            // Get candidates from discovery service
+            let mut target_id = [0u8; 32];
+            rand::thread_rng().fill_bytes(&mut target_id);
+            let candidates = self.discovery_service.find_nodes(&target_id, ALPHA);
+            
+            for (_, addr) in candidates {
+                if !self.connection_pool.is_connected(&addr) {
+                    if let Ok(()) = self.connect_to_peer(addr) {
+                        connected += 1;
+                        break;
+                    }
                 }
             }
         }
@@ -291,7 +339,7 @@ impl Node {
     
     // Add a method to get a diverse set of peers for privacy-focused operations
     pub fn get_diverse_peers(&self, count: usize) -> Vec<SocketAddr> {
-        self.connection_pool.select_random_peers(count)
+        (*self.connection_pool).select_random_peers(count)
     }
 
     pub fn enable_mining(&mut self) {
@@ -349,7 +397,108 @@ impl Node {
         let queued = std::mem::take(&mut self.fluff_queue);
         self.broadcast_transactions.extend(queued);
     }
+
+    // Add discovery-related methods
+
+    // Bootstrap the node's routing table
+    pub fn bootstrap(&mut self) -> Result<(), NodeError> {
+        if !self.discovery_service.needs_bootstrap() {
+            return Ok(());
+        }
+
+        let bootstrap_nodes = self.discovery_service.get_bootstrap_nodes();
+        for addr in bootstrap_nodes {
+            if let Ok(()) = self.connect_to_peer(addr) {
+                // After successful connection, add to discovery
+                if let Some(peer_conn) = self.connection_pool.get_connection(&addr) {
+                    let mut id = [0u8; 32];
+                    let addr_string = addr.to_string();
+                    let addr_bytes = addr_string.as_bytes();
+                    id[..addr_bytes.len().min(32)].copy_from_slice(&addr_bytes[..addr_bytes.len().min(32)]);
+                    
+                    self.discovery_service.add_node(
+                        id,
+                        addr,
+                        peer_conn.features,
+                        peer_conn.privacy_features,
+                    );
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    // Find and connect to new peers
+    pub fn discover_peers(&mut self) -> Result<(), NodeError> {
+        // Get some random target to search for
+        let mut target_id = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut target_id);
+
+        // Find closest nodes to target
+        let nodes = self.discovery_service.find_nodes(&target_id, ALPHA);
+        
+        // Try to connect to found nodes
+        for (_, addr) in nodes {
+            if !self.connection_pool.is_connected(&addr) {
+                if let Ok(()) = self.connect_to_peer(addr) {
+                    // Successfully connected to new peer
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    // Add periodic discovery method
+    pub fn maintain_network(&mut self) -> Result<(), NodeError> {
+        // Check if bootstrap is needed
+        if self.discovery_service.needs_bootstrap() {
+            self.bootstrap()?;
+        }
+
+        // Discover new peers if needed
+        let current_peers = self.connection_pool.get_all_connections().len();
+        let target_peers = MAX_OUTBOUND_CONNECTIONS + MAX_INBOUND_CONNECTIONS;
+
+        if current_peers < target_peers {
+            self.discover_peers()?;
+        }
+
+        // Rotate peers for privacy if needed
+        self.rotate_peers_for_privacy()?;
+
+        // Maintain network diversity
+        self.maintain_network_diversity()?;
+
+        Ok(())
+    }
+
+    // Add method to maintain network diversity
+    fn maintain_network_diversity(&mut self) -> Result<(), NodeError> {
+        let diversity_score = self.connection_pool.get_network_diversity_score();
+        
+        // If diversity is too low, try to improve it
+        if diversity_score < MIN_PEER_DIVERSITY_SCORE {
+            // Get candidates from discovery that would improve diversity
+            if let Some(new_peer) = (*self.connection_pool).select_outbound_peer() {
+                if let Ok(()) = self.connect_to_peer(new_peer) {
+                    // Successfully connected to new peer
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
+
+// Add constant for discovery
+const ALPHA: usize = 3; // Number of parallel lookups in Kademlia
+
+// Add constants for network management
+const MAX_OUTBOUND_CONNECTIONS: usize = 8;
+const MAX_INBOUND_CONNECTIONS: usize = 125;
+const MIN_PEER_DIVERSITY_SCORE: f64 = 0.5;
 
 #[derive(Debug)]
 pub enum NodeError {

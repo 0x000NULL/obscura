@@ -215,6 +215,7 @@ pub struct ProofOfStake {
     pub highest_finalized_block: u64, // Height of highest finalized block
 }
 
+#[derive(Clone)]
 pub struct StakeProof {
     pub stake_amount: u64,
     pub stake_age: u64,

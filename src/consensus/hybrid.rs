@@ -5,7 +5,7 @@ use super::randomx::{verify_difficulty, RandomXContext};
 use super::{pos_old::ProofOfStake, pow::ProofOfWork};
 use crate::blockchain::Block;
 use std::sync::{Arc, Mutex, RwLock};
-use super::hybrid_optimizations::HybridStateManager;
+use crate::consensus::hybrid_optimizations::HybridStateManager;
 
 pub struct HybridValidator {
     pow: ProofOfWork,

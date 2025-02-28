@@ -2,7 +2,90 @@
 
 This document contains the release notes for each version of the Obscura blockchain.
 
-## [0.4.0] - 2024-02-27
+## [0.4.1] - 2025-02-27
+
+### Network Layer Enhancements
+
+This update implements comprehensive connection pool management and enhances the network layer with improved privacy features and testing infrastructure.
+
+#### Connection Pool Implementation
+- Added comprehensive connection pool management
+  - Implemented connection diversity tracking and enforcement
+  - Created network type-based connection limits
+  - Added peer rotation mechanism for enhanced privacy
+  - Implemented ban system for malicious peers
+  - Added feature negotiation tracking
+  - Created test-specific connection pool settings
+
+#### Network Privacy Features
+- Enhanced network privacy mechanisms
+  - Added privacy-focused peer selection
+  - Implemented periodic peer rotation
+  - Created connection type management (inbound/outbound/feeler)
+  - Added network diversity enforcement
+  - Implemented connection obfuscation
+  - Added timing attack protection
+
+#### Connection Management
+- Improved connection handling
+  - Added connection limits per network type
+  - Implemented peer scoring system
+  - Created ban scoring mechanism
+  - Added peer prioritization
+  - Implemented connection diversity tracking
+  - Created network type classification
+
+#### Test Suite Improvements
+- Enhanced test infrastructure
+  - Fixed time overflow issue in peer rotation test
+  - Implemented test-specific rotation interval (100ms)
+  - Added safe time arithmetic for rotation checks
+  - Created mock TCP stream implementation
+  - Added comprehensive test logging
+  - Implemented test-specific constants
+
+#### Key Improvements
+- Better network privacy through connection diversity
+- Enhanced peer management with scoring system
+- Improved test reliability for time-sensitive operations
+- More predictable test behavior
+- Enhanced debugging capabilities
+- Better test maintainability
+
+#### Technical Details
+- Connection Pool Features:
+  - Network type tracking (IPv4, IPv6, Tor, I2P)
+  - Connection limits per network type
+  - Peer rotation intervals
+  - Ban system implementation
+  - Feature negotiation system
+  - Privacy-preserving peer selection
+
+- Test Framework Enhancements:
+  - Mock TCP stream implementation
+  - Test-specific constants
+  - Enhanced logging system
+  - Time-based test stability
+  - Test isolation improvements
+  - Reproducible test behavior
+
+#### Documentation
+- Added comprehensive connection pool documentation
+- Created network privacy feature documentation
+- Updated test framework documentation
+- Added debugging and logging documentation
+- Created implementation examples
+- Updated API documentation
+
+#### Key Improvements
+- Better network privacy through connection diversity
+- Enhanced peer management with scoring system
+- Improved test reliability for time-sensitive operations
+- More predictable test behavior
+- Enhanced debugging capabilities
+- Better test maintainability 
+
+## [0.4.0] - 2025-02-27
 
 ### Hybrid Consensus Optimizations
 
@@ -57,7 +140,7 @@ This release implements comprehensive optimizations for the hybrid consensus mec
 - Faster state synchronization with snapshots
 - Better documentation and examples
 
-## [0.3.9] - 2024-02-27
+## [0.3.9] - 2025-02-27
 
 ### Documentation and Architecture Enhancement
 
@@ -104,7 +187,7 @@ This release focuses on comprehensive documentation improvements and architectur
 - More comprehensive implementation guides
 - Improved developer onboarding experience
 
-## [0.3.8] - 2024-02-27
+## [0.3.8] - 2025-02-27
 
 ### Future PoS Enhancements Implementation
 
@@ -178,7 +261,7 @@ This release implements several major enhancements to the Proof of Stake system,
 - Created diversity calculation tests
 - Implemented attestation verification tests
 
-## [0.3.7] - 2024-02-26
+## [0.3.7] - 2025-02-26
 
 ### Enhanced Connection Pool Management
 
@@ -210,7 +293,7 @@ This release implements comprehensive connection pool management and network pri
 - Created mock TCP stream for testing
 - Added comprehensive test logging
 
-## [0.3.6] - 2024-02-26
+## [0.3.6] - 2025-02-26
 
 ### Handshake Protocol Implementation
 
@@ -230,7 +313,7 @@ This release implements a comprehensive handshake protocol for network connectio
 - Updated P2P protocol documentation
 - Documented privacy features in network connections
 
-## [0.3.5] - 2024-02-26
+## [0.3.5] - 2025-02-26
 
 ### Block Structure Enhancement
 
@@ -266,7 +349,7 @@ This release implements significant improvements to the block structure.
 - Created merkle proof verification tests
 - Implemented tests for all privacy-enhancing features
 
-## [0.3.4] - 2024-03-04
+## [0.3.4] - 2025-03-04
 
 ### Multi-Asset Staking
 
@@ -285,7 +368,7 @@ This release introduces multi-asset staking, allowing validators to stake with m
 - Added comprehensive documentation in `docs/consensus/multi_asset_staking.md`
 - Updated main consensus documentation to reference multi-asset staking
 
-## [0.3.3] - 2024-03-03
+## [0.3.3] - 2025-03-03
 
 ### Threshold Signatures and Validator Sharding
 
@@ -307,7 +390,7 @@ This release implements threshold signatures for validator aggregation and shard
 - Added documentation for threshold signatures in `docs/consensus/threshold_signatures.md`
 - Added documentation for validator sharding in `docs/consensus/sharding.md`
 
-## [0.3.2] - 2024-03-02
+## [0.3.2] - 2025-03-02
 
 ### Validator Enhancements
 
@@ -334,7 +417,7 @@ This release adds several enhancements to the validator management system.
 #### Documentation
 - Added documentation for validator enhancements in `docs/consensus/validator_enhancements.md`
 
-## [0.3.1] - 2024-03-01
+## [0.3.1] - 2025-03-01
 
 ### BFT Finality and Fork Choice Enhancements
 
@@ -364,7 +447,7 @@ This release implements a Byzantine Fault Tolerance (BFT) finality gadget and en
 - Added documentation for BFT finality in `docs/consensus/bft_finality.md`
 - Updated fork choice documentation
 
-## [0.2.0] - 2024-02-28
+## [0.2.0] - 2025-02-28
 
 ### Complete Proof of Stake Implementation
 
@@ -391,7 +474,7 @@ This release implements a complete Proof of Stake (PoS) mechanism.
 - Added comprehensive documentation for PoS functionality
 - Created documentation for hybrid consensus mechanism
 
-## [0.1.9] - 2024-02-27
+## [0.1.9] - 2025-02-27
 
 ### Test Optimization
 
@@ -408,7 +491,7 @@ This release optimizes test performance for hybrid consensus validation.
 #### Documentation
 - Added documentation for test optimization in `docs/testing/test_optimization.md`
 
-## [0.1.8] - 2024-02-26
+## [0.1.8] - 2025-02-26
 
 ### Child-Pays-For-Parent (CPFP) Mechanism
 
@@ -426,7 +509,7 @@ This release implements the Child-Pays-For-Parent (CPFP) mechanism for transacti
 - Added detailed documentation for CPFP mechanism in `docs/consensus/cpfp.md`
 - Updated related documentation to reference CPFP functionality
 
-## [0.1.7] - 2024-02-25
+## [0.1.7] - 2025-02-25
 
 ### Documentation Structure and Organization
 
@@ -446,7 +529,7 @@ This release focuses on comprehensive documentation structure and organization.
 - Implemented Replace-By-Fee (RBF) documentation
 - Created mining rewards index for easy navigation
 
-## [0.1.6] - 2024-02-25
+## [0.1.6] - 2025-02-25
 
 ### Dynamic Fee Market and Mining Rewards
 
@@ -478,7 +561,7 @@ This release implements a dynamic fee market for transaction processing and enha
 - Added documentation for RBF in `docs/consensus/replace_by_fee.md`
 - Added documentation for coinbase maturity in `docs/consensus/coinbase_maturity.md`
 
-## [0.1.5] - 2024-02-25
+## [0.1.5] - 2025-02-25
 
 ### Difficulty Adjustment Mechanism
 
@@ -501,7 +584,7 @@ This release implements a complete difficulty adjustment mechanism.
 #### Documentation
 - Added documentation for difficulty adjustment in `docs/consensus/difficulty.md`
 
-## [0.1.4] - 2024-02-25
+## [0.1.4] - 2025-02-25
 
 ### Cryptographic Enhancements
 
@@ -523,7 +606,7 @@ This release replaces AES-128 with ChaCha20 in the RandomX VM implementation.
 #### Documentation
 - Updated cryptographic documentation to reflect ChaCha20 implementation
 
-## [0.1.0] - 2024-02-25
+## [0.1.0] - 2025-02-25
 
 ### Initial RandomX PoW Implementation
 
@@ -548,4 +631,4 @@ This release implements the RandomX Proof of Work algorithm.
 - Register-based hash computation
 
 #### Documentation
-- Added comprehensive documentation for RandomX implementation 
+- Added comprehensive documentation for RandomX implementation

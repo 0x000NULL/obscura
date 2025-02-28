@@ -257,8 +257,8 @@ fn test_connection_pool_peer_rotation() {
     // Initially, should_rotate_peers should return false
     assert!(!pool.should_rotate_peers());
     
-    // Set the last rotation time to one hour ago
-    pool.set_last_rotation_time(Duration::from_secs(3600));
+    // Set the last rotation time to just over the rotation interval ago
+    pool.set_last_rotation_time(TEST_PEER_ROTATION_INTERVAL + Duration::from_millis(1));
     
     // Now should_rotate_peers should return true
     assert!(pool.should_rotate_peers());

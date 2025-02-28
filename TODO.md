@@ -159,20 +159,27 @@
       - [x] Add checksums and validation
       - [x] Implement message padding for privacy
       - [x] Add timing attack protection
-    - [ ] Add connection pooling
-      - [ ] Implement connection diversity
-      - [ ] Add privacy-focused peer selection
-  - [ ] Create node discovery mechanism
-    - [ ] Implement Kademlia DHT
-    - [ ] Add bootstrap nodes
-    - [ ] Create peer scoring system
-    - [ ] Implement privacy-preserving discovery
-    - [ ] Add network identity protection
+    - [x] Add connection pooling
+      - [x] Implement connection diversity
+      - [x] Add privacy-focused peer selection
+      - [x] Create test-specific connection pool settings
+      - [x] Add comprehensive connection pool tests
+      - [x] Implement network type tracking
+      - [x] Add connection limits per network
+      - [x] Create peer rotation mechanism
+      - [x] Implement ban system for malicious peers
+      - [x] Add feature negotiation tracking
+    - [x] Create node discovery mechanism
+      - [x] Implement Kademlia DHT
+      - [x] Add bootstrap nodes
+      - [x] Create peer scoring system
+      - [x] Implement privacy-preserving discovery
+      - [x] Add network identity protection
   - [ ] Add peer management system
-    - [ ] Implement connection limits
-    - [ ] Add ban scoring
-    - [ ] Create peer prioritization
-    - [ ] Implement privacy-focused peer rotation
+    - [x] Implement connection limits
+    - [x] Add ban scoring
+    - [x] Create peer prioritization
+    - [x] Implement privacy-focused peer rotation
     - [ ] Add peer reputation privacy
   - [ ] Implement block propagation
     - [ ] Add compact block relay
@@ -1078,10 +1085,18 @@
   - [ ] Document network upgrades related to PoS 
 
 ## Completed Tasks
-- [x] Fixed unused assignments in `src/consensus/difficulty.rs` by using the variables to avoid warnings
-- [x] Fixed borrowing issues in `src/consensus/pos.rs` in the `rotate_shards` method by cloning necessary data
-- [x] Added `#[derive(Clone)]` to the `ValidatorInfo` struct in `src/consensus/pos.rs`
+- [x] Fixed unused assignments in `src/consensus/difficulty.rs` by using the variables with `let _ = variable` pattern to avoid warnings
+- [x] Fixed borrowing issues in `src/consensus/pos.rs` in the `rotate_shards` method by:
+  - Extracting necessary data from `self` before proceeding
+  - Cloning `active_validators` and `validators` to avoid borrowing `self` multiple times
+  - Creating a simplified version of `StakingContract` with only the necessary fields
+  - Updating the call to `shard_manager.rotate_shards` to pass the simplified contract
+- [x] Added `#[derive(Clone)]` to the `ValidatorInfo` struct in `src/consensus/pos.rs` to enable cloning in the `rotate_shards` method
 - [x] Fixed unused variable in `ShardManager::new()` by using `current_time` to initialize both `last_shard_rotation` and `last_rotation`
+- [x] Fixed time overflow issue in connection pool peer rotation test by:
+  - Using test-specific rotation interval (100ms) instead of large durations
+  - Setting last rotation time to just over the interval for safe testing
+  - Ensuring proper time arithmetic to avoid overflow
 - [x] Fixed Transaction struct in test files to include new privacy-related fields
 - [x] Implemented basic transaction privacy features including obfuscation, stealth addressing, and confidential transactions
 - [x] Fixed stealth addressing tests to properly handle ephemeral keys
@@ -1173,3 +1188,14 @@
   - [ ] Design hands-on implementation workshops
   - [ ] Create security training materials
   - [ ] Add architecture design workshops 
+
+### Testing
+- [x] Connection Pool Testing
+  - [x] Add connection management tests
+  - [x] Implement peer rotation tests
+  - [x] Create network diversity tests
+  - [x] Add feature support verification tests
+  - [x] Create mock TCP stream for testing
+  - [x] Add test-specific constants
+  - [x] Implement comprehensive test logging
+  - [x] Fix time overflow issues in tests 

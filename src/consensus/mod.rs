@@ -9,6 +9,7 @@ pub mod randomx;
 pub mod sharding;
 pub mod threshold_sig;
 pub mod vrf;
+pub mod hybrid_optimizations;
 
 pub use difficulty::DifficultyAdjuster;
 pub use hybrid::HybridValidator;

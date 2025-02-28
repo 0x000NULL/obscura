@@ -379,64 +379,6 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
         false
     }
     
-    // Select a peer for outbound connection based on scoring
-    pub fn select_outbound_peer(&self) -> Option<SocketAddr> {
-        let mut candidates = Vec::new();
-        
-        // Get connected and banned peers first
-        let connected_peers: HashSet<SocketAddr> = if let Ok(connections) = self.active_connections.read() {
-            connections.keys().cloned().collect()
-        } else {
-            HashSet::new()
-        };
-        
-        let banned_peers: HashSet<SocketAddr> = if let Ok(banned) = self.banned_peers.read() {
-            banned.clone()
-        } else {
-            HashSet::new()
-        };
-        
-        // Then process scores
-        if let Ok(scores) = self.peer_scores.read() {
-            // Filter out already connected and banned peers
-            for (addr, score) in scores.iter() {
-                if !connected_peers.contains(addr) && !banned_peers.contains(addr) {
-                    candidates.push((*addr, score.calculate_score()));
-                }
-            }
-        }
-        
-        // Sort by score (higher is better)
-        candidates.sort_by(|(_, score1), (_, score2)| {
-            score2.partial_cmp(score1).unwrap_or(std::cmp::Ordering::Equal)
-        });
-        
-        // Select one of the top peers with some randomness
-        let top_n = std::cmp::min(3, candidates.len());
-        if top_n > 0 {
-            let mut rng = thread_rng();
-            let idx = rng.gen_range(0, top_n);
-            return Some(candidates[idx].0);
-        }
-        
-        None
-    }
-    
-    // Select a random subset of peers for privacy-preserving operations
-    pub fn select_random_peers(&self, count: usize) -> Vec<SocketAddr> {
-        let mut result = Vec::new();
-        
-        if let Ok(connections) = self.active_connections.read() {
-            let mut peers: Vec<SocketAddr> = connections.keys().cloned().collect();
-            let mut rng = thread_rng();
-            peers.shuffle(&mut rng);
-            
-            result = peers.into_iter().take(count).collect();
-        }
-        
-        result
-    }
-    
     // Check if it's time to rotate peers
     pub fn should_rotate_peers(&self) -> bool {
         // Get the current time
@@ -590,6 +532,121 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
         }
         // Default score for unknown peers
         50 // Middle score (0-100 range)
+    }
+
+    // Add method to get peer scores reference
+    pub fn get_peer_scores_ref(&self) -> Arc<RwLock<HashMap<SocketAddr, PeerScore>>> {
+        self.peer_scores.clone()
+    }
+
+    // Add method to check if connected to a peer
+    pub fn is_connected(&self, addr: &SocketAddr) -> bool {
+        if let Ok(connections) = self.active_connections.read() {
+            connections.contains_key(addr)
+        } else {
+            false
+        }
+    }
+
+    // Add method to get network diversity score
+    pub fn get_network_diversity_score(&self) -> f64 {
+        let mut score = 0.0;
+        
+        if let Ok(network_counts) = self.network_counts.read() {
+            let total_connections: usize = network_counts.values().sum();
+            if total_connections > 0 {
+                // Calculate entropy-based diversity score
+                for count in network_counts.values() {
+                    if *count > 0 {
+                        let p = *count as f64 / total_connections as f64;
+                        score -= p * p.log2();
+                    }
+                }
+                // Normalize to [0,1]
+                let max_entropy = (network_counts.len() as f64).log2();
+                if max_entropy > 0.0 {
+                    score /= max_entropy;
+                }
+            }
+        }
+        
+        score
+    }
+
+    // Select a peer for outbound connection based on scoring
+    pub fn select_outbound_peer(&self) -> Option<SocketAddr> {
+        let mut candidates = Vec::new();
+        
+        // Get connected and banned peers first
+        let connected_peers: HashSet<SocketAddr> = if let Ok(connections) = self.active_connections.read() {
+            connections.keys().cloned().collect()
+        } else {
+            HashSet::new()
+        };
+        
+        let banned_peers: HashSet<SocketAddr> = if let Ok(banned) = self.banned_peers.read() {
+            banned.clone()
+        } else {
+            HashSet::new()
+        };
+        
+        // Then process scores
+        if let Ok(scores) = self.peer_scores.read() {
+            // Filter out already connected and banned peers
+            for (addr, score) in scores.iter() {
+                if !connected_peers.contains(addr) && !banned_peers.contains(addr) {
+                    candidates.push((*addr, score.calculate_score()));
+                }
+            }
+        }
+        
+        // Sort by score (higher is better)
+        candidates.sort_by(|(_, score1), (_, score2)| {
+            score2.partial_cmp(score1).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        
+        // Select one of the top peers with some randomness
+        let top_n = std::cmp::min(3, candidates.len());
+        if top_n > 0 {
+            let mut rng = thread_rng();
+            let idx = rng.gen_range(0, top_n);
+            return Some(candidates[idx].0);
+        }
+        
+        None
+    }
+
+    // Select a random subset of peers for privacy-preserving operations
+    pub fn select_random_peers(&self, count: usize) -> Vec<SocketAddr> {
+        let mut result = Vec::new();
+        let mut rng = thread_rng();
+        
+        if let Ok(connections) = self.active_connections.read() {
+            let mut peers: Vec<_> = connections.keys().cloned().collect();
+            
+            // Try to select peers from different networks
+            let mut network_used = HashMap::new();
+            peers.shuffle(&mut rng);
+            
+            for peer in peers {
+                let network_type = match peer.ip() {
+                    IpAddr::V4(_) => NetworkType::IPv4,
+                    IpAddr::V6(_) => NetworkType::IPv6,
+                };
+                
+                let network_count = network_used.entry(network_type).or_insert(0);
+                if *network_count < self.max_connections_per_network {
+                    result.push(peer);
+                    *network_count += 1;
+                    
+                    if result.len() >= count {
+                        break;
+                    }
+                }
+            }
+        }
+        
+        result
     }
 }
 

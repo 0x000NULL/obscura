@@ -2,6 +2,90 @@
 
 All notable changes to the Obscura project will be documented in this file.
 
+## [0.4.1] - 2025-02-27
+
+### Network Layer Enhancements
+
+This update implements comprehensive connection pool management and enhances the network layer with improved privacy features and testing infrastructure.
+
+#### Connection Pool Implementation
+- Added comprehensive connection pool management
+  - Implemented connection diversity tracking and enforcement
+  - Created network type-based connection limits
+  - Added peer rotation mechanism for enhanced privacy
+  - Implemented ban system for malicious peers
+  - Added feature negotiation tracking
+  - Created test-specific connection pool settings
+
+#### Network Privacy Features
+- Enhanced network privacy mechanisms
+  - Added privacy-focused peer selection
+  - Implemented periodic peer rotation
+  - Created connection type management (inbound/outbound/feeler)
+  - Added network diversity enforcement
+  - Implemented connection obfuscation
+  - Added timing attack protection
+
+#### Connection Management
+- Improved connection handling
+  - Added connection limits per network type
+  - Implemented peer scoring system
+  - Created ban scoring mechanism
+  - Added peer prioritization
+  - Implemented connection diversity tracking
+  - Created network type classification
+
+#### Test Suite Improvements
+- Enhanced test infrastructure
+  - Fixed time overflow issue in peer rotation test
+  - Implemented test-specific rotation interval (100ms)
+  - Added safe time arithmetic for rotation checks
+  - Created mock TCP stream implementation
+  - Added comprehensive test logging
+  - Implemented test-specific constants
+
+#### Key Improvements
+- Better network privacy through connection diversity
+- Enhanced peer management with scoring system
+- Improved test reliability for time-sensitive operations
+- More predictable test behavior
+- Enhanced debugging capabilities
+- Better test maintainability
+
+#### Technical Details
+- Connection Pool Features:
+  - Network type tracking (IPv4, IPv6, Tor, I2P)
+  - Connection limits per network type
+  - Peer rotation intervals
+  - Ban system implementation
+  - Feature negotiation system
+  - Privacy-preserving peer selection
+
+- Test Framework Enhancements:
+  - Mock TCP stream implementation
+  - Test-specific constants
+  - Enhanced logging system
+  - Time-based test stability
+  - Test isolation improvements
+  - Reproducible test behavior
+
+#### Documentation
+- Added comprehensive connection pool documentation
+- Created network privacy feature documentation
+- Updated test framework documentation
+- Added debugging and logging documentation
+- Created implementation examples
+- Updated API documentation
+
+#### Key Improvements
+- Better network privacy through connection diversity
+- Enhanced peer management with scoring system
+- Improved test reliability for time-sensitive operations
+- More predictable test behavior
+- Enhanced debugging capabilities
+- Better test maintainability 
+
+
 ## [0.4.0] - 2024-02-27
 
 ### Added
@@ -665,23 +749,6 @@ All notable changes to the Obscura project will be documented in this file.
   - Created diversity metrics tests
   - Implemented security attestation tests
   - Added formal verification tests
-
-## [Unreleased]
-
-### Fixed
-- Fixed unused assignments in `src/consensus/difficulty.rs` by using the variables with `let _ = variable` pattern to avoid warnings
-- Fixed borrowing issues in `src/consensus/pos.rs` in the `rotate_shards` method by:
-  - Extracting necessary data from `self` before proceeding
-  - Cloning `active_validators` and `validators` to avoid borrowing `self` multiple times
-  - Creating a simplified version of `StakingContract` with only the necessary fields
-  - Updating the call to `shard_manager.rotate_shards` to pass the simplified contract
-- Added `#[derive(Clone)]` to the `ValidatorInfo` struct in `src/consensus/pos.rs` to enable cloning in the `rotate_shards` method
-- Fixed unused variable in `ShardManager::new()` by using `current_time` to initialize both `last_shard_rotation` and `last_rotation`
-
-### Improvements
-- Code now compiles successfully with `cargo build`
-- Fixed critical borrowing issues that were preventing compilation
-- Improved code structure in the `rotate_shards` method to avoid borrowing conflicts
 
 ### Known Issues
 - Multiple unused constants, fields, and methods throughout the codebase (72 Clippy warnings)
