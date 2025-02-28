@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use crate::consensus::pos_old::{
     Treasury, Governance, CrossChainStake, InsurancePool, ExitQueue, BftConsensus,
-    Stake, ValidatorInfo, ValidatorUpdate, LiquidStakingPool
+    Stake, ValidatorUpdate, LiquidStakingPool
 };
 use crate::consensus::sharding::{Shard, CrossShardCommittee, ShardManager};
 
@@ -50,32 +50,26 @@ pub struct MultiAssetStake {
 
 // Delegation marketplace structures
 /// Represents a listing in the delegation marketplace
+#[derive(Clone, Debug)]
 pub struct MarketplaceListing {
     /// Unique identifier for the listing
     pub id: String,
     /// Public key of the validator offering delegation
-    pub validator: Vec<u8>,
+    pub validator_id: String,
     /// Amount of delegation available
-    pub available_delegation: u64,
+    pub amount: u64,
     /// Minimum delegation amount accepted
     pub min_delegation: u64,
     /// Commission rate charged by the validator
     pub commission_rate: f64,
-    /// Duration for which delegations will be locked
-    pub lock_period: u64,
-    /// Timestamp when the listing was created
-    pub creation_time: u64,
-    /// Timestamp when the listing expires
-    pub expiration_time: u64,
     /// Current status of the listing
     pub status: MarketplaceListingStatus,
-    /// Terms and conditions for the delegation
-    pub terms: String,
-    /// Historical performance data for the validator
-    pub performance_history: Vec<(u64, f64)>,  // (timestamp, performance)
+    /// Timestamp when the listing was created
+    pub created_at: u64,
 }
 
 /// Status of a marketplace listing
+#[derive(Clone, Debug)]
 pub enum MarketplaceListingStatus {
     /// Listing is active and accepting delegations
     Active,
@@ -88,26 +82,24 @@ pub enum MarketplaceListingStatus {
 }
 
 /// Represents an offer made by a delegator in response to a listing
+#[derive(Clone, Debug)]
 pub struct MarketplaceOffer {
     /// Unique identifier for the offer
     pub id: String,
     /// ID of the listing this offer is for
     pub listing_id: String,
     /// Public key of the delegator making the offer
-    pub delegator: Vec<u8>,
+    pub delegator_id: String,
     /// Amount being offered for delegation
     pub amount: u64,
     /// Timestamp when the offer was created
-    pub creation_time: u64,
-    /// Timestamp when the offer expires
-    pub expiration_time: u64,
+    pub created_at: u64,
     /// Current status of the offer
     pub status: MarketplaceOfferStatus,
-    /// Whether the delegator has accepted the terms
-    pub terms_accepted: bool,
 }
 
 /// Status of a marketplace offer
+#[derive(Clone, Debug)]
 pub enum MarketplaceOfferStatus {
     /// Offer is pending validator approval
     Pending,
@@ -117,139 +109,102 @@ pub enum MarketplaceOfferStatus {
     Rejected,
     /// Offer has expired
     Expired,
-    /// Offer is under dispute
-    Disputed,
-    /// Offer has been completed successfully
-    Completed,
 }
 
 /// Represents a completed transaction in the delegation marketplace
+#[derive(Clone, Debug)]
 pub struct MarketplaceTransaction {
     /// Unique identifier for the transaction
     pub id: String,
-    /// ID of the listing this transaction is for
-    pub listing_id: String,
     /// ID of the offer that led to this transaction
     pub offer_id: String,
-    /// Public key of the validator
-    pub validator: Vec<u8>,
-    /// Public key of the delegator
-    pub delegator: Vec<u8>,
-    /// Amount delegated
-    pub amount: u64,
-    /// Commission rate agreed upon
-    pub commission_rate: f64,
-    /// Duration for which the delegation is locked
-    pub lock_period: u64,
-    /// Timestamp when the transaction was created
-    pub creation_time: u64,
-    /// Timestamp when the transaction was completed
-    pub completion_time: Option<u64>,
     /// Current status of the transaction
     pub status: MarketplaceTransactionStatus,
-    /// Amount held in escrow for dispute resolution
-    pub escrow_amount: u64,
-    /// Timestamp when the escrow will be released
-    pub escrow_release_time: Option<u64>,
+    /// Timestamp when the transaction was completed
+    pub completed_at: u64,
 }
 
 /// Status of a marketplace transaction
+#[derive(Clone, Debug)]
 pub enum MarketplaceTransactionStatus {
-    /// Transaction is active
-    Active,
     /// Transaction has been completed
     Completed,
+    /// Transaction failed
+    Failed,
     /// Transaction is under dispute
     Disputed,
-    /// Transaction was refunded
-    Refunded,
 }
 
 /// Represents a dispute in the delegation marketplace
+#[derive(Clone, Debug)]
 pub struct MarketplaceDispute {
     /// Unique identifier for the dispute
     pub id: String,
     /// ID of the transaction under dispute
     pub transaction_id: String,
-    /// Public key of the party initiating the dispute
-    pub initiator: Vec<u8>,
     /// Reason for the dispute
     pub reason: String,
-    /// Evidence supporting the dispute claim
-    pub evidence: Vec<u8>,
-    /// Timestamp when the dispute was created
-    pub creation_time: u64,
-    /// Timestamp when the dispute was resolved
-    pub resolution_time: Option<u64>,
     /// Current status of the dispute
     pub status: MarketplaceDisputeStatus,
-    /// Resolution details if the dispute has been resolved
-    pub resolution: Option<String>,
+    /// Timestamp when the dispute was created
+    pub created_at: u64,
 }
 
 /// Status of a marketplace dispute
+#[derive(Clone, Debug)]
 pub enum MarketplaceDisputeStatus {
     /// Dispute is open and awaiting review
     Open,
-    /// Dispute is being reviewed
-    UnderReview,
     /// Dispute has been resolved
     Resolved,
-    /// Dispute was dismissed
-    Dismissed,
+    /// Dispute was rejected
+    Rejected,
 }
 
 // Validator reputation oracle structures
 /// Manages the reputation scores of validators
+#[derive(Clone, Debug)]
 pub struct ReputationOracle {
-    /// Committee members responsible for reputation assessments
-    pub committee: Vec<Vec<u8>>,
-    /// Timestamp of the last committee rotation
-    pub last_rotation: u64,
-    /// Current reputation scores for validators
-    pub reputation_scores: HashMap<Vec<u8>, ReputationScore>,
-    /// Pending reputation assessments
-    pub pending_assessments: Vec<ReputationAssessment>,
-    /// External data sources for reputation information
-    pub external_data_sources: Vec<ExternalDataSource>,
-    /// Historical reputation scores
-    pub reputation_history: HashMap<Vec<u8>, VecDeque<(u64, f64)>>,
+    /// Unique identifier for the reputation oracle
+    pub id: String,
+    /// Name of the reputation oracle
+    pub name: String,
+    /// Weight of this reputation oracle in the overall reputation calculation
+    pub weight: f64,
+    /// Timestamp of the last update
+    pub last_update: u64,
 }
 
 /// Represents a validator's reputation score
+#[derive(Clone, Debug, Default)]
 pub struct ReputationScore {
-    /// Public key of the validator
-    pub validator: Vec<u8>,
-    /// Overall reputation score (0.0-1.0)
-    pub overall_score: f64,
-    /// Score based on validator uptime (0.0-1.0)
-    pub uptime_score: f64,
-    /// Score based on validator performance (0.0-1.0)
-    pub performance_score: f64,
-    /// Score based on community feedback (0.0-1.0)
-    pub community_score: f64,
-    /// Score based on security practices (0.0-1.0)
-    pub security_score: f64,
-    /// Timestamp of the last score update
+    /// Total reputation score (0.0-1.0)
+    pub total_score: f64,
+    /// Number of updates
+    pub update_count: u64,
+    /// Timestamp of the last update
     pub last_update: u64,
-    /// Confidence level in the score (0.0-1.0)
-    pub confidence: f64,
+}
+
+impl ReputationScore {
+    pub fn update_with_assessment(&mut self, assessment: &ReputationAssessment) {
+        self.total_score = (self.total_score * self.update_count as f64 + assessment.score) / (self.update_count + 1) as f64;
+        self.update_count += 1;
+        self.last_update = assessment.timestamp;
+    }
 }
 
 /// Represents an assessment of a validator's reputation
+#[derive(Clone, Debug)]
 pub struct ReputationAssessment {
     /// Public key of the validator being assessed
-    pub validator: Vec<u8>,
-    /// Public key of the committee member making the assessment
-    pub assessor: Vec<u8>,
-    /// Category-specific scores
-    pub scores: HashMap<String, f64>,
-    /// Evidence supporting the assessment
-    pub evidence: HashMap<String, Vec<u8>>,
+    pub validator_id: String,
+    /// Score based on validator performance (0.0-1.0)
+    pub score: f64,
     /// Timestamp of the assessment
     pub timestamp: u64,
-    /// Signature of the assessor
-    pub signature: Vec<u8>,
+    /// ID of the reputation oracle making the assessment
+    pub oracle_id: String,
 }
 
 /// Represents an external data source for reputation information
@@ -274,108 +229,85 @@ pub struct ExternalDataSource {
 
 // Stake compounding automation structures
 /// Configuration for automatic compounding of staking rewards
+#[derive(Clone, Debug)]
 pub struct CompoundingConfig {
     /// Public key of the staker
-    pub staker: Vec<u8>,
-    /// Whether auto-compounding is enabled
-    pub enabled: bool,
+    pub validator_id: String,
+    /// Minimum reward amount to trigger compounding
+    pub threshold_amount: u64,
     /// Frequency of compounding operations in seconds
     pub frequency: u64,
-    /// Minimum reward amount to trigger compounding
-    pub threshold: u64,
-    /// Maximum percentage of stake to compound
-    pub max_percentage: f64,
-    /// Timestamp of the last compounding operation
-    pub last_compound_time: u64,
-    /// Whether to auto-delegate compounded stake
-    pub auto_delegation: bool,
-    /// Preferred validator for auto-delegation
-    pub preferred_validator: Option<Vec<u8>>,
+    /// Whether auto-compounding is enabled
+    pub enabled: bool,
 }
 
 /// Represents a compounding operation
+#[derive(Clone, Debug)]
 pub struct CompoundingOperation {
     /// Unique identifier for the operation
     pub id: String,
     /// Public key of the staker
-    pub staker: Vec<u8>,
+    pub validator_id: String,
     /// Amount of rewards before compounding
-    pub reward_amount: u64,
-    /// Amount actually compounded
-    pub compounded_amount: u64,
-    /// Fee charged for the compounding service
-    pub fee_amount: u64,
+    pub amount: u64,
     /// Timestamp of the operation
     pub timestamp: u64,
-    /// Status of the operation
-    pub status: CompoundingStatus,
-    /// Hash of the transaction that executed the compounding
-    pub transaction_hash: Option<Vec<u8>>,
 }
 
 /// Status of a compounding operation
-pub enum CompoundingStatus {
-    /// Operation is pending execution
-    Pending,
-    /// Operation has been completed
-    Completed,
-    /// Operation failed
-    Failed,
+#[derive(Clone, Debug)]
+pub struct CompoundingStatus {
+    /// Unique identifier for the operation
+    pub operation_id: String,
+    /// Whether the operation succeeded
+    pub success: bool,
+    /// Message associated with the operation
+    pub message: String,
+    /// Timestamp of the operation
+    pub timestamp: u64,
 }
 
 // Validator set diversity metrics structures
 /// Metrics for measuring the diversity of the validator set
+#[derive(Clone, Debug, Default)]
 pub struct DiversityMetrics {
     /// Timestamp when the metrics were calculated
-    pub timestamp: u64,
+    pub last_update: u64,
     /// Score for entity diversity (0.0-1.0)
-    pub entity_diversity_score: f64,
+    pub entity_diversity: f64,
     /// Score for geographic diversity (0.0-1.0)
-    pub geographic_diversity_score: f64,
-    /// Score for stake distribution (0.0-1.0)
-    pub stake_distribution_score: f64,
+    pub geographic_diversity: f64,
     /// Score for client implementation diversity (0.0-1.0)
-    pub client_diversity_score: f64,
-    /// Overall diversity score (0.0-1.0)
-    pub overall_diversity_score: f64,
-    /// Number of validators in the set
-    pub validator_count: usize,
-    /// Total active stake
-    pub active_stake: u64,
-    /// Recommendations for improving diversity
-    pub recommendations: Vec<String>,
+    pub client_diversity: f64,
 }
 
 /// Information about an entity operating validators
+#[derive(Clone, Debug)]
 pub struct EntityInfo {
     /// Unique identifier for the entity
     pub id: String,
     /// Name of the entity
     pub name: String,
-    /// Set of validators operated by this entity
-    pub validators: HashSet<Vec<u8>>,
+    /// Number of validators operated by this entity
+    pub validator_count: u64,
     /// Total stake controlled by this entity
     pub total_stake: u64,
-    /// Percentage of total stake controlled by this entity
-    pub stake_percentage: f64,
 }
 
 /// Information about a client implementation used by validators
+#[derive(Clone, Debug)]
 pub struct ClientImplementation {
-    /// Unique identifier for the client implementation
-    pub id: String,
     /// Name of the client implementation
     pub name: String,
     /// Version of the client implementation
     pub version: String,
-    /// Set of validators using this client implementation
-    pub validators: HashSet<Vec<u8>>,
-    /// Percentage of total stake using this client implementation
-    pub stake_percentage: f64,
+    /// Number of validators using this client implementation
+    pub validator_count: u64,
 }
 
 // Geographic distribution structures
 /// Represents a geographic region for validator distribution
+#[derive(Clone, Debug)]
 pub struct GeoRegion {
     /// Unique identifier for the region
     pub id: usize,
@@ -394,129 +326,96 @@ pub struct GeoRegion {
 }
 
 /// Report on the geographic distribution of validators
+#[derive(Clone, Debug)]
 pub struct GeoDistributionReport {
     /// Timestamp when the report was generated
     pub timestamp: u64,
-    /// Information about each region
-    pub regions: Vec<GeoRegion>,
-    /// Overall distribution score (0.0-1.0)
-    pub distribution_score: f64,
-    /// Whether the minimum number of regions requirement is met
-    pub min_regions_met: bool,
-    /// Whether the distribution is eligible for bonuses
-    pub bonus_eligible: bool,
-    /// Recommendations for improving distribution
-    pub recommendations: Vec<String>,
+    /// Metrics for measuring the diversity of the validator set
+    pub metrics: DiversityMetrics,
+    /// Number of validators in the set
+    pub validator_count: u64,
+    /// Number of entities in the set
+    pub entity_count: u64,
 }
 
 /// Geographic information for a validator
+#[derive(Clone, Debug)]
 pub struct ValidatorGeoInfo {
-    /// Public key of the validator
-    pub validator: Vec<u8>,
-    /// ID of the region where the validator is located
-    pub region_id: usize,
     /// Country where the validator is located
-    pub country: String,
+    pub country_code: String,
+    /// Region where the validator is located
+    pub region: String,
     /// Latitude coordinate
     pub latitude: f64,
     /// Longitude coordinate
     pub longitude: f64,
-    /// Timestamp of the last update
-    pub last_update: u64,
-    /// Whether the location has been verified
-    pub verified: bool,
 }
 
 // Hardware security structures
 /// Information about a validator's hardware security setup
+#[derive(Clone, Debug)]
 pub struct HardwareSecurityInfo {
-    /// Public key of the validator
-    pub validator: Vec<u8>,
     /// Security level (0-3)
-    pub security_level: u8,
-    /// Description of the security setup
-    pub description: String,
-    /// Method used for attestation
-    pub attestation_method: String,
+    pub security_level: u32,
+    /// TPM version
+    pub tpm_version: String,
+    /// Whether the validator is in a secure enclave
+    pub secure_enclave: bool,
     /// Timestamp of the last attestation
     pub last_attestation: u64,
-    /// Timestamp when the next attestation is due
-    pub next_attestation_due: u64,
-    /// History of attestations
-    pub attestation_history: Vec<(u64, bool)>,  // (timestamp, passed)
-    /// Bonus percentage for this security level
-    pub bonus_percentage: f64,
 }
 
 /// Represents an attestation of hardware security
+#[derive(Clone, Debug)]
 pub struct SecurityAttestation {
+    /// Unique identifier for the attestation
+    pub id: String,
     /// Public key of the validator
-    pub validator: Vec<u8>,
+    pub validator_id: String,
+    /// Attestation data
+    pub attestation_data: String,
     /// Timestamp of the attestation
     pub timestamp: u64,
-    /// Security level attested
-    pub security_level: u8,
-    /// Evidence supporting the attestation
-    pub evidence: Vec<u8>,
-    /// Entity that performed the audit
-    pub auditor: Option<String>,
-    /// Whether the attestation passed
-    pub passed: bool,
-    /// Additional notes about the attestation
-    pub notes: String,
 }
 
 // Formal verification structures
 /// Represents a formal verification of a contract
+#[derive(Clone, Debug)]
 pub struct FormalVerification {
     /// ID of the contract being verified
     pub contract_id: String,
-    /// Method used for verification
-    pub verification_method: String,
-    /// Entity that performed the verification
-    pub verifier: String,
+    /// Proof system used for verification
+    pub proof_system: String,
+    /// Result of the verification
+    pub verification_result: bool,
     /// Timestamp of the verification
     pub timestamp: u64,
-    /// Percentage of code covered by the verification
-    pub coverage_percentage: f64,
-    /// Whether the verification passed
-    pub passed: bool,
-    /// Hash of the verification report
-    pub report_hash: Vec<u8>,
-    /// URL where the report can be accessed
-    pub report_url: String,
-    /// Timestamp when the verification expires
-    pub expiration: u64,
 }
 
 /// Represents a contract that has undergone formal verification
+#[derive(Clone, Debug)]
 pub struct VerifiedContract {
     /// Unique identifier for the contract
     pub id: String,
-    /// Name of the contract
-    pub name: String,
-    /// Version of the contract
-    pub version: String,
     /// Hash of the contract code
-    pub hash: Vec<u8>,
-    /// Current verification status
-    pub verification_status: VerificationStatus,
-    /// List of verifications performed on this contract
-    pub verifications: Vec<FormalVerification>,
-    /// Whether the contract is eligible for verification bonuses
-    pub bonus_eligible: bool,
+    pub code_hash: String,
+    /// Whether the contract is verified
+    pub is_verified: bool,
+    /// Timestamp of the verification
+    pub verification_time: u64,
 }
 
 /// Status of a contract's verification
-pub enum VerificationStatus {
-    /// Contract has not been verified
-    Unverified,
-    /// Contract has been partially verified
-    PartiallyVerified,
-    /// Contract has been fully verified
-    FullyVerified,
-    /// Verification has expired
-    VerificationExpired,
+#[derive(Clone, Debug)]
+pub struct VerificationStatus {
+    /// ID of the contract
+    pub contract_id: String,
+    /// Verification status
+    pub status: bool,
+    /// Message associated with the verification
+    pub message: String,
+    /// Timestamp of the verification
+    pub timestamp: u64,
 }
 
 // Quantum resistance structures
@@ -568,12 +467,10 @@ pub struct HybridSignature {
 impl ReputationOracle {
     pub fn new() -> Self {
         ReputationOracle {
-            committee: Vec::new(),
-            last_rotation: 0,
-            reputation_scores: HashMap::new(),
-            pending_assessments: Vec::new(),
-            external_data_sources: Vec::new(),
-            reputation_history: HashMap::new(),
+            id: String::new(),
+            name: String::new(),
+            weight: 0.0,
+            last_update: 0,
         }
     }
 }
@@ -581,15 +478,10 @@ impl ReputationOracle {
 impl DiversityMetrics {
     pub fn new() -> Self {
         DiversityMetrics {
-            timestamp: 0,
-            entity_diversity_score: 0.0,
-            geographic_diversity_score: 0.0,
-            stake_distribution_score: 0.0,
-            client_diversity_score: 0.0,
-            overall_diversity_score: 0.0,
-            validator_count: 0,
-            active_stake: 0,
-            recommendations: Vec::new(),
+            last_update: 0,
+            entity_diversity: 0.0,
+            geographic_diversity: 0.0,
+            client_diversity: 0.0,
         }
     }
 }
@@ -642,4 +534,14 @@ pub struct StakingContract {
     pub multi_asset_stakes: HashMap<Vec<u8>, Vec<MultiAssetStake>>,
     pub asset_exchange_rates: HashMap<String, f64>,
     pub last_exchange_rate_update: u64,
+}
+
+#[derive(Clone, Debug)]
+pub struct ValidatorInfo {
+    pub id: String,
+    pub stake: u64,
+    pub commission: f64,
+    pub uptime: f64,
+    pub performance: f64,
+    pub last_update: u64,
 } 
