@@ -36,6 +36,17 @@ jobs:
           toolchain: stable
           override: true
 
+      # Ensure build.rs exists and is properly configured
+      - name: Ensure build.rs exists
+        run: |
+          if [ ! -f "build.rs" ]; then
+            echo "fn main() {
+                println!(\"cargo:rustc-link-lib=stdc++\");
+                println!(\"cargo:rustc-link-lib=randomx\");
+                println!(\"cargo:rustc-link-search=native=/usr/local/lib\");
+            }" > build.rs
+          fi
+
       # Add cargo caching to speed up builds
       - uses: actions/cache@v3
         with:
@@ -52,6 +63,8 @@ jobs:
           command: test
         id: test
         continue-on-error: true  # We'll check the outcome in the next step
+        env:
+          RUSTFLAGS: "-L $(pwd)/RandomX/build -L /usr/local/lib -l randomx -l stdc++ -Clink-arg=-lstdc++"
       
       # Stop the workflow if tests failed (but allow ignored tests)
       - name: Check test results
@@ -188,7 +201,7 @@ jobs:
           git clone https://github.com/tevador/RandomX.git
           cd RandomX
           mkdir build && cd build
-          cmake ..
+          cmake .. -DCMAKE_CXX_FLAGS="-fPIC"
           make -j
           sudo make install
           sudo ldconfig
