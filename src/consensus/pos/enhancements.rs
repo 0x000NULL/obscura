@@ -87,7 +87,15 @@ impl ValidatorReputationManager {
     }
 
     pub fn update_reputation(&mut self, validator_id: String, assessment: ReputationAssessment) {
-        let score = self.reputation_scores.entry(validator_id).or_default();
+        let score = self.reputation_scores.entry(validator_id).or_insert_with(|| {
+            // For new validators, initialize with the assessment's score directly
+            let mut initial_score = ReputationScore::default();
+            initial_score.total_score = assessment.score;
+            initial_score.update_count = 0; // Will be incremented to 1 in update_with_assessment
+            initial_score.last_update = assessment.timestamp;
+            initial_score
+        });
+        
         score.update_with_assessment(&assessment);
         self.assessment_history.push_back(assessment);
         

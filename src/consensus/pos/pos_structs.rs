@@ -188,7 +188,13 @@ pub struct ReputationScore {
 
 impl ReputationScore {
     pub fn update_with_assessment(&mut self, assessment: &ReputationAssessment) {
-        self.total_score = (self.total_score * self.update_count as f64 + assessment.score) / (self.update_count + 1) as f64;
+        // If this is the first update (after initialization), just use the assessment score
+        // Otherwise, calculate a weighted average
+        if self.update_count == 0 {
+            self.total_score = assessment.score;
+        } else {
+            self.total_score = (self.total_score * self.update_count as f64 + assessment.score) / (self.update_count + 1) as f64;
+        }
         self.update_count += 1;
         self.last_update = assessment.timestamp;
     }

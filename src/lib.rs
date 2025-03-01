@@ -3,6 +3,7 @@ pub mod consensus;
 pub mod crypto;
 pub mod networking;
 pub mod wallet;
+pub mod utils;
 
 // Re-export commonly used items
 pub use blockchain::{Block, BlockHeader, Transaction};
