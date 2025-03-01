@@ -88,11 +88,7 @@ mod fee_adjustment_tests {
                 public_key_script: vec![],
             }],
             lock_time: 0,
-            fee_adjustments: Some(FeeAdjustment {
-                adjustment_factor: 1.5,
-                lock_time: current_time - 100, // Started 100 seconds ago
-                expiry_time: current_time + 100, // Expires in 100 seconds
-            }),
+            fee_adjustments: Some(vec![current_time - 100, current_time + 100]),
             privacy_flags: 0,
             obfuscated_id: None,
             ephemeral_pubkey: None,
@@ -114,11 +110,7 @@ mod fee_adjustment_tests {
                 public_key_script: vec![],
             }],
             lock_time: 0,
-            fee_adjustments: Some(FeeAdjustment {
-                adjustment_factor: 1.5,
-                lock_time: current_time + 100, // Starts in 100 seconds
-                expiry_time: current_time + 200, // Expires in 200 seconds
-            }),
+            fee_adjustments: Some(vec![current_time + 100, current_time + 200]),
             privacy_flags: 0,
             obfuscated_id: None,
             ephemeral_pubkey: None,
@@ -140,11 +132,7 @@ mod fee_adjustment_tests {
                 public_key_script: vec![],
             }],
             lock_time: 0,
-            fee_adjustments: Some(FeeAdjustment {
-                adjustment_factor: 1.5,
-                lock_time: current_time - 200, // Started 200 seconds ago
-                expiry_time: current_time - 100, // Expired 100 seconds ago
-            }),
+            fee_adjustments: Some(vec![current_time - 200, current_time - 100]),
             privacy_flags: 0,
             obfuscated_id: None,
             ephemeral_pubkey: None,

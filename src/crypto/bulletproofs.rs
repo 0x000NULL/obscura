@@ -1,6 +1,7 @@
 use rand::Rng;
 use sha2::{Sha256, Digest};
 use rand::rngs::OsRng;
+use curve25519_dalek::scalar::Scalar;
 
 // Range Proof structure for proving a value is within a range without revealing it
 #[derive(Debug, Clone)]

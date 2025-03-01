@@ -1,6 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 use sha2::Digest;
-use crate::blockchain::{Block, Transaction, TransactionOutput, OutPoint, TransactionInput};
+use crate::blockchain::{Block, Transaction};
 use crate::blockchain::block_structure::BlockStructureManager;
 
 #[test]
@@ -39,7 +39,7 @@ fn test_privacy_merkle_root() {
         let tx = Transaction {
             inputs: Vec::new(),
             outputs: Vec::new(),
-            lock_time: i as u64,
+            lock_time: i as u32,
             fee_adjustments: None,
             privacy_flags: 0,
             obfuscated_id: None,
@@ -92,7 +92,7 @@ fn test_merkle_proof_verification() {
         let tx = Transaction {
             inputs: Vec::new(),
             outputs: Vec::new(),
-            lock_time: i as u64,
+            lock_time: i as u32,
             fee_adjustments: None,
             privacy_flags: 0,
             obfuscated_id: None,

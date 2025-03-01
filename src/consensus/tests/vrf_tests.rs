@@ -1,7 +1,6 @@
-use crate::consensus::vrf::{Vrf, VrfProof};
-use ed25519_dalek::{Keypair, PublicKey, Signature, Signer};
+use crate::consensus::vrf::{Vrf};
+use ed25519_dalek::{Keypair};
 use rand::{rngs::OsRng, RngCore};
-use sha2::{Digest, Sha256};
 
 #[test]
 fn test_vrf_basic_functionality() {
@@ -112,8 +111,8 @@ fn test_vrf_validator_selection_simulation() {
     let mut validators = Vec::new();
     for i in 0..5 {
         let keypair = Keypair::generate(&mut csprng);
-        let stake = 1000 + (i * 500); // Different stake amounts
-        validators.push((keypair, stake));
+        let _stake = 1000 + (i * 500); // Different stake amounts
+        validators.push((keypair, _stake));
     }
 
     // Create a random beacon

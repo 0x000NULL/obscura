@@ -11,32 +11,10 @@ pub mod threshold_sig;
 pub mod vrf;
 pub mod hybrid_optimizations;
 
-pub use difficulty::DifficultyAdjuster;
-pub use hybrid::HybridValidator;
-pub use mining_reward::{
-    calculate_block_reward, calculate_block_reward_by_time, calculate_min_fee_rate,
-    calculate_single_transaction_fee, calculate_transaction_fee_rate, calculate_transaction_fees,
-    calculate_transaction_fees_with_utxo, can_replace_by_fee, create_block_with_size_limit,
-    create_mining_pool_coinbase, create_mining_pool_coinbase_with_utxo, estimate_transaction_size,
-    is_coinbase_mature, prioritize_transactions, process_rbf_in_mempool, validate_block_size,
-    validate_coinbase_maturity, validate_mining_pool_coinbase, PoolParticipant, COINBASE_MATURITY,
-    GENESIS_TIMESTAMP, HALVING_INTERVAL, INITIAL_BLOCK_REWARD, MAX_FEE_RATE, MIN_FEE_RATE,
-    MIN_RBF_FEE_INCREASE, TARGET_BLOCK_SIZE,
-};
-pub use pos_old::{
-    ProofOfStake, StakeProof, StakingContract, MINIMUM_STAKE, MINIMUM_STAKE_AGE, STAKE_LOCK_PERIOD,
-    WITHDRAWAL_DELAY,
-};
+pub use pos_old::StakeProof;
 pub use randomx::{verify_difficulty, RandomXContext, RandomXError};
-pub use sharding::{CrossShardCommittee, Shard, ShardManager};
-pub use threshold_sig::{ThresholdError, ThresholdSignature, ValidatorAggregation};
-pub use vrf::{Vrf, VrfProof};
 
 // Import blockchain functions that are referenced in the consensus module
-pub use crate::blockchain::{
-    create_coinbase_transaction, validate_coinbase_transaction, Block, BlockHeader, Transaction,
-    TransactionOutput,
-};
 
 pub trait ConsensusEngine {
     fn validate_block(&self, block: &crate::blockchain::Block) -> bool;
@@ -149,8 +127,6 @@ pub fn calculate_block_hash(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     mod mining_reward_tests;
     mod pos_tests;
     mod randomx_tests;

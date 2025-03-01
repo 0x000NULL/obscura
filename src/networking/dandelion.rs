@@ -3,7 +3,6 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::{SocketAddr, IpAddr};
 use rand::{Rng, thread_rng, seq::SliceRandom, distributions::{Distribution, Bernoulli}};
 use rand_chacha::{ChaCha20Rng, rand_core::{SeedableRng, RngCore}};
-use rand_core::OsRng;
 
 // Constants for Dandelion protocol
 pub const STEM_PHASE_MIN_TIMEOUT: Duration = Duration::from_secs(10);  // Minimum time in stem phase
@@ -384,39 +383,74 @@ impl DandelionManager {
     
     /// Calculate stem paths for known peers
     /// This builds the random graph for transaction routing
-    pub fn calculate_stem_paths(&mut self, known_peers: &[SocketAddr]) {
+    pub fn calculate_stem_paths(&mut self, known_peers: &[SocketAddr], force: bool) {
+        println!("DEBUG: calculate_stem_paths called with {} peers", known_peers.len());
+        for (i, peer) in known_peers.iter().enumerate() {
+            println!("DEBUG: known_peer[{}] = {}", i, peer);
+        }
+
         let now = Instant::now();
         
         // Don't recalculate paths too frequently to avoid timing analysis
-        if now.duration_since(self.last_path_recalculation) < STEM_PATH_RECALCULATION_INTERVAL {
+        // But allow forcing recalculation for testing
+        if !force && now.duration_since(self.last_path_recalculation) < STEM_PATH_RECALCULATION_INTERVAL {
+            println!("DEBUG: Skipping recalculation due to time interval");
             return;
         }
         
+        println!("DEBUG: Clearing existing paths");
         // Clear existing paths
         self.stem_successors.clear();
         
         // Need at least 2 peers to build paths
         if known_peers.len() < 2 {
+            println!("DEBUG: Not enough peers (need at least 2), got {}", known_peers.len());
             self.last_path_recalculation = now;
             return;
         }
         
+        println!("DEBUG: Building paths for {} peers", known_peers.len());
+        
+        // Create a randomized list of peers
         let mut rng = thread_rng();
         
-        // Build random paths such that each node has exactly one successor
-        // This forms a random graph consisting of cycles and paths
-        let mut peers = known_peers.to_vec();
-        peers.shuffle(&mut rng); // Randomize peer order
-        
-        for i in 0..peers.len() {
-            // Assign a successor that's not the node itself
-            let successor_index = (i + 1 + rng.gen_range(0, peers.len())) % peers.len();
-            self.stem_successors.insert(peers[i], peers[successor_index]);
+        // For each peer, assign a successor that is not itself
+        for &peer in known_peers {
+            // Create a list of potential successors (all peers except the current one)
+            let possible_successors: Vec<&SocketAddr> = known_peers
+                .iter()
+                .filter(|&p| p != &peer)
+                .collect();
+            
+            if !possible_successors.is_empty() {
+                // Randomly select a successor for this peer
+                let successor = possible_successors.choose(&mut rng).unwrap();
+                println!("DEBUG: Assigning successor {} to peer {}", successor, peer);
+                self.stem_successors.insert(peer, **successor);
+            }
         }
         
-        // Also update our own successor
-        self.select_stem_successor();
+        // Verify all peers have successors assigned
+        println!("DEBUG: Verifying all peers have successors assigned");
+        for &peer in known_peers {
+            if !self.stem_successors.contains_key(&peer) {
+                println!("DEBUG: Peer {} has no successor, assigning one", peer);
+                // This should be rare but just in case - assign a fallback successor
+                let fallback_successors: Vec<&SocketAddr> = known_peers
+                    .iter()
+                    .filter(|&p| p != &peer)
+                    .collect();
+                
+                if !fallback_successors.is_empty() {
+                    let fallback = fallback_successors.choose(&mut rng).unwrap();
+                    println!("DEBUG: Assigned fallback successor {} to peer {}", fallback, peer);
+                    self.stem_successors.insert(peer, **fallback);
+                }
+            }
+        }
         
+        // Update our own successor
+        self.select_stem_successor();
         self.last_path_recalculation = now;
     }
     
@@ -1903,7 +1937,7 @@ mod tests {
         let tx_hash = [0u8; 32];
         
         // Force stem phase for testing
-        let original_stem_prob = STEM_PROBABILITY;
+        let _original_stem_prob = STEM_PROBABILITY;
         // Hack to make this test reliable since we can't modify the constant
         let state = if thread_rng().gen_bool(0.99) {
             manager.add_transaction(tx_hash, None)
@@ -1939,7 +1973,8 @@ mod tests {
             "127.0.0.1:8337".parse().unwrap(),
         ];
         
-        manager.calculate_stem_paths(&peers);
+        // Force recalculation for testing
+        manager.calculate_stem_paths(&peers, true);
         
         // Each peer should have a successor
         for peer in &peers {

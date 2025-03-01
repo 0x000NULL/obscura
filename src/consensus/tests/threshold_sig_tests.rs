@@ -1,7 +1,7 @@
 use crate::consensus::threshold_sig::{
     ThresholdError, ThresholdSchemeShamir, ThresholdSignature, ValidatorAggregation,
 };
-use ed25519_dalek::{Keypair, PublicKey, Signature, Signer};
+use ed25519_dalek::{Keypair, Signer};
 use rand::rngs::OsRng;
 use std::collections::HashMap;
 

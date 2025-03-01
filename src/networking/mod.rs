@@ -9,7 +9,6 @@ use rand::RngCore;
 use rand::seq::SliceRandom;
 use rand::Rng;
 use bincode;
-use serde::{Serialize, Deserialize};
 use std::time::{Duration, Instant};
 use std::collections::{HashSet, HashMap};
 use rand_distr::{Bernoulli, Distribution};
@@ -53,7 +52,6 @@ pub mod peer_manager;
 // Re-export key types from p2p module
 pub use p2p::{
     HandshakeProtocol, 
-    HandshakeMessage, 
     PeerConnection, 
     HandshakeError,
     FeatureFlag,
@@ -77,7 +75,7 @@ pub use connection_pool::{
 };
 
 // Re-export key types from discovery module
-pub use discovery::{DiscoveryService, NodeId};
+pub use discovery::DiscoveryService;
 
 // Re-export key types from dandelion module
 pub use dandelion::{PropagationMetadata};
@@ -680,20 +678,17 @@ impl Node {
         // Build relay path for multi-hop if needed
         let relay_path = if let PropagationState::MultiHopStem(_) = state {
             // We need to build a path with network diversity
-            let mut path = Vec::new();
             
             // Try to get a pre-built multi-hop path
             let all_peers = self.get_all_connections();
             if let Some(peers) = dandelion_manager.get_multi_hop_path(&tx_hash, &all_peers) {
-                path = peers;
+                peers
             } else {
                 // Fall back to a short random path
                 let mut available_peers = all_peers.clone();
                 available_peers.shuffle(&mut rng);
-                path = available_peers.into_iter().take(MIN_ROUTING_PATH_LENGTH).collect();
+                available_peers.into_iter().take(MIN_ROUTING_PATH_LENGTH).collect()
             }
-            
-            path
         } else {
             Vec::new()
         };

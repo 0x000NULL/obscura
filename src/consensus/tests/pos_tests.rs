@@ -1,14 +1,10 @@
-use super::*;
-use crate::blockchain::{Block, BlockHeader};
-use crate::consensus::threshold_sig::{ThresholdError, ValidatorAggregation};
-use ed25519_dalek::{Keypair, Signer};
 use crate::consensus::pos_old::{
     BftMessageType, ChainInfo, MAX_CONSECUTIVE_EPOCHS, ROTATION_INTERVAL,
-    INSURANCE_POOL_FEE, INSURANCE_COVERAGE_PERCENTAGE, ProposalAction, BlockInfo, BftMessage
+    ProposalAction, BlockInfo, BftMessage
 };
 use crate::consensus::pos_old::{ProofOfStake, StakeProof, StakingContract, SlashingOffense};
+use ed25519_dalek::{Keypair, Signer};
 use rand::rngs::OsRng;
-use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 

@@ -446,7 +446,7 @@ impl Mempool {
         true
     }
     
-    fn verify_input_signature(&self, tx: &Transaction, input: &crate::blockchain::TransactionInput) -> bool {
+    fn verify_input_signature(&self, _tx: &Transaction, _input: &crate::blockchain::TransactionInput) -> bool {
         // For testing: Skip real verification
         #[cfg(test)]
         {
@@ -465,7 +465,7 @@ impl Mempool {
             };
             
             // Get the UTXO from the set
-            let outpoint = &input.previous_output;
+            let outpoint = &_input.previous_output;
             println!("Checking UTXO for outpoint: {:?}", outpoint);
             let utxo = match utxo_set.get_utxo(outpoint) {
                 Some(utxo) => utxo,
@@ -494,10 +494,10 @@ impl Mempool {
             };
             
             // Create message that was signed (transaction with SIGHASH flags)
-            let message = create_signature_message(tx, input);
+            let message = create_signature_message(_tx, _input);
             
             // Extract signature from input's script_sig
-            let signature_bytes = match extract_signature_from_script(&input.signature_script) {
+            let signature_bytes = match extract_signature_from_script(&_input.signature_script) {
                 Some(sig) => sig,
                 None => {
                     println!("Signature verification failed: Couldn't extract signature from script");
@@ -1042,12 +1042,12 @@ impl Mempool {
 
         // For the test cases, we need to identify the special test transactions
         // Declare all variables at the beginning to avoid scope issues
-        let _parent_tx_hash: Option<[u8; 32]> = None;
-        let _tx1_hash: Option<[u8; 32]> = None;
-        let _tx2_hash: Option<[u8; 32]> = None;
-        let _tx3_hash: Option<[u8; 32]> = None;
-        let _is_cpfp_test = false;
-        let _is_tx_prioritization_test = false;
+        let mut _parent_tx_hash: Option<[u8; 32]> = None;
+        let mut _tx1_hash: Option<[u8; 32]> = None;
+        let mut _tx2_hash: Option<[u8; 32]> = None;
+        let mut _tx3_hash: Option<[u8; 32]> = None;
+        let mut _is_cpfp_test = false;
+        let mut _is_tx_prioritization_test = false;
         
         #[cfg(test)]
         {
@@ -1374,7 +1374,7 @@ fn extract_signature_from_script(script: &[u8]) -> Option<Vec<u8>> {
     Some(script[1..len+1].to_vec())
 }
 
-fn create_signature_message(tx: &Transaction, input: &crate::blockchain::TransactionInput) -> Vec<u8> {
+fn create_signature_message(_tx: &Transaction, _input: &crate::blockchain::TransactionInput) -> Vec<u8> {
     // For testing: Return a simple message
     #[cfg(test)]
     {
@@ -1387,10 +1387,10 @@ fn create_signature_message(tx: &Transaction, input: &crate::blockchain::Transac
     {
         // For simplicity, just hash the transaction and input data
         let mut hasher = Sha256::new();
-        hasher.update(&tx.hash());
-        hasher.update(&input.previous_output.transaction_hash);
-        hasher.update(&input.previous_output.index.to_le_bytes());
-        hasher.update(&input.sequence.to_le_bytes());
+        hasher.update(&_tx.hash());
+        hasher.update(&_input.previous_output.transaction_hash);
+        hasher.update(&_input.previous_output.index.to_le_bytes());
+        hasher.update(&_input.sequence.to_le_bytes());
         
         hasher.finalize().to_vec()
     }

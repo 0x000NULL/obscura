@@ -499,7 +499,7 @@ mod tests {
             let tx = Transaction {
                 inputs: Vec::new(),
                 outputs: Vec::new(),
-                lock_time: i as u64,
+                lock_time: i as u32,
                 fee_adjustments: None,
                 privacy_flags: 0,
                 obfuscated_id: None,

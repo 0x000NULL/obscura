@@ -1,6 +1,6 @@
 use crate::networking::connection_pool::{ConnectionPool, ConnectionType, ConnectionError};
 use crate::networking::p2p::{PeerConnection, FeatureFlag, PrivacyFeatureFlag};
-use std::net::{SocketAddr, IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 use std::time::Duration;
 use std::sync::{Arc, Mutex};
 use std::io::{self, Read, Write, Cursor};

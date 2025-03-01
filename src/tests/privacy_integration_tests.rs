@@ -1,7 +1,4 @@
-use crate::blockchain::{Transaction, TransactionInput, TransactionOutput, OutPoint};
-use crate::crypto::privacy::{TransactionObfuscator, StealthAddressing, ConfidentialTransactions};
 use crate::wallet::Wallet;
-use ed25519_dalek::{Keypair, PublicKey};
 
 #[test]
 fn test_transaction_privacy() {

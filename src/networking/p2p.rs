@@ -510,8 +510,6 @@ impl<T: Read + Write + Clone> PeerConnection<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::{TcpListener, Ipv4Addr};
-    use std::thread;
     
     #[test]
     fn test_handshake_message_serialization() {

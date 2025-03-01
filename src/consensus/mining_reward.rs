@@ -884,7 +884,7 @@ pub fn create_test_transaction(value: u64) -> crate::blockchain::Transaction {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consensus::validate_coinbase_transaction;
+    use crate::blockchain::validate_coinbase_transaction;
 
     // Remove unused imports
     // use crate::blockchain::{Transaction, TransactionOutput};
@@ -986,7 +986,6 @@ mod tests {
     #[test]
     fn test_mining_pool_distribution() {
         use super::*;
-        use crate::blockchain::{Transaction, TransactionOutput};
 
         let block_height = 0;
         let participants = vec![

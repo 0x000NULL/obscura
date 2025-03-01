@@ -161,7 +161,7 @@ pub fn validate_block_hybrid(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consensus::pos_old::{StakeProof, StakingContract};
+    use crate::consensus::pos_old::{StakingContract};
 
     #[test]
     fn test_hybrid_validation_with_staking() {

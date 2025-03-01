@@ -6,10 +6,6 @@ pub use super::pos_structs::{
     MarketplaceOffer,
     MarketplaceTransaction,
     MarketplaceDispute,
-    MarketplaceListingStatus,
-    MarketplaceOfferStatus,
-    MarketplaceTransactionStatus,
-    MarketplaceDisputeStatus,
     ReputationOracle,
     ReputationScore,
     ReputationAssessment,
@@ -23,7 +19,6 @@ pub use super::pos_structs::{
     ValidatorGeoInfo,
     HardwareSecurityInfo,
     SecurityAttestation,
-    FormalVerification,
     VerifiedContract,
     VerificationStatus,
 };

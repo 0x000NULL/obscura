@@ -368,7 +368,7 @@ fn test_withdrawal_flow() {
     }
     
     // Create a copy of the assets for verification later
-    let expected_assets = assets.clone();
+    let _expected_assets = assets.clone();
     
     // Remove the stake manually to simulate withdrawal
     let returned_assets = contract.multi_asset_stakes.remove(&staker).unwrap()[0].assets.clone();
