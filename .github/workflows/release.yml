@@ -1,0 +1,267 @@
+name: Automated Release
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  # First job: Run tests to ensure code quality
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Needed for changelog comparison
+
+      - name: Set up Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      # Add cargo caching to speed up builds
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      # Run tests to ensure everything is working
+      - name: Run cargo test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+        id: test
+        continue-on-error: true  # We'll check the outcome in the next step
+      
+      # Stop the workflow if tests failed (but allow ignored tests)
+      - name: Check test results
+        if: steps.test.outcome != 'success'
+        run: |
+          echo "Tests failed! Cancelling release process."
+          exit 1
+
+  # Second job: Extract version and create release
+  create-release:
+    needs: test  # Only run if tests pass
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ env.VERSION }}
+      tag_version: ${{ env.TAG_VERSION }}
+      release_exists: ${{ env.RELEASE_EXISTS }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Needed for changelog comparison
+
+      # Install GitHub CLI
+      - name: Install GitHub CLI
+        run: |
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          sudo apt update
+          sudo apt install gh -y
+
+      # Extract version from Cargo.toml
+      - name: Extract version from Cargo.toml
+        id: version
+        run: |
+          VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "TAG_VERSION=v$VERSION" >> $GITHUB_ENV
+          echo "Version extracted: v$VERSION"
+
+      # Extract binary name from Cargo.toml
+      - name: Extract binary name
+        id: binary_name
+        run: |
+          BINARY_NAME=$(grep '^\[package\]' -A 10 Cargo.toml | grep 'name' | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "BINARY_NAME=$BINARY_NAME" >> $GITHUB_ENV
+          echo "Binary name extracted: $BINARY_NAME"
+
+      # Check if the release already exists to prevent duplicates
+      - name: Check if release exists
+        id: check_release
+        run: |
+          if gh release view ${{ env.TAG_VERSION }} &>/dev/null; then
+            echo "Release ${{ env.TAG_VERSION }} already exists! Skipping."
+            echo "RELEASE_EXISTS=true" >> $GITHUB_ENV
+          else
+            echo "RELEASE_EXISTS=false" >> $GITHUB_ENV
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Exit if release already exists
+      - name: Exit if release exists
+        if: env.RELEASE_EXISTS == 'true'
+        run: echo "Release already exists, skipping the rest of the workflow."
+
+      # Extract changelog entry for this version
+      - name: Extract changelog
+        if: env.RELEASE_EXISTS != 'true'
+        id: changelog
+        run: |
+          # Extract changelog for the current version
+          CHANGELOG_CONTENT=$(awk -v ver="## ${{ env.VERSION }}" '
+            BEGIN { found=0; }
+            /^## / { 
+              if (found == 1) { exit }
+              if ($0 ~ ver) { found=1; next }
+            }
+            found { print }
+          ' CHANGELOG.md)
+          
+          # Save content to a file to preserve newlines
+          echo "$CHANGELOG_CONTENT" > release_notes.txt
+          
+          # Show extracted content for debugging
+          echo "Extracted release notes for version ${{ env.VERSION }}:"
+          cat release_notes.txt
+
+      # Create GitHub release without attaching binaries yet
+      - name: Create GitHub Release
+        if: env.RELEASE_EXISTS != 'true'
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.TAG_VERSION }}
+          name: Release ${{ env.TAG_VERSION }}
+          body_path: release_notes.txt
+          draft: true  # Create as draft first, we'll finalize after uploading binaries
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Build binaries for multiple platforms
+  build:
+    needs: create-release
+    if: needs.create-release.outputs.release_exists != 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            target: x86_64-unknown-linux-gnu
+            binary_suffix: ""
+          - os: windows-latest
+            platform: windows
+            target: x86_64-pc-windows-msvc
+            binary_suffix: ".exe"
+          - os: macos-latest
+            platform: macos
+            target: x86_64-apple-darwin
+            binary_suffix: ""
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          target: ${{ matrix.target }}
+          override: true
+
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ matrix.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      # Extract binary name from Cargo.toml
+      - name: Extract binary name
+        id: binary_name
+        shell: bash
+        run: |
+          BINARY_NAME=$(grep '^\[package\]' -A 10 Cargo.toml | grep 'name' | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "BINARY_NAME=$BINARY_NAME" >> $GITHUB_ENV
+          echo "Binary name extracted: $BINARY_NAME"
+
+      # Build release binary
+      - name: Build release binary
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --target ${{ matrix.target }}
+
+      # Create artifact name based on platform and binary name
+      - name: Prepare artifact
+        id: prepare_artifact
+        shell: bash
+        run: |
+          ARTIFACT_NAME="${{ env.BINARY_NAME }}-${{ matrix.platform }}-${{ matrix.target }}"
+          mkdir -p release-artifacts
+          
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            cp "target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.binary_suffix }}" "release-artifacts/${{ env.BINARY_NAME }}${{ matrix.binary_suffix }}"
+          else
+            cp "target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}" "release-artifacts/${{ env.BINARY_NAME }}"
+          fi
+          
+          # Create compressed archive
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            cd release-artifacts
+            7z a -tzip "../$ARTIFACT_NAME.zip" *
+            cd ..
+          else
+            cd release-artifacts
+            tar -czf "../$ARTIFACT_NAME.tar.gz" *
+            cd ..
+          fi
+          
+          echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $GITHUB_ENV
+          
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            echo "ARTIFACT_PATH=$ARTIFACT_NAME.zip" >> $GITHUB_ENV
+          else
+            echo "ARTIFACT_PATH=$ARTIFACT_NAME.tar.gz" >> $GITHUB_ENV
+          fi
+
+      # Upload artifact to release
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ needs.create-release.outputs.version }}
+          files: ${{ env.ARTIFACT_PATH }}
+          draft: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Final job to publish the release
+  publish-release:
+    needs: [create-release, build]
+    if: needs.create-release.outputs.release_exists != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      # Install GitHub CLI
+      - name: Install GitHub CLI
+        run: |
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          sudo apt update
+          sudo apt install gh -y
+          
+      # Publish the release (change from draft to published)
+      - name: Publish Release
+        run: |
+          gh release edit v${{ needs.create-release.outputs.version }} --draft=false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release Completion Message
+        run: echo "🎉 Release v${{ needs.create-release.outputs.version }} successfully created and published!" 
