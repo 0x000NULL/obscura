@@ -15,6 +15,20 @@ jobs:
         with:
           fetch-depth: 0  # Needed for changelog comparison
 
+      # Install system dependencies (RandomX and other crypto libraries)
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake libssl-dev
+          # Clone and build RandomX library
+          git clone https://github.com/tevador/RandomX.git
+          cd RandomX
+          mkdir build && cd build
+          cmake ..
+          make -j
+          sudo make install
+          sudo ldconfig
+
       - name: Set up Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
@@ -164,6 +178,51 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      # Install system dependencies based on platform
+      - name: Install Linux dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake libssl-dev
+          # Clone and build RandomX library
+          git clone https://github.com/tevador/RandomX.git
+          cd RandomX
+          mkdir build && cd build
+          cmake ..
+          make -j
+          sudo make install
+          sudo ldconfig
+
+      - name: Install macOS dependencies
+        if: matrix.platform == 'macos'
+        run: |
+          brew install cmake openssl
+          # Clone and build RandomX library
+          git clone https://github.com/tevador/RandomX.git
+          cd RandomX
+          mkdir build && cd build
+          cmake ..
+          make -j
+          sudo make install
+
+      - name: Install Windows dependencies
+        if: matrix.platform == 'windows'
+        shell: bash
+        run: |
+          # Install dependencies using vcpkg
+          git clone https://github.com/Microsoft/vcpkg.git
+          cd vcpkg
+          ./bootstrap-vcpkg.bat
+          ./vcpkg install openssl:x64-windows
+          # Clone and build RandomX library
+          cd ..
+          git clone https://github.com/tevador/RandomX.git
+          cd RandomX
+          mkdir build && cd build
+          cmake .. -DCMAKE_TOOLCHAIN_FILE=../../vcpkg/scripts/buildsystems/vcpkg.cmake
+          cmake --build . --config Release
+          cmake --install . --config Release
+
       - name: Set up Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
@@ -189,6 +248,19 @@ jobs:
           echo "BINARY_NAME=$BINARY_NAME" >> $GITHUB_ENV
           echo "Binary name extracted: $BINARY_NAME"
 
+      # Configure environment variables for build
+      - name: Configure build environment
+        shell: bash
+        run: |
+          # Set environment variables to help find libraries
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            echo "RUSTFLAGS=-C link-arg=/LIBPATH:$(pwd)/RandomX/build/Release" >> $GITHUB_ENV
+          elif [ "${{ matrix.platform }}" = "macos" ]; then
+            echo "RUSTFLAGS=-L $(pwd)/RandomX/build" >> $GITHUB_ENV
+          else
+            echo "LD_LIBRARY_PATH=$(pwd)/RandomX/build:/usr/local/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+          fi
+
       # Build release binary
       - name: Build release binary
         uses: actions-rs/cargo@v1
@@ -206,8 +278,16 @@ jobs:
           
           if [ "${{ matrix.platform }}" = "windows" ]; then
             cp "target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.binary_suffix }}" "release-artifacts/${{ env.BINARY_NAME }}${{ matrix.binary_suffix }}"
+            # Copy required DLLs
+            cp RandomX/build/Release/*.dll "release-artifacts/" || true
           else
             cp "target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}" "release-artifacts/${{ env.BINARY_NAME }}"
+            # Copy required shared libraries
+            if [ "${{ matrix.platform }}" = "linux" ]; then
+              cp RandomX/build/librandomx.so "release-artifacts/" || true
+            elif [ "${{ matrix.platform }}" = "macos" ]; then
+              cp RandomX/build/librandomx.dylib "release-artifacts/" || true
+            fi
           fi
           
           # Create compressed archive
