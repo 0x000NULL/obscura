@@ -247,12 +247,12 @@
       - [ ] Implement key blinding techniques
       - [ ] Add forward secrecy mechanisms
 - [ ] Network Privacy Protections
-  - [ ] Implement basic Dandelion protocol
-    - [ ] Create transaction propagation phases
-    - [ ] Add transaction stem phase routing
-    - [ ] Implement fluff phase broadcasting
-    - [ ] Create transaction propagation delay
-    - [ ] Add node selection for transaction relay
+  - [x] Implement basic Dandelion protocol
+    - [x] Create transaction propagation phases
+    - [x] Add transaction stem phase routing
+    - [x] Implement fluff phase broadcasting
+    - [x] Create transaction propagation delay
+    - [x] Add node selection for transaction relay
   - [ ] Add IP address protection
     - [ ] Implement basic connection obfuscation
     - [ ] Create connection padding mechanism
