@@ -2,6 +2,36 @@
 
 All notable changes to the Obscura project will be documented in this file.
 
+## [0.5.1] - 2025-03-02
+
+### Fixed
+- **Codebase Cleanup and Testing Improvements**
+  - Fixed import paths in main.rs and test files
+  - Corrected import path for `HybridConsensus` from `consensus::hybrid::HybridConsensus` to `crate::consensus::HybridConsensus`
+  - Updated import path for `Node` from `networking::p2p::Node` to `crate::networking::Node`
+  - Resolved unused import warnings throughout the codebase
+  - Cleaned up unused variables by prefixing with underscores
+  - Removed unnecessary mutable declarations
+  - Optimized test structure for better maintainability
+  - Ensured comprehensive test coverage of all functionality
+  - Fixed test module structure and import organization
+
+### Testing
+- **Enhanced Test Coverage and Organization**
+  - Achieved 100% test pass rate across all modules
+  - Improved test organization with better module structure
+  - Enhanced test error handling and logging
+  - Added proper isolation between test cases
+  - Updated test documentation to reflect current best practices
+
+### Documentation
+- **Improved Testing Documentation**
+  - Updated documentation with clear instructions for running tests
+  - Added comprehensive testing documentation with examples
+  - Created detailed guide for test coverage measurement
+  - Updated README with installation and testing instructions
+  - Enhanced inline code documentation for better developer experience
+
 ## [0.5.0] - 2025-03-15
 
 ### Added

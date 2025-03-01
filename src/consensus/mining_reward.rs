@@ -160,7 +160,7 @@ pub fn calculate_single_transaction_fee(
 /// Prioritizes transactions based on fee rate for inclusion in a block
 pub fn prioritize_transactions(
     transactions: &[crate::blockchain::Transaction],
-    utxo_set: &crate::blockchain::UTXOSet,
+    _utxo_set: &crate::blockchain::UTXOSet,
     max_block_size: usize,
 ) -> Vec<crate::blockchain::Transaction> {
     // Create a temporary mempool to utilize CPFP functions
@@ -174,9 +174,8 @@ pub fn prioritize_transactions(
 
     println!("Total transactions in mempool after adding: {}", mempool.size());
     
-    // Get transactions ordered by effective fee rate (CPFP)
-    let prioritized_txs =
-        mempool.get_transactions_by_effective_fee_rate(utxo_set, transactions.len());
+    // Get transactions ordered by fee rate
+    let prioritized_txs = mempool.get_transactions_by_fee(transactions.len());
 
     // Select transactions up to the maximum block size
     let mut selected_txs = Vec::new();

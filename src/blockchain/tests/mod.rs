@@ -6,6 +6,7 @@ use rand::thread_rng;
 #[cfg(test)]
 mod block_structure_tests;
 
+#[allow(dead_code)]
 pub fn create_test_transaction() -> Transaction {
     let keypair = Keypair::generate(&mut thread_rng());
     let output = TransactionOutput {
@@ -26,6 +27,7 @@ pub fn create_test_transaction() -> Transaction {
     }
 }
 
+#[allow(dead_code)]
 pub fn create_transaction_with_fee(fee: u64) -> Transaction {
     Transaction {
         inputs: vec![],
@@ -43,6 +45,7 @@ pub fn create_transaction_with_fee(fee: u64) -> Transaction {
     }
 }
 
+#[allow(dead_code)]
 pub fn validate_signature(
     input: &TransactionInput,
     message: &[u8],
@@ -60,6 +63,7 @@ pub fn validate_signature(
     }
 }
 
+#[allow(dead_code)]
 pub fn create_test_block(nonce: u64) -> Block {
     let mut block = Block::new([0u8; 32]);
     block.header.nonce = nonce;

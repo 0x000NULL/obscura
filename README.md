@@ -125,3 +125,50 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - RandomX from Monero
 - Rust Crypto Community
 - Zero-Knowledge Research Community
+
+## Testing
+
+### Running Tests
+
+To run all tests, including the integration tests for the main module:
+
+```bash
+cargo test
+```
+
+To run a specific test:
+
+```bash
+cargo test test_init_crypto_success
+```
+
+To run tests with logging output:
+
+```bash
+RUST_LOG=debug cargo test -- --nocapture
+```
+
+### Test Coverage
+
+To measure test coverage, you can use tools like `cargo-tarpaulin`:
+
+```bash
+cargo install cargo-tarpaulin
+cargo tarpaulin --out Html
+```
+
+The HTML report will show you which lines are covered by tests.
+
+## Development
+
+### Building
+
+```bash
+cargo build
+```
+
+### Running
+
+```bash
+cargo run
+```

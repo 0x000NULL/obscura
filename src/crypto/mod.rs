@@ -9,11 +9,15 @@ pub mod privacy;
 pub mod bulletproofs;
 pub mod pedersen;
 
+// Key management functions
+// These functions are intended for use in the wallet implementation
+#[allow(dead_code)] // Allow unused code as these are intended for future use
 pub fn generate_keypair() -> Option<Keypair> {
     let mut csprng = OsRng;
     Some(Keypair::generate(&mut csprng))
 }
 
+#[allow(dead_code)]
 pub fn serialize_keypair(keypair: &Keypair) -> Vec<u8> {
     let mut bytes = Vec::with_capacity(64);
     bytes.extend_from_slice(keypair.public.as_bytes());
@@ -21,6 +25,7 @@ pub fn serialize_keypair(keypair: &Keypair) -> Vec<u8> {
     bytes
 }
 
+#[allow(dead_code)]
 pub fn deserialize_keypair(bytes: &[u8]) -> Option<Keypair> {
     if bytes.len() != 64 {
         return None;
@@ -32,6 +37,7 @@ pub fn deserialize_keypair(bytes: &[u8]) -> Option<Keypair> {
     Keypair::from_bytes(&[secret_key, public_key].concat()).ok()
 }
 
+#[allow(dead_code)]
 pub fn encrypt_keypair(keypair: &Keypair, password: &[u8]) -> Vec<u8> {
     let serialized = serialize_keypair(keypair);
     let mut encrypted = serialized.clone();
@@ -44,6 +50,7 @@ pub fn encrypt_keypair(keypair: &Keypair, password: &[u8]) -> Vec<u8> {
     encrypted
 }
 
+#[allow(dead_code)]
 pub fn decrypt_keypair(encrypted: &[u8], password: &[u8]) -> Option<Keypair> {
     let mut decrypted = encrypted.to_vec();
 
@@ -55,10 +62,13 @@ pub fn decrypt_keypair(encrypted: &[u8], password: &[u8]) -> Option<Keypair> {
     deserialize_keypair(&decrypted)
 }
 
+// Transaction-related cryptographic functions
+#[allow(dead_code)]
 pub fn hash_transaction(tx: &Transaction) -> [u8; 32] {
     tx.hash()
 }
 
+#[allow(dead_code)]
 pub fn calculate_hash_difficulty(hash: &[u8; 32]) -> u32 {
     // Convert first 4 bytes of hash to u32 in big-endian order
     let mut value = 0u32;
@@ -71,6 +81,7 @@ pub fn calculate_hash_difficulty(hash: &[u8; 32]) -> u32 {
     value
 }
 
+#[allow(dead_code)]
 pub fn validate_hash_difficulty(hash: &[u8; 32], target: u32) -> bool {
     let hash_value = calculate_hash_difficulty(hash);
     // For PoW, lower hash values are better (need to be below target)

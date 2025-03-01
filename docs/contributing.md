@@ -116,4 +116,48 @@ Join our community to discuss the project, ask questions, and get help:
 
 ## License
 
-By contributing to Obscura, you agree that your contributions will be licensed under the project's license. 
+By contributing to Obscura, you agree that your contributions will be licensed under the project's license.
+
+## Testing Requirements
+
+Obscura maintains a high standard of code quality and test coverage. All contributions must include appropriate tests:
+
+### Test Coverage Expectations
+
+1. **New Features**: Must include comprehensive tests covering all code paths
+2. **Bug Fixes**: Must include regression tests that would have caught the bug
+3. **Refactoring**: Must maintain or improve existing test coverage
+4. **Documentation**: No tests required, but examples should be verified
+
+### Testing Best Practices
+
+Please follow our [Testing Best Practices](testing/testing_best_practices.md) when writing tests. Key points include:
+
+1. **Test Structure**: Follow the Arrange-Act-Assert pattern
+2. **Naming Conventions**: Use descriptive test names that indicate what is being tested
+3. **Mock Dependencies**: Use mocking to isolate the component being tested
+4. **Test Both Success and Error Paths**: Ensure all code paths are tested
+
+### Running Tests
+
+Before submitting a pull request, ensure all tests pass:
+
+```bash
+# Run all tests
+cargo test
+
+# Run with debug logging
+RUST_LOG=debug cargo test -- --nocapture
+
+# Check test coverage (requires cargo-tarpaulin)
+cargo tarpaulin
+```
+
+### Test Review
+
+During code review, we will evaluate your tests for:
+
+1. **Correctness**: Tests should accurately verify expected behavior
+2. **Completeness**: Tests should cover all relevant code paths
+3. **Clarity**: Tests should be understandable and well-documented
+4. **Performance**: Tests should run efficiently 

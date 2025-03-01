@@ -778,8 +778,8 @@ fn test_cpfp_transaction_prioritization() {
     // Debug: Print transactions in mempool
     println!("Number of transactions in mempool: {}", mempool.size());
 
-    // Get transactions ordered by effective fee rate (CPFP)
-    let prioritized_txs = mempool.get_transactions_by_effective_fee_rate(&test_utxo_set, 10);
+    // Get transactions ordered by fee
+    let prioritized_txs = mempool.get_transactions_by_fee(10);
 
     // Debug: Print the transaction hashes in prioritized_txs
     println!("Number of prioritized transactions: {}", prioritized_txs.len());

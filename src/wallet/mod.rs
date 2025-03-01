@@ -4,6 +4,7 @@ use crate::crypto::privacy::{TransactionObfuscator, StealthAddressing, Confident
 use ed25519_dalek::{Keypair, PublicKey, Signer};
 use rand;
 
+#[allow(dead_code)]
 pub struct Wallet {
     pub keypair: Option<Keypair>,
     pub balance: u64,
@@ -17,6 +18,7 @@ pub struct Wallet {
 }
 
 impl Wallet {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Wallet {
             keypair: None,
@@ -30,6 +32,7 @@ impl Wallet {
         }
     }
 
+    #[allow(dead_code)]
     pub fn new_with_keypair() -> Self {
         let mut wallet = Self::new();
         wallet.keypair = Some(Keypair::generate(&mut rand::thread_rng()));
@@ -37,6 +40,7 @@ impl Wallet {
     }
     
     /// Enable privacy features for the wallet
+    #[allow(dead_code)]
     pub fn enable_privacy(&mut self) {
         self.transaction_obfuscator = Some(TransactionObfuscator::new());
         self.stealth_addressing = Some(StealthAddressing::new());
@@ -44,6 +48,7 @@ impl Wallet {
         self.privacy_enabled = true;
     }
 
+    #[allow(dead_code)]
     pub fn create_transaction(&mut self, recipient: PublicKey, amount: u64) -> Option<Transaction> {
         if amount > self.balance || self.keypair.is_none() {
             return None;
@@ -112,6 +117,7 @@ impl Wallet {
         Some(tx)
     }
 
+    #[allow(dead_code)]
     pub fn create_stake(&mut self, amount: u64) -> Option<StakeProof> {
         if amount > self.balance {
             return None;
@@ -135,6 +141,7 @@ impl Wallet {
     }
     
     /// Scan for transactions addressed to this wallet using stealth addressing
+    #[allow(dead_code)]
     pub fn scan_for_stealth_transactions(&self, transactions: &[Transaction]) -> Vec<TransactionOutput> {
         if !self.privacy_enabled || self.keypair.is_none() || self.stealth_addressing.is_none() {
             return Vec::new();

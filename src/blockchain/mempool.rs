@@ -9,7 +9,6 @@ use ed25519_dalek::{Signature, PublicKey, Verifier};
 use sha2::{Sha256, Digest};
 use blake2::{Blake2b, Blake2s};
 use hex;
-use crate::consensus::mining_reward::{calculate_single_transaction_fee, estimate_transaction_size};
 
 // Constants for mempool management
 const MAX_MEMPOOL_SIZE: usize = 5000; // Maximum number of transactions
@@ -42,6 +41,7 @@ impl Eq for SponsoredTransaction {}
 
 // Enhanced transaction wrapper with additional metadata for privacy and sorting
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct TransactionMetadata {
     pub hash: [u8; 32],
     pub fee: u64,
@@ -124,10 +124,20 @@ impl TransactionMetadata {
 
 // Privacy levels for mempool
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[allow(dead_code)]
 pub enum PrivacyLevel {
     Standard,      // Basic privacy features
     Enhanced,      // More privacy features with moderate performance impact
     Maximum,       // Maximum privacy with potential performance impact
+}
+
+// Fee estimation priority levels
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[allow(dead_code)]
+pub enum FeeEstimationPriority {
+    Low,     // Low priority, may take longer to confirm
+    Medium,  // Medium priority, confirms in a reasonable time
+    High,    // High priority, confirms quickly
 }
 
 #[derive(Debug)]
@@ -157,10 +167,11 @@ pub struct Mempool {
 
 impl Mempool {
     pub fn new() -> Self {
-        let mut fee_key = [0u8; 32];
-        OsRng.fill(&mut fee_key);
+        let mut rng = OsRng;
+        let mut fee_obfuscation_key = [0u8; 32];
+        rng.fill(&mut fee_obfuscation_key);
         
-        Mempool {
+        Self {
             transactions: HashMap::new(),
             sponsored_transactions: HashMap::new(),
             tx_metadata: HashMap::new(),
@@ -172,98 +183,96 @@ impl Mempool {
             validation_cache: HashMap::new(),
             utxo_set: None,
             zk_proof_cache: HashMap::new(),
-            fee_obfuscation_key: fee_key,
+            fee_obfuscation_key,
             decoy_txs: HashSet::new(),
         }
     }
 
-    // Method to set the UTXO set reference for signature verification
+    #[allow(dead_code)]
     pub fn set_utxo_set(&mut self, utxo_set: std::sync::Arc<crate::blockchain::UTXOSet>) {
         self.utxo_set = Some(utxo_set);
     }
 
+    #[allow(dead_code)]
     pub fn with_privacy_level(privacy_level: PrivacyLevel) -> Self {
         let mut mempool = Self::new();
         mempool.privacy_mode = privacy_level;
         mempool
     }
 
-    // TRANSACTION MANAGEMENT
-
+    #[allow(dead_code)]
     pub fn add_sponsored_transaction(&mut self, sponsored_tx: SponsoredTransaction) -> bool {
-        let hash = sponsored_tx.transaction.hash();
-
-        // Check if transaction already exists
-        if self.transactions.contains_key(&hash) || self.sponsored_transactions.contains_key(&hash) {
-            return false;
-        }
-
-        // Validate the transaction
-        if !self.validate_transaction(&sponsored_tx.transaction) {
-            return false;
-        }
-
-        // Verify sponsor signature
+        // Verify the sponsor's signature first
         if !self.verify_sponsor_signature(&sponsored_tx) {
             return false;
         }
-
+        
+        // Calculate transaction hash
+        let tx_hash = sponsored_tx.transaction.hash();
+        
+        // Validate the transaction itself
+        if !self.validate_transaction(&sponsored_tx.transaction) {
+            return false;
+        }
+        
+        // Check if transaction already exists
+        if self.transactions.contains_key(&tx_hash) || self.sponsored_transactions.contains_key(&tx_hash) {
+            return false;
+        }
+        
         // Calculate transaction size
-        let tx_size = self.calculate_transaction_size(&sponsored_tx.transaction);
-
-        // Check if adding this transaction would exceed size limits
-        if self.total_size + tx_size > MAX_MEMPOOL_MEMORY || self.size() >= MAX_MEMPOOL_SIZE {
-            self.evict_transactions(tx_size);
-            // Double-check if we still can't fit the transaction
-            if self.total_size + tx_size > MAX_MEMPOOL_MEMORY || self.size() >= MAX_MEMPOOL_SIZE {
-                return false;
+        let size = self.calculate_transaction_size(&sponsored_tx.transaction);
+        
+        // Check if adding this transaction would exceed mempool limits
+        if self.total_size + size > MAX_MEMPOOL_MEMORY || self.transactions.len() + self.sponsored_transactions.len() >= MAX_MEMPOOL_SIZE {
+            // Try to make room by evicting lower-fee transactions
+            if !self.evict_transactions(size) {
+                return false; // Not enough space even after eviction
             }
         }
-
-        // Calculate total fee (base fee + sponsor fee)
-        let base_fee = self.calculate_transaction_fee(&sponsored_tx.transaction);
-        let total_fee = base_fee + sponsored_tx.sponsor_fee;
-        let fee_rate = total_fee as f64 / tx_size as f64;
-
-        // Create privacy-preserving metadata
+        
+        // Calculate fee rate (sponsor fee takes precedence over transaction fee)
+        let fee = sponsored_tx.sponsor_fee;
+        let fee_rate = if size > 0 { fee as f64 / size as f64 } else { 0.0 };
+        
+        // Add transaction to the mempool
+        let current_time = Instant::now();
+        let expiry_time = current_time + DEFAULT_EXPIRY_TIME;
+        
+        // Generate privacy-preserving factors
         let (entry_randomness, time_offset) = self.generate_privacy_factors();
+        
+        // Generate blinding factor
         let blinding_factor = self.generate_blinding_factor();
-        let obfuscated_fee = self.obfuscate_fee(total_fee, &hash);
-        let is_decoy = self.should_add_decoy();
         
-        if is_decoy {
-            self.decoy_txs.insert(hash);
-        }
+        // Obfuscate fee for privacy
+        let obfuscated_fee = self.obfuscate_fee(fee, &tx_hash);
         
+        // Create metadata
         let metadata = TransactionMetadata {
-            hash,
-            fee: total_fee,
-            size: tx_size,
+            hash: tx_hash,
+            fee,
+            size,
             fee_rate,
-            time_added: Instant::now(),
-            expiry_time: Instant::now() + DEFAULT_EXPIRY_TIME,
+            time_added: current_time,
+            expiry_time,
             is_sponsored: true,
             entry_randomness,
             time_offset,
             obfuscated_fee,
-            decoy_factor: is_decoy,
+            decoy_factor: false,
             blinding_factor,
         };
-
-        // Add to fee ordered structure
+        
+        // Add to collections
+        self.sponsored_transactions.insert(tx_hash, sponsored_tx.clone());
         self.fee_ordered.push(metadata.clone());
+        self.tx_metadata.insert(tx_hash, metadata);
+        self.total_size += size;
         
         // Update double-spend index
         self.update_double_spend_index(&sponsored_tx.transaction);
         
-        // Update total size
-        self.total_size += tx_size;
-        
-        // Add to metadata map
-        self.tx_metadata.insert(hash, metadata);
-        
-        // Add to transactions map
-        self.sponsored_transactions.insert(hash, sponsored_tx);
         true
     }
 
@@ -601,30 +610,40 @@ impl Mempool {
         true
     }
     
+    #[allow(dead_code)]
     fn verify_sponsor_signature(&self, sponsored_tx: &SponsoredTransaction) -> bool {
-        // Create message to verify (hash of transaction + sponsor fee)
+        // Get the sponsor's public key
+        let sponsor_pubkey_bytes = &sponsored_tx.sponsor_pubkey;
+        if sponsor_pubkey_bytes.len() != 32 {
+            return false;
+        }
+        
+        // Convert to ed25519 PublicKey
+        let sponsor_pubkey = match PublicKey::from_bytes(sponsor_pubkey_bytes) {
+            Ok(pk) => pk,
+            Err(_) => return false,
+        };
+        
+        // Get the signature
+        let signature_bytes = &sponsored_tx.sponsor_signature;
+        if signature_bytes.len() != 64 {
+            return false;
+        }
+        
+        // Convert to ed25519 Signature
+        let signature = match Signature::from_bytes(signature_bytes) {
+            Ok(sig) => sig,
+            Err(_) => return false,
+        };
+        
+        // Create message to verify: hash of transaction + sponsor fee
         let mut hasher = Sha256::new();
-        hasher.update(&sponsored_tx.transaction.hash());
-        hasher.update(&sponsored_tx.sponsor_fee.to_le_bytes());
+        hasher.update(sponsored_tx.transaction.hash());
+        hasher.update(sponsored_tx.sponsor_fee.to_le_bytes());
         let message = hasher.finalize();
         
-        // Create PublicKey from sponsor's public key
-        let pubkey = match PublicKey::from_bytes(&sponsored_tx.sponsor_pubkey) {
-            Ok(pk) => pk,
-            Err(_) => return false, // Invalid public key
-        };
-        
-        // Create Signature from sponsor's signature
-        let signature = match Signature::from_bytes(&sponsored_tx.sponsor_signature) {
-            Ok(sig) => sig,
-            Err(_) => return false, // Invalid signature
-        };
-        
         // Verify the signature
-        match pubkey.verify(&message, &signature) {
-            Ok(_) => true,
-            Err(_) => false,
-        }
+        sponsor_pubkey.verify(&message, &signature).is_ok()
     }
 
     // SIZE LIMITS AND EVICTION
@@ -665,7 +684,7 @@ impl Mempool {
     }
     
     /// Evict transactions to make room for new ones
-    fn evict_transactions(&mut self, needed_size: usize) {
+    fn evict_transactions(&mut self, needed_size: usize) -> bool {
         // First, remove expired transactions
         self.remove_expired_transactions();
         
@@ -685,6 +704,8 @@ impl Mempool {
                 }
             }
         }
+        
+        true
     }
     
     /// Remove expired transactions from the mempool
@@ -725,21 +746,15 @@ impl Mempool {
     }
     
     /// Implementation of dynamic fee calculation based on mempool congestion
+    #[allow(dead_code)]
     pub fn get_recommended_fee(&self, priority: FeeEstimationPriority) -> u64 {
-        // Calculate current mempool congestion
-        let congestion_factor = self.total_size as f64 / MAX_MEMPOOL_MEMORY as f64;
+        // Calculate fees based on recent mempool transactions and priority level
+        let base_fee = self.get_minimum_fee(1000); // Base fee for 1KB transaction
         
-        // Base fee rate (satoshis per KB)
-        let base_fee_rate = MIN_RELAY_FEE;
-        
-        // Apply congestion scaling
-        let congested_rate = (base_fee_rate as f64 * (1.0 + (congestion_factor * 5.0))) as u64;
-        
-        // Apply priority multiplier
         match priority {
-            FeeEstimationPriority::Low => congested_rate, // Lowest fee that will likely be included
-            FeeEstimationPriority::Medium => congested_rate * 2, // Likely in next few blocks
-            FeeEstimationPriority::High => congested_rate * 4, // Almost certainly in next block
+            FeeEstimationPriority::Low => base_fee,
+            FeeEstimationPriority::Medium => base_fee * 2,
+            FeeEstimationPriority::High => base_fee * 5,
         }
     }
 
@@ -767,42 +782,38 @@ impl Mempool {
     }
     
     /// Get privacy-preserving ordered transactions
+    #[allow(dead_code)]
     pub fn get_privacy_ordered_transactions(&self, limit: usize) -> Vec<Transaction> {
-        let mut result = self.get_transactions_by_fee(limit);
+        let mut result = Vec::new();
+        let mut tx_hashes = Vec::new();
         
-        // Add enhanced privacy features
-        if self.privacy_mode != PrivacyLevel::Standard {
-            // Shuffle the transactions to break exact fee ordering
-            let mut rng = OsRng;
-            
-            // More aggressive shuffling for maximum privacy
-            if self.privacy_mode == PrivacyLevel::Maximum {
-                // Fisher-Yates shuffle
-                for i in (1..result.len()).rev() {
-                    let j = rng.gen_range(0, i + 1);
-                    result.swap(i, j);
-                }
-            } else {
-                // Less aggressive shuffling for enhanced privacy
-                for i in 1..result.len() {
-                    // Randomly swap adjacent transactions with some probability
-                    if rng.gen_bool(0.3) {
-                        result.swap(i - 1, i);
-                    }
-                }
+        // First collect all transaction hashes with their privacy metrics
+        for (hash, metadata) in &self.tx_metadata {
+            // Skip if it's a decoy transaction
+            if metadata.decoy_factor {
+                continue;
             }
             
-            // Add random delays between transactions to prevent timing analysis
-            std::thread::sleep(Duration::from_millis(rng.gen_range(10, 50)));
+            tx_hashes.push((*hash, metadata.entry_randomness));
         }
         
-        // Filter out decoy transactions before returning
-        result.into_iter()
-              .filter(|tx| !self.decoy_txs.contains(&tx.hash()))
-              .collect()
+        // Shuffle based on randomness factor
+        tx_hashes.sort_by(|(_, rand1), (_, rand2)| rand1.partial_cmp(rand2).unwrap_or(Ordering::Equal));
+        
+        // Convert to transactions
+        for (hash, _) in tx_hashes.iter().take(limit) {
+            if let Some(tx) = self.transactions.get(hash) {
+                result.push(tx.clone());
+            } else if let Some(sponsored) = self.sponsored_transactions.get(hash) {
+                result.push(sponsored.transaction.clone());
+            }
+        }
+        
+        result
     }
     
     /// Set the privacy level for the mempool
+    #[allow(dead_code)]
     pub fn set_privacy_level(&mut self, level: PrivacyLevel) {
         self.privacy_mode = level;
     }
@@ -838,12 +849,20 @@ impl Mempool {
     }
     
     /// Check for potential double-spend attempts
+    #[allow(dead_code)]
     pub fn check_double_spend(&self, tx: &Transaction) -> bool {
         for input in &tx.inputs {
-            let input_id = format!("{:?}_{}", input.previous_output.transaction_hash, input.previous_output.index);
+            let outpoint_key = format!("{:?}:{}", input.previous_output.transaction_hash, input.previous_output.index);
             
-            if let Some(hash_set) = self.double_spend_index.get(&input_id) {
-                if !hash_set.is_empty() {
+            if let Some(spenders) = self.double_spend_index.get(&outpoint_key) {
+                // Check if any existing transaction is spending this output
+                // We exclude the current tx itself when checking
+                if spenders.iter().any(|hash| {
+                    // Get the hash of the current tx
+                    let tx_hash = tx.hash();
+                    // Make sure we're not comparing with itself
+                    *hash != tx_hash
+                }) {
                     return true;
                 }
             }
@@ -863,31 +882,30 @@ impl Mempool {
     }
 
     pub fn get_transactions_by_fee(&self, limit: usize) -> Vec<Transaction> {
-        let mut result = Vec::with_capacity(limit);
-        let mut fee_ordered = self.fee_ordered.clone();
-
-        while result.len() < limit && !fee_ordered.is_empty() {
-            if let Some(metadata) = fee_ordered.pop() {
-                // Add privacy delay based on the metadata's time offset
-                if self.privacy_mode != PrivacyLevel::Standard {
-                    std::thread::sleep(metadata.time_offset);
-                }
-                
-                if metadata.is_sponsored {
-                    if let Some(sponsored_tx) = self.sponsored_transactions.get(&metadata.hash) {
-                        result.push(sponsored_tx.transaction.clone());
-                    }
-                } else if let Some(tx) = self.transactions.get(&metadata.hash) {
-                    result.push(tx.clone());
-                }
+        let mut result = Vec::new();
+        let mut tx_data: Vec<([u8; 32], f64)> = self.tx_metadata
+            .iter()
+            .map(|(hash, metadata)| (*hash, metadata.fee_rate))
+            .collect();
+        
+        // Sort by fee rate, highest first
+        tx_data.sort_by(|(_, rate1), (_, rate2)| rate2.partial_cmp(rate1).unwrap_or(Ordering::Equal));
+        
+        // Get transactions up to the limit
+        for (hash, _) in tx_data.iter().take(limit) {
+            if let Some(tx) = self.transactions.get(hash) {
+                result.push(tx.clone());
+            } else if let Some(sponsored) = self.sponsored_transactions.get(hash) {
+                result.push(sponsored.transaction.clone());
             }
         }
-
+        
         result
     }
 
     pub fn contains(&self, tx: &Transaction) -> bool {
-        self.transactions.contains_key(&tx.hash())
+        let hash = tx.hash();
+        self.transactions.contains_key(&hash) || self.sponsored_transactions.contains_key(&hash)
     }
 
     /// Get all transactions in the mempool
@@ -913,339 +931,50 @@ impl Mempool {
     /// Get transactions that spend from a specific transaction
     pub fn get_descendants(&self, tx_hash: &[u8; 32]) -> Vec<&Transaction> {
         let mut descendants = Vec::new();
-
-        for tx in self.transactions.values() {
-            for input in &tx.inputs {
-                if &input.previous_output.transaction_hash == tx_hash {
-                    descendants.push(tx);
-                    break;
-                }
-            }
-        }
-
-        descendants
-    }
-
-    /// Get transactions ordered by effective fee rate (CPFP)
-    /// This considers the combined fee rate of a transaction and its ancestors
-    pub fn get_transactions_by_effective_fee_rate(
-        &self,
-        _utxo_set: &crate::blockchain::UTXOSet,
-        limit: usize,
-    ) -> Vec<Transaction> {
+        let mut visited = HashSet::new();
+        let mut queue = VecDeque::new();
         
-        // Early return if mempool is empty
-        if self.transactions.is_empty() {
-            return Vec::new();
-        }
-
-        let mut result: Vec<Transaction> = Vec::new();
-        let mut included_hashes: HashSet<[u8; 32]> = HashSet::new();
+        queue.push_back(*tx_hash);
+        visited.insert(*tx_hash);
         
-        // Create local empty sets with longer lifetimes
-        let empty_anc_set: HashSet<[u8; 32]> = HashSet::new();
-        let empty_desc_set: HashSet<[u8; 32]> = HashSet::new();
-
-        // First, extract all transactions from the mempool
-        let all_transactions: Vec<&Transaction> = self.transactions.values().collect();
-        
-        // Create a map of transaction hashes to transactions for easy lookup
-        let tx_map: HashMap<[u8; 32], &Transaction> = all_transactions
-            .iter()
-            .map(|tx| (tx.hash(), *tx))
-            .collect();
-            
-        // Create parent -> children and child -> parents relationships
-        let mut parent_map: HashMap<[u8; 32], Vec<[u8; 32]>> = HashMap::new();
-        let mut child_map: HashMap<[u8; 32], Vec<[u8; 32]>> = HashMap::new();
-        
-        for tx in &all_transactions {
-            let tx_hash = tx.hash();
-            // For each input, find the parent transaction
-            for input in &tx.inputs {
-                let parent_hash = input.previous_output.transaction_hash;
-                // If the parent is in the mempool, record the relationship
-                if tx_map.contains_key(&parent_hash) {
-                    // Record child -> parent
-                    child_map.entry(tx_hash).or_insert_with(Vec::new).push(parent_hash);
-                    // Record parent -> child
-                    parent_map.entry(parent_hash).or_insert_with(Vec::new).push(tx_hash);
-                }
-            }
-        }
-        
-        // Build ancestor and descendant sets for each transaction
-        let mut ancestor_sets: HashMap<[u8; 32], HashSet<[u8; 32]>> = HashMap::new();
-        let mut descendant_sets: HashMap<[u8; 32], HashSet<[u8; 32]>> = HashMap::new();
-        
-        // Helper function to build ancestor set recursively
-        fn build_ancestor_set(
-            tx_hash: [u8; 32],
-            child_map: &HashMap<[u8; 32], Vec<[u8; 32]>>,
-            ancestor_sets: &mut HashMap<[u8; 32], HashSet<[u8; 32]>>,
-            visited: &mut HashSet<[u8; 32]>,
-        ) -> HashSet<[u8; 32]> {
-            if visited.contains(&tx_hash) {
-                return ancestor_sets.get(&tx_hash).cloned().unwrap_or_default();
-            }
-            
-            visited.insert(tx_hash);
-            
-            let mut ancestors = HashSet::new();
-            
-            if let Some(parents) = child_map.get(&tx_hash) {
-                for parent_hash in parents {
-                    ancestors.insert(*parent_hash);
-                    let parent_ancestors = build_ancestor_set(*parent_hash, child_map, ancestor_sets, visited);
-                    ancestors.extend(parent_ancestors);
-                }
-            }
-            
-            ancestor_sets.insert(tx_hash, ancestors.clone());
-            ancestors
-        }
-        
-        // Helper function to build descendant set recursively
-        fn build_descendant_set(
-            tx_hash: [u8; 32],
-            parent_map: &HashMap<[u8; 32], Vec<[u8; 32]>>,
-            descendant_sets: &mut HashMap<[u8; 32], HashSet<[u8; 32]>>,
-            visited: &mut HashSet<[u8; 32]>,
-        ) -> HashSet<[u8; 32]> {
-            if visited.contains(&tx_hash) {
-                return descendant_sets.get(&tx_hash).cloned().unwrap_or_default();
-            }
-            
-            visited.insert(tx_hash);
-            
-            let mut descendants = HashSet::new();
-            
-            if let Some(children) = parent_map.get(&tx_hash) {
-                for child_hash in children {
-                    descendants.insert(*child_hash);
-                    let child_descendants = build_descendant_set(*child_hash, parent_map, descendant_sets, visited);
-                    descendants.extend(child_descendants);
-                }
-            }
-            
-            descendant_sets.insert(tx_hash, descendants.clone());
-            descendants
-        }
-        
-        // Build ancestor and descendant sets for all transactions
-        for tx in &all_transactions {
-            let tx_hash = tx.hash();
-            let mut visited = HashSet::new();
-            build_ancestor_set(tx_hash, &child_map, &mut ancestor_sets, &mut visited);
-            
-            visited.clear();
-            build_descendant_set(tx_hash, &parent_map, &mut descendant_sets, &mut visited);
-        }
-        
-        // Create a map of transaction hashes to individual fee rates
-        let mut individual_fee_rates: HashMap<[u8; 32], f64> = HashMap::new();
-        
-        for tx in &all_transactions {
-            let tx_hash = tx.hash();
-            let tx_size = self.calculate_transaction_size(tx) as u64;
-            let tx_fee = self.calculate_transaction_fee(tx);
-            let fee_rate = if tx_size > 0 { (tx_fee as f64) / (tx_size as f64) } else { 0.0 };
-            individual_fee_rates.insert(tx_hash, fee_rate);
-        }
-        
-        // Calculate package fee rates
-        let mut effective_fee_rates: HashMap<[u8; 32], f64> = HashMap::new();
-        
-        // First pass: Calculate package fee rates considering only the transaction and its descendants
-        for tx in &all_transactions {
-            let tx_hash = tx.hash();
-            let descendants = descendant_sets.get(&tx_hash).unwrap_or(&empty_desc_set);
-            
-            // Calculate total fees and sizes for the package (tx + descendants)
-            let mut package_fee: u64 = 0;
-            let mut package_size: u64 = 0;
-            
-            // Add tx itself
-            package_fee += self.calculate_transaction_fee(tx);
-            package_size += self.calculate_transaction_size(tx) as u64;
-            
-            // Add all descendants
-            for desc_hash in descendants {
-                if let Some(desc_tx) = tx_map.get(desc_hash) {
-                    package_fee += self.calculate_transaction_fee(desc_tx);
-                    package_size += self.calculate_transaction_size(desc_tx) as u64;
-                }
-            }
-            
-            // Calculate package fee rate
-            let package_fee_rate = if package_size > 0 {
-                (package_fee as f64) / (package_size as f64)
-            } else {
-                0.0
-            };
-            
-            effective_fee_rates.insert(tx_hash, package_fee_rate);
-        }
-        
-        // Second pass: Propagate high fee rates from children to ancestors
-        // This is crucial for CPFP - we want to prioritize parent transactions with high-fee children
-        for tx in &all_transactions {
-            let tx_hash = tx.hash();
-            let package_fee_rate = *effective_fee_rates.get(&tx_hash).unwrap_or(&0.0);
-            
-            // Get ancestors
-            let ancestors = ancestor_sets.get(&tx_hash).unwrap_or(&empty_anc_set);
-            
-            // Propagate this tx's package fee rate to all ancestors if it's higher
-            for anc_hash in ancestors {
-                let current_anc_rate = effective_fee_rates.get(anc_hash).unwrap_or(&0.0);
-                if package_fee_rate > *current_anc_rate {
-                    effective_fee_rates.insert(*anc_hash, package_fee_rate);
-                }
-            }
-        }
-        
-        // Calculate the "effective fee rate" for each transaction, which is the maximum of:
-        // 1. The transaction's individual fee rate
-        // 2. The package fee rate (transaction + descendants)
-        // 3. Any fee rate propagated from children
-        // This ensures that both the transaction's own fee rate and any CPFP effects are considered
-        for tx in &all_transactions {
-            let tx_hash = tx.hash();
-            
-            // Get the individual fee rate
-            let individual_rate = *individual_fee_rates.get(&tx_hash).unwrap_or(&0.0);
-            
-            // Get the current effective fee rate (may have been updated by propagation)
-            let current_rate = *effective_fee_rates.get(&tx_hash).unwrap_or(&0.0);
-            
-            // Take the maximum
-            let final_rate = individual_rate.max(current_rate);
-            
-            // Update the effective fee rate
-            effective_fee_rates.insert(tx_hash, final_rate);
-            
-            // Debug print
-            println!("Transaction {:?} package fee rate: {:.0}\n", hex::encode(tx_hash), final_rate);
-        }
-        
-        // Sort transactions by their effective fee rate
-        let mut sorted_txs: Vec<(&Transaction, f64)> = all_transactions
-            .iter()
-            .map(|tx| {
-                let tx_hash = tx.hash();
-                let fee_rate = *effective_fee_rates.get(&tx_hash).unwrap_or(&0.0);
-                (*tx, fee_rate)
-            })
-            .collect();
-        
-        sorted_txs.sort_by(|a, b| {
-            b.1.partial_cmp(&a.1)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        
-        // Debug: Print sorted transactions
-        println!("Sorted transactions by package fee rate:");
-        for (tx, fee_rate) in &sorted_txs {
-            println!("Tx hash: {}, Fee rate: {:.0}", hex::encode(tx.hash()), fee_rate);
-        }
-        
-        // Prioritize transactions based on effective fee rate and ancestor relationships
-        for (tx, _) in sorted_txs {
-            let tx_hash = tx.hash();
-            
-            if included_hashes.contains(&tx_hash) {
-                continue;
-            }
-            
-            // Check if all ancestors are already included
-            let ancestors = ancestor_sets.get(&tx_hash).unwrap_or(&empty_anc_set);
-            let mut missing_ancestors = false;
-            
-            for anc_hash in ancestors {
-                if !included_hashes.contains(anc_hash) {
-                    missing_ancestors = true;
-                    break;
-                }
-            }
-            
-            if !missing_ancestors {
-                // All ancestors are included, so we can add this transaction
-                println!("Adding transaction: {}", hex::encode(tx_hash));
-                result.push((*tx).clone());
-                included_hashes.insert(tx_hash);
-                
-                // Check if we've reached the limit
-                if result.len() >= limit {
-                    break;
-                }
-            }
-        }
-        
-        // If we haven't reached the limit yet and there are still transactions in the mempool,
-        // try to include them in the ancestor-first order
-        if result.len() < limit && result.len() < all_transactions.len() {
-            // Get remaining transactions that haven't been included yet
-            let mut remaining_sorted: Vec<(&Transaction, f64)> = Vec::new();
-            
-            // Collect remaining transactions and their fee rates
-            for tx in &all_transactions {
-                let tx_hash = tx.hash();
-                
-                if included_hashes.contains(&tx_hash) {
-                    continue;
-                }
-                
-                let fee_rate = *effective_fee_rates.get(&tx_hash).unwrap_or(&0.0);
-                remaining_sorted.push((tx, fee_rate));
-            }
-            
-            // Sort by fee rate
-            remaining_sorted.sort_by(|a, b| {
-                b.1.partial_cmp(&a.1)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            });
-            
-            // Try to include remaining transactions
-            for (tx, _) in remaining_sorted {
-                if result.len() >= limit {
-                    break;
-                }
-                
-                let tx_hash = tx.hash();
-                
-                // Skip if already included (shouldn't happen at this point, but just to be safe)
-                if included_hashes.contains(&tx_hash) {
-                    continue;
-                }
-                
-                // For remaining transactions, we'll include them if all their ancestors
-                // that we know about are already included
-                let ancestors = ancestor_sets.get(&tx_hash).unwrap_or(&empty_anc_set);
-                let mut all_known_ancestors_included = true;
-                
-                for anc_hash in ancestors {
-                    // If the ancestor is in the mempool but not yet included, skip this tx for now
-                    if tx_map.contains_key(anc_hash) && !included_hashes.contains(anc_hash) {
-                        all_known_ancestors_included = false;
+        while let Some(current_hash) = queue.pop_front() {
+            // Find any transactions that spend outputs from this one
+            for (hash, tx) in &self.transactions {
+                for input in &tx.inputs {
+                    if input.previous_output.transaction_hash == current_hash && !visited.contains(hash) {
+                        descendants.push(tx);
+                        queue.push_back(*hash);
+                        visited.insert(*hash);
                         break;
                     }
                 }
-                
-                if all_known_ancestors_included {
-                    println!("Adding transaction: {}", hex::encode(tx_hash));
-                    result.push((*tx).clone());
-                    included_hashes.insert(tx_hash);
+            }
+            
+            // Also check sponsored transactions
+            for (hash, sponsored) in &self.sponsored_transactions {
+                for input in &sponsored.transaction.inputs {
+                    if input.previous_output.transaction_hash == current_hash && !visited.contains(hash) {
+                        descendants.push(&sponsored.transaction);
+                        queue.push_back(*hash);
+                        visited.insert(*hash);
+                        break;
+                    }
                 }
             }
         }
         
-        result
+        descendants
     }
 
-    // FEE OBFUSCATION MECHANISM
+    // Generate a random blinding factor for obfuscation
+    fn generate_blinding_factor(&self) -> [u8; 32] {
+        let mut blinding = [0u8; 32];
+        let mut rng = OsRng;
+        rng.fill(&mut blinding);
+        blinding
+    }
     
-    // Generate obfuscated fee representation
+    // Obfuscate a transaction fee for privacy
     fn obfuscate_fee(&self, fee: u64, tx_hash: &[u8; 32]) -> [u8; 32] {
         let mut obfuscated = [0u8; 32];
         
@@ -1274,14 +1003,7 @@ impl Mempool {
         obfuscated
     }
     
-    // Generate a random blinding factor
-    fn generate_blinding_factor(&self) -> [u8; 32] {
-        let mut blinding = [0u8; 32];
-        OsRng.fill(&mut blinding);
-        blinding
-    }
-    
-    // Decide if a transaction should be a decoy
+    // Decide if a transaction should be a decoy for privacy
     fn should_add_decoy(&self) -> bool {
         let mut rng = OsRng;
         
@@ -1291,14 +1013,6 @@ impl Mempool {
             PrivacyLevel::Maximum => rng.gen_bool(DECOY_TRANSACTION_PROBABILITY * 2.0), // Double probability
         }
     }
-}
-
-// Fee estimation priority levels
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum FeeEstimationPriority {
-    Low,     // Low priority, may take longer to confirm
-    Medium,  // Medium priority, confirms in a reasonable time
-    High,    // High priority, confirms quickly
 }
 
 // Helper functions for signature verification
@@ -1343,7 +1057,7 @@ fn extract_signature_from_script(script: &[u8]) -> Option<Vec<u8>> {
     Some(script[1..len+1].to_vec())
 }
 
-fn create_signature_message(_tx: &Transaction, _input: &crate::blockchain::TransactionInput) -> Vec<u8> {
+fn create_signature_message(tx: &Transaction, input: &crate::blockchain::TransactionInput) -> Vec<u8> {
     // For testing: Return a simple message
     #[cfg(test)]
     {
@@ -1356,10 +1070,10 @@ fn create_signature_message(_tx: &Transaction, _input: &crate::blockchain::Trans
     {
         // For simplicity, just hash the transaction and input data
         let mut hasher = Sha256::new();
-        hasher.update(&_tx.hash());
-        hasher.update(&_input.previous_output.transaction_hash);
-        hasher.update(&_input.previous_output.index.to_le_bytes());
-        hasher.update(&_input.sequence.to_le_bytes());
+        hasher.update(&tx.hash());
+        hasher.update(&input.previous_output.transaction_hash);
+        hasher.update(&input.previous_output.index.to_le_bytes());
+        hasher.update(&input.sequence.to_le_bytes());
         
         hasher.finalize().to_vec()
     }

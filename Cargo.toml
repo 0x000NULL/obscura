@@ -34,5 +34,11 @@ blake2 = "0.9"
 lazy_static = "1.4"
 siphasher = "0.3"
 
+[dev-dependencies]
+tempfile = "3.8"
+mockall = "0.11"
+test-log = "0.2"
+tokio = { version = "1.32", features = ["full"] }
+
 [build-dependencies]
 cc = "1.0" 

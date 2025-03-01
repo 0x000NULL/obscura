@@ -16,6 +16,7 @@ pub use randomx::{verify_difficulty, RandomXContext, RandomXError};
 
 // Import blockchain functions that are referenced in the consensus module
 
+#[allow(dead_code)]
 pub trait ConsensusEngine {
     fn validate_block(&self, block: &crate::blockchain::Block) -> bool;
     fn calculate_next_difficulty(&self) -> u32;
@@ -28,6 +29,7 @@ pub struct HybridConsensus {
 }
 
 impl HybridConsensus {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         HybridConsensus {
             pow_engine: pow::ProofOfWork::new(),
@@ -36,6 +38,7 @@ impl HybridConsensus {
     }
 }
 
+#[allow(dead_code)]
 pub fn validate_block_hybrid(
     block: &crate::blockchain::Block,
     randomx: &Arc<randomx::RandomXContext>,
@@ -108,6 +111,7 @@ fn validate_pos(block: &crate::blockchain::Block, stake_proof: &StakeProof) -> b
     pos.validate_stake_proof(stake_proof, &block.serialize_header())
 }
 
+#[allow(dead_code)]
 pub fn verify_block_hash(randomx: &RandomXContext, block_header: &[u8], target: u32) -> bool {
     let mut hash = [0u8; 32];
     if randomx.calculate_hash(block_header, &mut hash).is_err() {
@@ -116,6 +120,7 @@ pub fn verify_block_hash(randomx: &RandomXContext, block_header: &[u8], target: 
     verify_difficulty(&hash, target)
 }
 
+#[allow(dead_code)]
 pub fn calculate_block_hash(
     randomx: &RandomXContext,
     header_bytes: &[u8],

@@ -25,6 +25,7 @@ pub use super::pos_structs::{
 
 /// Manages the delegation marketplace functionality
 #[derive(Default)]
+#[allow(dead_code)]
 pub struct DelegationMarketplace {
     /// Active listings in the marketplace
     listings: HashMap<String, MarketplaceListing>,
@@ -36,6 +37,7 @@ pub struct DelegationMarketplace {
     disputes: HashMap<String, MarketplaceDispute>,
 }
 
+#[allow(dead_code)]
 impl DelegationMarketplace {
     pub fn new() -> Self {
         Self::default()
@@ -72,6 +74,7 @@ impl DelegationMarketplace {
 
 /// Manages validator reputation tracking and assessment
 #[derive(Default)]
+#[allow(dead_code)]
 pub struct ValidatorReputationManager {
     /// Reputation scores for validators
     reputation_scores: HashMap<String, ReputationScore>,
@@ -81,6 +84,7 @@ pub struct ValidatorReputationManager {
     oracles: Vec<ReputationOracle>,
 }
 
+#[allow(dead_code)]
 impl ValidatorReputationManager {
     pub fn new() -> Self {
         Self::default()
@@ -116,6 +120,7 @@ impl ValidatorReputationManager {
 
 /// Manages automated stake compounding operations
 #[derive(Default)]
+#[allow(dead_code)]
 pub struct StakeCompoundingManager {
     /// Compounding configurations per validator
     configs: HashMap<String, CompoundingConfig>,
@@ -125,6 +130,7 @@ pub struct StakeCompoundingManager {
     history: VecDeque<CompoundingStatus>,
 }
 
+#[allow(dead_code)]
 impl StakeCompoundingManager {
     pub fn new() -> Self {
         Self::default()
@@ -158,6 +164,7 @@ impl StakeCompoundingManager {
 
 /// Manages validator set diversity metrics and incentives
 #[derive(Default)]
+#[allow(dead_code)]
 pub struct ValidatorDiversityManager {
     /// Current diversity metrics
     metrics: DiversityMetrics,
@@ -169,6 +176,7 @@ pub struct ValidatorDiversityManager {
     client_diversity: HashMap<String, ClientImplementation>,
 }
 
+#[allow(dead_code)]
 impl ValidatorDiversityManager {
     pub fn new() -> Self {
         Self::default()
@@ -206,6 +214,7 @@ impl ValidatorDiversityManager {
 
 /// Manages hardware security requirements and attestations
 #[derive(Default)]
+#[allow(dead_code)]
 pub struct HardwareSecurityManager {
     /// Hardware security info per validator
     security_info: HashMap<String, HardwareSecurityInfo>,
@@ -215,6 +224,7 @@ pub struct HardwareSecurityManager {
     required_level: u32,
 }
 
+#[allow(dead_code)]
 impl HardwareSecurityManager {
     pub fn new(required_level: u32) -> Self {
         Self {
@@ -249,6 +259,7 @@ impl HardwareSecurityManager {
 
 /// Manages formal verification of staking contracts
 #[derive(Default)]
+#[allow(dead_code)]
 pub struct ContractVerificationManager {
     /// Verified contracts
     verified_contracts: HashMap<String, VerifiedContract>,
@@ -256,6 +267,7 @@ pub struct ContractVerificationManager {
     verification_history: VecDeque<VerificationStatus>,
 }
 
+#[allow(dead_code)]
 impl ContractVerificationManager {
     pub fn new() -> Self {
         Self::default()

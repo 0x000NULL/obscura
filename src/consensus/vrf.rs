@@ -4,6 +4,7 @@ use sha2::{Digest, Sha256};
 /// VRF (Verifiable Random Function) implementation for validator selection
 /// This is a simplified implementation based on the ed25519 signature scheme
 pub struct Vrf<'a> {
+    #[allow(dead_code)]
     keypair: &'a Keypair,
 }
 
@@ -21,11 +22,13 @@ pub struct VrfProof {
 
 impl<'a> Vrf<'a> {
     /// Create a new VRF instance with the given keypair
+    #[allow(dead_code)]
     pub fn new(keypair: &'a Keypair) -> Self {
         Vrf { keypair }
     }
 
     /// Generate a VRF proof for the given message
+    #[allow(dead_code)]
     pub fn prove(&self, message: &[u8]) -> Result<VrfProof, &'static str> {
         // Sign the message with the private key
         let signature = self.keypair.sign(message);
@@ -48,7 +51,7 @@ impl<'a> Vrf<'a> {
     pub fn verify(proof: &VrfProof) -> Result<[u8; 32], &'static str> {
         // Verify the signature
         let public_key = match PublicKey::from_bytes(&proof.public_key) {
-            Ok(pk) => pk,
+            Ok(key) => key,
             Err(_) => return Err("Invalid public key"),
         };
 
@@ -57,33 +60,35 @@ impl<'a> Vrf<'a> {
             Err(_) => return Err("Invalid signature"),
         };
 
+        // Verify the signature
         if public_key.verify(&proof.message, &signature).is_err() {
-            return Err("Invalid VRF proof: signature verification failed");
+            return Err("Signature verification failed");
         }
 
-        // Hash the signature to get the VRF output
+        // Regenerate the output from the signature
         let mut hasher = Sha256::new();
-        hasher.update(&proof.signature);
+        hasher.update(signature.to_bytes());
         let mut output = [0u8; 32];
         output.copy_from_slice(&hasher.finalize());
 
-        // Verify that the output matches the one in the proof
+        // Verify that the output matches the provided output
         if output != proof.output {
-            return Err("Invalid VRF proof: output mismatch");
+            return Err("Output does not match signature");
         }
 
         Ok(output)
     }
 
-    /// Generate a random value in the range [0, max) using the VRF output
+    /// Generate a random value from the VRF output
+    #[allow(dead_code)]
     pub fn generate_random_value(output: &[u8; 32], max: u64) -> u64 {
-        // Convert first 8 bytes of output to u64
-        let mut value = 0u64;
+        // Convert first 8 bytes to u64
+        let mut value: u64 = 0;
         for i in 0..8 {
             value = (value << 8) | (output[i] as u64);
         }
-
-        // Reduce to the range [0, max)
+        
+        // Map to range [0, max)
         value % max
     }
 }

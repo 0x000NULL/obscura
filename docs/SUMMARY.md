@@ -59,11 +59,10 @@
 - [Crypto](crypto/index.md)
 
 # Testing
-- [Testing Guide](testing/index.md)
-  - [Test Strategy](testing/test_strategy.md)
-  - [Consensus Tests](testing/consensus_tests.md)
-  - [Network Tests](testing/network_tests.md)
-  - [Test Optimization](testing/test_optimization.md)
+- [Testing Overview](testing/index.md)
+- [Testing Best Practices](testing/testing_best_practices.md)
+- [Test Optimization](testing/test_optimization.md)
+- [Consensus Tests](testing/consensus_tests.md)
 
 # Additional Resources
 - [API Reference](api/README.md)

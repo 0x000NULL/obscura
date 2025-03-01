@@ -22,6 +22,7 @@ pub struct HybridStateManager {
 
 /// Represents the cached state of a validator
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct ValidatorState {
     pub stake_amount: u64,
     pub performance_score: f64,
@@ -169,6 +170,7 @@ impl SnapshotManager {
         }
     }
 
+    #[allow(dead_code)]
     pub fn add_snapshot(&mut self, block_height: u64, snapshot: StateSnapshot) {
         self.snapshots.insert(block_height, snapshot);
         
@@ -180,6 +182,7 @@ impl SnapshotManager {
         }
     }
 
+    #[allow(dead_code)]
     pub fn prune_old_snapshots(&mut self, current_block: u64) {
         self.snapshots.retain(|&block_height, _| {
             current_block - block_height <= self.snapshot_interval * self.max_snapshots as u64
@@ -198,6 +201,7 @@ impl ValidationManager {
         }
     }
 
+    #[allow(dead_code)]
     pub fn validate_block_parallel(
         &self,
         block: &Block,

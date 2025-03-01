@@ -36,6 +36,7 @@ lazy_static::lazy_static! {
 
 // Pedersen commitment structure
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct PedersenCommitment {
     // Compressed commitment value (point on the curve)
     pub commitment: CompressedRistretto,
@@ -47,6 +48,7 @@ pub struct PedersenCommitment {
 
 impl PedersenCommitment {
     // Create a commitment to a value with a random blinding factor
+    #[allow(dead_code)]
     pub fn commit_random(value: u64) -> Self {
         let mut rng = OsRng;
         let blinding = Scalar::random(&mut rng);
@@ -54,6 +56,7 @@ impl PedersenCommitment {
     }
     
     // Create a commitment to a value with a specific blinding factor
+    #[allow(dead_code)]
     pub fn commit(value: u64, blinding: Scalar) -> Self {
         // Commit = value*G + blinding*H
         let value_scalar = Scalar::from(value);
@@ -67,6 +70,7 @@ impl PedersenCommitment {
     }
     
     // Create a commitment from an existing compressed point (for deserialization)
+    #[allow(dead_code)]
     pub fn from_compressed(compressed: CompressedRistretto) -> Self {
         PedersenCommitment {
             commitment: compressed,
@@ -76,11 +80,13 @@ impl PedersenCommitment {
     }
     
     // Get the value if available
+    #[allow(dead_code)]
     pub fn value(&self) -> Option<u64> {
         self.value
     }
     
     // Get the blinding factor if available
+    #[allow(dead_code)]
     pub fn blinding(&self) -> Option<Scalar> {
         self.blinding.clone()
     }
@@ -106,50 +112,57 @@ impl PedersenCommitment {
         })
     }
     
-    // Add two commitments together (homomorphic property)
+    // Homomorphic addition of commitments
+    // If C1 = v1*G + r1*H and C2 = v2*G + r2*H
+    // Then C1 + C2 = (v1+v2)*G + (r1+r2)*H
+    #[allow(dead_code)]
     pub fn add(&self, other: &PedersenCommitment) -> Result<PedersenCommitment, &'static str> {
-        // Decompress the points
+        // Decompress points
         let self_point = match self.commitment.decompress() {
             Some(p) => p,
-            None => return Err("Invalid commitment point"),
+            None => return Err("Invalid commitment format"),
         };
         
         let other_point = match other.commitment.decompress() {
             Some(p) => p,
-            None => return Err("Invalid commitment point"),
+            None => return Err("Invalid commitment format"),
         };
         
-        // Add the points (this works because of the homomorphic property)
+        // Add points
         let sum_point = self_point + other_point;
         
-        // Create a new commitment with the combined value if known
-        let combined_value = match (self.value, other.value) {
-            (Some(v1), Some(v2)) => Some(v1.checked_add(v2).ok_or("Value overflow")?),
-            _ => None,
-        };
-        
-        // Combine blinding factors if known
-        let combined_blinding = match (self.blinding.as_ref(), other.blinding.as_ref()) {
-            (Some(b1), Some(b2)) => Some(b1 + b2),
-            _ => None,
-        };
-        
-        Ok(PedersenCommitment {
+        // Create new commitment
+        let result = PedersenCommitment {
             commitment: sum_point.compress(),
-            value: combined_value,
-            blinding: combined_blinding,
-        })
+            value: match (self.value, other.value) {
+                (Some(v1), Some(v2)) => Some(v1 + v2),
+                _ => None,
+            },
+            blinding: match (self.blinding.as_ref(), other.blinding.as_ref()) {
+                (Some(b1), Some(b2)) => Some(b1 + b2),
+                _ => None,
+            },
+        };
+        
+        Ok(result)
     }
     
-    // Verify that a commitment is to a specific value if blinding factor is known
+    // Verify that a commitment is to a specific value (if we know the blinding factor)
+    #[allow(dead_code)]
     pub fn verify(&self, value: u64) -> bool {
-        match self.blinding {
-            Some(blinding) => {
-                let expected = Self::commit(value, blinding);
-                self.commitment.eq(&expected.commitment)
-            },
-            None => false,
+        // We need the blinding factor to verify
+        if self.blinding.is_none() {
+            return false;
         }
+        
+        // Recreate the commitment with the claimed value and stored blinding factor
+        let value_scalar = Scalar::from(value);
+        let blinding = self.blinding.unwrap();
+        let expected_point = (value_scalar * G.clone()) + (blinding * H.clone());
+        let expected_compressed = expected_point.compress();
+        
+        // Check if it matches the stored commitment
+        expected_compressed == self.commitment
     }
 }
 

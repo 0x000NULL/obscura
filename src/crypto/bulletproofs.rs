@@ -1,10 +1,10 @@
 use rand::Rng;
 use sha2::{Sha256, Digest};
 use rand::rngs::OsRng;
-use curve25519_dalek::scalar::Scalar;
 
 // Range Proof structure for proving a value is within a range without revealing it
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct RangeProof {
     // Compressed Bulletproof representation
     pub compressed_proof: Vec<u8>,
@@ -14,6 +14,7 @@ pub struct RangeProof {
 
 impl RangeProof {
     // Create a new range proof for a value in [0, 2^64)
+    #[allow(dead_code)]
     pub fn new(value: u64) -> Self {
         // In a real implementation, this would use the bulletproofs library
         // to generate a real zero-knowledge range proof
@@ -35,6 +36,7 @@ impl RangeProof {
     }
     
     // Create a new range proof for a value in [min_value, max_value]
+    #[allow(dead_code)]
     pub fn new_with_range(value: u64, min_value: u64, max_value: u64) -> Option<Self> {
         if value < min_value || value > max_value {
             return None;
@@ -60,19 +62,17 @@ impl RangeProof {
         })
     }
     
-    // Serialize the proof to bytes for storage or transmission
+    #[allow(dead_code)]
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         
-        // Add range information
+        // Serialize the range
         bytes.extend_from_slice(&self.min_value.to_le_bytes());
         bytes.extend_from_slice(&self.max_value.to_le_bytes());
         
-        // Add length of compressed proof
-        let proof_len = (self.compressed_proof.len() as u32).to_le_bytes();
-        bytes.extend_from_slice(&proof_len);
-        
-        // Add compressed proof data
+        // Serialize the compressed proof
+        let proof_len = self.compressed_proof.len() as u32;
+        bytes.extend_from_slice(&proof_len.to_le_bytes());
         bytes.extend_from_slice(&self.compressed_proof);
         
         bytes
@@ -140,6 +140,7 @@ pub fn verify_range_proof(commitment: &crate::crypto::pedersen::PedersenCommitme
 }
 
 // Batch verification of multiple range proofs for efficiency
+#[allow(dead_code)]
 pub fn batch_verify_range_proofs(
     commitments: &[crate::crypto::pedersen::PedersenCommitment],
     proofs: &[RangeProof],
@@ -165,6 +166,7 @@ pub fn batch_verify_range_proofs(
 mod tests {
     use super::*;
     use crate::crypto::pedersen::PedersenCommitment;
+    use curve25519_dalek::scalar::Scalar;
     
     #[test]
     fn test_range_proof_creation() {

@@ -1,3 +1,5 @@
+#![allow(dead_code)]  // Temporarily allow dead code while in development
+
 pub mod blockchain;
 pub mod consensus;
 pub mod crypto;
@@ -13,6 +15,9 @@ pub use consensus::{ConsensusEngine, HybridConsensus, StakeProof};
 pub use networking::{Node, NodeError};
 // Re-export privacy features
 pub use crypto::privacy::{TransactionObfuscator, StealthAddressing, ConfidentialTransactions};
+
+// Re-export key types for convenience
+pub use consensus::pos;
 
 #[cfg(test)]
 mod tests {

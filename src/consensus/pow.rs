@@ -36,11 +36,13 @@ impl ProofOfWork {
         verify_difficulty(&hash, self.difficulty_adjuster.get_current_difficulty())
     }
 
+    #[allow(dead_code)]
     pub fn adjust_difficulty(&mut self, block_timestamp: u64) -> u32 {
         self.difficulty_adjuster.add_block_time(block_timestamp)
     }
 
     /// Creates a new block with a coinbase transaction for the given miner
+    #[allow(dead_code)]
     pub fn create_mining_block(
         &self,
         previous_hash: [u8; 32],
@@ -68,6 +70,7 @@ impl ProofOfWork {
     }
 
     /// Creates a new block with a coinbase transaction that includes transaction fees
+    #[allow(dead_code)]
     pub fn create_mining_block_with_transactions(
         &self,
         previous_hash: [u8; 32],
@@ -105,6 +108,7 @@ impl ProofOfWork {
     }
 
     /// Validates that a block contains a valid coinbase transaction
+    #[allow(dead_code)]
     pub fn validate_mining_reward(&self, block: &Block, block_height: u64) -> bool {
         if block.transactions.is_empty() {
             return false;
@@ -121,6 +125,7 @@ impl ProofOfWork {
     }
 
     /// Validates that a block contains a valid coinbase transaction including transaction fees
+    #[allow(dead_code)]
     pub fn validate_mining_reward_with_fees(&self, block: &Block, block_height: u64) -> bool {
         if block.transactions.is_empty() {
             return false;

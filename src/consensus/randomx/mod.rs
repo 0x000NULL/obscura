@@ -44,6 +44,7 @@ impl RandomXContext {
         Self::new_with_mode(key, false)
     }
 
+    #[allow(dead_code)]
     pub fn new_for_testing(key: &[u8]) -> Self {
         Self::new_with_mode(key, true)
     }
@@ -174,6 +175,7 @@ impl RandomXContext {
         }
     }
 
+    #[allow(dead_code)]
     pub fn is_valid(&self) -> bool {
         !self.vm.is_null() && !self.cache.is_null()
     }
@@ -188,6 +190,7 @@ impl Drop for RandomXContext {
     }
 }
 
+#[allow(dead_code)]
 pub fn verify_difficulty(hash: &[u8; 32], target: u32) -> bool {
     // Convert first 4 bytes of hash to u32 in big-endian order
     let hash_value = u32::from_be_bytes([hash[0], hash[1], hash[2], hash[3]]);

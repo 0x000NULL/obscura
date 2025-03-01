@@ -4,8 +4,6 @@ use std::time::{Duration, SystemTime};
 use crate::networking::kademlia::Node;
 use crate::networking::connection_pool::ConnectionType;
 use crate::networking::Message;
-use crate::networking::kademlia::NodeId;
-use crate::networking::p2p::HandshakeError;
 
 const MAX_CONNECTIONS: usize = 125;
 const MAX_INBOUND_CONNECTIONS: usize = 100;
@@ -296,6 +294,7 @@ impl PeerManager {
 mod tests {
     use super::*;
     use std::net::{IpAddr, Ipv4Addr};
+    use crate::networking::kademlia::NodeId;
 
     fn create_test_node(port: u16) -> Node {
         Node::new(

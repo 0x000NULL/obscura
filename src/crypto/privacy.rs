@@ -6,12 +6,16 @@ use ed25519_dalek::{Keypair, PublicKey, SecretKey, Signature, Signer, Verifier};
 use std::collections::HashMap;
 
 // Constants for transaction privacy
+#[allow(dead_code)]
 const MIXING_MIN_TRANSACTIONS: usize = 3;
+#[allow(dead_code)]
 const MIXING_MAX_TRANSACTIONS: usize = 10;
+#[allow(dead_code)]
 const TX_ID_SALT_SIZE: usize = 32;
 const METADATA_FIELDS_TO_STRIP: [&str; 3] = ["ip", "timestamp", "user-agent"];
 
 /// Transaction obfuscation module
+#[allow(dead_code)]
 pub struct TransactionObfuscator {
     // Salt used for transaction identifier obfuscation
     tx_id_salt: [u8; TX_ID_SALT_SIZE],
@@ -19,6 +23,7 @@ pub struct TransactionObfuscator {
     obfuscated_tx_ids: HashMap<[u8; 32], [u8; 32]>,
 }
 
+#[allow(dead_code)]
 impl TransactionObfuscator {
     /// Create a new TransactionObfuscator
     pub fn new() -> Self {
@@ -127,6 +132,7 @@ impl TransactionObfuscator {
 }
 
 /// Stealth addressing implementation
+#[allow(dead_code)]
 pub struct StealthAddressing {
     // Ephemeral keypairs for one-time addresses
     ephemeral_keys: Vec<Keypair>,
@@ -134,6 +140,7 @@ pub struct StealthAddressing {
     address_mapping: HashMap<Vec<u8>, Vec<u8>>,
 }
 
+#[allow(dead_code)]
 impl StealthAddressing {
     /// Create a new StealthAddressing instance
     pub fn new() -> Self {
@@ -262,11 +269,13 @@ impl StealthAddressing {
 }
 
 /// Confidential transactions implementation
+#[allow(dead_code)]
 pub struct ConfidentialTransactions {
     // Blinding factors for amount hiding
     blinding_factors: HashMap<Vec<u8>, u64>,
 }
 
+#[allow(dead_code)]
 impl ConfidentialTransactions {
     /// Create a new ConfidentialTransactions instance
     pub fn new() -> Self {
