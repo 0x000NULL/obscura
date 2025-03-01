@@ -2,6 +2,64 @@
 
 All notable changes to the Obscura project will be documented in this file.
 
+## [0.5.0] - 2025-03-15
+
+### Added
+- **Enhanced Dandelion Protocol Implementation**
+  - Added dynamic peer reputation system with scores from -100 to 100
+  - Implemented anonymity set management with effectiveness tracking
+  - Created historical path analysis to prevent intermediary predictability
+  - Added anti-snooping heuristics to detect transaction graph analysis
+  - Implemented dummy node responses for suspicious peers
+  - Added steganographic data hiding for transaction metadata
+  - Implemented transaction batching with configurable parameters
+  - Added differential privacy noise using Laplace distribution
+  - Created non-attributable transaction propagation
+  - Added background noise traffic generation
+  - Implemented automated Sybil attack detection and mitigation
+  - Added IP-diversity-based Eclipse attack detection
+  - Created automated response mechanisms for network attacks
+  - Added secure failover strategies for routing failures
+  - Implemented optional Tor network integration
+  - Added Mixnet support for enhanced anonymity
+  - Created layered encryption for multi-hop paths
+  - Added modular privacy routing modes (Standard, Tor, Mixnet, Layered)
+  - Implemented ChaCha20Rng for cryptographic-grade randomness
+  - Added foundation for post-quantum encryption options
+
+- **Node Integration for Enhanced Privacy**
+  - Added `route_transaction_with_privacy` method for privacy level selection
+  - Created specialized routing methods for different privacy needs
+  - Implemented anti-snooping transaction request handling
+  - Added automatic eclipse attack defense
+  - Created background noise generation for traffic analysis resistance
+  - Added enhanced maintenance cycles for privacy features
+
+- **Documentation and Testing**
+  - Added comprehensive documentation for all privacy features
+  - Created detailed configuration guide with recommendations
+  - Added failure handling and debugging documentation
+  - Created performance tuning guidelines
+  - Added detailed security analysis and adversary models
+  - Implemented extensive test suite for all privacy features
+  - Created specialized tests for attack detection and mitigation
+
+### Changed
+- Enhanced transaction propagation with multi-hop and multi-path routing
+- Improved peer selection to use reputation-based scoring
+- Updated transaction batching to improve obfuscation
+- Enhanced node selection process to resist Eclipse attacks
+- Updated network maintenance cycle with privacy-focused operations
+- Improved transaction metadata handling with enhanced privacy
+- Enhanced timing randomization with mathematical differential privacy guarantees
+- Updated peer connection management for better privacy
+- Improved transaction routing security with layered defenses
+
+### Removed
+- Deprecated simple transaction relaying in favor of multi-path routing
+- Removed insecure randomness sources in favor of ChaCha20Rng
+- Eliminated timing correlations through differential privacy
+
 ## [0.4.2] - 2025-02-28
 
 ### Block Propagation Implementation

@@ -2,6 +2,118 @@
 
 This document contains the release notes for each version of the Obscura blockchain.
 
+## [0.5.0] - 2025-03-15
+
+### Enhanced Dandelion Protocol Implementation
+
+This release implements a comprehensive and advanced version of the Dandelion protocol, significantly enhancing transaction privacy and resistance to deanonymization attacks in the Obscura network.
+
+#### Advanced Privacy Features
+
+- **Dynamic Peer Scoring & Reputation System**
+  - Implemented reputation-based routing with scores from -100 to 100
+  - Created anonymity set management with effectiveness tracking
+  - Added historical path analysis for preventing intermediary predictability
+  - Implemented automatic reputation decay to prevent long-term pattern analysis
+
+- **Advanced Adversarial Resistance**
+  - Added anti-snooping heuristics to detect transaction graph analysis attempts
+  - Implemented dummy node responses for suspicious peers
+  - Created steganographic data hiding for transaction metadata
+  - Added comprehensive Sybil cluster detection and mitigation
+
+- **Traffic Analysis Protection**
+  - Implemented transaction batching with configurable parameters
+  - Added differential privacy noise using Laplace distribution
+  - Created non-attributable transaction propagation
+  - Added background noise traffic generation
+
+- **Enhanced Attack Detection & Response**
+  - Implemented automated Sybil attack detection and scoring
+  - Added IP-diversity-based Eclipse attack detection
+  - Created automated response mechanisms for network attacks
+  - Implemented secure failover strategies for routing failures
+
+- **Privacy Network Integration**
+  - Added optional Tor network integration
+  - Implemented Mixnet support for enhanced anonymity
+  - Created layered encryption for multi-hop paths
+  - Added modular privacy routing modes
+
+- **Cryptographic & Protocol Hardening**
+  - Implemented ChaCha20Rng for cryptographic-grade randomness
+  - Added foundation for post-quantum encryption options
+  - Created enhanced transaction processing flow
+
+#### Implementation Details
+
+- **Architecture**
+  - Designed a comprehensive `DandelionManager` to handle all privacy features
+  - Created transaction propagation state machine with multiple routing options
+  - Added transaction metadata tracking with privacy safeguards
+
+- **Security**
+  - Implemented protection against six distinct adversary models
+  - Added formal defenses against common deanonymization techniques
+  - Created adaptive security measures based on threat detection
+
+- **Configurability**
+  - Added 35+ configuration parameters for fine-tuning privacy vs. performance
+  - Created adaptive timing options for network conditions
+  - Implemented multiple privacy modes (Standard, Tor, Mixnet, Layered)
+
+- **Performance Optimization**
+  - Added efficient batch processing for transactions
+  - Created configurable resource utilization controls
+  - Implemented background tasks for maintenance operations
+
+#### Node Integration
+
+- Enhanced the `Node` struct with privacy-focused methods:
+  - Added `route_transaction_with_privacy` for privacy level selection
+  - Created specialized routing methods for different privacy needs
+  - Implemented anti-snooping transaction request handling
+  - Added automatic eclipse attack defense
+  - Created background noise generation for traffic analysis resistance
+  - Added enhanced maintenance cycles for privacy features
+
+#### Documentation
+
+- Added comprehensive documentation for all privacy features
+- Created detailed configuration guide with recommendations
+- Added failure handling and debugging documentation
+- Created performance tuning guidelines
+- Added detailed security analysis and adversary models
+
+#### Testing
+
+- Implemented extensive test suite for all privacy features
+- Created specialized tests for attack detection and mitigation
+- Added reputation system verification tests
+- Implemented integration tests for the complete privacy workflow
+
+### Security Enhancements
+
+- Added formal security analysis for all privacy features
+- Implemented defense-in-depth approach with multiple protective layers
+- Created automated detection and response to common attack vectors
+- Added privacy-preserving logging and diagnostic capabilities
+
+### Improvements
+
+- Enhanced transaction propagation speed through intelligent path selection
+- Improved privacy guarantees with mathematical foundations
+- Added configurable privacy-performance tradeoffs
+- Created seamless fallback mechanisms for all privacy features
+- Implemented resource-efficient privacy protections
+
+### Bug Fixes
+
+- Fixed potential information leakage in transaction handling
+- Resolved timing correlation vulnerabilities
+- Addressed potential partitioning attacks
+- Fixed transaction metadata exposure issues
+
 ## [0.4.2] - 2025-03-01
 
 ### Block Propagation Implementation
@@ -189,7 +301,7 @@ This update implements comprehensive connection pool management and enhances the
 - Improved test reliability for time-sensitive operations
 - More predictable test behavior
 - Enhanced debugging capabilities
-- Better test maintainability 
+- Better test maintainability
 
 ## [0.4.0] - 2025-02-27
 

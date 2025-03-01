@@ -1,6 +1,7 @@
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
+use serde::{Serialize, Deserialize};
 
 // Add the new module
 pub mod block_structure;
@@ -8,13 +9,13 @@ pub mod mempool;
 pub mod tests;
 pub mod test_helpers;
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Block {
     pub header: BlockHeader,
     pub transactions: Vec<Transaction>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct BlockHeader {
     pub version: u32,
     pub previous_hash: [u8; 32],
@@ -29,14 +30,14 @@ pub struct BlockHeader {
     pub padding_commitment: Option<[u8; 32]>, // Commitment to padding data for privacy
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct FeeAdjustment {
     pub adjustment_factor: f64, // Multiplier for the base fee (e.g. 1.5 = 50% increase)
     pub lock_time: u64,         // Unix timestamp when adjustment becomes active
     pub expiry_time: u64,       // Unix timestamp when adjustment expires
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Transaction {
     pub inputs: Vec<TransactionInput>,
     pub outputs: Vec<TransactionOutput>,
@@ -50,20 +51,20 @@ pub struct Transaction {
     pub range_proofs: Option<Vec<Vec<u8>>>, // Optional range proofs for confidential amounts
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct TransactionInput {
     pub previous_output: OutPoint,
     pub signature_script: Vec<u8>,
     pub sequence: u32,
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct TransactionOutput {
     pub value: u64,
     pub public_key_script: Vec<u8>,
 }
 
-#[derive(Clone, Eq, Hash, PartialEq, Debug)]
+#[derive(Clone, Eq, Hash, PartialEq, Debug, Serialize, Deserialize)]
 pub struct OutPoint {
     pub transaction_hash: [u8; 32],
     pub index: u32,
@@ -454,5 +455,59 @@ impl Transaction {
         
         // Set privacy flags
         self.privacy_flags |= 0x04; // Confidential transactions enabled
+    }
+
+    pub fn serialize(&self) -> Vec<u8> {
+        bincode::serialize(self).unwrap_or_default()
+    }
+    
+    pub fn new(inputs: Vec<TransactionInput>, outputs: Vec<TransactionOutput>) -> Self {
+        Transaction {
+            inputs,
+            outputs,
+            lock_time: 0,
+            fee_adjustments: None,
+            privacy_flags: 0,
+            obfuscated_id: None,
+            ephemeral_pubkey: None,
+            amount_commitments: None,
+            range_proofs: None,
+        }
+    }
+}
+
+// Add implementation for BlockHeader
+impl BlockHeader {
+    pub fn hash(&self) -> [u8; 32] {
+        let mut hasher = Sha256::new();
+        
+        // Serialize header data into hasher
+        hasher.update(self.version.to_le_bytes());
+        hasher.update(self.previous_hash);
+        hasher.update(self.merkle_root);
+        hasher.update(self.timestamp.to_le_bytes());
+        hasher.update(self.difficulty_target.to_le_bytes());
+        hasher.update(self.nonce.to_le_bytes());
+        hasher.update(self.height.to_le_bytes());
+        
+        // Handle optional fields
+        if let Some(miner) = &self.miner {
+            hasher.update(miner);
+        }
+        
+        hasher.update(self.privacy_flags.to_le_bytes());
+        
+        if let Some(padding) = self.padding_commitment {
+            hasher.update(padding);
+        }
+        
+        // Apply double-SHA256 (common in blockchain protocols)
+        let first_hash = hasher.finalize();
+        let mut second_hasher = Sha256::new();
+        second_hasher.update(first_hash);
+        
+        let mut output = [0u8; 32];
+        output.copy_from_slice(&second_hasher.finalize()[..]);
+        output
     }
 }

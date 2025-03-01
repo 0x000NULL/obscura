@@ -1102,7 +1102,7 @@ mod tests {
         
         // Test handling get block transactions
         let indexes = vec![0, 1, 2];
-        let result = propagation.handle_get_block_transactions(peer_addr, block_hash, indexes);
+        let result = propagation.handle_get_block_transactions(peer_addr, block_hash, indexes.clone());
         assert!(result.is_ok());
         
         // Test handling get block transactions for unknown block
