@@ -24,7 +24,7 @@ jobs:
           git clone https://github.com/tevador/RandomX.git
           cd RandomX
           mkdir build && cd build
-          cmake ..
+          cmake .. -DCMAKE_CXX_FLAGS="-fPIC"
           make -j
           sudo make install
           sudo ldconfig
@@ -254,10 +254,11 @@ jobs:
         run: |
           # Set environment variables to help find libraries
           if [ "${{ matrix.platform }}" = "windows" ]; then
-            echo "RUSTFLAGS=-C link-arg=/LIBPATH:$(pwd)/RandomX/build/Release" >> $GITHUB_ENV
+            echo "RUSTFLAGS=-C link-arg=/LIBPATH:$(pwd)/RandomX/build/Release -C link-arg=stdc++.lib" >> $GITHUB_ENV
           elif [ "${{ matrix.platform }}" = "macos" ]; then
-            echo "RUSTFLAGS=-L $(pwd)/RandomX/build" >> $GITHUB_ENV
+            echo "RUSTFLAGS=-L $(pwd)/RandomX/build -l stdc++" >> $GITHUB_ENV
           else
+            echo "RUSTFLAGS=-L $(pwd)/RandomX/build -L /usr/local/lib -l randomx -l stdc++" >> $GITHUB_ENV
             echo "LD_LIBRARY_PATH=$(pwd)/RandomX/build:/usr/local/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
           fi
 
