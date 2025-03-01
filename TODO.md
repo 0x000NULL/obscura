@@ -247,7 +247,11 @@
       - [ ] Implement key blinding techniques
       - [ ] Add forward secrecy mechanisms
 - [ ] Network Privacy Protections
-  - [x] Implement basic Dandelion protocol
+  - [xerror[E0599]: no method named `defend_against_eclipse_attack` found for mutable reference `&mut networking::Node` in the current scope
+   --> src\networking\mod.rs:876:30
+    |
+876 |         if let Err(e) = self.defend_against_eclipse_attack() {
+    |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method not found in `&mut Node`] Implement basic Dandelion protocol
     - [x] Create transaction propagation phases
     - [x] Add transaction stem phase routing
     - [x] Implement fluff phase broadcasting

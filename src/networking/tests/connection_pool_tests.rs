@@ -30,6 +30,14 @@ impl MockTcpStream {
     }
 }
 
+// Implement From<CloneableTcpStream> for MockTcpStream
+impl From<crate::networking::p2p::CloneableTcpStream> for MockTcpStream {
+    fn from(_: crate::networking::p2p::CloneableTcpStream) -> Self {
+        // For tests, we just create a new MockTcpStream regardless of the input
+        MockTcpStream::new()
+    }
+}
+
 impl Read for MockTcpStream {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.read_data.read(buf)

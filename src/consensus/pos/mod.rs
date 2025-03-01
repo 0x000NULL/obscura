@@ -81,7 +81,7 @@ impl ProofOfStake {
         // Calculate diversity scores based on validator distribution
         let mut entity_counts = HashMap::<String, u64>::new();
         let mut geo_counts = HashMap::<u32, u64>::new();
-        let mut client_counts = HashMap::<String, u64>::new();
+        let client_counts = HashMap::<String, u64>::new();
         
         for (validator_id, _) in &self.staking_contract.validators {
             if let Some(info) = self.security_manager.get_security_info(&hex::encode(validator_id)) {

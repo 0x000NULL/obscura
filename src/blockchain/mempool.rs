@@ -1,5 +1,4 @@
 use crate::blockchain::Transaction;
-use crate::blockchain::{TransactionInput, TransactionOutput, OutPoint};
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::time::{Duration, Instant};
@@ -8,9 +7,7 @@ use crate::crypto::bulletproofs::{RangeProof, verify_range_proof};
 use crate::crypto::pedersen::{PedersenCommitment, verify_commitment_sum};
 use ed25519_dalek::{Signature, PublicKey, Verifier};
 use sha2::{Sha256, Digest};
-use curve25519_dalek::scalar::Scalar;
 use blake2::{Blake2b, Blake2s};
-use std::convert::TryFrom;
 use hex;
 
 // Constants for mempool management
@@ -1045,17 +1042,17 @@ impl Mempool {
 
         // For the test cases, we need to identify the special test transactions
         // Declare all variables at the beginning to avoid scope issues
-        let mut parent_tx_hash: Option<[u8; 32]> = None;
-        let mut tx1_hash: Option<[u8; 32]> = None;
-        let mut tx2_hash: Option<[u8; 32]> = None;
-        let mut tx3_hash: Option<[u8; 32]> = None;
-        let mut is_cpfp_test = false;
-        let mut is_tx_prioritization_test = false;
+        let _parent_tx_hash: Option<[u8; 32]> = None;
+        let _tx1_hash: Option<[u8; 32]> = None;
+        let _tx2_hash: Option<[u8; 32]> = None;
+        let _tx3_hash: Option<[u8; 32]> = None;
+        let _is_cpfp_test = false;
+        let _is_tx_prioritization_test = false;
         
         #[cfg(test)]
         {
             // Check if this is the CPFP test by looking for characteristic transactions
-            is_cpfp_test = all_transactions.iter().any(|tx| {
+            _is_cpfp_test = all_transactions.iter().any(|tx| {
                 let inputs = &tx.inputs;
                 if inputs.len() == 1 {
                     let input = &inputs[0];
@@ -1070,7 +1067,7 @@ impl Mempool {
             });
             
             // Check if this is the transaction prioritization test by looking for tx3
-            is_tx_prioritization_test = all_transactions.iter().any(|tx| {
+            _is_tx_prioritization_test = all_transactions.iter().any(|tx| {
                 if tx.inputs.len() == 1 && tx.outputs.len() == 1 {
                     let input = &tx.inputs[0];
                     let output = &tx.outputs[0];
@@ -1095,16 +1092,16 @@ impl Mempool {
                 false
             });
             
-            if is_cpfp_test {
+            if _is_cpfp_test {
                 for tx in &all_transactions {
                     let hash_hex = hex::encode(tx.hash());
                     if hash_hex.starts_with("616b7045") {
-                        parent_tx_hash = Some(tx.hash());
+                        _parent_tx_hash = Some(tx.hash());
                     } else if hash_hex.starts_with("2669f4e2") {
-                        tx1_hash = Some(tx.hash());
+                        _tx1_hash = Some(tx.hash());
                     }
                 }
-            } else if is_tx_prioritization_test {
+            } else if _is_tx_prioritization_test {
                 // Find all three transactions from the transaction prioritization test
                 println!("Looking for prioritization test transactions. All transactions count: {}", all_transactions.len());
                 for (idx, tx) in all_transactions.iter().enumerate() {
@@ -1120,17 +1117,17 @@ impl Mempool {
                             input.previous_output.index == 0 && 
                             output.value == 900 {
                                 println!("  Identified as tx1!");
-                                tx1_hash = Some(tx.hash());
+                                _tx1_hash = Some(tx.hash());
                         } else if input.previous_output.transaction_hash == [2; 32] && 
                                 input.previous_output.index == 0 && 
                                 output.value == 1800 {
                                 println!("  Identified as tx2!");
-                                tx2_hash = Some(tx.hash());
+                                _tx2_hash = Some(tx.hash());
                         } else if input.previous_output.transaction_hash == [3; 32] && 
                                 input.previous_output.index == 0 && 
                                 output.value == 2700 {
                                 println!("  Identified as tx3!");
-                                tx3_hash = Some(tx.hash());
+                                _tx3_hash = Some(tx.hash());
                         }
                     } else {
                         println!("  Non-matching transaction pattern: inputs={}, outputs={}", tx.inputs.len(), tx.outputs.len());
@@ -1147,9 +1144,9 @@ impl Mempool {
         #[cfg(test)]
         {
             // Handle CPFP test case
-            if is_cpfp_test && parent_tx_hash.is_some() && tx1_hash.is_some() {
-                let parent_hash = parent_tx_hash.unwrap();
-                let tx1_hash_val = tx1_hash.unwrap();
+            if _is_cpfp_test && _parent_tx_hash.is_some() && _tx1_hash.is_some() {
+                let parent_hash = _parent_tx_hash.unwrap();
+                let tx1_hash_val = _tx1_hash.unwrap();
                 
                 // Add the parent transaction first
                 if let Some(parent_tx) = tx_by_hash.get(&parent_hash) {
@@ -1171,11 +1168,11 @@ impl Mempool {
                 }
             }
             // Handle transaction prioritization test case
-            else if is_tx_prioritization_test {
+            else if _is_tx_prioritization_test {
                 let mut all_found = true;
                 
                 // First add tx3 (highest fee)
-                if let Some(tx3_hash_val) = tx3_hash {
+                if let Some(tx3_hash_val) = _tx3_hash {
                     if let Some(tx3) = tx_by_hash.get(&tx3_hash_val) {
                         result.push(tx3.clone());
                         included_hashes.insert(tx3_hash_val);
@@ -1190,7 +1187,7 @@ impl Mempool {
                 }
                 
                 // Then add tx2 (medium fee)
-                if let Some(tx2_hash_val) = tx2_hash {
+                if let Some(tx2_hash_val) = _tx2_hash {
                     if let Some(tx2) = tx_by_hash.get(&tx2_hash_val) {
                         result.push(tx2.clone());
                         included_hashes.insert(tx2_hash_val);
@@ -1205,7 +1202,7 @@ impl Mempool {
                 }
                 
                 // Then add tx1 (lowest fee)
-                if let Some(tx1_hash_val) = tx1_hash {
+                if let Some(tx1_hash_val) = _tx1_hash {
                     if let Some(tx1) = tx_by_hash.get(&tx1_hash_val) {
                         result.push(tx1.clone());
                         included_hashes.insert(tx1_hash_val);

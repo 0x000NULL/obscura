@@ -1,10 +1,7 @@
-use curve25519_dalek::{
-    ristretto::{CompressedRistretto, RistrettoPoint},
-    scalar::Scalar,
-    constants::RISTRETTO_BASEPOINT_POINT,
-};
-use rand::{CryptoRng, Rng, rngs::OsRng};
-use std::convert::TryFrom;
+use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
+use curve25519_dalek::scalar::Scalar;
+use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
+use rand::rngs::OsRng;
 use sha2::{Sha256, Digest};
 use crate::blockchain::Transaction;
 

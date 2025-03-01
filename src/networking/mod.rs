@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::blockchain::{Block, Transaction};
+use crate::blockchain::{Block, Transaction, Mempool};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::io;
@@ -9,12 +9,14 @@ use rand::RngCore;
 use rand::seq::SliceRandom;
 use rand::Rng;
 use bincode;
+use serde::{Serialize, Deserialize};
 use std::time::{Duration, Instant};
-use std::collections::{HashSet};
-use rand_distr::{Bernoulli};
+use std::collections::{HashSet, HashMap};
+use rand_distr::{Bernoulli, Distribution};
+use std::net::IpAddr;
+use rand::thread_rng;
 use crate::networking::dandelion::{
-    DandelionManager, PropagationState, PrivacyRoutingMode, 
-    TOR_INTEGRATION_ENABLED, MIXNET_INTEGRATION_ENABLED, LAYERED_ENCRYPTION_ENABLED
+    DandelionManager, PropagationState, PrivacyRoutingMode
 };
 
 // Constants for Dandelion
@@ -78,25 +80,20 @@ pub use connection_pool::{
 pub use discovery::{DiscoveryService, NodeId};
 
 // Re-export key types from dandelion module
-pub use dandelion::{DandelionManager, PropagationState, PropagationMetadata};
+pub use dandelion::{PropagationMetadata};
 
 #[derive(Clone)]
 #[allow(dead_code)]
 pub struct Node {
     peers: Vec<SocketAddr>,
-    // Replace active_connections with connection_pool
-    connection_pool: Arc<ConnectionPool<CloneableTcpStream>>,
-    // Add handshake protocol
+    connection_pool: Arc<Mutex<ConnectionPool>>,
     handshake_protocol: Arc<Mutex<HandshakeProtocol>>,
-    // Add discovery service
     discovery_service: Arc<DiscoveryService>,
-    // Add dandelion manager
     dandelion_manager: Arc<Mutex<DandelionManager>>,
-    mempool: Vec<Transaction>,
+    mempool: Arc<Mutex<Mempool>>,
     stem_transactions: Vec<Transaction>,
     broadcast_transactions: Vec<Transaction>,
-    fluff_queue: Vec<Transaction>,
-    // Add supported features
+    fluff_queue: Arc<Mutex<Vec<Transaction>>>,
     supported_features: u32,
     supported_privacy_features: u32,
 }
@@ -122,10 +119,10 @@ impl Node {
         );
         
         // Create connection pool
-        let connection_pool = Arc::new(ConnectionPool::new(
+        let connection_pool = Arc::new(Mutex::new(ConnectionPool::new(
             supported_features,
             supported_privacy_features
-        ));
+        )));
 
         // Generate random node ID for discovery
         let mut local_id = [0u8; 32];
@@ -140,7 +137,7 @@ impl Node {
         let discovery_service = Arc::new(DiscoveryService::new(
             local_id,
             bootstrap_nodes,
-            connection_pool.get_peer_scores_ref().clone(),
+            connection_pool.lock().unwrap().get_peer_scores_ref().clone(),
             true, // Enable privacy by default
         ));
         
@@ -150,10 +147,10 @@ impl Node {
             handshake_protocol: Arc::new(Mutex::new(handshake_protocol)),
             discovery_service,
             dandelion_manager: Arc::new(Mutex::new(DandelionManager::new())),
-            mempool: Vec::new(),
+            mempool: Arc::new(Mutex::new(Mempool::new())),
             stem_transactions: Vec::new(),
             broadcast_transactions: Vec::new(),
-            fluff_queue: Vec::new(),
+            fluff_queue: Arc::new(Mutex::new(Vec::new())),
             supported_features,
             supported_privacy_features,
         }
@@ -172,66 +169,42 @@ impl Node {
     }
     
     // Update connect_to_peer to use connection_pool
-    pub fn connect_to_peer(&mut self, addr: SocketAddr) -> Result<(), NodeError> {
-        use std::net::TcpStream;
-        
-        // Check if peer is banned
-        if self.connection_pool.is_banned(&addr) {
-            return Err(NodeError::NetworkError("Peer is banned".to_string()));
-        }
-        
-        // Check if we're already connected
-        if self.connection_pool.get_connection(&addr).is_some() {
-            // Already connected
-            return Ok(());
-        }
-        
-        // Try to establish TCP connection
-        let stream = TcpStream::connect(addr)
-            .map_err(|e| HandshakeError::IoError(e))?;
-        
-        // Wrap in CloneableTcpStream
-        let mut cloneable_stream = CloneableTcpStream::new(stream);
-        
-        // Perform handshake
-        let peer_connection = if let Ok(mut protocol) = self.handshake_protocol.lock() {
-            protocol.perform_outbound_handshake(cloneable_stream.inner_mut(), addr)?
+    pub fn connect_to_peer(&self, peer_addr: SocketAddr) -> Result<(), String> {
+        if let Ok(pool) = self.connection_pool.lock() {
+            if pool.is_connected(&peer_addr) {
+                return Ok(());
+            }
+            
+            if pool.is_banned(&peer_addr) {
+                return Err("Peer is banned".to_string());
+            }
         } else {
-            return Err(NodeError::NetworkError("Failed to acquire handshake protocol lock".to_string()));
+            return Err("Failed to acquire connection pool lock".to_string());
+        }
+        
+        // Create new TCP connection
+        let stream = match std::net::TcpStream::connect(peer_addr) {
+            Ok(s) => s,
+            Err(e) => return Err(format!("Connection failed: {}", e)),
         };
         
-        // Add to connection pool
-        self.connection_pool.add_connection(peer_connection.clone(), ConnectionType::Outbound)
-            .map_err(|e| match e {
-                ConnectionError::TooManyConnections => 
-                    NodeError::NetworkError("Too many connections".to_string()),
-                ConnectionError::PeerBanned => 
-                    NodeError::NetworkError("Peer is banned".to_string()),
-                ConnectionError::NetworkDiversityLimit => 
-                    NodeError::NetworkError("Network diversity limit reached".to_string()),
-                ConnectionError::ConnectionFailed(msg) => 
-                    NodeError::NetworkError(format!("Connection failed: {}", msg)),
-            })?;
-        
-        // Add to discovery service
-        let mut id = [0u8; 32];
-        let addr_string = addr.to_string();
-        let addr_bytes = addr_string.as_bytes();
-        id[..addr_bytes.len().min(32)].copy_from_slice(&addr_bytes[..addr_bytes.len().min(32)]);
-        
-        self.discovery_service.add_node(
-            id,
-            addr,
-            peer_connection.features,
-            peer_connection.privacy_features,
+        // Create new peer connection
+        let peer_conn = PeerConnection::new(
+            CloneableTcpStream::new(stream),
+            peer_addr,
+            self.supported_features,
+            self.supported_privacy_features
         );
         
-        // Add to peers list if not already there
-        if !self.peers.contains(&addr) {
-            self.peers.push(addr);
+        // Add to connection pool
+        if let Ok(pool) = self.connection_pool.lock() {
+            match pool.add_connection(peer_conn, ConnectionType::Outbound) {
+                Ok(_) => Ok(()),
+                Err(e) => Err(format!("Failed to add connection: {:?}", e)),
+            }
+        } else {
+            Err("Failed to acquire connection pool lock".to_string())
         }
-        
-        Ok(())
     }
     
     // Update handle_incoming_connection to use connection_pool
@@ -239,8 +212,10 @@ impl Node {
         let peer_addr = stream.peer_addr().map_err(|e| HandshakeError::IoError(e))?;
         
         // Check if peer is banned
-        if self.connection_pool.is_banned(&peer_addr) {
-            return Err(NodeError::NetworkError("Peer is banned".to_string()));
+        if let Ok(banned_peers) = self.get_peers_by_network_type(NetworkType::IPv4) {
+            if banned_peers.contains(&peer_addr) {
+                return Err(NodeError::NetworkError("Peer is banned".to_string()));
+            }
         }
         
         // Wrap in CloneableTcpStream
@@ -254,7 +229,7 @@ impl Node {
         };
         
         // Add to connection pool
-        self.connection_pool.add_connection(peer_connection, ConnectionType::Inbound)
+        self.connection_pool.lock().unwrap().add_connection(peer_connection, ConnectionType::Inbound)
             .map_err(|e| match e {
                 ConnectionError::TooManyConnections => 
                     NodeError::NetworkError("Too many inbound connections".to_string()),
@@ -277,7 +252,7 @@ impl Node {
     // Update disconnect_peer to use connection_pool
     pub fn disconnect_peer(&mut self, addr: &SocketAddr) {
         // Remove from connection pool
-        self.connection_pool.remove_connection(addr);
+        self.connection_pool.lock().unwrap().remove_connection(addr);
         
         // Remove from peers list
         self.peers.retain(|peer| peer != addr);
@@ -285,17 +260,17 @@ impl Node {
     
     // Update is_feature_supported to use connection_pool
     pub fn is_feature_supported(&self, addr: &SocketAddr, feature: FeatureFlag) -> bool {
-        self.connection_pool.is_feature_supported(addr, feature)
+        self.connection_pool.lock().unwrap().is_feature_supported(addr, feature)
     }
     
     // Update is_privacy_feature_supported to use connection_pool
     pub fn is_privacy_feature_supported(&self, addr: &SocketAddr, feature: PrivacyFeatureFlag) -> bool {
-        self.connection_pool.is_privacy_feature_supported(addr, feature)
+        self.connection_pool.lock().unwrap().is_privacy_feature_supported(addr, feature)
     }
 
     // Update send_message to use connection_pool and mutex stream
     pub fn send_message(&self, addr: &SocketAddr, message_type: MessageType, payload: Vec<u8>) -> Result<(), io::Error> {
-        if let Some(peer_conn) = self.connection_pool.get_connection(addr) {
+        if let Some(peer_conn) = self.connection_pool.lock().unwrap().get_connection(addr) {
             let message = Message::new(message_type, payload);
             return message.write_to_mutex_stream(&peer_conn.stream).map_err(|e| match e {
                 MessageError::IoError(io_err) => io_err,
@@ -307,7 +282,7 @@ impl Node {
     
     // Update receive_message to use connection_pool and mutex stream
     pub fn receive_message(&self, addr: &SocketAddr) -> Result<(MessageType, Vec<u8>), io::Error> {
-        if let Some(peer_conn) = self.connection_pool.get_connection(addr) {
+        if let Some(peer_conn) = self.connection_pool.lock().unwrap().get_connection(addr) {
             let message = Message::read_from_mutex_stream(&peer_conn.stream).map_err(|e| match e {
                 MessageError::IoError(io_err) => io_err,
                 _ => io::Error::new(io::ErrorKind::InvalidData, "Message deserialization error"),
@@ -323,7 +298,7 @@ impl Node {
         let mut failed_peers = Vec::new();
         
         // Get all connections
-        let connections = self.connection_pool.get_all_connections();
+        let connections = self.connection_pool.lock().unwrap().get_all_connections();
         
         for (addr, peer_conn, _) in connections {
             let message = Message::new(message_type, payload.clone());
@@ -338,12 +313,12 @@ impl Node {
     // Add a method to perform peer rotation for privacy
     pub fn rotate_peers_for_privacy(&mut self) -> Result<(), NodeError> {
         // Check if it's time to rotate
-        if !self.connection_pool.should_rotate_peers() {
+        if !self.connection_pool.lock().unwrap().should_rotate_peers() {
             return Ok(());
         }
         
         // Get number of peers to disconnect
-        let num_peers_to_disconnect = self.connection_pool.rotate_peers();
+        let num_peers_to_disconnect = self.connection_pool.lock().unwrap().rotate_peers();
         
         // If no peers were disconnected, we're done
         if num_peers_to_disconnect == 0 {
@@ -359,7 +334,7 @@ impl Node {
             let candidates = self.discovery_service.find_nodes(&target_id, ALPHA);
             
             for (_, addr) in candidates {
-                if !self.connection_pool.is_connected(&addr) {
+                if !self.connection_pool.lock().unwrap().is_connected(&addr) {
                     if let Ok(()) = self.connect_to_peer(addr) {
                         connected += 1;
                         break;
@@ -377,19 +352,23 @@ impl Node {
     
     // Add a method to get a diverse set of peers for privacy-focused operations
     pub fn get_diverse_peers(&self, count: usize) -> Vec<SocketAddr> {
-        (*self.connection_pool).select_random_peers(count)
+        (*self.connection_pool.lock().unwrap()).select_random_peers(count)
     }
 
     pub fn enable_mining(&mut self) {
         // TODO: Implement mining functionality
     }
 
-    pub fn mempool(&self) -> &Vec<Transaction> {
-        &self.mempool
+    pub fn mempool(&self) -> Vec<Transaction> {
+        let mempool = self.mempool.lock().unwrap();
+        mempool.get_all_transactions()
+            .map(|(_, tx)| tx.clone())
+            .collect()
     }
 
     pub fn add_transaction(&mut self, tx: Transaction) {
-        self.mempool.push(tx);
+        let mut mempool = self.mempool.lock().unwrap();
+        mempool.add_transaction(tx);
     }
 
     pub fn process_block(&mut self, block: Block) -> Result<(), NodeError> {
@@ -475,7 +454,8 @@ impl Node {
                 let now = Instant::now();
                 let mut rng = rand::thread_rng();
                 let transition_delay = Duration::from_secs(rng.gen_range(
-                    STEM_PHASE_MIN_TIMEOUT.as_secs()..=STEM_PHASE_MAX_TIMEOUT.as_secs()
+                    STEM_PHASE_MIN_TIMEOUT.as_secs(),
+                    STEM_PHASE_MAX_TIMEOUT.as_secs() + 1
                 ));
                 
                 manager.transactions.insert(tx_hash, PropagationMetadata {
@@ -489,12 +469,19 @@ impl Node {
                     is_decoy: false,
                     adaptive_delay: None,
                     suspicious_peers: HashSet::new(),
+                    privacy_mode: PrivacyRoutingMode::Standard,
+                    encryption_layers: 0,
+                    transaction_modified: false,
+                    anonymity_set: HashSet::new(),
+                    differential_delay: Duration::from_millis(0),
+                    tx_data: Vec::new(),
+                    fluff_time: None,
                 });
             }
         }
         
         // Add random delay before sending (for privacy)
-        let delay = rand::thread_rng().gen_range(50..500);
+        let delay = rand::thread_rng().gen_range(50, 500);
         std::thread::sleep(Duration::from_millis(delay));
         
         // Try to send the transaction to the successor
@@ -516,7 +503,9 @@ impl Node {
                 }
                 
                 // Fall back to fluff phase
-                self.fluff_queue.push(tx.clone());
+                if !self.fluff_queue.lock().unwrap().iter().any(|queue_tx| queue_tx.hash() == tx.hash()) {
+                    self.fluff_queue.lock().unwrap().push(tx.clone());
+                }
                 
                 Err(format!("Failed to send to stem successor: {}, falling back to fluff phase", e))
             }
@@ -564,7 +553,7 @@ impl Node {
         drop(connection_pool);
         
         for tx_hash in fluff_txs {
-            match self.mempool.iter().find(|tx| tx.hash() == tx_hash) {
+            match self.mempool.lock().unwrap().get_transaction(&tx_hash) {
                 Some(tx) => {
                     self.broadcast_transaction(tx.clone(), &peers)?;
                 },
@@ -584,17 +573,18 @@ impl Node {
         let tx_hash = transaction.hash();
         
         // Check if we already have this transaction
-        {
-            let mempool = self.mempool.iter().find(|tx| tx.hash() == tx_hash);
-            if mempool.is_some() {
-                return Ok(());  // Already have this transaction
-            }
+        let mempool_has_tx = self.mempool.lock().unwrap().get_transaction(&tx_hash).is_some();
+        if mempool_has_tx {
+            return Ok(());  // Already have this transaction
         }
         
         // Add to mempool
         {
             let mut mempool = self.mempool.lock().unwrap();
-            mempool.add_transaction(transaction.clone())?;
+            if !mempool.add_transaction(transaction.clone()) {
+                // Transaction was not added to mempool (already exists or invalid)
+                return Ok(());
+            }
         }
         
         // Process with Dandelion protocol
@@ -625,9 +615,9 @@ impl Node {
                 // Create path only if we have enough peers
                 if all_peers.len() >= 3 {
                     // Determine path length - more hops = more privacy but higher failure risk
-                    let hop_count = rng.gen_range(MIN_ROUTING_PATH_LENGTH..=MIN_ROUTING_PATH_LENGTH.max(
+                    let hop_count = rng.gen_range(MIN_ROUTING_PATH_LENGTH, MIN_ROUTING_PATH_LENGTH.max(
                         all_peers.len().min(MAX_MULTI_HOP_LENGTH)
-                    ));
+                    ) + 1);
                     
                     // Select diverse peers for path
                     let mut available_peers = all_peers.clone();
@@ -678,7 +668,8 @@ impl Node {
         // Determine transition time (when to switch from stem to fluff)
         let transition_delay = if state != PropagationState::Fluff {
             Duration::from_secs(rng.gen_range(
-                STEM_PHASE_MIN_TIMEOUT.as_secs()..=STEM_PHASE_MAX_TIMEOUT.as_secs()
+                STEM_PHASE_MIN_TIMEOUT.as_secs(),
+                STEM_PHASE_MAX_TIMEOUT.as_secs() + 1
             ))
         } else {
             Duration::from_secs(0) // Immediate for fluff phase
@@ -692,7 +683,8 @@ impl Node {
             let mut path = Vec::new();
             
             // Try to get a pre-built multi-hop path
-            if let Some(peers) = dandelion_manager.get_multi_hop_path(&[]) {
+            let all_peers = self.get_all_connections();
+            if let Some(peers) = dandelion_manager.get_multi_hop_path(&tx_hash, &all_peers) {
                 path = peers;
             } else {
                 // Fall back to a short random path
@@ -722,7 +714,7 @@ impl Node {
         
         // Create metadata for tracking
         dandelion_manager.transactions.insert(tx_hash, PropagationMetadata {
-            state,
+            state: state.clone(),
             received_time: now,
             transition_time: now + transition_delay,
             relayed: false,
@@ -732,6 +724,13 @@ impl Node {
             is_decoy: false,
             adaptive_delay: None,
             suspicious_peers: HashSet::new(),
+            privacy_mode: PrivacyRoutingMode::Standard,
+            encryption_layers: 0,
+            transaction_modified: false,
+            anonymity_set: HashSet::new(),
+            differential_delay: Duration::from_millis(0),
+            tx_data: Vec::new(),
+            fluff_time: None,
         });
         
         drop(dandelion_manager);
@@ -742,8 +741,12 @@ impl Node {
             PropagationState::MultiHopStem(_) => self.route_transaction_stem(transaction),
             PropagationState::MultiPathStem(_) => self.route_transaction_stem(transaction),
             PropagationState::BatchedStem => Ok(()), // Will be handled by batch processing
-            PropagationState::Fluff => self.route_transaction_fluff(transaction),
+            PropagationState::Fluff => self.route_transaction_fluff(tx_hash),
             PropagationState::DecoyTransaction => Ok(()), // Decoys are handled separately
+            PropagationState::TorRelayed => Ok(()), // Tor relayed transactions are handled by Tor network
+            PropagationState::MixnetRelayed => Ok(()), // Mixnet relayed transactions are handled by Mixnet
+            PropagationState::LayeredEncrypted => Ok(()), // Layered encrypted transactions have special handling
+            PropagationState::Fluffed => Ok(()), // Transaction has already been fluffed, no further action needed
         }
     }
     
@@ -825,498 +828,8 @@ impl Node {
         Ok(())
     }
 
-    // Add method to maintain network
-    pub fn maintain_network(&self) -> Result<(), String> {
-        // Maintain connection pool
-        let connection_pool = self.connection_pool.lock().unwrap();
-        if connection_pool.should_rotate_peers() {
-            let rotated = connection_pool.rotate_peers();
-            if rotated > 0 {
-                println!("Rotated {} peers for privacy", rotated);
-            }
-        }
-        drop(connection_pool);
-
-        // Maintain network diversity
-        if let Err(e) = self.maintain_network_diversity() {
-            println!("Error maintaining network diversity: {:?}", e);
-        }
-        
-        // Discover new peers periodically
-        let discovery_result = self.discover_peers();
-        if let Err(e) = discovery_result {
-            println!("Peer discovery error: {:?}", e);
-        }
-        
-        // Maintain Dandelion protocol for privacy with enhanced security features
-        if let Err(e) = self.maintain_dandelion() {
-            println!("Dandelion maintenance error: {:?}", e);
-        }
-        
-        // Process any transactions waiting in fluff queue
-        if let Err(e) = self.process_fluff_queue() {
-            println!("Error processing fluff queue: {:?}", e);
-        }
-
-        Ok(())
-    }
-
-    /// Route a transaction with enhanced privacy features
-    pub fn route_transaction_with_privacy(&mut self, tx: Transaction, privacy_mode: PrivacyRoutingMode) -> Result<(), String> {
-        let tx_hash = tx.hash();
-        
-        // Add to mempool
-        self.mempool.push(tx.clone());
-        
-        // Get transaction routing mode
-        let stem_state = if let Ok(manager) = self.dandelion_manager.lock() {
-            manager.add_transaction_with_privacy(tx_hash, None, privacy_mode.clone())
-        } else {
-            return Err("Failed to acquire lock on Dandelion manager".to_string());
-        };
-        
-        match privacy_mode {
-            PrivacyRoutingMode::Standard => {
-                match stem_state {
-                    PropagationState::Stem => {
-                        // Standard stem routing
-                        self.route_transaction_stem(tx)
-                    },
-                    PropagationState::MultiHopStem(hops) => {
-                        self.route_transaction_multi_hop(tx, hops)
-                    },
-                    PropagationState::MultiPathStem(paths) => {
-                        self.route_transaction_multi_path(tx, paths)
-                    },
-                    PropagationState::BatchedStem => {
-                        self.add_transaction_to_batch(tx)
-                    },
-                    PropagationState::Fluff => {
-                        // Add directly to fluff queue
-                        self.fluff_queue.push(tx);
-                        Ok(())
-                    },
-                    _ => Ok(()) // Other states handled elsewhere
-                }
-            },
-            PrivacyRoutingMode::Tor => {
-                if TOR_INTEGRATION_ENABLED {
-                    self.route_transaction_via_tor(tx)
-                } else {
-                    // Fall back to standard routing with high anonymity
-                    self.route_transaction_multi_hop(tx, 3)
-                }
-            },
-            PrivacyRoutingMode::Mixnet => {
-                if MIXNET_INTEGRATION_ENABLED {
-                    self.route_transaction_via_mixnet(tx)
-                } else {
-                    // Fall back to standard routing with high anonymity
-                    self.route_transaction_multi_path(tx, 2)
-                }
-            },
-            PrivacyRoutingMode::Layered => {
-                if LAYERED_ENCRYPTION_ENABLED {
-                    self.route_transaction_layered(tx)
-                } else {
-                    // Fall back to standard stem routing with high anonymity
-                    self.route_transaction_multi_hop(tx, 3)
-                }
-            }
-        }
-    }
-    
-    /// Route a transaction through multiple hops for enhanced privacy
-    pub fn route_transaction_multi_hop(&mut self, tx: Transaction, hops: usize) -> Result<(), String> {
-        let tx_hash = tx.hash();
-        
-        // Get the multi-hop path
-        let path = if let Ok(manager) = self.dandelion_manager.lock() {
-            manager.get_multi_hop_path(&[])
-        } else {
-            return Err("Failed to acquire lock on Dandelion manager".to_string());
-        };
-        
-        if let Some(path) = path {
-            if path.is_empty() {
-                return Err("Empty multi-hop path".to_string());
-            }
-            
-            // Add to stem transactions
-            self.stem_transactions.push(tx.clone());
-            
-            // First hop is the path entry point
-            let first_hop = path[0];
-            
-            // Send to first hop
-            match self.send_transaction_to_peer(first_hop, tx.clone()) {
-                Ok(_) => {
-                    // Mark as relayed
-                    if let Ok(mut manager) = self.dandelion_manager.lock() {
-                        manager.mark_relayed(&tx_hash);
-                        
-                        // Record successful relay
-                        manager.reward_successful_relay(first_hop, &tx_hash);
-                    }
-                    Ok(())
-                },
-                Err(e) => {
-                    // Handle transmission failure with smart failover
-                    if let Ok(mut manager) = self.dandelion_manager.lock() {
-                        manager.record_suspicious_behavior(&tx_hash, first_hop, "relay_failure");
-                        
-                        // Get failover peers
-                        let failover_peers = manager.get_failover_peers(&tx_hash, &first_hop, &self.get_stem_successors());
-                        
-                        if !failover_peers.is_empty() {
-                            // Try first failover peer
-                            let failover = failover_peers[0];
-                            match self.send_transaction_to_peer(failover, tx.clone()) {
-                                Ok(_) => {
-                                    manager.mark_relayed(&tx_hash);
-                                    manager.reward_successful_relay(failover, &tx_hash);
-                                    return Ok(());
-                                },
-                                Err(_) => {} // Continue to fallback
-                            }
-                        }
-                    }
-                    
-                    // Fallback to fluff phase if stem fails
-                    self.fluff_queue.push(tx.clone());
-                    return self.route_transaction_fluff(tx);
-                }
-            }
-        } else {
-            // No suitable path, fallback to fluff
-            self.fluff_queue.push(tx.clone());
-            return self.route_transaction_fluff(tx);
-        }
-    }
-    
-    /// Route a transaction through multiple paths for enhanced privacy
-    pub fn route_transaction_multi_path(&mut self, tx: Transaction, num_paths: usize) -> Result<(), String> {
-        let tx_hash = tx.hash();
-        
-        // Get multiple diverse paths
-        let paths = if let Ok(mut manager) = self.dandelion_manager.lock() {
-            manager.create_multi_path_routing(tx_hash, &self.get_diverse_peers(num_paths * 2))
-        } else {
-            Vec::new()
-        };
-        
-        if paths.is_empty() {
-            // Fall back to standard stem routing
-            return self.route_transaction_stem(tx);
-        }
-        
-        // Add to stem transactions
-        self.stem_transactions.push(tx.clone());
-        
-        let mut success = false;
-        
-        // Send to multiple paths for redundancy and privacy
-        for peer in &paths {
-            match self.send_transaction_to_peer(*peer, tx.clone()) {
-                Ok(_) => {
-                    // Mark successful relay
-                    if let Ok(mut manager) = self.dandelion_manager.lock() {
-                        manager.reward_successful_relay(*peer, &tx_hash);
-                    }
-                    success = true;
-                },
-                Err(_) => {
-                    // Record failure
-                    if let Ok(mut manager) = self.dandelion_manager.lock() {
-                        manager.record_suspicious_behavior(&tx_hash, *peer, "relay_failure");
-                    }
-                }
-            }
-        }
-        
-        if success {
-            // Mark as relayed
-            if let Ok(mut manager) = self.dandelion_manager.lock() {
-                manager.mark_relayed(&tx_hash);
-            }
-            Ok(())
-        } else {
-            // Fallback to fluff phase if all paths fail
-            self.fluff_queue.push(tx.clone());
-            return self.route_transaction_fluff(tx);
-        }
-    }
-    
-    /// Add a transaction to a batch for traffic analysis protection
-    pub fn add_transaction_to_batch(&mut self, tx: Transaction) -> Result<(), String> {
-        let tx_hash = tx.hash();
-        
-        // Add to batch
-        let batch_id = if let Ok(mut manager) = self.dandelion_manager.lock() {
-            manager.add_to_batch(tx_hash)
-        } else {
-            None
-        };
-        
-        if batch_id.is_some() {
-            // Add to stem transactions for now
-            self.stem_transactions.push(tx);
-            Ok(())
-        } else {
-            // Fallback to regular stem routing
-            self.route_transaction_stem(tx)
-        }
-    }
-    
-    /// Route a transaction through Tor network
-    pub fn route_transaction_via_tor(&mut self, tx: Transaction) -> Result<(), String> {
-        if !TOR_INTEGRATION_ENABLED {
-            return Err("Tor integration not enabled".to_string());
-        }
-        
-        // Here we would implement actual Tor routing
-        // For now, this is a placeholder that simulates Tor by:
-        // 1. Adding extra delays to simulate Tor latency
-        // 2. Using multi-hop routing with more hops than standard
-        
-        // Add to stem transactions
-        self.stem_transactions.push(tx.clone());
-        
-        // Simulate Tor by using multi-hop with extra privacy
-        let _ = self.route_transaction_multi_hop(tx, 5);
-        
-        // In real implementation, would use Tor SOCKS proxy
-        // let socks_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), TOR_SOCKS_PORT);
-        // Connect to Tor SOCKS proxy and route transaction...
-        
-        Ok(())
-    }
-    
-    /// Route a transaction through Mixnet
-    pub fn route_transaction_via_mixnet(&mut self, tx: Transaction) -> Result<(), String> {
-        if !MIXNET_INTEGRATION_ENABLED {
-            return Err("Mixnet integration not enabled".to_string());
-        }
-        
-        // Here we would implement actual Mixnet routing
-        // For now, this is a placeholder that simulates Mixnet by:
-        // 1. Adding extra delays to simulate Mixnet latency
-        // 2. Using multi-path routing for redundancy like Mixnet
-        
-        // Add to stem transactions
-        self.stem_transactions.push(tx.clone());
-        
-        // Simulate Mixnet by using multi-path with extra privacy
-        let _ = self.route_transaction_multi_path(tx, 3);
-        
-        // In real implementation, would use actual Mixnet client
-        
-        Ok(())
-    }
-    
-    /// Route a transaction with layered encryption
-    pub fn route_transaction_layered(&mut self, tx: Transaction) -> Result<(), String> {
-        if !LAYERED_ENCRYPTION_ENABLED {
-            return Err("Layered encryption not enabled".to_string());
-        }
-        
-        let tx_hash = tx.hash();
-        
-        // Get path for layered routing
-        let path = self.get_diverse_peers(3);
-        
-        if path.is_empty() {
-            return Err("No suitable peers for layered encryption".to_string());
-        }
-        
-        // Set up layered encryption
-        let session_id = if let Ok(mut manager) = self.dandelion_manager.lock() {
-            manager.setup_layered_encryption(&tx_hash, &path)
-        } else {
-            None
-        };
-        
-        if session_id.is_none() {
-            // Fall back to standard stem routing
-            return self.route_transaction_stem(tx);
-        }
-        
-        // Add to stem transactions
-        self.stem_transactions.push(tx.clone());
-        
-        // In a real implementation, we would:
-        // 1. Encrypt the transaction for each layer in reverse order
-        // 2. Include routing information for each hop
-        // 3. Send the onion-encrypted package to the first hop
-        
-        // For now, simulate by sending to first peer in path
-        if !path.is_empty() {
-            match self.send_transaction_to_peer(path[0], tx.clone()) {
-                Ok(_) => {
-                    // Mark as relayed
-                    if let Ok(mut manager) = self.dandelion_manager.lock() {
-                        manager.mark_relayed(&tx_hash);
-                        manager.reward_successful_relay(path[0], &tx_hash);
-                    }
-                    Ok(())
-                },
-                Err(e) => {
-                    // Fallback to standard routing
-                    self.fluff_queue.push(tx);
-                    Err(format!("Layered encryption relay failed ({}), fallback to fluff phase", e))
-                }
-            }
-        } else {
-            self.fluff_queue.push(tx);
-            Ok(())
-        }
-    }
-    
-    /// Handle incoming transaction with anti-snooping protections
-    pub fn handle_transaction_request(&self, peer: SocketAddr, tx_hash: [u8; 32]) -> Result<Option<Transaction>, String> {
-        // Track the request for anti-snooping detection
-        if let Ok(mut manager) = self.dandelion_manager.lock() {
-            manager.track_transaction_request(peer, &tx_hash);
-            
-            // Check if we should respond with a dummy transaction
-            if manager.should_send_dummy_response(peer, &tx_hash) {
-                // Send a dummy transaction instead of the real one
-                let dummy_tx_hash = manager.generate_dummy_transaction();
-                
-                // Create a dummy transaction (simple placeholder)
-                let dummy_tx = Transaction::new(vec![], vec![]); // Create minimal valid transaction
-                
-                // Record dummy response
-                if let Some(reputation) = manager.peer_reputation.get_mut(&peer) {
-                    reputation.dummy_responses_sent += 1;
-                }
-                
-                return Ok(Some(dummy_tx));
-            }
-        }
-        
-        // Check if we have the transaction in mempool
-        if let Some(tx) = self.mempool.iter().find(|tx| tx.hash() == tx_hash) {
-            // Check if it's a transaction we should share
-            if let Ok(manager) = self.dandelion_manager.lock() {
-                if let Some(metadata) = manager.transactions.get(&tx_hash) {
-                    // Only share if in fluff phase or we're the originator
-                    if metadata.state == PropagationState::Fluff || 
-                       metadata.source_addr.is_none() { // We're originator if no source
-                        return Ok(Some(tx.clone()));
-                    } else {
-                        // We have it but it's in stem phase, deny knowledge
-                        return Ok(None);
-                    }
-                }
-            }
-            
-            // If not tracked by Dandelion, assume safe to share
-            return Ok(Some(tx.clone()));
-        }
-        
-        // Don't have the transaction
-        Ok(None)
-    }
-    
-    /// Check peer reputation and determine if it should be used for routing
-    pub fn is_peer_suitable_for_routing(&self, peer: SocketAddr) -> bool {
-        if let Ok(manager) = self.dandelion_manager.lock() {
-            // Check for suspicious behavior
-            if manager.is_peer_suspicious(&peer) {
-                return false;
-            }
-            
-            // Check for Sybil attack indicators
-            if manager.detect_sybil_peer(peer) {
-                return false;
-            }
-            
-            // Check reputation threshold
-            if let Some(reputation) = manager.peer_reputation.get(&peer) {
-                return reputation.reputation_score >= 20.0;
-            }
-        }
-        
-        // Default to true if can't check reputation
-        true
-    }
-    
-    /// Check for and respond to potential Eclipse attacks
-    pub fn defend_against_eclipse_attack(&mut self) -> Result<(), String> {
-        let mut peers_to_drop = Vec::new();
-        
-        // Check for potential Eclipse attack
-        let eclipse_detected = if let Ok(mut manager) = self.dandelion_manager.lock() {
-            let detected = manager.check_for_eclipse_attack();
-            if detected {
-                // Get peers to drop if attack detected
-                peers_to_drop = manager.respond_to_eclipse_attack();
-            }
-            detected
-        } else {
-            false
-        };
-        
-        if eclipse_detected {
-            // Log detection
-            println!("Potential Eclipse attack detected! Taking defensive measures.");
-            
-            // Drop suspicious peers
-            for peer in &peers_to_drop {
-                self.disconnect_peer(peer);
-            }
-            
-            // Force peer rotation for diversity
-            self.rotate_peers_for_privacy()?;
-            
-            // Recalculate stem paths
-            if let Ok(mut manager) = self.dandelion_manager.lock() {
-                manager.calculate_stem_paths(&self.peers);
-            }
-        }
-        
-        Ok(())
-    }
-    
-    /// Generate and send background noise traffic for traffic analysis protection
-    pub fn generate_background_noise(&self) -> Result<(), String> {
-        let should_generate = if let Ok(mut manager) = self.dandelion_manager.lock() {
-            manager.should_generate_background_noise()
-        } else {
-            false
-        };
-        
-        if should_generate {
-            // Create a minimal dummy transaction
-            let dummy_tx = Transaction::new(vec![], vec![]);
-            
-            // Get random peers from fluff targets
-            let all_peers = self.peers.clone();
-            let tx_hash = dummy_tx.hash();
-            
-            let targets = if let Ok(manager) = self.dandelion_manager.lock() {
-                manager.get_fluff_targets(&tx_hash, &all_peers)
-            } else {
-                all_peers
-            };
-            
-            // Send to a random subset of peers
-            let mut rng = rand::thread_rng();
-            let mut selected_targets = targets;
-            selected_targets.shuffle(&mut rng);
-            
-            // Send to up to 3 peers
-            for peer in selected_targets.iter().take(3) {
-                let _ = self.send_transaction_to_peer(peer, dummy_tx.clone());
-            }
-        }
-        
-        Ok(())
-    }
-    
     /// Enhanced version of maintain_dandelion to include advanced privacy features
-    pub fn maintain_dandelion_enhanced(&self) -> Result<(), String> {
+    pub fn maintain_dandelion_enhanced(&mut self) -> Result<(), String> {
         if let Ok(mut manager) = self.dandelion_manager.lock() {
             // Run standard maintenance
             manager.cleanup_old_transactions(Duration::from_secs(3600));
@@ -1336,25 +849,18 @@ impl Node {
             // Process transactions ready for fluff phase
             for tx_hash in ready_txs {
                 // Mark transaction for broadcast
-                if let Some(tx) = self.mempool.iter().find(|tx| tx.hash() == tx_hash) {
-                    if !self.fluff_queue.contains(tx) {
-                        // Lock is needed because we're modifying Node state
-                        if let Ok(mut node) = unsafe { (self as *const Self as *mut Self).as_mut() } {
-                            node.fluff_queue.push(tx.clone());
-                        }
+                if let Some(tx) = self.mempool.lock().unwrap().get_transaction(&tx_hash) {
+                    if !self.fluff_queue.lock().unwrap().iter().any(|queue_tx| queue_tx.hash() == tx.hash()) {
+                        self.fluff_queue.lock().unwrap().push(tx.clone());
                     }
                 }
             }
             
             // Generate decoy transactions if needed
-            if let Some(decoy_hash) = manager.generate_decoy_transaction() {
+            if let Some(_decoy_hash) = manager.generate_decoy_transaction() {
                 // Create a minimal dummy transaction for the decoy
                 let decoy_tx = Transaction::new(vec![], vec![]);
-                
-                // Lock is needed because we're modifying Node state
-                if let Ok(mut node) = unsafe { (self as *const Self as *mut Self).as_mut() } {
-                    node.fluff_queue.push(decoy_tx.clone());
-                }
+                self.fluff_queue.lock().unwrap().push(decoy_tx);
             }
         }
         
@@ -1362,21 +868,21 @@ impl Node {
     }
     
     /// Enhanced version of maintain_network to include advanced privacy protections
-    pub fn maintain_network_enhanced(&self) -> Result<(), String> {
+    pub fn maintain_network_enhanced(&mut self) -> Result<(), String> {
         // Maintain connection pool
-        if let Some(should_rotate) = self.connection_pool.should_rotate_peers() {
-            if should_rotate {
-                let rotated = self.connection_pool.rotate_peers();
-                println!("Rotated {} peers for privacy", rotated);
-            }
+        let connection_pool = self.connection_pool.lock().unwrap();
+        if connection_pool.should_rotate_peers() {
+            let rotated = connection_pool.rotate_peers();
+            println!("Rotated {} peers for privacy", rotated);
         }
-        
+        drop(connection_pool);
+
         // Maintain network diversity
         if let Err(e) = self.maintain_network_diversity() {
             println!("Error maintaining network diversity: {}", e);
         }
         
-        // Discover new peers
+        // Discover new peers periodically
         if let Err(e) = self.discover_peers() {
             println!("Error discovering peers: {}", e);
         }
@@ -1415,34 +921,35 @@ impl Node {
 
     /// Send a transaction to a specific peer
     pub fn send_transaction_to_peer(&self, peer: SocketAddr, tx: Transaction) -> Result<(), String> {
-        // First, check if we're connected to this peer
-        if !self.connection_pool.is_connected(&peer) {
-            return Err(format!("Not connected to peer {}", peer));
-        }
+        let connection_pool = self.connection_pool.lock().map_err(|e| format!("Failed to acquire connection pool lock: {}", e))?;
         
-        // Serialize and send the transaction
-        match self.send_message(&peer, MessageType::Transactions, vec![tx].serialize()) {
-            Ok(_) => {
-                if let Some(addr_string) = peer.to_string().split(':').next() {
-                    // If peer supports Dandelion, mark transaction as relayed
-                    if self.is_privacy_feature_supported(&peer, PrivacyFeatureFlag::Dandelion) {
-                        let mut dandelion_manager = self.dandelion_manager.lock().unwrap();
-                        dandelion_manager.mark_relayed(&tx.hash());
-                        
-                        // Reward successful relay
-                        dandelion_manager.reward_successful_relay(peer, &tx.hash());
-                    }
-                }
-                
-                Ok(())
-            },
-            Err(e) => Err(format!("Failed to send transaction: {}", e)),
+        if let Some(conn) = connection_pool.get_connection(&peer) {
+            // Serialize transaction
+            let payload = bincode::serialize(&vec![tx]).map_err(|e| format!("Failed to serialize transaction: {}", e))?;
+            
+            // Create message
+            let message = Message::new(MessageType::Transactions, payload);
+            
+            // Send message
+            message.write_to_mutex_stream(&conn.stream)
+                .map_err(|e| format!("Failed to send transaction: {}", e))
+        } else {
+            Err("Peer not connected".to_string())
         }
     }
 
     /// Route a transaction in fluff (broadcast) phase
-    pub fn route_transaction_fluff(&self, tx: Transaction) -> Result<(), String> {
-        let tx_hash = tx.hash();
+    pub fn route_transaction_fluff(&self, tx_hash: [u8; 32]) -> Result<(), String> {
+        // Get the transaction from mempool
+        let tx = if let Ok(mempool) = self.mempool.lock() {
+            if let Some(tx) = mempool.get_transaction(&tx_hash) {
+                tx.clone()
+            } else {
+                return Err("Transaction not found in mempool".to_string());
+            }
+        } else {
+            return Err("Failed to acquire mempool lock".to_string());
+        };
         
         // Get the dandelion manager to update state
         let mut dandelion_manager = self.dandelion_manager.lock().unwrap();
@@ -1453,7 +960,7 @@ impl Node {
         }
         
         // Get target peers for fluff phase broadcasting
-        let all_peers: Vec<SocketAddr> = self.connection_pool.get_all_connections()
+        let all_peers: Vec<SocketAddr> = self.connection_pool.lock().unwrap().get_all_connections()
             .into_iter()
             .map(|(addr, _, _)| addr)
             .collect();
@@ -1471,13 +978,12 @@ impl Node {
         // Broadcast to targets with random delays
         for target in targets {
             // Add small random delay between broadcasts for privacy
-            let delay = rand::thread_rng().gen_range(10..100);
+            let delay = rng.gen_range(10, 100);
             std::thread::sleep(std::time::Duration::from_millis(delay));
             
             // Send transaction to target
             let _ = self.send_transaction_to_peer(target, tx.clone());
         }
-        
         
         Ok(())
     }
@@ -1498,7 +1004,7 @@ impl Node {
         // Create random subset of peers for initial broadcast (for privacy)
         let broadcast_count = std::cmp::min(
             peers.len(),
-            rng.gen_range(MIN_BROADCAST_PEERS..=MAX_BROADCAST_PEERS)
+            rng.gen_range(MIN_BROADCAST_PEERS, MAX_BROADCAST_PEERS + 1)
         );
         
         let mut target_peers = peers.to_vec();
@@ -1513,7 +1019,7 @@ impl Node {
             }
             
             // Add random delay between broadcasts
-            let delay = rng.gen_range(10..200);
+            let delay = rng.gen_range(10, 200);
             std::thread::sleep(Duration::from_millis(delay));
             
             // Send transaction to peer
@@ -1551,7 +1057,7 @@ impl Node {
                 }
                 
                 // Add random delay
-                let delay = rng.gen_range(10..200);
+                let delay = rng.gen_range(10, 200);
                 std::thread::sleep(Duration::from_millis(delay));
                 
                 // Send transaction to peer
@@ -1572,19 +1078,20 @@ impl Node {
 
     /// Maintain network diversity to enhance privacy and resilience
     pub fn maintain_network_diversity(&self) -> Result<(), String> {
-        // Check if we have enough connections
-        let connection_pool = self.connection_pool.clone();
-        
         // Get current diversity metrics
+        let connection_pool = self.connection_pool.lock().map_err(|e| format!("Failed to acquire connection pool lock: {}", e))?;
         let diversity_score = connection_pool.get_diversity_score();
+        let network_counts = connection_pool.get_network_type_counts();
         
         // If diversity is already good, nothing to do
         if diversity_score >= MIN_PEER_DIVERSITY_SCORE {
             return Ok(());
         }
         
-        // Get current connection types
-        let (ipv4_count, ipv6_count, tor_count, i2p_count) = connection_pool.get_network_type_counts();
+        let ipv4_count = network_counts.get(&NetworkType::IPv4).copied().unwrap_or(0);
+        let ipv6_count = network_counts.get(&NetworkType::IPv6).copied().unwrap_or(0);
+        let tor_count = network_counts.get(&NetworkType::Tor).copied().unwrap_or(0);
+        let i2p_count = network_counts.get(&NetworkType::I2P).copied().unwrap_or(0);
         let total_connections = ipv4_count + ipv6_count + tor_count + i2p_count;
         
         // Plan for better diversity
@@ -1608,9 +1115,12 @@ impl Node {
             }
         }
         
+        // Drop the connection pool lock before making changes
+        drop(connection_pool);
+        
         // Disconnect peers with poor diversity scores
         for peer in to_disconnect {
-            connection_pool.schedule_disconnect(&peer);
+            self.schedule_disconnect(&peer)?;
         }
         
         // Try to connect to more diverse peers
@@ -1619,6 +1129,7 @@ impl Node {
             if let Some(candidates) = self.discovery_service.get_peers_by_network_type(network_type) {
                 for candidate in candidates {
                     // Don't try to connect if we're already connected
+                    let connection_pool = self.connection_pool.lock().map_err(|e| format!("Failed to acquire connection pool lock: {}", e))?;
                     if connection_pool.is_connected(&candidate) {
                         continue;
                     }
@@ -1639,7 +1150,9 @@ impl Node {
         }
         
         // Check if diversity improved
+        let connection_pool = self.connection_pool.lock().map_err(|e| format!("Failed to acquire connection pool lock: {}", e))?;
         let new_diversity_score = connection_pool.get_diversity_score();
+        
         if new_diversity_score > diversity_score {
             Ok(())
         } else {
@@ -1660,8 +1173,7 @@ impl Node {
             return Err("No new peers discovered".to_string());
         }
         
-        // Get current connection pool state
-        let connection_pool = self.connection_pool.clone();
+        let connection_pool = self.connection_pool.lock().map_err(|e| format!("Failed to acquire connection pool lock: {}", e))?;
         let mut connected = 0;
         
         // Try to connect to discovered peers
@@ -1679,7 +1191,6 @@ impl Node {
             // Try to connect to the peer
             match connection_pool.connect_to_peer(peer_addr) {
                 Ok(_) => {
-                    // Successfully connected
                     connected += 1;
                     
                     // Add to discovery service
@@ -1695,10 +1206,7 @@ impl Node {
                         break;
                     }
                 },
-                Err(_) => {
-                    // Failed to connect, try next peer
-                    continue;
-                }
+                Err(_) => continue,
             }
         }
         
@@ -1707,6 +1215,141 @@ impl Node {
         } else {
             Err("Failed to connect to any discovered peers".to_string())
         }
+    }
+
+    pub fn get_network_type_counts(&self) -> Result<HashMap<NetworkType, usize>, String> {
+        if let Ok(pool) = self.connection_pool.lock() {
+            Ok(pool.get_network_type_counts())
+        } else {
+            Err("Failed to acquire connection pool lock".to_string())
+        }
+    }
+
+    pub fn get_diversity_score(&self) -> Result<f64, String> {
+        if let Ok(pool) = self.connection_pool.lock() {
+            Ok(pool.get_diversity_score())
+        } else {
+            Err("Failed to acquire connection pool lock".to_string())
+        }
+    }
+
+    pub fn get_peers_by_network_type(&self, network_type: NetworkType) -> Result<Vec<SocketAddr>, String> {
+        if let Ok(pool) = self.connection_pool.lock() {
+            Ok(pool.get_peers_by_network_type(network_type))
+        } else {
+            Err("Failed to acquire connection pool lock".to_string())
+        }
+    }
+
+    pub fn is_onion_routing_enabled(&self) -> Result<bool, String> {
+        if let Ok(pool) = self.connection_pool.lock() {
+            Ok(pool.is_onion_routing_enabled())
+        } else {
+            Err("Failed to acquire connection pool lock".to_string())
+        }
+    }
+
+    pub fn schedule_disconnect(&self, peer: &SocketAddr) -> Result<(), String> {
+        if let Ok(pool) = self.connection_pool.lock() {
+            pool.schedule_disconnect(peer);
+            Ok(())
+        } else {
+            Err("Failed to acquire connection pool lock".to_string())
+        }
+    }
+
+    pub fn is_connected(&self, peer: &SocketAddr) -> Result<bool, String> {
+        if let Ok(pool) = self.connection_pool.lock() {
+            Ok(pool.is_connected(peer))
+        } else {
+            Err("Failed to acquire connection pool lock".to_string())
+        }
+    }
+
+    pub fn is_banned(&self, peer: &SocketAddr) -> Result<bool, String> {
+        if let Ok(pool) = self.connection_pool.lock() {
+            Ok(pool.is_banned(peer))
+        } else {
+            Err("Failed to acquire connection pool lock".to_string())
+        }
+    }
+
+    pub fn get_all_connections(&self) -> Vec<SocketAddr> {
+        if let Ok(pool) = self.connection_pool.lock() {
+            pool.get_all_connections()
+                .into_iter()
+                .map(|(addr, _, _)| addr)
+                .collect()
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Generate background noise traffic to mask real transactions
+    pub fn generate_background_noise(&mut self) -> Result<(), String> {
+        let mut dandelion_manager = self.dandelion_manager.lock().unwrap();
+        
+        // Check if we should generate background noise
+        if dandelion_manager.should_generate_background_noise() {
+            // Generate a decoy transaction
+            if let Some(decoy_hash) = dandelion_manager.generate_decoy_transaction() {
+                // Get peers to broadcast to
+                let connection_pool = self.connection_pool.lock().unwrap();
+                let peers = connection_pool.get_all_peers();
+                drop(connection_pool);
+                
+                // Try to find a transaction in the mempool with this hash (unlikely)
+                match self.mempool.lock().unwrap().get_transaction(&decoy_hash) {
+                    Some(tx) => {
+                        self.broadcast_transaction(tx.clone(), &peers)?;
+                    },
+                    None => {
+                        // This is a decoy that's not in mempool
+                        // In a real implementation, we'd create a dummy payload to send
+                        if dandelion::PRIVACY_LOGGING_ENABLED {
+                            println!("Generated background noise transaction: {:?}", decoy_hash);
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Detect and defend against potential eclipse attacks
+    /// 
+    /// Eclipse attacks occur when a node is surrounded by malicious peers that isolate it from the rest of the network.
+    /// This method checks for signs of an eclipse attack and takes defensive measures if needed.
+    pub fn defend_against_eclipse_attack(&mut self) -> Result<(), String> {
+        // Get the dandelion manager to check for eclipse attack
+        let mut dandelion_manager = self.dandelion_manager.lock().map_err(|e| format!("Failed to acquire dandelion manager lock: {}", e))?;
+        
+        // Check for eclipse attack
+        let eclipse_result = dandelion_manager.check_for_eclipse_attack();
+        
+        // If an eclipse attack is detected, take defensive measures
+        if eclipse_result.is_eclipse_detected {
+            // Log the detection
+            println!("Potential eclipse attack detected! Taking defensive measures.");
+            
+            // Release the dandelion manager lock before disconnecting peers
+            drop(dandelion_manager);
+            
+            // Disconnect from suspicious peers
+            for peer_addr in eclipse_result.peers_to_drop {
+                println!("Disconnecting from suspicious peer: {}", peer_addr);
+                self.disconnect_peer(&peer_addr);
+                
+                // Schedule to find new peers
+                self.schedule_disconnect(&peer_addr)?;
+            }
+            
+            // Try to discover new peers to replace the ones we disconnected from
+            self.discover_peers()?;
+        }
+        
+        Ok(())
     }
 }
 
@@ -1750,6 +1393,29 @@ impl From<MessageError> for NodeError {
             MessageError::MessageTooLarge => NodeError::NetworkError("Message too large".to_string()),
             MessageError::MessageTooSmall => NodeError::NetworkError("Message too small".to_string()),
             MessageError::DeserializationError => NodeError::NetworkError("Message deserialization error".to_string()),
+        }
+    }
+}
+
+impl From<NodeError> for String {
+    fn from(err: NodeError) -> Self {
+        match err {
+            NodeError::InvalidBlock => "Invalid block".to_string(),
+            NodeError::InvalidTransaction => "Invalid transaction".to_string(),
+            NodeError::MiningDisabled => "Mining is disabled".to_string(),
+            NodeError::NetworkError(msg) => format!("Network error: {}", msg),
+        }
+    }
+}
+
+// Add From implementation for ConnectionError
+impl From<ConnectionError> for NodeError {
+    fn from(err: ConnectionError) -> Self {
+        match err {
+            ConnectionError::TooManyConnections => NodeError::NetworkError("Too many connections".to_string()),
+            ConnectionError::PeerBanned => NodeError::NetworkError("Peer is banned".to_string()),
+            ConnectionError::NetworkDiversityLimit => NodeError::NetworkError("Network diversity limit reached".to_string()),
+            ConnectionError::ConnectionFailed(msg) => NodeError::NetworkError(msg),
         }
     }
 }

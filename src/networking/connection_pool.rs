@@ -844,6 +844,203 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
 
         (avg, variance.sqrt(), count) // Returns (mean, standard deviation, count)
     }
+
+    pub fn get_diversity_score(&self) -> f64 {
+        let mut network_types = HashSet::new();
+        let mut total_peers = 0;
+
+        if let Ok(connections) = self.active_connections.read() {
+            for (addr, _) in connections.iter() {
+                network_types.insert(self.get_network_type(addr));
+                total_peers += 1;
+            }
+        }
+
+        if total_peers == 0 {
+            return 0.0;
+        }
+
+        network_types.len() as f64 / total_peers as f64
+    }
+
+    pub fn get_network_type_counts(&self) -> HashMap<NetworkType, usize> {
+        let mut counts = HashMap::new();
+        
+        if let Ok(connections) = self.active_connections.read() {
+            for (addr, _) in connections.iter() {
+                let network_type = self.get_network_type(addr);
+                *counts.entry(network_type).or_insert(0) += 1;
+            }
+        }
+
+        counts
+    }
+
+    pub fn get_peers_by_network_type(&self, network_type: NetworkType) -> Vec<SocketAddr> {
+        if let Ok(connections) = self.active_connections.read() {
+            connections.iter()
+                .filter(|(addr, _)| self.get_network_type(addr) == network_type)
+                .map(|(addr, _)| *addr)
+                .collect()
+        } else {
+            Vec::new()
+        }
+    }
+
+    pub fn is_onion_routing_enabled(&self) -> bool {
+        (self.local_privacy_features & 0x01) != 0
+    }
+
+    pub fn schedule_disconnect(&self, peer: &SocketAddr) {
+        if let Ok(mut connections) = self.active_connections.write() {
+            connections.remove(peer);
+        }
+    }
+
+    pub fn connect_to_peer(&self, peer_addr: SocketAddr) -> Result<(), ConnectionError> 
+        where T: From<crate::networking::p2p::CloneableTcpStream> {
+        // Check if already connected
+        if self.is_connected(&peer_addr) {
+            return Ok(());
+        }
+
+        // Check if banned
+        if self.is_banned(&peer_addr) {
+            return Err(ConnectionError::PeerBanned);
+        }
+
+        // Check network diversity limits
+        let network_type = match peer_addr.ip() {
+            IpAddr::V4(_) => NetworkType::IPv4,
+            IpAddr::V6(_) => NetworkType::IPv6,
+        };
+
+        if let Ok(mut counts) = self.network_counts.write() {
+            let count = counts.entry(network_type).or_insert(0);
+            if *count >= self.max_connections_per_network {
+                return Err(ConnectionError::NetworkDiversityLimit);
+            }
+            *count += 1;
+        }
+
+        // Create new TCP connection
+        let stream = match std::net::TcpStream::connect(peer_addr) {
+            Ok(s) => s,
+            Err(e) => return Err(ConnectionError::ConnectionFailed(e.to_string())),
+        };
+
+        // Convert to CloneableTcpStream and then to T
+        let cloneable_stream = crate::networking::p2p::CloneableTcpStream::new(stream);
+        let stream_t = T::from(cloneable_stream);
+
+        // Create new peer connection
+        let peer_conn = PeerConnection::new(stream_t, peer_addr, self.local_features, self.local_privacy_features);
+        
+        // Add to active connections
+        self.add_connection(peer_conn, ConnectionType::Outbound)
+    }
+
+    pub fn get_all_peers(&self) -> Vec<SocketAddr> {
+        if let Ok(connections) = self.active_connections.read() {
+            connections.keys().cloned().collect()
+        } else {
+            Vec::new()
+        }
+    }
+
+    pub fn get_peers_for_rotation(&self, count: usize) -> Vec<SocketAddr> {
+        let mut rng = rand::thread_rng();
+        let mut peers = self.get_all_peers();
+        peers.shuffle(&mut rng);
+        peers.truncate(count);
+        peers
+    }
+
+    pub fn get_peer_info(&self, addr: &SocketAddr) -> Option<PeerConnection<T>> {
+        if let Ok(connections) = self.active_connections.read() {
+            connections.get(addr).map(|(conn, _)| conn.clone())
+        } else {
+            None
+        }
+    }
+
+    pub fn get_connection_type(&self, addr: &SocketAddr) -> Option<ConnectionType> {
+        if let Ok(connections) = self.active_connections.read() {
+            connections.get(addr).map(|(_, conn_type)| *conn_type)
+        } else {
+            None
+        }
+    }
+
+    pub fn get_network_type(&self, addr: &SocketAddr) -> NetworkType {
+        match addr.ip() {
+            IpAddr::V4(_) => NetworkType::IPv4,
+            IpAddr::V6(_) => NetworkType::IPv6,
+        }
+    }
+
+    pub fn get_connection_count(&self) -> usize {
+        if let Ok(connections) = self.active_connections.read() {
+            connections.len()
+        } else {
+            0
+        }
+    }
+
+    pub fn get_outbound_count(&self) -> usize {
+        if let Ok(connections) = self.active_connections.read() {
+            connections.values()
+                .filter(|(_, conn_type)| *conn_type == ConnectionType::Outbound)
+                .count()
+        } else {
+            0
+        }
+    }
+
+    pub fn get_inbound_count(&self) -> usize {
+        if let Ok(connections) = self.active_connections.read() {
+            connections.values()
+                .filter(|(_, conn_type)| *conn_type == ConnectionType::Inbound)
+                .count()
+        } else {
+            0
+        }
+    }
+
+    pub fn get_feeler_count(&self) -> usize {
+        if let Ok(connections) = self.active_connections.read() {
+            connections.values()
+                .filter(|(_, conn_type)| *conn_type == ConnectionType::Feeler)
+                .count()
+        } else {
+            0
+        }
+    }
+
+    pub fn get_network_diversity(&self) -> f64 {
+        let mut network_counts = HashMap::new();
+        let mut total = 0;
+
+        if let Ok(connections) = self.active_connections.read() {
+            for (addr, _) in connections.iter() {
+                let network_type = self.get_network_type(addr);
+                *network_counts.entry(network_type).or_insert(0) += 1;
+                total += 1;
+            }
+        }
+
+        if total == 0 {
+            return 0.0;
+        }
+
+        let mut diversity = 0.0;
+        for count in network_counts.values() {
+            let p = *count as f64 / total as f64;
+            diversity -= p * p.log2();
+        }
+
+        diversity
+    }
 }
 
 // Connection pool errors

@@ -1,12 +1,6 @@
-use curve25519_dalek::{
-    ristretto::{CompressedRistretto, RistrettoPoint},
-    scalar::Scalar,
-};
-use merlin::Transcript;
-use rand::{CryptoRng, Rng};
-use rand::rngs::OsRng;
-use std::convert::TryFrom;
+use rand::Rng;
 use sha2::{Sha256, Digest};
+use rand::rngs::OsRng;
 
 // Range Proof structure for proving a value is within a range without revealing it
 #[derive(Debug, Clone)]

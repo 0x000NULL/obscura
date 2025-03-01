@@ -15,7 +15,16 @@ pub struct Block {
     pub transactions: Vec<Transaction>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+impl Default for Block {
+    fn default() -> Self {
+        Block {
+            header: BlockHeader::default(),
+            transactions: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct BlockHeader {
     pub version: u32,
     pub previous_hash: [u8; 32],
@@ -37,18 +46,17 @@ pub struct FeeAdjustment {
     pub expiry_time: u64,       // Unix timestamp when adjustment expires
 }
 
-#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Transaction {
     pub inputs: Vec<TransactionInput>,
     pub outputs: Vec<TransactionOutput>,
-    pub lock_time: u64,
-    pub fee_adjustments: Option<FeeAdjustment>, // Optional time-locked fee adjustment
-    // Add privacy features
-    pub privacy_flags: u32, // Flags for privacy features enabled in this transaction
-    pub obfuscated_id: Option<[u8; 32]>, // Optional obfuscated transaction ID
-    pub ephemeral_pubkey: Option<Vec<u8>>, // Optional ephemeral public key for stealth addressing
-    pub amount_commitments: Option<Vec<Vec<u8>>>, // Optional commitments for confidential amounts
-    pub range_proofs: Option<Vec<Vec<u8>>>, // Optional range proofs for confidential amounts
+    pub lock_time: u32,
+    pub fee_adjustments: Option<Vec<u64>>,
+    pub privacy_flags: u32,
+    pub obfuscated_id: Option<[u8; 32]>,
+    pub ephemeral_pubkey: Option<[u8; 32]>,
+    pub amount_commitments: Option<Vec<[u8; 32]>>,
+    pub range_proofs: Option<Vec<Vec<u8>>>,
 }
 
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
@@ -362,9 +370,9 @@ impl Transaction {
             .fold(0, |acc, output| acc + output.value);
 
         if let Some(adjustment) = &self.fee_adjustments {
-            if current_time >= adjustment.lock_time && current_time < adjustment.expiry_time {
+            if current_time >= adjustment[0] && current_time < adjustment[1] {
                 // Apply the fee adjustment if within the valid time window
-                (base_fee as f64 * adjustment.adjustment_factor) as u64
+                (base_fee as f64 * adjustment[0] as f64) as u64
             } else {
                 base_fee
             }
@@ -425,7 +433,12 @@ impl Transaction {
         
         // Store ephemeral public key in transaction
         if let Some(ephemeral_pubkey) = stealth.get_last_ephemeral_pubkey() {
-            self.ephemeral_pubkey = Some(ephemeral_pubkey);
+            // Convert Vec<u8> to [u8; 32]
+            if ephemeral_pubkey.len() == 32 {
+                let mut key_array = [0u8; 32];
+                key_array.copy_from_slice(&ephemeral_pubkey);
+                self.ephemeral_pubkey = Some(key_array);
+            }
         }
         
         // Set privacy flags
@@ -439,8 +452,17 @@ impl Transaction {
         let mut range_proofs = Vec::with_capacity(self.outputs.len());
         
         for output in &self.outputs {
-            let commitment = confidential.create_commitment(output.value);
+            let commitment_vec = confidential.create_commitment(output.value);
             let range_proof = confidential.create_range_proof(output.value);
+            
+            // Convert Vec<u8> commitment to [u8; 32]
+            let mut commitment = [0u8; 32];
+            if commitment_vec.len() >= 32 {
+                commitment.copy_from_slice(&commitment_vec[0..32]);
+            } else {
+                // If commitment is less than 32 bytes, copy what we have and leave the rest as zeros
+                commitment[..commitment_vec.len()].copy_from_slice(&commitment_vec);
+            }
             
             commitments.push(commitment);
             range_proofs.push(range_proof);

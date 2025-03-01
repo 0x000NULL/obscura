@@ -82,6 +82,20 @@ pub enum MessageError {
     DeserializationError,
 }
 
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MessageError::IoError(e) => write!(f, "IO error: {}", e),
+            MessageError::InvalidMagic => write!(f, "Invalid magic bytes"),
+            MessageError::InvalidChecksum => write!(f, "Invalid message checksum"),
+            MessageError::InvalidMessageType => write!(f, "Invalid message type"),
+            MessageError::MessageTooLarge => write!(f, "Message exceeds maximum size"),
+            MessageError::MessageTooSmall => write!(f, "Message is too small"),
+            MessageError::DeserializationError => write!(f, "Failed to deserialize message"),
+        }
+    }
+}
+
 impl From<io::Error> for MessageError {
     fn from(err: io::Error) -> Self {
         MessageError::IoError(err)

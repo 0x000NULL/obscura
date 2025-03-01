@@ -1,10 +1,9 @@
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use rayon::prelude::*;
 
 use super::pos_old::{StakeProof, StakingContract};
-use super::pow::ProofOfWork;
 use crate::blockchain::Block;
 
 /// Manages the state of the hybrid consensus system with optimizations
@@ -150,7 +149,7 @@ impl HybridStateManager {
             .transactions
             .par_chunks(num_cpus::get().max(1))
             .map(|chunk| {
-                chunk.iter().all(|tx| {
+                chunk.iter().all(|_tx| {
                     // Add your transaction validation logic here
                     true // Placeholder
                 })
@@ -230,7 +229,7 @@ impl ValidationManager {
             .transactions
             .par_chunks(chunk_size.max(1))
             .map(|chunk| {
-                chunk.iter().all(|tx| {
+                chunk.iter().all(|_tx| {
                     // Add your transaction validation logic here
                     true // Placeholder
                 })

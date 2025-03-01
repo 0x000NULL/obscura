@@ -1,8 +1,9 @@
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::time::{Duration, SystemTime};
-use crate::networking::kademlia::{Node, NodeId};
+use crate::networking::kademlia::Node;
 use crate::networking::connection_pool::ConnectionType;
+use crate::networking::Message;
 
 const MAX_CONNECTIONS: usize = 125;
 const MAX_INBOUND_CONNECTIONS: usize = 100;
@@ -185,7 +186,7 @@ impl PeerManager {
 
         let disconnect_count = to_disconnect.len() / 3; // Rotate 1/3 of outbound connections
         let mut to_disconnect: Vec<_> = to_disconnect.into_iter()
-            .map(|(addr, info)| (**addr, info.calculate_priority_score()))
+            .map(|(addr, info)| (*addr, info.calculate_priority_score()))
             .collect();
 
         to_disconnect.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
@@ -241,12 +242,15 @@ impl PeerManager {
         (inbound, outbound)
     }
 
-    pub fn get_peers_by_score(&self) -> Vec<(SocketAddr, f64)> {
-        let mut peers: Vec<_> = self.peers
-            .iter()
+    pub fn get_peers_by_priority(&self) -> Vec<(SocketAddr, f64)> {
+        let mut peers: Vec<_> = self.peers.iter()
             .map(|(addr, info)| (*addr, info.calculate_priority_score()))
             .collect();
-        peers.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        
+        peers.sort_by(|(_, score1), (_, score2)| {
+            score2.partial_cmp(score1).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        
         peers
     }
 

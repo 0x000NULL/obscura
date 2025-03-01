@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, SystemTime, Instant};
 use serde::{Serialize, Deserialize};
 
 const K: usize = 20; // Maximum number of nodes per k-bucket
@@ -64,7 +64,7 @@ impl Node {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct KBucket {
     nodes: Vec<Node>,
     last_updated: SystemTime,
@@ -113,22 +113,33 @@ impl KBucket {
 
 #[derive(Debug)]
 pub struct KademliaTable {
-    node_id: NodeId,
+    local_id: NodeId,
     buckets: Vec<KBucket>,
     pending_lookups: HashMap<NodeId, HashSet<SocketAddr>>,
+    last_updated: Instant,
 }
 
 impl KademliaTable {
-    pub fn new(node_id: NodeId) -> Self {
+    pub fn new(local_id: NodeId) -> Self {
         KademliaTable {
-            node_id,
-            buckets: (0..BUCKET_COUNT).map(|_| KBucket::new()).collect(),
+            local_id,
+            buckets: vec![KBucket::new(); 160],
             pending_lookups: HashMap::new(),
+            last_updated: Instant::now(),
         }
     }
 
+    // Helper function to convert from discovery service NodeId ([u8; 32]) to Kademlia NodeId ([u8; 20])
+    pub fn convert_discovery_nodeid(discovery_id: &[u8; 32]) -> NodeId {
+        let mut id_bytes = [0u8; 20];
+        for i in 0..20 {
+            id_bytes[i] = discovery_id[i];
+        }
+        NodeId::new(id_bytes)
+    }
+
     pub fn add_node(&mut self, node: Node) -> bool {
-        let bucket_idx = self.node_id.bucket_index(&node.id);
+        let bucket_idx = self.local_id.bucket_index(&node.id);
         self.buckets[bucket_idx].add_node(node)
     }
 
@@ -145,28 +156,49 @@ impl KademliaTable {
     }
 
     pub fn start_lookup(&mut self, target_id: &NodeId) -> Vec<Node> {
+        // First find the closest nodes without holding a mutable borrow
+        let closest_nodes = self.find_closest_nodes(target_id, ALPHA);
+        
+        // Then insert into pending_lookups
         let mut pending = HashSet::new();
+        for node in &closest_nodes {
+            pending.insert(node.addr);
+        }
         self.pending_lookups.insert(target_id.clone(), pending);
-        self.find_closest_nodes(target_id, ALPHA)
+        
+        closest_nodes
     }
 
     pub fn update_lookup(&mut self, target_id: NodeId, from_addr: SocketAddr, found_nodes: Vec<Node>) -> Vec<Node> {
-        if let Some(pending) = self.pending_lookups.get_mut(&target_id) {
+        // First, check if we have a pending lookup and remove the from_addr
+        let lookup_exists = self.pending_lookups.get_mut(&target_id).map(|pending| {
             pending.remove(&from_addr);
-            
-            // Add new nodes to routing table
-            for node in &found_nodes {
-                self.add_node(node.clone());
-            }
+            pending.is_empty()
+        });
 
-            // If lookup is complete, remove it from pending
-            if pending.is_empty() {
+        // Add new nodes to routing table
+        for node in &found_nodes {
+            self.add_node(node.clone());
+        }
+
+        // If lookup doesn't exist or is now complete, return empty vector
+        match lookup_exists {
+            None => return Vec::new(),
+            Some(true) => {
+                // Lookup is complete, remove it
                 self.pending_lookups.remove(&target_id);
                 return Vec::new();
+            },
+            Some(false) => {
+                // Lookup is still pending, continue with next batch
             }
+        }
 
-            // Return next batch of nodes to query
-            let closest = self.find_closest_nodes(&target_id, ALPHA);
+        // Find the closest nodes without holding a mutable borrow
+        let closest = self.find_closest_nodes(&target_id, ALPHA);
+        
+        // Now get the pending lookup again to update it
+        if let Some(pending) = self.pending_lookups.get_mut(&target_id) {
             let mut next_nodes = Vec::new();
             for node in closest {
                 if !pending.contains(&node.addr) {
@@ -187,55 +219,190 @@ impl KademliaTable {
     }
 
     pub fn handle_find_node(&mut self, target_id: &NodeId) -> Vec<Node> {
+        // First get the closest nodes without holding a mutable borrow
+        let closest_nodes = self.find_closest_nodes(target_id, ALPHA);
+        
+        // Then process the pending lookups
         if let Some(pending) = self.pending_lookups.get_mut(target_id) {
-            // Clone nodes before iterating to avoid mutable borrow conflicts
-            let nodes_to_process: Vec<_> = pending.iter().cloned().collect();
+            let nodes_to_add: Vec<_> = closest_nodes.iter()
+                .filter(|node| !pending.contains(&node.addr))
+                .cloned()
+                .collect();
             
-            for node in nodes_to_process {
-                // Add node to routing table
-                let node_clone = node.clone();
-                self.add_node(node_clone);
+            // Add nodes to pending
+            for node in nodes_to_add {
+                pending.insert(node.addr);
             }
-
-            if pending.is_empty() {
+            
+            // Check if lookup is complete
+            let is_lookup_complete = pending.is_empty();
+            
+            if is_lookup_complete {
+                // Lookup is complete, remove it
                 self.pending_lookups.remove(target_id);
             }
         }
-
-        // Find closest nodes without mutable borrow
-        let closest = self.find_closest_nodes(target_id, ALPHA);
         
-        // Process closest nodes
-        for node in &closest {
-            if let Some(pending) = self.pending_lookups.get_mut(target_id) {
-                if !pending.contains(&node.addr) {
-                    pending.insert(node.addr);
-                }
-            }
-        }
-
-        closest
+        closest_nodes
     }
 
     pub fn handle_nodes(&mut self, target_id: &NodeId, nodes: Vec<Node>) {
-        if let Some(pending) = self.pending_lookups.get_mut(target_id) {
-            // Clone nodes before iterating to avoid mutable borrow conflicts
-            let nodes_to_process: Vec<_> = nodes.iter().cloned().collect();
-            
-            for node in nodes_to_process {
-                // Add node to routing table
-                let node_clone = node.clone();
-                self.add_node(node_clone);
-            }
-
+        // First collect nodes to add
+        let nodes_to_add: Vec<_> = nodes.into_iter()
+            .filter(|node| {
+                if let Some(pending) = self.pending_lookups.get(target_id) {
+                    !pending.contains(&node.addr)
+                } else {
+                    true
+                }
+            })
+            .collect();
+        
+        // Then add nodes to routing table
+        for node in nodes_to_add {
+            self.add_node(node);
+        }
+        
+        // Finally check if lookup is complete
+        if let Some(pending) = self.pending_lookups.get(target_id) {
             if pending.is_empty() {
                 self.pending_lookups.remove(target_id);
             }
         }
     }
 
-    fn send_find_node(&mut self, addr: SocketAddr, target_id: NodeId) {
+    fn send_find_node(&mut self, _addr: SocketAddr, _target_id: NodeId) {
         // Implementation will be added later
+    }
+
+    pub fn process_find_node(&mut self, node: Node, target_id: NodeId) {
+        // First, add the node to our routing table
+        self.add_node(node.clone());
+
+        // Get the pending lookup set for this target
+        let pending_lookup = self.pending_lookups.get(&target_id).cloned();
+        
+        if let Some(mut pending) = pending_lookup {
+            // Update pending set
+            pending.remove(&node.addr);
+            let is_lookup_complete = pending.is_empty();
+            
+            if is_lookup_complete {
+                // Lookup is complete, remove it
+                self.pending_lookups.remove(&target_id);
+                return;
+            }
+            
+            // Find closest nodes without holding a mutable borrow
+            let closest = self.find_closest_nodes(&target_id, ALPHA);
+            
+            // Prepare nodes to query
+            let mut nodes_to_query = Vec::new();
+            for node in closest {
+                if !pending.contains(&node.addr) {
+                    nodes_to_query.push(node.clone());
+                }
+            }
+            
+            // Update the pending lookups with both existing and new nodes
+            if let Some(pending_set) = self.pending_lookups.get_mut(&target_id) {
+                for node in &nodes_to_query {
+                    pending_set.insert(node.addr);
+                }
+            }
+            
+            // Send find_node requests to the new nodes
+            for node in nodes_to_query {
+                self.send_find_node(node.addr, target_id.clone());
+            }
+        }
+    }
+
+    pub fn lookup(&mut self, target_id: NodeId) {
+        // First get the closest nodes without holding a mutable borrow
+        let closest_nodes = self.find_closest_nodes(&target_id, ALPHA);
+        
+        // Create a new pending set
+        let mut pending = HashSet::new();
+        let mut nodes_to_query = Vec::new();
+        
+        // Add nodes and prepare find_node requests
+        for node in closest_nodes {
+            pending.insert(node.addr);
+            nodes_to_query.push(node);
+        }
+        
+        // Update pending lookups
+        self.pending_lookups.insert(target_id.clone(), pending);
+        
+        // Send find_node requests
+        for node in nodes_to_query {
+            self.send_find_node(node.addr, target_id.clone());
+        }
+    }
+
+    pub fn handle_find_node_response(&mut self, target_id: [u8; 32], nodes: Vec<Node>) {
+        // Convert [u8; 32] to NodeId by using the first 20 bytes
+        let node_id = Self::convert_discovery_nodeid(&target_id);
+        
+        // First check if we need to process a complete lookup
+        let (should_process, nodes_to_add) = {
+            if let Some(pending) = self.pending_lookups.get_mut(&node_id) {
+                // Add nodes to pending set
+                let mut nodes_to_add = Vec::new();
+                for node in nodes {
+                    if !pending.contains(&node.addr) {
+                        pending.insert(node.addr);
+                        nodes_to_add.push(node);
+                    }
+                }
+                (pending.is_empty(), nodes_to_add)
+            } else {
+                (false, Vec::new())
+            }
+        };
+
+        // Add nodes outside of the pending lookup scope
+        for node in nodes_to_add {
+            self.add_node(node);
+        }
+
+        // If lookup is complete, remove it
+        if should_process {
+            self.pending_lookups.remove(&node_id);
+            return;
+        }
+        
+        // Check if lookup still exists
+        if !self.pending_lookups.contains_key(&node_id) {
+            return;
+        }
+        
+        // Find closest nodes without holding a mutable borrow
+        let closest = self.find_closest_nodes(&node_id, ALPHA);
+        
+        // Get the pending set again to check which nodes to query
+        let nodes_to_query = {
+            if let Some(pending) = self.pending_lookups.get(&node_id) {
+                closest.into_iter()
+                    .filter(|node| !pending.contains(&node.addr))
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            }
+        };
+        
+        // Update the pending set with new nodes
+        if let Some(pending) = self.pending_lookups.get_mut(&node_id) {
+            for node in &nodes_to_query {
+                pending.insert(node.addr);
+            }
+        }
+        
+        // Send find node requests
+        for node in nodes_to_query {
+            self.send_find_node(node.addr, node_id.clone());
+        }
     }
 }
 

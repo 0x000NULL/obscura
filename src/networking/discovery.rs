@@ -1,10 +1,10 @@
 use std::collections::{HashMap, HashSet};
-use std::net::SocketAddr;
+use std::net::{SocketAddr, IpAddr};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use rand::{seq::SliceRandom, thread_rng};
 
-use crate::networking::p2p::{FeatureFlag, PrivacyFeatureFlag};
+use crate::networking::p2p::PrivacyFeatureFlag;
 use crate::networking::connection_pool::{NetworkType, PeerScore};
 
 // Kademlia DHT constants
@@ -136,8 +136,8 @@ impl RoutingTable {
         }
 
         let network_type = match addr.ip() {
-            std::net::IpAddr::V4(_) => NetworkType::IPv4,
-            std::net::IpAddr::V6(_) => NetworkType::IPv6,
+            IpAddr::V4(_) => NetworkType::IPv4,
+            IpAddr::V6(_) => NetworkType::IPv6,
         };
 
         let entry = KBucketEntry {
@@ -289,6 +289,50 @@ impl DiscoveryService {
         } else {
             Vec::new()
         }
+    }
+
+    pub fn get_peers_by_network_type(&self, network_type: NetworkType) -> Option<Vec<SocketAddr>> {
+        let mut peers = Vec::new();
+        
+        // Get all known peers
+        let known_peers = self.get_all_known_peers();
+        
+        // Filter by network type
+        for peer in known_peers {
+            match peer.ip() {
+                IpAddr::V4(_) if network_type == NetworkType::IPv4 => peers.push(peer),
+                IpAddr::V6(_) if network_type == NetworkType::IPv6 => peers.push(peer),
+                _ => continue,
+            }
+        }
+        
+        if peers.is_empty() {
+            None
+        } else {
+            Some(peers)
+        }
+    }
+
+    fn get_all_known_peers(&self) -> Vec<SocketAddr> {
+        let mut peers = Vec::new();
+        
+        // Add known peers from routing table
+        if let Ok(routing_table) = self.routing_table.read() {
+            // Add bootstrap nodes
+            peers.extend(&routing_table.bootstrap_nodes);
+            
+            // Add discovered nodes from buckets
+            for bucket in &routing_table.buckets {
+                for entry in &bucket.entries {
+                    peers.push(entry.addr);
+                }
+            }
+            
+            // We could also use the known_peers HashSet if we just need addresses
+            // peers.extend(routing_table.known_peers.iter());
+        }
+        
+        peers
     }
 }
 

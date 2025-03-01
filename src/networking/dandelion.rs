@@ -1,10 +1,9 @@
-use std::time::{Duration, Instant};
-use std::collections::{HashMap, HashSet, VecDeque, BTreeMap};
+use std::time::{Duration, Instant, SystemTime};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::{SocketAddr, IpAddr};
-use std::sync::Arc;
-use rand::{Rng, thread_rng, seq::SliceRandom, distributions::{Distribution, Bernoulli, Uniform}};
+use rand::{Rng, thread_rng, seq::SliceRandom, distributions::{Distribution, Bernoulli}};
 use rand_chacha::{ChaCha20Rng, rand_core::{SeedableRng, RngCore}};
-use crate::blockchain::Transaction;
+use rand_core::OsRng;
 
 // Constants for Dandelion protocol
 pub const STEM_PHASE_MIN_TIMEOUT: Duration = Duration::from_secs(10);  // Minimum time in stem phase
@@ -44,6 +43,7 @@ pub const REPUTATION_PENALTY_SYBIL: f64 = -30.0;                    // Penalty f
 pub const REPUTATION_REWARD_SUCCESSFUL_RELAY: f64 = 2.0;            // Reward for successful relay
 pub const REPUTATION_THRESHOLD_STEM: f64 = 20.0;                    // Minimum score to be used in stem routing
 pub const ANONYMITY_SET_MIN_SIZE: usize = 5;                        // Minimum size of anonymity set
+pub const MIN_PEERS_FOR_SYBIL_DETECTION: usize = 5;                 // Minimum peers needed for Sybil detection
 
 pub const ANTI_SNOOPING_ENABLED: bool = true;                       // Enable anti-snooping measures
 pub const MAX_TX_REQUESTS_BEFORE_PENALTY: u32 = 5;                  // Max transaction requests before penalty
@@ -78,6 +78,7 @@ pub enum PropagationState {
     TorRelayed,            // Relayed through Tor network
     MixnetRelayed,         // Relayed through Mixnet
     LayeredEncrypted,      // Using layered encryption
+    Fluffed,               // Fluffed transaction
 }
 
 // Privacy routing mode
@@ -107,6 +108,8 @@ pub struct PropagationMetadata {
     pub transaction_modified: bool,         // Whether transaction was modified for non-attributability
     pub anonymity_set: HashSet<SocketAddr>, // Set of peers that form the anonymity set
     pub differential_delay: Duration,       // Noise added by differential privacy
+    pub tx_data: Vec<u8>,                  // Transaction data
+    pub fluff_time: Option<Instant>,        // Time when the transaction was fluffed
 }
 
 // Network traffic data for adaptive timing
@@ -121,25 +124,25 @@ struct NetworkCondition {
 // Peer reputation and behavior tracking for advanced security
 #[derive(Debug, Clone)]
 pub struct PeerReputation {
-    reputation_score: f64,                  // Overall reputation score (-100 to 100)
-    last_reputation_update: Instant,        // Last time reputation was updated
-    successful_relays: u32,                 // Count of successful relays
-    failed_relays: u32,                     // Count of failed relays
-    suspicious_actions: u32,                // Count of suspicious actions
-    sybil_indicators: u32,                  // Count of potential Sybil indicators
-    eclipse_indicators: u32,                // Count of potential Eclipse indicators
-    last_used_for_stem: Option<Instant>,    // Last time peer was used in stem path
-    last_used_for_fluff: Option<Instant>,   // Last time peer was used in fluff broadcast
-    ip_subnet: [u8; 4],                     // First two octets of IP for subnet grouping
-    autonomous_system: Option<u32>,         // AS number (if known) for diversity check
-    transaction_requests: HashMap<[u8; 32], u32>, // Track requests for specific transactions
-    connection_patterns: VecDeque<Instant>, // Connection timing patterns
-    dummy_responses_sent: u32,              // Count of dummy responses sent to this peer
-    last_penalized: Option<Instant>,        // Last time peer was penalized
-    peer_cluster: Option<usize>,            // Cluster ID for Sybil detection
-    tor_compatible: bool,                   // Whether peer supports Tor
-    mixnet_compatible: bool,                // Whether peer supports Mixnet
-    layered_encryption_compatible: bool,    // Whether peer supports layered encryption
+    pub reputation_score: f64,                  // Overall reputation score (-100 to 100)
+    pub last_reputation_update: Instant,        // Last time reputation was updated
+    pub successful_relays: u32,                 // Count of successful relays
+    pub failed_relays: u32,                     // Count of failed relays
+    pub suspicious_actions: u32,                // Count of suspicious actions
+    pub sybil_indicators: u32,                  // Count of potential Sybil indicators
+    pub eclipse_indicators: u32,                // Count of potential Eclipse indicators
+    pub last_used_for_stem: Option<Instant>,    // Last time peer was used in stem path
+    pub last_used_for_fluff: Option<Instant>,   // Last time peer was used in fluff broadcast
+    pub ip_subnet: [u8; 4],                     // First two octets of IP for subnet grouping
+    pub autonomous_system: Option<u32>,         // AS number (if known) for diversity check
+    pub transaction_requests: HashMap<[u8; 32], u32>, // Track requests for specific transactions
+    pub connection_patterns: VecDeque<Instant>, // Connection timing patterns
+    pub dummy_responses_sent: u32,              // Count of dummy responses sent to this peer
+    pub last_penalized: Option<Instant>,        // Last time peer was penalized
+    pub peer_cluster: Option<usize>,            // Cluster ID for Sybil detection
+    pub tor_compatible: bool,                   // Whether peer supports Tor
+    pub mixnet_compatible: bool,                // Whether peer supports Mixnet
+    pub layered_encryption_compatible: bool,    // Whether peer supports layered encryption
 }
 
 // Transaction batch for traffic analysis protection
@@ -211,25 +214,25 @@ pub struct DandelionManager {
     pub stem_successors: HashMap<SocketAddr, SocketAddr>,
     
     // Multi-hop stem paths for extended routing
-    multi_hop_paths: HashMap<SocketAddr, Vec<SocketAddr>>,
+    pub multi_hop_paths: HashMap<SocketAddr, Vec<SocketAddr>>,
     
     // Current node's successor
-    current_successor: Option<SocketAddr>,
+    pub current_successor: Option<SocketAddr>,
     
     // Last time the stem paths were recalculated
-    last_path_recalculation: Instant,
+    pub last_path_recalculation: Instant,
     
     // Current outbound peers
-    outbound_peers: Vec<SocketAddr>,
+    pub outbound_peers: Vec<SocketAddr>,
     
     // Network conditions for adaptive timing
-    network_conditions: HashMap<SocketAddr, NetworkCondition>,
+    pub network_conditions: HashMap<SocketAddr, NetworkCondition>,
     
     // Advanced peer reputation tracking
-    peer_reputation: HashMap<SocketAddr, PeerReputation>,
+    pub peer_reputation: HashMap<SocketAddr, PeerReputation>,
     
     // Transaction batches for traffic analysis protection
-    transaction_batches: HashMap<u64, TransactionBatch>,
+    pub transaction_batches: HashMap<u64, TransactionBatch>,
     
     // Next batch ID
     next_batch_id: u64,
@@ -297,6 +300,13 @@ pub struct DandelionManager {
     
     // Differential privacy noise generator state
     differential_privacy_state: Vec<f64>,
+}
+
+#[derive(Debug)]
+pub struct EclipseAttackResult {
+    pub is_eclipse_detected: bool,
+    pub overrepresented_subnet: Option<[u8; 4]>,
+    pub peers_to_drop: Vec<SocketAddr>,
 }
 
 impl DandelionManager {
@@ -400,7 +410,7 @@ impl DandelionManager {
         
         for i in 0..peers.len() {
             // Assign a successor that's not the node itself
-            let successor_index = (i + 1 + rng.gen_range(0..peers.len() - 1)) % peers.len();
+            let successor_index = (i + 1 + rng.gen_range(0, peers.len())) % peers.len();
             self.stem_successors.insert(peers[i], peers[successor_index]);
         }
         
@@ -425,12 +435,12 @@ impl DandelionManager {
         
         // Calculate random timeout for stem->fluff transition
         // Randomizing this makes timing analysis more difficult
-        let delay = rng.gen_range(STEM_PHASE_MIN_TIMEOUT..STEM_PHASE_MAX_TIMEOUT);
-        let transition_time = now + delay;
+        let delay = rng.gen_range(STEM_PHASE_MIN_TIMEOUT.as_secs(), STEM_PHASE_MAX_TIMEOUT.as_secs() + 1);
+        let transition_time = now + Duration::from_secs(delay);
         
         // Add transaction to our manager
         self.transactions.insert(tx_hash, PropagationMetadata {
-            state,
+            state: state.clone(),
             received_time: now,
             transition_time,
             relayed: false,
@@ -445,6 +455,8 @@ impl DandelionManager {
             transaction_modified: false,
             anonymity_set: HashSet::new(),
             differential_delay: Duration::from_millis(0),
+            tx_data: Vec::new(),
+            fluff_time: None,
         });
         
         state
@@ -484,7 +496,7 @@ impl DandelionManager {
     
     /// Get all transactions that should be in fluff phase
     pub fn get_fluff_transactions(&self) -> Vec<[u8; 32]> {
-        let now = Instant::now();
+        let _now = Instant::now();
         
         self.transactions
             .iter()
@@ -499,8 +511,8 @@ impl DandelionManager {
     /// This helps prevent timing analysis
     pub fn calculate_propagation_delay(&self) -> Duration {
         let mut rng = thread_rng();
-        let delay_ms = rng.gen_range(FLUFF_PROPAGATION_DELAY_MIN_MS..FLUFF_PROPAGATION_DELAY_MAX_MS);
-        Duration::from_millis(delay_ms)
+        let propagation_delay = rng.gen_range(FLUFF_PROPAGATION_DELAY_MIN_MS, FLUFF_PROPAGATION_DELAY_MAX_MS + 1);
+        Duration::from_millis(propagation_delay)
     }
     
     /// Get a diverse set of nodes for fluff phase broadcast
@@ -584,6 +596,8 @@ impl DandelionManager {
             transaction_modified: false,
             anonymity_set: HashSet::new(),
             differential_delay: Duration::from_millis(0),
+            tx_data: Vec::new(),
+            fluff_time: None,
         });
         
         self.last_decoy_generation = now;
@@ -617,7 +631,7 @@ impl DandelionManager {
                 self.next_batch_id += 1;
                 
                 // Create a new batch with random release time
-                let wait_time = self.secure_rng.gen_range(0..MAX_BATCH_WAIT_MS);
+                let wait_time = self.secure_rng.gen_range(0, MAX_BATCH_WAIT_MS);
                 let release_time = now + Duration::from_millis(wait_time);
                 
                 self.transaction_batches.insert(id, TransactionBatch {
@@ -728,6 +742,19 @@ impl DandelionManager {
     }
     
     /// Get a multi-hop path for transaction routing
+    pub fn get_multi_hop_path(&mut self, _tx_hash: &[u8; 32], all_peers: &[SocketAddr]) -> Option<Vec<SocketAddr>> {
+        let mut available_paths: Vec<(SocketAddr, Vec<SocketAddr>)> = self.multi_hop_paths.iter()
+            .filter(|(start, _path)| {
+                // Check if the start node is in the available peers
+                all_peers.contains(start)
+            })
+            .map(|(start, path)| (*start, path.clone()))
+            .collect();
+        
+        if available_paths.is_empty() {
+            return None;
+        }
+        
         // Shuffle the paths for randomization
         available_paths.shuffle(&mut thread_rng());
         
@@ -774,7 +801,7 @@ impl DandelionManager {
     }
     
     /// Calculate adaptive delay based on network conditions
-    pub fn calculate_adaptive_delay(&self, tx_hash: &[u8; 32], target: &SocketAddr) -> Duration {
+    pub fn calculate_adaptive_delay(&mut self, tx_hash: &[u8; 32], target: &SocketAddr) -> Duration {
         if !ADAPTIVE_TIMING_ENABLED {
             // Fall back to standard random delay
             return self.calculate_propagation_delay();
@@ -782,7 +809,7 @@ impl DandelionManager {
         
         let base_delay = Duration::from_millis(
             FLUFF_PROPAGATION_DELAY_MIN_MS + 
-            self.secure_rng.gen_range(0..FLUFF_PROPAGATION_DELAY_MAX_MS - FLUFF_PROPAGATION_DELAY_MIN_MS)
+            self.secure_rng.gen_range(0, FLUFF_PROPAGATION_DELAY_MAX_MS - FLUFF_PROPAGATION_DELAY_MIN_MS)
         );
         
         // Check if we have network conditions for this peer
@@ -854,7 +881,7 @@ impl DandelionManager {
         // Update specific behavior metrics
         match behavior_type {
             "relay_failure" => behavior.failed_relays += 1,
-            "tx_request" => behavior.transaction_requests.insert(*tx_hash, 1),
+            "tx_request" => { behavior.transaction_requests.insert(*tx_hash, 1); },
             "eclipse_attempt" => behavior.eclipse_indicators += 1,
             _ => {}
         }
@@ -874,6 +901,67 @@ impl DandelionManager {
                    behavior.eclipse_indicators >= 1;
         }
         false
+    }
+    
+    /// Add transaction to stem phase with possible advanced privacy features
+    pub fn add_transaction_with_privacy(
+        &mut self,
+        tx_hash: [u8; 32],
+        source_addr: Option<SocketAddr>,
+        privacy_mode: PrivacyRoutingMode
+    ) -> PropagationState {
+        let now = Instant::now();
+        let mut rng = thread_rng();
+        
+        // Determine initial state based on probability and privacy mode
+        let state = match privacy_mode {
+            PrivacyRoutingMode::Standard => {
+                if rng.gen_bool(STEM_PROBABILITY) {
+                    if rng.gen_bool(MULTI_HOP_STEM_PROBABILITY) {
+                        let hop_count = rng.gen_range(2, MAX_MULTI_HOP_LENGTH + 1);
+                        PropagationState::MultiHopStem(hop_count)
+                    } else {
+                        PropagationState::Stem
+                    }
+                } else {
+                    PropagationState::Fluff
+                }
+            },
+            PrivacyRoutingMode::Tor => PropagationState::TorRelayed,
+            PrivacyRoutingMode::Mixnet => PropagationState::MixnetRelayed,
+            PrivacyRoutingMode::Layered => PropagationState::LayeredEncrypted,
+        };
+        
+        // Calculate random timeout for stem->fluff transition with some differential privacy
+        let base_delay = rng.gen_range(STEM_PHASE_MIN_TIMEOUT.as_secs(), STEM_PHASE_MAX_TIMEOUT.as_secs() + 1);
+        let diff_privacy_delay = self.calculate_differential_privacy_delay(&tx_hash);
+        let transition_time = now + Duration::from_secs(base_delay) + diff_privacy_delay;
+        
+        // Get the best anonymity set for this transaction
+        let anonymity_set = self.get_best_anonymity_set();
+        
+        // Add transaction to our manager
+        self.transactions.insert(tx_hash, PropagationMetadata {
+            state: state.clone(),
+            received_time: now,
+            transition_time,
+            relayed: false,
+            source_addr,
+            relay_path: Vec::new(),
+            batch_id: None,
+            is_decoy: false,
+            adaptive_delay: None,
+            suspicious_peers: HashSet::new(),
+            privacy_mode: privacy_mode.clone(),
+            encryption_layers: if privacy_mode == PrivacyRoutingMode::Layered { 3 } else { 0 },
+            transaction_modified: false,
+            anonymity_set,
+            differential_delay: diff_privacy_delay,
+            tx_data: Vec::new(),
+            fluff_time: None,
+        });
+        
+        state
     }
     
     /// Get secure failover peers when primary path fails
@@ -946,7 +1034,7 @@ impl DandelionManager {
         }
         
         // Set transaction to multi-path state
-        if let Some(metadata) = self.transactions.get_mut(tx_hash) {
+        if let Some(metadata) = self.transactions.get_mut(&tx_hash) {
             metadata.state = PropagationState::MultiPathStem(2); // Use 2 additional paths
         }
         
@@ -1039,7 +1127,7 @@ impl DandelionManager {
     }
     
     /// Update a peer's reputation score
-    pub fn update_peer_reputation(&mut self, peer: SocketAddr, adjustment: f64, reason: &str) {
+    pub fn update_peer_reputation(&mut self, peer: SocketAddr, adjustment: f64, _reason: &str) {
         if !DYNAMIC_PEER_SCORING_ENABLED {
             return;
         }
@@ -1171,7 +1259,7 @@ impl DandelionManager {
         let mut selected_peers = HashSet::new();
         let mut selected_subnets = HashSet::new();
         
-        for peer in trusted_peers {
+        for peer in &trusted_peers {
             if selected_peers.len() >= target_size {
                 break;
             }
@@ -1187,7 +1275,7 @@ impl DandelionManager {
             
             // Prioritize peers from different subnets
             if selected_subnets.len() < target_size / 2 || !selected_subnets.contains(&subnet) {
-                selected_peers.insert(peer);
+                selected_peers.insert(*peer);
                 selected_subnets.insert(subnet);
             }
         }
@@ -1302,72 +1390,75 @@ impl DandelionManager {
         false
     }
     
-    /// Detect potential Sybil clusters by IP subnet patterns
-    pub fn detect_sybil_clusters(&mut self) {
-        // Step 1: Group peers by subnet
-        let mut subnet_groups: HashMap<[u8; 2], HashSet<SocketAddr>> = HashMap::new();
+    /// Detect potential Sybil clusters
+    pub fn detect_sybil_clusters(&mut self) -> Vec<Vec<SocketAddr>> {
+        let mut clusters = Vec::new();
         
-        for (peer, reputation) in &self.peer_reputation {
-            let subnet = [reputation.ip_subnet[0], reputation.ip_subnet[1]];
-            subnet_groups.entry(subnet)
-                .or_insert_with(HashSet::new)
-                .insert(*peer);
+        // Get trusted peers with good reputation
+        let trusted_peers: Vec<SocketAddr> = self.get_peers_by_reputation(Some(REPUTATION_THRESHOLD_STEM))
+            .into_iter()
+            .map(|(addr, _)| addr)
+            .collect();
+        
+        // Skip if not enough peers for detection
+        if trusted_peers.len() < MIN_PEERS_FOR_SYBIL_DETECTION {
+            return clusters;
         }
         
-        // Step 2: Identify suspicious clusters (many peers in same subnet)
-        let now = Instant::now();
+        // Group peers by subnet
+        let mut subnet_groups: HashMap<String, Vec<SocketAddr>> = HashMap::new();
         
-        for (subnet, peers) in subnet_groups {
+        // First pass - group by subnet
+        for peer in &trusted_peers {
+            let subnet = self.get_peer_subnet(peer);
+            subnet_groups.entry(subnet)
+                .or_insert_with(Vec::new)
+                .push(*peer);
+        }
+        
+        // Second pass - analyze behavior patterns
+        for (_, peers) in subnet_groups {
             if peers.len() >= SYBIL_DETECTION_CLUSTER_THRESHOLD {
-                // Calculate confidence score based on:
-                // - Number of peers in subnet
-                // - Average reputation score
-                // - Connection pattern similarity
+                let mut cluster = Vec::new();
+                let mut patterns = Vec::new();
                 
-                let avg_reputation: f64 = peers.iter()
-                    .filter_map(|p| self.peer_reputation.get(p))
-                    .map(|r| r.reputation_score)
-                    .sum::<f64>() / peers.len() as f64;
-                    
-                // Confidence is higher if:
-                // - More peers in same subnet
-                // - Lower average reputation
-                let count_factor = (peers.len() as f64 / 10.0).min(1.0);
-                let reputation_factor = ((100.0 - avg_reputation) / 100.0).max(0.0);
-                let confidence = 0.3 + (count_factor * 0.4) + (reputation_factor * 0.3);
-                
-                // Create or update the cluster
-                let cluster_id = self.next_sybil_cluster_id;
-                self.next_sybil_cluster_id += 1;
-                
-                self.sybil_clusters.insert(cluster_id, SybilCluster {
-                    cluster_id,
-                    peers: peers.clone(),
-                    subnet_pattern: subnet,
-                    detection_time: now,
-                    confidence_score: confidence,
-                });
-                
-                // Mark peers as part of this cluster
+                // Get behavior patterns for each peer
                 for peer in &peers {
-                    if let Some(reputation) = self.peer_reputation.get_mut(peer) {
-                        reputation.peer_cluster = Some(cluster_id);
+                    let pattern = self.get_peer_behavior_pattern(peer);
+                    patterns.push((*peer, pattern));
+                }
+                
+                // Compare patterns
+                for i in 0..patterns.len() {
+                    let mut similar_peers = vec![patterns[i].0];
+                    
+                    for j in (i + 1)..patterns.len() {
+                        if self.are_patterns_similar(&patterns[i].1, &patterns[j].1) {
+                            similar_peers.push(patterns[j].0);
+                        }
+                    }
+                    
+                    // If enough peers show similar behavior, consider it a Sybil cluster
+                    if similar_peers.len() >= SYBIL_DETECTION_CLUSTER_THRESHOLD {
+                        cluster.extend(similar_peers);
                     }
                 }
                 
-                // If highly confident, penalize all peers in cluster
-                if confidence > 0.8 {
-                    for peer in &peers {
-                        let dummy_tx = [0u8; 32]; // Dummy tx hash for the penalty
-                        self.penalize_suspicious_behavior(*peer, &dummy_tx, "sybil_cluster");
+                if !cluster.is_empty() {
+                    // Penalize all peers in the cluster
+                    for peer in &cluster {
+                        self.update_peer_reputation(*peer, REPUTATION_PENALTY_SYBIL, "sybil_cluster_detected");
                     }
+                    clusters.push(cluster);
                 }
             }
         }
+        
+        clusters
     }
     
     /// Check for potential eclipse attack based on IP diversity
-    pub fn check_for_eclipse_attack(&mut self) -> bool {
+    pub fn check_for_eclipse_attack(&mut self) -> EclipseAttackResult {
         // Count IP subnets in current outbound peers
         let mut subnet_counts: HashMap<[u8; 2], usize> = HashMap::new();
         
@@ -1397,7 +1488,7 @@ impl DandelionManager {
         let total_peers = self.outbound_peers.len();
         let eclipse_dominance = subnet_counts.values()
             .any(|&count| count as f64 / total_peers as f64 > 0.5);
-            
+        
         // Check for progressive increase in particular subnet representation
         let progressive_eclipse = if self.ip_diversity_history.len() >= 3 {
             let current = &self.ip_diversity_history[self.ip_diversity_history.len() - 1];
@@ -1416,266 +1507,42 @@ impl DandelionManager {
             false
         };
         
-        self.eclipse_defense_active = eclipse_risk || eclipse_dominance || progressive_eclipse;
-        self.eclipse_defense_active
-    }
-    
-    /// Respond to a potential eclipse attack
-    pub fn respond_to_eclipse_attack(&mut self) -> Vec<SocketAddr> {
-        if !self.eclipse_defense_active || !AUTOMATIC_ATTACK_RESPONSE_ENABLED {
-            return Vec::new();
-        }
+        let is_eclipse_detected = eclipse_risk || eclipse_dominance || progressive_eclipse;
+        self.eclipse_defense_active = is_eclipse_detected;
         
-        // Get the list of subnet counts
-        let mut subnet_counts: HashMap<[u8; 2], (usize, Vec<SocketAddr>)> = HashMap::new();
-        
-        for peer in &self.outbound_peers {
-            let subnet = match peer.ip() {
-                IpAddr::V4(ipv4) => {
-                    let octets = ipv4.octets();
-                    [octets[0], octets[1]]
-                },
-                _ => continue,
-            };
-            
-            subnet_counts.entry(subnet)
-                .or_insert_with(|| (0, Vec::new()))
-                .0 += 1;
-                
-            subnet_counts.get_mut(&subnet).unwrap().1.push(*peer);
-        }
-        
-        // Identify overrepresented subnets
-        let total_peers = self.outbound_peers.len();
-        let peers_to_rotate = (total_peers as f64 * ECLIPSE_DEFENSE_PEER_ROTATION_PERCENT) as usize;
-        
-        // Sort subnets by count (descending)
-        let mut subnet_counts_vec: Vec<([u8; 2], (usize, Vec<SocketAddr>))> = subnet_counts.into_iter().collect();
-        subnet_counts_vec.sort_by(|a, b| b.1.0.cmp(&a.1.0));
-        
-        let mut peers_to_drop = Vec::new();
-        let mut dropped_count = 0;
-        
-        // Favor dropping peers from overrepresented subnets
-        for (_, (count, peers)) in subnet_counts_vec {
-            if count as f64 / total_peers as f64 > 0.3 {
-                // Calculate how many to drop from this subnet
-                let to_drop = (count as f64 * 0.5) as usize;
-                
-                // Get peers sorted by reputation (drop lowest reputation first)
-                let mut subnet_peers = peers.clone();
-                subnet_peers.sort_by(|a, b| {
-                    let a_score = self.peer_reputation.get(a).map(|r| r.reputation_score).unwrap_or(0.0);
-                    let b_score = self.peer_reputation.get(b).map(|r| r.reputation_score).unwrap_or(0.0);
-                    a_score.partial_cmp(&b_score).unwrap_or(std::cmp::Ordering::Equal)
-                });
-                
-                // Add peers to drop list
-                for peer in subnet_peers.iter().take(to_drop) {
-                    peers_to_drop.push(*peer);
-                    dropped_count += 1;
-                    
-                    if dropped_count >= peers_to_rotate {
-                        break;
-                    }
-                }
-            }
-            
-            if dropped_count >= peers_to_rotate {
-                break;
-            }
-        }
-        
-        // Mark these peers for potential eclipse behavior
-        for peer in &peers_to_drop {
-            let dummy_tx = [0u8; 32]; // Dummy tx hash for the penalty
-            self.penalize_suspicious_behavior(*peer, &dummy_tx, "eclipse_attempt");
-        }
-        
-        peers_to_drop
-    }
-    
-    /// Generate a dummy transaction for anti-snooping measures
-    pub fn generate_dummy_transaction(&mut self) -> [u8; 32] {
-        let mut tx_hash = [0u8; 32];
-        self.secure_rng.fill_bytes(&mut tx_hash);
-        
-        // Add to our dummy transaction list for future reference
-        self.dummy_transaction_hashes.push_back(tx_hash);
-        if self.dummy_transaction_hashes.len() > 100 {
-            self.dummy_transaction_hashes.pop_front();
-        }
-        
-        tx_hash
-    }
-    
-    /// Determine if we should respond with a dummy transaction
-    pub fn should_send_dummy_response(&mut self, peer: SocketAddr, tx_hash: &[u8; 32]) -> bool {
-        if !ANTI_SNOOPING_ENABLED {
-            return false;
-        }
-        
-        // Initialize the peer's reputation
-        self.initialize_peer_reputation(peer);
-        
-        // Get transaction request count for this peer and transaction
-        let counters = self.snoop_detection_counters.entry(peer).or_insert_with(HashMap::new);
-        let count = counters.entry(*tx_hash).or_insert(0);
-        *count += 1;
-        
-        // Decide to send dummy based on:
-        // 1. Request count exceeds threshold
-        // 2. Random probability
-        // 3. Peer's reputation
-        
-        if *count > MAX_TX_REQUESTS_BEFORE_PENALTY {
-            // Penalize peer for excessive requests
-            self.penalize_suspicious_behavior(peer, tx_hash, "excessive_tx_requests");
-            
-            // High probability of dummy
-            return self.secure_rng.gen_bool(DUMMY_RESPONSE_PROBABILITY * 2.0);
-        }
-        
-        // Standard probability based on peer reputation
-        let reputation_factor = if let Some(reputation) = self.peer_reputation.get(&peer) {
-            // Lower reputation = higher probability of dummy
-            (REPUTATION_SCORE_MAX - reputation.reputation_score) / REPUTATION_SCORE_MAX
+        // Identify overrepresented subnet if any
+        let overrepresented_subnet = if is_eclipse_detected {
+            subnet_counts.iter()
+                .filter(|(_, &count)| count as f64 / total_peers as f64 > 0.3)
+                .max_by_key(|(_, &count)| count)
+                .map(|(subnet, _)| [subnet[0], subnet[1], 1, 0])
         } else {
-            0.5 // Default factor
+            None
         };
         
-        self.secure_rng.gen_bool(DUMMY_RESPONSE_PROBABILITY * reputation_factor)
-    }
-    
-    /// Track transaction request for anti-snooping detection
-    pub fn track_transaction_request(&mut self, peer: SocketAddr, tx_hash: &[u8; 32]) {
-        if !ANTI_SNOOPING_ENABLED {
-            return;
-        }
-        
-        // Initialize the peer's reputation
-        self.initialize_peer_reputation(peer);
-        
-        // Get transaction request counter
-        let counters = self.snoop_detection_counters.entry(peer).or_insert_with(HashMap::new);
-        let count = counters.entry(*tx_hash).or_insert(0);
-        *count += 1;
-        
-        // Track in peer reputation
-        if let Some(reputation) = self.peer_reputation.get_mut(&peer) {
-            let request_count = reputation.transaction_requests.entry(*tx_hash).or_insert(0);
-            *request_count += 1;
-            
-            // If requests exceed threshold, mark as suspicious
-            if *request_count > MAX_TX_REQUESTS_BEFORE_PENALTY {
-                self.penalize_suspicious_behavior(peer, tx_hash, "excessive_tx_requests");
-            }
-        }
-    }
-    
-    /// Clean up old transaction request tracking data
-    pub fn cleanup_snoop_detection(&mut self) {
-        let now = Instant::now();
-        
-        // Only run periodically
-        if now.duration_since(self.last_snoop_check).as_secs() < 3600 {
-            return;
-        }
-        
-        self.last_snoop_check = now;
-        
-        // Reset transaction request counts
-        for counters in self.snoop_detection_counters.values_mut() {
-            counters.clear();
-        }
-        
-        // Also clear from peer reputation
-        for reputation in self.peer_reputation.values_mut() {
-            reputation.transaction_requests.clear();
-        }
-    }
-    
-    /// Generate Laplace noise for differential privacy
-    fn generate_laplace_noise(&mut self, scale: f64) -> f64 {
-        // Using the internal RNG for better security
-        let uniform = Uniform::new(0.0, 1.0);
-        let u = uniform.sample(&mut self.secure_rng) - 0.5;
-        let sign = if u >= 0.0 { 1.0 } else { -1.0 };
-        -sign * scale * (1.0 - 2.0 * u.abs()).ln()
-    }
-    
-    /// Calculate a privacy-preserving delay using differential privacy
-    pub fn calculate_differential_privacy_delay(&mut self, tx_hash: &[u8; 32]) -> Duration {
-        if !DIFFERENTIAL_PRIVACY_ENABLED {
-            return Duration::from_millis(0);
-        }
-        
-        // Generate noise using the Laplace mechanism
-        let noise_ms = self.generate_laplace_noise(LAPLACE_SCALE_FACTOR);
-        
-        // Ensure the delay is reasonable (not negative, not too large)
-        let noise_ms = noise_ms.max(0.0).min(300.0);
-        
-        Duration::from_millis(noise_ms as u64)
-    }
-    
-    /// Add transaction to stem phase with possible advanced privacy features
-    pub fn add_transaction_with_privacy(
-        &mut self,
-        tx_hash: [u8; 32],
-        source_addr: Option<SocketAddr>,
-        privacy_mode: PrivacyRoutingMode
-    ) -> PropagationState {
-        let now = Instant::now();
-        let mut rng = thread_rng();
-        
-        // Determine initial state based on probability and privacy mode
-        let state = match privacy_mode {
-            PrivacyRoutingMode::Standard => {
-                if rng.gen_bool(STEM_PROBABILITY) {
-                    if rng.gen_bool(MULTI_HOP_STEM_PROBABILITY) {
-                        let hop_count = rng.gen_range(2..=MAX_MULTI_HOP_LENGTH);
-                        PropagationState::MultiHopStem(hop_count)
+        // Identify peers to drop if needed
+        let peers_to_drop = if let Some(subnet) = overrepresented_subnet {
+            self.outbound_peers.iter()
+                .filter(|peer| {
+                    if let IpAddr::V4(ipv4) = peer.ip() {
+                        let octets = ipv4.octets();
+                        octets[0] == subnet[0] && octets[1] == subnet[1]
                     } else {
-                        PropagationState::Stem
+                        false
                     }
-                } else {
-                    PropagationState::Fluff
-                }
-            },
-            PrivacyRoutingMode::Tor => PropagationState::TorRelayed,
-            PrivacyRoutingMode::Mixnet => PropagationState::MixnetRelayed,
-            PrivacyRoutingMode::Layered => PropagationState::LayeredEncrypted,
+                })
+                .take((total_peers as f64 * 0.3) as usize)
+                .cloned()
+                .collect()
+        } else {
+            Vec::new()
         };
         
-        // Calculate random timeout for stem->fluff transition with some differential privacy
-        let base_delay = rng.gen_range(STEM_PHASE_MIN_TIMEOUT..STEM_PHASE_MAX_TIMEOUT);
-        let diff_privacy_delay = self.calculate_differential_privacy_delay(&tx_hash);
-        let transition_time = now + base_delay + diff_privacy_delay;
-        
-        // Get the best anonymity set for this transaction
-        let anonymity_set = self.get_best_anonymity_set();
-        
-        // Add transaction to our manager
-        self.transactions.insert(tx_hash, PropagationMetadata {
-            state,
-            received_time: now,
-            transition_time,
-            relayed: false,
-            source_addr,
-            relay_path: Vec::new(),
-            batch_id: None,
-            is_decoy: false,
-            adaptive_delay: None,
-            suspicious_peers: HashSet::new(),
-            privacy_mode: privacy_mode.clone(),
-            encryption_layers: if privacy_mode == PrivacyRoutingMode::Layered { 3 } else { 0 },
-            transaction_modified: false,
-            anonymity_set,
-            differential_delay: diff_privacy_delay,
-        });
-        
-        state
+        EclipseAttackResult {
+            is_eclipse_detected,
+            overrepresented_subnet,
+            peers_to_drop,
+        }
     }
     
     /// Setup layered encryption for a transaction path
@@ -1735,7 +1602,7 @@ impl DandelionManager {
         let mut used_subnets = HashSet::new();
         
         // Get subnets of peers already in the path
-        for peer in path {
+        for peer in path.iter() {
             if let IpAddr::V4(ipv4) = peer.ip() {
                 let octets = ipv4.octets();
                 used_subnets.insert([octets[0], octets[1]]);
@@ -1763,32 +1630,245 @@ impl DandelionManager {
                     // Prefer adding peers from different subnets
                     if used_subnets.contains(&subnet) {
                         // 20% chance to still include a peer from same subnet
-                        return rng.gen_bool(0.2);
+                        rng.gen_bool(0.2)
+                    } else {
+                        true
                     }
+                } else {
+                    false // Skip IPv6 for now
                 }
-                
-                true
             })
-            .copied()
+            .cloned()
             .collect();
-        
+            
         // Randomize order
         candidates.shuffle(&mut rng);
         
-        // Add additional hops up to maximum path length
-        for candidate in candidates {
-            if path.len() >= MAX_ROUTING_PATH_LENGTH {
-                break;
-            }
-            
-            path.push(candidate);
+        // Add first available candidate
+        if let Some(next_hop) = candidates.first() {
+            path.push(*next_hop);
             
             // Track subnet
-            if let IpAddr::V4(ipv4) = candidate.ip() {
+            if let IpAddr::V4(ipv4) = next_hop.ip() {
                 let octets = ipv4.octets();
                 used_subnets.insert([octets[0], octets[1]]);
             }
+            
+            // Recursively build rest of path
+            self.build_diverse_path(path, available_peers, avoid_peers);
         }
+    }
+
+    // Test-only methods
+    #[cfg(test)]
+    pub fn set_last_decoy_generation(&mut self, time: std::time::Instant) {
+        self.last_decoy_generation = time;
+    }
+
+    #[cfg(test)]
+    pub fn get_transaction_batches(&mut self) -> &mut HashMap<u64, TransactionBatch> {
+        &mut self.transaction_batches
+    }
+
+    #[cfg(test)]
+    pub fn get_network_traffic(&self) -> f64 {
+        self.current_network_traffic
+    }
+
+    #[cfg(test)]
+    pub fn get_recent_transactions(&self) -> &VecDeque<([u8; 32], std::time::Instant)> {
+        &self.recent_transactions
+    }
+
+    #[cfg(test)]
+    pub fn get_anonymity_sets_len(&self) -> usize {
+        self.anonymity_sets.len()
+    }
+
+    #[cfg(test)]
+    pub fn get_peer_reputation(&self, peer: &SocketAddr) -> Option<&PeerReputation> {
+        self.peer_reputation.get(peer)
+    }
+
+    /// Get all transactions
+    pub fn get_transactions(&self) -> &HashMap<[u8; 32], PropagationMetadata> {
+        &self.transactions
+    }
+
+    /// Get all stem successors
+    pub fn get_stem_successors(&self) -> &HashMap<SocketAddr, SocketAddr> {
+        &self.stem_successors
+    }
+
+    /// Update stem successors with new peer information
+    pub fn update_stem_successors(&mut self, known_peers: &[SocketAddr]) {
+        // Clear existing stem successors
+        self.stem_successors.clear();
+        
+        if known_peers.is_empty() {
+            return;
+        }
+        
+        // Create a new random mapping for stem phase routing
+        let mut rng = thread_rng();
+        
+        for &peer in known_peers {
+            // Select a random successor that is not the peer itself
+            let available_successors: Vec<&SocketAddr> = known_peers.iter()
+                .filter(|&p| p != &peer)
+                .collect();
+            
+            if !available_successors.is_empty() {
+                let successor = *available_successors[rng.gen_range(0, available_successors.len())];
+                self.stem_successors.insert(peer, successor);
+            }
+        }
+        
+        // Log the update if privacy logging is enabled
+        if PRIVACY_LOGGING_ENABLED {
+            println!("Updated Dandelion stem successors with {} mappings", self.stem_successors.len());
+        }
+    }
+
+    /// Get all multi-hop paths
+    pub fn get_multi_hop_paths(&self) -> &HashMap<SocketAddr, Vec<SocketAddr>> {
+        &self.multi_hop_paths
+    }
+
+    /// Get the next batch ID
+    pub fn get_next_batch_id(&self) -> u64 {
+        self.next_batch_id
+    }
+
+    /// Track a transaction request from a peer
+    pub fn track_transaction_request(&mut self, peer: SocketAddr, tx_hash: &[u8; 32]) {
+        if let Some(reputation) = self.peer_reputation.get_mut(&peer) {
+            reputation.transaction_requests.entry(*tx_hash)
+                .and_modify(|count| *count += 1)
+                .or_insert(1);
+        }
+    }
+
+    /// Check if we should send a dummy response to a peer
+    pub fn should_send_dummy_response(&self, peer: SocketAddr, tx_hash: &[u8; 32]) -> bool {
+        if let Some(reputation) = self.peer_reputation.get(&peer) {
+            if let Some(request_count) = reputation.transaction_requests.get(tx_hash) {
+                return *request_count > SUSPICIOUS_BEHAVIOR_THRESHOLD;
+            }
+        }
+        false
+    }
+
+    /// Generate a dummy transaction for anti-snooping
+    pub fn generate_dummy_transaction(&mut self) -> Option<[u8; 32]> {
+        let mut dummy_tx = [0u8; 32];
+        self.secure_rng.fill_bytes(&mut dummy_tx);
+        Some(dummy_tx)
+    }
+
+    /// Clean up old snoop detection data
+    pub fn cleanup_snoop_detection(&mut self) {
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_secs() as u32;
+            
+        for reputation in self.peer_reputation.values_mut() {
+            reputation.transaction_requests.retain(|_, timestamp| {
+                // Keep items that are less than an hour old
+                now - *timestamp < 3600
+            });
+        }
+    }
+
+    /// Generate Laplace noise for differential privacy
+    pub fn generate_laplace_noise(&mut self, scale: f64) -> f64 {
+        let u1: f64 = self.secure_rng.gen();
+        let u2: f64 = self.secure_rng.gen();
+        let noise = -scale * (1.0 - 2.0 * u1).signum() * (1.0 - 2.0 * u2).ln();
+        noise
+    }
+
+    /// Calculate differential privacy delay for a transaction
+    pub fn calculate_differential_privacy_delay(&mut self, _tx_hash: &[u8; 32]) -> Duration {
+        let base_delay = Duration::from_millis(100);
+        let noise = self.generate_laplace_noise(50.0);
+        let additional_delay = Duration::from_millis(noise.abs() as u64);
+        base_delay + additional_delay
+    }
+
+    fn get_peer_subnet(&self, peer: &SocketAddr) -> String {
+        match peer.ip() {
+            IpAddr::V4(ipv4) => {
+                let octets = ipv4.octets();
+                format!("{}.{}", octets[0], octets[1])
+            },
+            IpAddr::V6(_) => "ipv6".to_string(), // Simplified for IPv6
+        }
+    }
+
+    fn get_peer_behavior_pattern(&self, peer: &SocketAddr) -> Vec<f64> {
+        let mut pattern = Vec::new();
+        
+        if let Some(reputation) = self.peer_reputation.get(peer) {
+            // Add various behavioral metrics to the pattern
+            pattern.push(reputation.successful_relays as f64);
+            pattern.push(reputation.failed_relays as f64);
+            pattern.push(reputation.suspicious_actions as f64);
+            pattern.push(reputation.sybil_indicators as f64);
+            pattern.push(reputation.eclipse_indicators as f64);
+            pattern.push(reputation.dummy_responses_sent as f64);
+            
+            // Add timing pattern metrics
+            if let Some(last_used) = reputation.last_used_for_stem {
+                pattern.push(last_used.elapsed().as_secs_f64());
+            } else {
+                pattern.push(f64::MAX);
+            }
+            
+            // Add connection pattern metrics
+            let connection_intervals: Vec<f64> = reputation.connection_patterns
+                .iter()
+                .zip(reputation.connection_patterns.iter().skip(1))
+                .map(|(t1, t2)| t2.duration_since(*t1).as_secs_f64())
+                .collect();
+            
+            if !connection_intervals.is_empty() {
+                let avg_interval = connection_intervals.iter().sum::<f64>() / connection_intervals.len() as f64;
+                pattern.push(avg_interval);
+            } else {
+                pattern.push(0.0);
+            }
+        }
+        
+        pattern
+    }
+
+    fn are_patterns_similar(&self, pattern1: &[f64], pattern2: &[f64]) -> bool {
+        if pattern1.len() != pattern2.len() || pattern1.is_empty() {
+            return false;
+        }
+        
+        // Calculate Euclidean distance between patterns
+        let squared_diff_sum: f64 = pattern1.iter()
+            .zip(pattern2.iter())
+            .map(|(a, b)| (a - b).powi(2))
+            .sum();
+        
+        let distance = squared_diff_sum.sqrt();
+        
+        // Patterns are similar if their distance is below a threshold
+        let threshold = 5.0; // Adjust based on pattern scale
+        distance < threshold
+    }
+
+    /// Get the fluffed transaction data
+    pub fn get_fluffed_transaction(&self, tx_hash: &[u8; 32]) -> Option<Vec<u8>> {
+        // Check if we have this transaction in our pool
+        if let Some(metadata) = self.transactions.get(tx_hash) {
+            return Some(metadata.tx_data.clone());
+        }
+        None
     }
 }
 
@@ -1871,4 +1951,4 @@ mod tests {
             assert!(peers.contains(successor));
         }
     }
-} 
+}

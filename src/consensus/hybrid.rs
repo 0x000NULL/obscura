@@ -4,7 +4,7 @@ use super::pos_old::{StakeProof, StakingContract};
 use super::randomx::{verify_difficulty, RandomXContext};
 use super::{pos_old::ProofOfStake, pow::ProofOfWork};
 use crate::blockchain::Block;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use crate::consensus::hybrid_optimizations::HybridStateManager;
 
 pub struct HybridValidator {

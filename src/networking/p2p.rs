@@ -73,6 +73,9 @@ pub enum PrivacyFeatureFlag {
     ConfidentialTransactions = 0x04,
     ZeroKnowledgeProofs = 0x08,
     DandelionPlusPlus = 0x10,
+    Tor,
+    I2P,
+    Dandelion,
 }
 
 // Handshake message structure
