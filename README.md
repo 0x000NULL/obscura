@@ -1,6 +1,85 @@
-# Obscura Blockchain (OBX)
+# Obscura - A Privacy-Focused Cryptocurrency
 
-A privacy-focused blockchain implementation written in Rust. Obscura combines modern cryptography with advanced privacy techniques to provide a secure, scalable, and anonymous blockchain platform.
+## Overview
+
+Obscura is a privacy-focused cryptocurrency that combines cutting-edge cryptography with blockchain technology to provide secure, private transactions. It implements advanced privacy features including stealth addressing, confidential transactions, and zero-knowledge proofs.
+
+## Key Features
+
+- **Strong Privacy**: Transaction amounts, sender, and receiver information are kept private
+- **Stealth Addressing**: One-time addresses for enhanced privacy
+- **Confidential Transactions**: Transaction amounts are hidden using Pedersen commitments
+- **Zero-Knowledge Proofs**: Prove transaction validity without revealing transaction details
+- **Dual-Curve Cryptography**: Using BLS12-381 and Jubjub curves for advanced privacy features
+- **Bulletproofs**: Efficient range proofs without trusted setup
+
+## Cryptographic Migration
+
+Obscura is currently migrating from curve25519-dalek/ed25519 to a dual-curve system using:
+
+1. **BLS12-381**: A pairing-friendly curve used for zk-SNARKs and complex zero-knowledge proofs
+2. **Jubjub**: An efficient elliptic curve defined over the BLS12-381 scalar field, used for signatures and commitments
+
+This migration will enable:
+- More advanced privacy features through zk-SNARK integration
+- Better cross-chain compatibility with other privacy-focused cryptocurrencies
+- Improved performance for complex cryptographic operations
+
+For more information, see our [Migration Guide](docs/MIGRATION_GUIDE.md) and [Cryptography Documentation](docs/CRYPTOGRAPHY.md).
+
+## Getting Started
+
+### Prerequisites
+
+- Rust 1.63 or higher
+- Cargo package manager
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/obscura-org/obscura.git
+cd obscura
+
+# Build with default features
+cargo build --release
+
+# Build with new cryptographic curves
+cargo build --release --features "use-bls12-381 use-jubjub"
+
+# Build with legacy support during migration
+cargo build --release --features "use-bls12-381 use-jubjub legacy-curves"
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+cargo test
+
+# Run cryptography tests
+cargo test --package obscura --lib crypto
+```
+
+## Documentation
+
+- [Cryptography Documentation](docs/CRYPTOGRAPHY.md): Explains the cryptographic primitives used in Obscura
+- [Migration Guide](docs/MIGRATION_GUIDE.md): Details about the migration to BLS12-381 and Jubjub curves
+- [API Documentation](docs/API.md): API reference for developers
+
+## Contributing
+
+Contributions are welcome! Please see our [Contributing Guide](CONTRIBUTING.md) for more information.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- The Zcash team for their pioneering work on zk-SNARKs and private transactions
+- The Monero project for innovations in privacy-focused cryptocurrency design
+- The Rust community for providing excellent cryptographic libraries
 
 ## Features
 
@@ -37,31 +116,6 @@ A privacy-focused blockchain implementation written in Rust. Obscura combines mo
 - Peer discovery and management
 - Block propagation with privacy enhancements
 - Transaction relay with timing variation
-
-## Getting Started
-
-### Prerequisites
-
-- Rust 1.50+
-- Cargo package manager
-
-### Installation
-
-1. Clone the repository:
-```
-git clone https://github.com/0x000null/obscura.git
-cd obscura
-```
-
-2. Build the project:
-```
-cargo build --release
-```
-
-3. Run the node:
-```
-cargo run --release
-```
 
 ## Usage
 
@@ -104,60 +158,6 @@ let low_priority_fee = mempool.get_recommended_fee(FeeEstimationPriority::Low);
 let medium_priority_fee = mempool.get_recommended_fee(FeeEstimationPriority::Medium);
 let high_priority_fee = mempool.get_recommended_fee(FeeEstimationPriority::High);
 ```
-
-## Documentation
-
-For detailed documentation, see the `docs` directory:
-
-- [Transaction Pool](docs/transaction_pool.md)
-- [Privacy Features](docs/privacy_features.md)
-- [Consensus Mechanism](docs/consensus.md)
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Acknowledgments
-- RandomX from Monero
-- Rust Crypto Community
-- Zero-Knowledge Research Community
-
-## Testing
-
-### Running Tests
-
-To run all tests, including the integration tests for the main module:
-
-```bash
-cargo test
-```
-
-To run a specific test:
-
-```bash
-cargo test test_init_crypto_success
-```
-
-To run tests with logging output:
-
-```bash
-RUST_LOG=debug cargo test -- --nocapture
-```
-
-### Test Coverage
-
-To measure test coverage, you can use tools like `cargo-tarpaulin`:
-
-```bash
-cargo install cargo-tarpaulin
-cargo tarpaulin --out Html
-```
-
-The HTML report will show you which lines are covered by tests.
 
 ## Development
 

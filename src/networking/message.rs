@@ -139,12 +139,12 @@ impl Message {
         // Ensure minimum message size for privacy
         if data.len() < MIN_MESSAGE_SIZE {
             let padding_size = MIN_MESSAGE_SIZE - data.len();
-            let padding_bytes: Vec<u8> = (0..padding_size).map(|_| rng.gen()).collect();
+            let padding_bytes: Vec<u8> = (0..padding_size).map(|_| rng.gen::<u8>()).collect();
             data.extend_from_slice(&padding_bytes);
         } else {
             // Add random padding between 0-32 bytes for variable message sizes
             let padding_size = rng.gen_range(0, 33);
-            let padding_bytes: Vec<u8> = (0..padding_size).map(|_| rng.gen()).collect();
+            let padding_bytes: Vec<u8> = (0..padding_size).map(|_| rng.gen::<u8>()).collect();
             data.extend_from_slice(&padding_bytes);
         }
     }

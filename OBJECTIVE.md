@@ -42,11 +42,11 @@ Use of a minimal, efficient scripting language to prevent vulnerabilities.
 
 3.1 Transaction Obfuscation
 
-Implement zk-SNARKs using Halo 2 for full transaction privacy (sender, receiver, and amount hidden).
+Implement zk-SNARKs using Halo 2 with BLS12-381 curve for full transaction privacy (sender, receiver, and amount hidden).
 
-Add stealth addresses for recipient privacy.
+Add stealth addresses for recipient privacy using Jubjub curve (an Edwards curve defined over the BLS12-381 scalar field).
 
-Use confidential transactions to obscure amounts.
+Use confidential transactions with Pedersen commitments on Jubjub curve to obscure amounts.
 
 3.2 Network Privacy
 
@@ -64,7 +64,7 @@ Users can generate view keys to selectively reveal transaction details for audit
 
 4.1 Trustless Exchange Mechanisms
 
-Atomic Swaps: Native support for cross-chain swaps with Monero and Bitcoin.
+Atomic Swaps: Native support for cross-chain swaps with Monero and Bitcoin, with curve adaptor techniques for interoperability.
 
 Decentralized Exchange (DEX): Built-in privacy-focused DEX with shielded liquidity pools.
 

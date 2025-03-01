@@ -24,9 +24,10 @@ fn test_key_serialization() {
 fn test_key_encryption() {
     let keypair = generate_keypair().unwrap();
     let password = b"test password";
+    let password_str = std::str::from_utf8(password).unwrap();
 
-    let encrypted = encrypt_keypair(&keypair, password);
-    let decrypted = decrypt_keypair(&encrypted, password).unwrap();
+    let encrypted = encrypt_keypair(&keypair, password_str);
+    let decrypted = decrypt_keypair(&encrypted, password_str).unwrap();
 
     assert_eq!(keypair.public.as_bytes(), decrypted.public.as_bytes());
 }

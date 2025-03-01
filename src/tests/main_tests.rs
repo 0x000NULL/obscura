@@ -10,7 +10,6 @@ mod main_tests {
     use std::time::Duration;
     use log::{error, debug};
     use tempfile;
-    use test_log::test;
 
     // Test helper to set up log capture
     fn setup_logging() -> tempfile::NamedTempFile {

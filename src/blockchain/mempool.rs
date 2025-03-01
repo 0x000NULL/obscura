@@ -6,9 +6,10 @@ use rand::{Rng, rngs::OsRng};
 use crate::crypto::bulletproofs::{RangeProof, verify_range_proof};
 use crate::crypto::pedersen::{PedersenCommitment, verify_commitment_sum};
 use ed25519_dalek::{Signature, PublicKey, Verifier};
-use sha2::{Sha256, Digest};
-use blake2::{Blake2b, Blake2s};
+use sha2::{Sha256, Digest, digest::{self, OutputSizeUser}};
+use blake2::{Blake2b, Blake2s, Blake2bCore, Blake2sCore};
 use hex;
+use sha2::digest::generic_array::GenericArray;
 
 // Constants for mempool management
 const MAX_MEMPOOL_SIZE: usize = 5000; // Maximum number of transactions
@@ -97,10 +98,10 @@ impl TransactionMetadata {
     // but adds privacy-enhancing noise
     fn get_obfuscated_fee_factor(&self) -> f64 {
         // Convert obfuscated_fee bytes to a value between 0.9 and 1.1
-        let mut hasher = Blake2s::new();
+        let mut hasher = Blake2s::<digest::consts::U32>::new();
         hasher.update(&self.obfuscated_fee);
         hasher.update(&self.blinding_factor);
-        let result = hasher.finalize();
+        let result: GenericArray<u8, <Blake2s<digest::consts::U32> as OutputSizeUser>::OutputSize> = hasher.finalize();
         
         // Get first 4 bytes as a u32 and normalize to 0.0-1.0 range
         let bytes = [result[0], result[1], result[2], result[3]];
@@ -640,7 +641,7 @@ impl Mempool {
         let mut hasher = Sha256::new();
         hasher.update(sponsored_tx.transaction.hash());
         hasher.update(sponsored_tx.sponsor_fee.to_le_bytes());
-        let message = hasher.finalize();
+        let message: GenericArray<u8, <Sha256 as OutputSizeUser>::OutputSize> = hasher.finalize();
         
         // Verify the signature
         sponsor_pubkey.verify(&message, &signature).is_ok()
@@ -986,13 +987,13 @@ impl Mempool {
         // Apply multiple rounds of obfuscation
         for round in 0..FEE_OBFUSCATION_ROUNDS {
             // Mix in the fee with blinding
-            let mut hasher = Blake2b::new();
+            let mut hasher = Blake2b::<digest::consts::U64>::new();
             hasher.update(&obfuscated);
             hasher.update(&fee.to_le_bytes());
             hasher.update(&self.fee_obfuscation_key);
             hasher.update(&[round as u8]); // Add round number
             
-            let result = hasher.finalize();
+            let result: GenericArray<u8, <Blake2b<digest::consts::U64> as OutputSizeUser>::OutputSize> = hasher.finalize();
             
             // Copy first 32 bytes to obfuscated
             for i in 0..32 {

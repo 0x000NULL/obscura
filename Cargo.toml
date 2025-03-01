@@ -1,44 +1,119 @@
 [package]
 name = "obscura"
-version = "0.5.0"
+version = "0.1.0"
+authors = ["Obscura Team <ethan@obscura.org>"]
+description = "A privacy-focused cryptocurrency with stealth addresses and confidential transactions"
+repository = "https://github.com/obscura-org/obscura"
 edition = "2021"
-authors = ["Ethan Aldrich <Add.email.here>"]
-description = "A Rust implementation of the Obscura blockchain protocol."
-repository = "https://github.com/0x000null/obscura"
 
 [dependencies]
-ed25519-dalek = "1.0"
-rand = "0.7"
-rand_core = "0.5"
-rand_distr = "0.3"
-rand_chacha = "0.2"
-sha2 = "0.9"
-chacha20 = "0.9"
-typenum = "1.16"
-log = "0.4"
-env_logger = "0.10"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-hex = "0.4"
-bincode = "1.3"
-# Dependencies for message serialization
-byteorder = "1.4"
-thiserror = "1.0"
-rayon = "1.8"
-num_cpus = "1.16"
-chacha20poly1305 = "0.10.1"
-# Privacy-focused cryptography dependencies
+# Keep existing cryptography dependencies
+ed25519-dalek = "1.0.1"
 curve25519-dalek = "3.2"
+rand = "0.7.3"  # Keep the original version to match ed25519-dalek
+rand_core = "0.5.1"  # Explicitly specify version to match ed25519-dalek
+sha2 = "0.10.6"
+blake2 = "0.10.6"
+blake3 = "1.3"
+hmac = "0.12"
 merlin = "3.0"
-blake2 = "0.9"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.96"
+bincode = "1.3"
+hex = "0.4.3"
+once_cell = "1.16"
 lazy_static = "1.4"
+# Parallel computation 
+rayon = "1.7.0"
+num_cpus = "1.16.0"
+
+# Additional dependencies identified from errors
+rand_chacha = "0.2.2"  # Compatible with rand 0.7
 siphasher = "0.3"
+group = "0.13.0"  # For Group trait (generator() method)
+ff = "0.13.0"  # For Field trait (random() method)
+
+# New BLS12-381 and Jubjub dependencies
+blstrs = "0.7.0"  # BLS12-381 implementation
+ark-bls12-381 = "0.4"  # Alternative BLS12-381 implementation from arkworks-rs
+ark-ed-on-bls12-381 = "0.4"  # Jubjub curve implementation from arkworks-rs
+zcash_primitives = "0.11"  # For Jubjub, Pedersen commitments, etc.
+halo2_proofs = "0.3"  # For zk-SNARKs
+
+# Networking dependencies
+tokio = { version = "1.28", features = ["full"] }
+futures = "0.3"
+async-trait = "0.1"
+libp2p = { version = "0.51", features = ["tcp", "dns", "websocket", "noise", "yamux", "ping", "identify", "kad", "gossipsub", "mdns"] }
+libp2p-quic = { version = "0.9.2-alpha" }
+libp2p-webrtc = { version = "0.9.0-alpha" }
+chacha20poly1305 = "0.10.1"
+chacha20 = "0.9.0"
+
+# Storage dependencies
+rocksdb = { version = "0.20", optional = true }
+sled = "0.34"
+
+# Consensus dependencies
+randomx-rs = { version = "0.2", optional = true }
+threshold_crypto = "0.4"
+bulletproofs = "4.0"
+# dalek-frost = "0.1"  # Removed as it's not found
+
+# CLI and configuration
+config = "0.13"
+clap = { version = "4.1", features = ["derive"] }
+generic-array = "0.14.7"
+toml = "0.5"
+
+# Additional missing dependencies
+log = "0.4"
+env_logger = "0.10.0"
+
+# Visualization and human-friendly output
+chrono = "0.4"
+colored = "2.0"
+prettytable-rs = "0.10"
+
+# Monitoring and metrics
+prometheus = { version = "0.13", optional = true }
+
+# Testing and benchmarking
+criterion = "0.4"
+
+# Development tooling
+rand_distr = "0.3.0"
 
 [dev-dependencies]
-tempfile = "3.8"
+tempfile = "3.5"
+proptest = "1.1"
 mockall = "0.11"
-test-log = "0.2"
-tokio = { version = "1.32", features = ["full"] }
 
 [build-dependencies]
-cc = "1.0" 
+cbindgen = "0.24"
+
+[profile.release]
+opt-level = 3
+debug = false
+strip = "symbols"
+lto = "thin"
+panic = "abort"
+codegen-units = 1
+incremental = false
+
+[profile.dev]
+opt-level = 0
+debug = true
+debug-assertions = true
+incremental = true
+
+[features]
+default = []
+test-utils = []
+benchmarking = []
+# New feature flags for curve migration
+use-bls12-381 = []
+use-jubjub = []
+legacy-curves = []
+# Storage backend features
+use-rocksdb = ["rocksdb"]

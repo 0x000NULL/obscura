@@ -228,30 +228,31 @@
     - [x] Implement output value obfuscation
     - [x] Create simple range proof system
   - [ ] Plan for advanced cryptographic primitives
-    - [ ] Research Pedersen commitment implementation
-      - [ ] Evaluate elliptic curve options (Ristretto, Curve25519)
-      - [ ] Design homomorphic commitment scheme
+    - [x] Research Pedersen commitment implementation
+      - [x] Evaluate elliptic curve options (Selected BLS12-381 as primary and Jubjub as secondary)
+      - [ ] Design homomorphic commitment scheme using selected curves
       - [ ] Create blinding factor generation protocol
       - [ ] Implement secure blinding factor storage
       - [ ] Add commitment verification system
     - [ ] Develop bulletproofs integration plan
-      - [ ] Evaluate bulletproofs libraries (dalek-cryptography/bulletproofs)
+      - [ ] Evaluate bulletproofs libraries (compatible with BLS12-381/Jubjub)
       - [ ] Design range proof protocol for transaction amounts
       - [ ] Create efficient verification mechanism
       - [ ] Implement multi-output proofs
       - [ ] Add batch verification optimization
     - [ ] Design proper Diffie-Hellman key exchange for stealth addressing
-      - [ ] Implement X25519 for key exchange
+      - [ ] Implement appropriate key exchange for Jubjub curve
       - [ ] Create secure ephemeral key generation
       - [ ] Design shared secret derivation protocol
       - [ ] Implement key blinding techniques
       - [ ] Add forward secrecy mechanisms
-- [ ] Network Privacy Protections
-  - [xerror[E0599]: no method named `defend_against_eclipse_attack` found for mutable reference `&mut networking::Node` in the current scope
-   --> src\networking\mod.rs:876:30
-    |
-876 |         if let Err(e) = self.defend_against_eclipse_attack() {
-    |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method not found in `&mut Node`] Implement basic Dandelion protocol
+    - [ ] Implement BLS12-381 specific functions
+      - [ ] Create optimized BLS12-381 curve operations
+      - [ ] Implement Jubjub curve for efficient in-circuit operations
+      - [ ] Develop cross-curve operations for atomic swaps
+      - [ ] Create test vectors for curve operations
+      - [ ] Add benchmarking for cryptographic performance
+- [x] Network Privacy Protections
     - [x] Create transaction propagation phases
     - [x] Add transaction stem phase routing
     - [x] Implement fluff phase broadcasting
@@ -1330,3 +1331,17 @@
   - [x] Add test-specific constants
   - [x] Implement comprehensive test logging
   - [x] Fix time overflow issues in tests 
+
+## Elliptic Curve Migration
+
+- [ ] Add new dependencies to Cargo.toml (blstrs, ark-bls12-381, ark-ed-on-bls12-381, etc.)
+- [ ] Create src/crypto/bls12_381.rs for BLS12-381 specific implementations
+- [ ] Create src/crypto/jubjub.rs for Jubjub specific implementations
+- [ ] Update src/crypto/mod.rs to support both curve systems during transition
+- [ ] Reimplement Pedersen commitments using Jubjub in src/crypto/pedersen.rs
+- [ ] Update bulletproofs implementation to work with Jubjub in src/crypto/bulletproofs.rs
+- [ ] Update privacy module to use Jubjub for stealth addressing in src/crypto/privacy.rs
+- [ ] Create comprehensive tests for new cryptographic implementations
+- [ ] Benchmark performance of BLS12-381 and Jubjub operations
+- [ ] Implement zk-SNARK circuits for enhanced privacy features
+- [ ] Update atomic swap functionality for cross-chain compatibility 

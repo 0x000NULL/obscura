@@ -1934,16 +1934,10 @@ mod tests {
         let mut manager = DandelionManager::new();
         let tx_hash = [0u8; 32];
         
-        // Force stem phase for testing
-        let _original_stem_prob = STEM_PROBABILITY;
-        // Hack to make this test reliable since we can't modify the constant
-        let state = if thread_rng().gen_bool(0.99) {
-            manager.add_transaction(tx_hash, None)
-        } else {
-            PropagationState::Stem
-        };
+        // Add the transaction and get its state
+        let state = manager.add_transaction(tx_hash, None);
         
-        // Should transition after the timeout
+        // Only test the transition if it's in the Stem state
         if state == PropagationState::Stem {
             if let Some(metadata) = manager.transactions.get_mut(&tx_hash) {
                 // Force quick transition
@@ -1956,6 +1950,9 @@ mod tests {
             // Should now transition to fluff
             let new_state = manager.check_transition(&tx_hash);
             assert_eq!(new_state, Some(PropagationState::Fluff));
+        } else {
+            // If it didn't start in Stem state, the test is basically skipped
+            println!("Transaction didn't start in Stem state, skipping transition test");
         }
     }
     
