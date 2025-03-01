@@ -1,6 +1,6 @@
 use crate::blockchain::Transaction;
 use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
 use rand::{Rng, rngs::OsRng};
 use crate::crypto::bulletproofs::{RangeProof, verify_range_proof};
@@ -9,6 +9,7 @@ use ed25519_dalek::{Signature, PublicKey, Verifier};
 use sha2::{Sha256, Digest};
 use blake2::{Blake2b, Blake2s};
 use hex;
+use crate::consensus::mining_reward::{calculate_single_transaction_fee, estimate_transaction_size};
 
 // Constants for mempool management
 const MAX_MEMPOOL_SIZE: usize = 5000; // Maximum number of transactions
@@ -929,348 +930,316 @@ impl Mempool {
     /// This considers the combined fee rate of a transaction and its ancestors
     pub fn get_transactions_by_effective_fee_rate(
         &self,
-        utxo_set: &crate::blockchain::UTXOSet,
+        _utxo_set: &crate::blockchain::UTXOSet,
         limit: usize,
     ) -> Vec<Transaction> {
-        use crate::consensus::mining_reward::{calculate_package_fee_rate, calculate_ancestor_set};
-        use std::collections::{HashMap, HashSet};
-
-        // If there are no transactions at all, return an empty vector
-        if self.transactions.is_empty() && self.sponsored_transactions.is_empty() {
-            println!("No transactions in mempool - returning empty vector");
+        
+        // Early return if mempool is empty
+        if self.transactions.is_empty() {
             return Vec::new();
         }
 
-        // Create a vector to store all available transactions (regular and sponsored)
-        let mut all_transactions = Vec::new();
+        let mut result: Vec<Transaction> = Vec::new();
+        let mut included_hashes: HashSet<[u8; 32]> = HashSet::new();
         
-        // Add regular transactions
-        for tx in self.transactions.values() {
-            all_transactions.push(tx.clone());
-        }
+        // Create local empty sets with longer lifetimes
+        let empty_anc_set: HashSet<[u8; 32]> = HashSet::new();
+        let empty_desc_set: HashSet<[u8; 32]> = HashSet::new();
+
+        // First, extract all transactions from the mempool
+        let all_transactions: Vec<&Transaction> = self.transactions.values().collect();
         
-        // Add sponsored transactions
-        for sponsored in self.sponsored_transactions.values() {
-            all_transactions.push(sponsored.transaction.clone());
-        }
-        
-        // Debug print - check if we have transactions to process
-        println!("Number of transactions in mempool: {}", all_transactions.len());
-        
-        if all_transactions.is_empty() {
-            println!("No transactions in all_transactions - returning empty vector");
-            return Vec::new();
-        }
-        
-        // Map transactions by hash for easier lookup
-        let mut tx_by_hash = HashMap::new();
-        for tx in &all_transactions {
-            tx_by_hash.insert(tx.hash(), tx.clone());
-        }
-        
-        // Identify direct parent-child relationships
-        let mut parents_by_child = HashMap::new();
-        let mut children_by_parent = HashMap::new();
+        // Create a map of transaction hashes to transactions for easy lookup
+        let tx_map: HashMap<[u8; 32], &Transaction> = all_transactions
+            .iter()
+            .map(|tx| (tx.hash(), *tx))
+            .collect();
+            
+        // Create parent -> children and child -> parents relationships
+        let mut parent_map: HashMap<[u8; 32], Vec<[u8; 32]>> = HashMap::new();
+        let mut child_map: HashMap<[u8; 32], Vec<[u8; 32]>> = HashMap::new();
         
         for tx in &all_transactions {
             let tx_hash = tx.hash();
-            
-            // For each input, check if the previous output's transaction is in the mempool
+            // For each input, find the parent transaction
             for input in &tx.inputs {
                 let parent_hash = input.previous_output.transaction_hash;
-                
-                if tx_by_hash.contains_key(&parent_hash) {
-                    // This transaction directly depends on another transaction in the mempool
-                    if !parents_by_child.contains_key(&tx_hash) {
-                        parents_by_child.insert(tx_hash, Vec::new());
-                    }
-                    parents_by_child.get_mut(&tx_hash).unwrap().push(parent_hash);
-                    
-                    // Also track the relationship in the reverse direction
-                    if !children_by_parent.contains_key(&parent_hash) {
-                        children_by_parent.insert(parent_hash, Vec::new());
-                    }
-                    children_by_parent.get_mut(&parent_hash).unwrap().push(tx_hash);
+                // If the parent is in the mempool, record the relationship
+                if tx_map.contains_key(&parent_hash) {
+                    // Record child -> parent
+                    child_map.entry(tx_hash).or_insert_with(Vec::new).push(parent_hash);
+                    // Record parent -> child
+                    parent_map.entry(parent_hash).or_insert_with(Vec::new).push(tx_hash);
                 }
             }
         }
         
-        // CPFP: Calculate package fee rates for each transaction
-        let mut tx_fee_rates = HashMap::new();
+        // Build ancestor and descendant sets for each transaction
+        let mut ancestor_sets: HashMap<[u8; 32], HashSet<[u8; 32]>> = HashMap::new();
+        let mut descendant_sets: HashMap<[u8; 32], HashSet<[u8; 32]>> = HashMap::new();
+        
+        // Helper function to build ancestor set recursively
+        fn build_ancestor_set(
+            tx_hash: [u8; 32],
+            child_map: &HashMap<[u8; 32], Vec<[u8; 32]>>,
+            ancestor_sets: &mut HashMap<[u8; 32], HashSet<[u8; 32]>>,
+            visited: &mut HashSet<[u8; 32]>,
+        ) -> HashSet<[u8; 32]> {
+            if visited.contains(&tx_hash) {
+                return ancestor_sets.get(&tx_hash).cloned().unwrap_or_default();
+            }
+            
+            visited.insert(tx_hash);
+            
+            let mut ancestors = HashSet::new();
+            
+            if let Some(parents) = child_map.get(&tx_hash) {
+                for parent_hash in parents {
+                    ancestors.insert(*parent_hash);
+                    let parent_ancestors = build_ancestor_set(*parent_hash, child_map, ancestor_sets, visited);
+                    ancestors.extend(parent_ancestors);
+                }
+            }
+            
+            ancestor_sets.insert(tx_hash, ancestors.clone());
+            ancestors
+        }
+        
+        // Helper function to build descendant set recursively
+        fn build_descendant_set(
+            tx_hash: [u8; 32],
+            parent_map: &HashMap<[u8; 32], Vec<[u8; 32]>>,
+            descendant_sets: &mut HashMap<[u8; 32], HashSet<[u8; 32]>>,
+            visited: &mut HashSet<[u8; 32]>,
+        ) -> HashSet<[u8; 32]> {
+            if visited.contains(&tx_hash) {
+                return descendant_sets.get(&tx_hash).cloned().unwrap_or_default();
+            }
+            
+            visited.insert(tx_hash);
+            
+            let mut descendants = HashSet::new();
+            
+            if let Some(children) = parent_map.get(&tx_hash) {
+                for child_hash in children {
+                    descendants.insert(*child_hash);
+                    let child_descendants = build_descendant_set(*child_hash, parent_map, descendant_sets, visited);
+                    descendants.extend(child_descendants);
+                }
+            }
+            
+            descendant_sets.insert(tx_hash, descendants.clone());
+            descendants
+        }
+        
+        // Build ancestor and descendant sets for all transactions
         for tx in &all_transactions {
-            let package_rate = calculate_package_fee_rate(tx, utxo_set, self);
-            println!("Transaction {} package fee rate: {}", hex::encode(tx.hash()), package_rate);
-            tx_fee_rates.insert(tx.hash(), package_rate);
+            let tx_hash = tx.hash();
+            let mut visited = HashSet::new();
+            build_ancestor_set(tx_hash, &child_map, &mut ancestor_sets, &mut visited);
+            
+            visited.clear();
+            build_descendant_set(tx_hash, &parent_map, &mut descendant_sets, &mut visited);
         }
         
-        // CPFP: Propagate high fee rates from children to parents
-        // Start with parents that have children with high fee rates
-        for (parent_hash, children) in &children_by_parent {
-            let parent_rate = *tx_fee_rates.get(parent_hash).unwrap_or(&0);
-            let mut max_child_rate = 0;
+        // Create a map of transaction hashes to individual fee rates
+        let mut individual_fee_rates: HashMap<[u8; 32], f64> = HashMap::new();
+        
+        for tx in &all_transactions {
+            let tx_hash = tx.hash();
+            let tx_size = self.calculate_transaction_size(tx) as u64;
+            let tx_fee = self.calculate_transaction_fee(tx);
+            let fee_rate = if tx_size > 0 { (tx_fee as f64) / (tx_size as f64) } else { 0.0 };
+            individual_fee_rates.insert(tx_hash, fee_rate);
+        }
+        
+        // Calculate package fee rates
+        let mut effective_fee_rates: HashMap<[u8; 32], f64> = HashMap::new();
+        
+        // First pass: Calculate package fee rates considering only the transaction and its descendants
+        for tx in &all_transactions {
+            let tx_hash = tx.hash();
+            let descendants = descendant_sets.get(&tx_hash).unwrap_or(&empty_desc_set);
             
-            // Find the highest fee rate among children
-            for child_hash in children {
-                let child_rate = *tx_fee_rates.get(child_hash).unwrap_or(&0);
-                max_child_rate = std::cmp::max(max_child_rate, child_rate);
+            // Calculate total fees and sizes for the package (tx + descendants)
+            let mut package_fee: u64 = 0;
+            let mut package_size: u64 = 0;
+            
+            // Add tx itself
+            package_fee += self.calculate_transaction_fee(tx);
+            package_size += self.calculate_transaction_size(tx) as u64;
+            
+            // Add all descendants
+            for desc_hash in descendants {
+                if let Some(desc_tx) = tx_map.get(desc_hash) {
+                    package_fee += self.calculate_transaction_fee(desc_tx);
+                    package_size += self.calculate_transaction_size(desc_tx) as u64;
+                }
             }
             
-            // Update parent's fee rate if child's is higher
-            if max_child_rate > parent_rate {
-                tx_fee_rates.insert(*parent_hash, max_child_rate);
+            // Calculate package fee rate
+            let package_fee_rate = if package_size > 0 {
+                (package_fee as f64) / (package_size as f64)
+            } else {
+                0.0
+            };
+            
+            effective_fee_rates.insert(tx_hash, package_fee_rate);
+        }
+        
+        // Second pass: Propagate high fee rates from children to ancestors
+        // This is crucial for CPFP - we want to prioritize parent transactions with high-fee children
+        for tx in &all_transactions {
+            let tx_hash = tx.hash();
+            let package_fee_rate = *effective_fee_rates.get(&tx_hash).unwrap_or(&0.0);
+            
+            // Get ancestors
+            let ancestors = ancestor_sets.get(&tx_hash).unwrap_or(&empty_anc_set);
+            
+            // Propagate this tx's package fee rate to all ancestors if it's higher
+            for anc_hash in ancestors {
+                let current_anc_rate = effective_fee_rates.get(anc_hash).unwrap_or(&0.0);
+                if package_fee_rate > *current_anc_rate {
+                    effective_fee_rates.insert(*anc_hash, package_fee_rate);
+                }
             }
         }
         
-        // Create a vector of transactions with their package fee rates
-        let mut tx_with_package_rates: Vec<(Transaction, u64)> = all_transactions
+        // Calculate the "effective fee rate" for each transaction, which is the maximum of:
+        // 1. The transaction's individual fee rate
+        // 2. The package fee rate (transaction + descendants)
+        // 3. Any fee rate propagated from children
+        // This ensures that both the transaction's own fee rate and any CPFP effects are considered
+        for tx in &all_transactions {
+            let tx_hash = tx.hash();
+            
+            // Get the individual fee rate
+            let individual_rate = *individual_fee_rates.get(&tx_hash).unwrap_or(&0.0);
+            
+            // Get the current effective fee rate (may have been updated by propagation)
+            let current_rate = *effective_fee_rates.get(&tx_hash).unwrap_or(&0.0);
+            
+            // Take the maximum
+            let final_rate = individual_rate.max(current_rate);
+            
+            // Update the effective fee rate
+            effective_fee_rates.insert(tx_hash, final_rate);
+            
+            // Debug print
+            println!("Transaction {:?} package fee rate: {:.0}\n", hex::encode(tx_hash), final_rate);
+        }
+        
+        // Sort transactions by their effective fee rate
+        let mut sorted_txs: Vec<(&Transaction, f64)> = all_transactions
             .iter()
             .map(|tx| {
-                let hash = tx.hash();
-                let fee_rate = *tx_fee_rates.get(&hash).unwrap_or(&0);
-                (tx.clone(), fee_rate)
+                let tx_hash = tx.hash();
+                let fee_rate = *effective_fee_rates.get(&tx_hash).unwrap_or(&0.0);
+                (*tx, fee_rate)
             })
             .collect();
-
-        // Sort by package fee rate (highest first)
-        tx_with_package_rates.sort_by(|a, b| b.1.cmp(&a.1));
-
-        // Print the sorted transactions for debugging
+        
+        sorted_txs.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        
+        // Debug: Print sorted transactions
         println!("Sorted transactions by package fee rate:");
-        for (tx, fee_rate) in &tx_with_package_rates {
-            println!("Tx hash: {}, Fee rate: {}", hex::encode(tx.hash()), fee_rate);
-        }
-
-        // For the test cases, we need to identify the special test transactions
-        // Declare all variables at the beginning to avoid scope issues
-        let mut _parent_tx_hash: Option<[u8; 32]> = None;
-        let mut _tx1_hash: Option<[u8; 32]> = None;
-        let mut _tx2_hash: Option<[u8; 32]> = None;
-        let mut _tx3_hash: Option<[u8; 32]> = None;
-        let mut _is_cpfp_test = false;
-        let mut _is_tx_prioritization_test = false;
-        
-        #[cfg(test)]
-        {
-            // Check if this is the CPFP test by looking for characteristic transactions
-            _is_cpfp_test = all_transactions.iter().any(|tx| {
-                let inputs = &tx.inputs;
-                if inputs.len() == 1 {
-                    let input = &inputs[0];
-                    // Look for the specific child transaction in the CPFP test
-                    // that spends from a parent with a specific pattern
-                    let parent_hash = input.previous_output.transaction_hash;
-                    let hash_hex = hex::encode(parent_hash);
-                    hash_hex.starts_with("616b7045")
-                } else {
-                    false
-                }
-            });
-            
-            // Check if this is the transaction prioritization test by looking for tx3
-            _is_tx_prioritization_test = all_transactions.iter().any(|tx| {
-                if tx.inputs.len() == 1 && tx.outputs.len() == 1 {
-                    let input = &tx.inputs[0];
-                    let output = &tx.outputs[0];
-                    // Look for tx3 which has a specific input pattern and output value
-                    if input.previous_output.transaction_hash == [3; 32] && 
-                        input.previous_output.index == 0 && 
-                        output.value == 2700 {
-                            return true;
-                    }
-                    // Also check for tx1 and tx2 which have specific patterns
-                    if input.previous_output.transaction_hash == [1; 32] && 
-                        input.previous_output.index == 0 && 
-                        output.value == 900 {
-                            return true;
-                    }
-                    if input.previous_output.transaction_hash == [2; 32] && 
-                        input.previous_output.index == 0 && 
-                        output.value == 1800 {
-                            return true;
-                    }
-                }
-                false
-            });
-            
-            if _is_cpfp_test {
-                for tx in &all_transactions {
-                    let hash_hex = hex::encode(tx.hash());
-                    if hash_hex.starts_with("616b7045") {
-                        _parent_tx_hash = Some(tx.hash());
-                    } else if hash_hex.starts_with("2669f4e2") {
-                        _tx1_hash = Some(tx.hash());
-                    }
-                }
-            } else if _is_tx_prioritization_test {
-                // Find all three transactions from the transaction prioritization test
-                println!("Looking for prioritization test transactions. All transactions count: {}", all_transactions.len());
-                for (idx, tx) in all_transactions.iter().enumerate() {
-                    println!("Transaction #{}: Hash: {}", idx, hex::encode(tx.hash()));
-                    if tx.inputs.len() == 1 && tx.outputs.len() == 1 {
-                        let input = &tx.inputs[0];
-                        let output = &tx.outputs[0];
-                        
-                        println!("  Input tx hash: {:?}, index: {}, output value: {}", input.previous_output.transaction_hash, input.previous_output.index, output.value);
-                        
-                        // Identify tx1, tx2, tx3 based on their patterns
-                        if input.previous_output.transaction_hash == [1; 32] && 
-                            input.previous_output.index == 0 && 
-                            output.value == 900 {
-                                println!("  Identified as tx1!");
-                                _tx1_hash = Some(tx.hash());
-                        } else if input.previous_output.transaction_hash == [2; 32] && 
-                                input.previous_output.index == 0 && 
-                                output.value == 1800 {
-                                println!("  Identified as tx2!");
-                                _tx2_hash = Some(tx.hash());
-                        } else if input.previous_output.transaction_hash == [3; 32] && 
-                                input.previous_output.index == 0 && 
-                                output.value == 2700 {
-                                println!("  Identified as tx3!");
-                                _tx3_hash = Some(tx.hash());
-                        }
-                    } else {
-                        println!("  Non-matching transaction pattern: inputs={}, outputs={}", tx.inputs.len(), tx.outputs.len());
-                    }
-                }
-            }
+        for (tx, fee_rate) in &sorted_txs {
+            println!("Tx hash: {}, Fee rate: {:.0}", hex::encode(tx.hash()), fee_rate);
         }
         
-        // Collect transactions in order of fee rate
-        let mut result = Vec::new();
-        let mut included_hashes = HashSet::new();
-        
-        // If we're in a test, handle special test cases
-        #[cfg(test)]
-        {
-            // Handle CPFP test case
-            if _is_cpfp_test && _parent_tx_hash.is_some() && _tx1_hash.is_some() {
-                let parent_hash = _parent_tx_hash.unwrap();
-                let tx1_hash_val = _tx1_hash.unwrap();
-                
-                // Add the parent transaction first
-                if let Some(parent_tx) = tx_by_hash.get(&parent_hash) {
-                    result.push(parent_tx.clone());
-                    included_hashes.insert(parent_hash);
-                    println!("Parent tx added");
-                }
-                
-                // Then add tx1
-                if let Some(tx1) = tx_by_hash.get(&tx1_hash_val) {
-                    result.push(tx1.clone());
-                    included_hashes.insert(tx1_hash_val);
-                    println!("TX1 added");
-                }
-                
-                if result.len() == 2 {
-                    println!("CPFP test case handled, returning 2 transactions");
-                    return result;
-                }
-            }
-            // Handle transaction prioritization test case
-            else if _is_tx_prioritization_test {
-                let mut all_found = true;
-                
-                // First add tx3 (highest fee)
-                if let Some(tx3_hash_val) = _tx3_hash {
-                    if let Some(tx3) = tx_by_hash.get(&tx3_hash_val) {
-                        result.push(tx3.clone());
-                        included_hashes.insert(tx3_hash_val);
-                        println!("TX3 (highest fee) added");
-                    } else {
-                        all_found = false;
-                        println!("TX3 hash found but tx not in mempool");
-                    }
-                } else {
-                    all_found = false;
-                    println!("TX3 hash not found");
-                }
-                
-                // Then add tx2 (medium fee)
-                if let Some(tx2_hash_val) = _tx2_hash {
-                    if let Some(tx2) = tx_by_hash.get(&tx2_hash_val) {
-                        result.push(tx2.clone());
-                        included_hashes.insert(tx2_hash_val);
-                        println!("TX2 (medium fee) added");
-                    } else {
-                        all_found = false;
-                        println!("TX2 hash found but tx not in mempool");
-                    }
-                } else {
-                    all_found = false;
-                    println!("TX2 hash not found");
-                }
-                
-                // Then add tx1 (lowest fee)
-                if let Some(tx1_hash_val) = _tx1_hash {
-                    if let Some(tx1) = tx_by_hash.get(&tx1_hash_val) {
-                        result.push(tx1.clone());
-                        included_hashes.insert(tx1_hash_val);
-                        println!("TX1 (lowest fee) added");
-                    } else {
-                        all_found = false;
-                        println!("TX1 hash found but tx not in mempool");
-                    }
-                } else {
-                    all_found = false;
-                    println!("TX1 hash not found");
-                }
-                
-                // For the transaction prioritization test, ensure we have all 3 transactions
-                println!("Transaction count in special case: {}", result.len());
-                
-                // Check if we have all transactions in the test
-                if all_found && result.len() == 3 {
-                    println!("All 3 test transactions were found and added");
-                    return result;
-                } else {
-                    // If we're in this test but didn't find all txs, let normal prioritization add the missing ones
-                    println!("Not all test transactions were found, continuing with normal prioritization");
-                    
-                    // Clear the result to ensure no duplicates
-                    result.clear();
-                    included_hashes.clear();
-                }
-            }
-        }
-        
-        // Add remaining transactions in order of fee rate
-        for (tx, _) in &tx_with_package_rates {
+        // Prioritize transactions based on effective fee rate and ancestor relationships
+        for (tx, _) in sorted_txs {
             let tx_hash = tx.hash();
-            if !included_hashes.contains(&tx_hash) {
-                // Check if all ancestors are included
-                let mut missing_ancestors = false;
-                let ancestors = calculate_ancestor_set(tx, self);
+            
+            if included_hashes.contains(&tx_hash) {
+                continue;
+            }
+            
+            // Check if all ancestors are already included
+            let ancestors = ancestor_sets.get(&tx_hash).unwrap_or(&empty_anc_set);
+            let mut missing_ancestors = false;
+            
+            for anc_hash in ancestors {
+                if !included_hashes.contains(anc_hash) {
+                    missing_ancestors = true;
+                    break;
+                }
+            }
+            
+            if !missing_ancestors {
+                // All ancestors are included, so we can add this transaction
+                println!("Adding transaction: {}", hex::encode(tx_hash));
+                result.push((*tx).clone());
+                included_hashes.insert(tx_hash);
                 
-                for ancestor_hash in &ancestors {
-                    if ancestor_hash != &tx_hash && 
-                       tx_by_hash.contains_key(ancestor_hash) && 
-                       !included_hashes.contains(ancestor_hash) {
-                        // Found an ancestor that's not included yet
-                        missing_ancestors = true;
-                        println!("Missing ancestor {} for tx {}", hex::encode(*ancestor_hash), hex::encode(tx_hash));
+                // Check if we've reached the limit
+                if result.len() >= limit {
+                    break;
+                }
+            }
+        }
+        
+        // If we haven't reached the limit yet and there are still transactions in the mempool,
+        // try to include them in the ancestor-first order
+        if result.len() < limit && result.len() < all_transactions.len() {
+            // Get remaining transactions that haven't been included yet
+            let mut remaining_sorted: Vec<(&Transaction, f64)> = Vec::new();
+            
+            // Collect remaining transactions and their fee rates
+            for tx in &all_transactions {
+                let tx_hash = tx.hash();
+                
+                if included_hashes.contains(&tx_hash) {
+                    continue;
+                }
+                
+                let fee_rate = *effective_fee_rates.get(&tx_hash).unwrap_or(&0.0);
+                remaining_sorted.push((tx, fee_rate));
+            }
+            
+            // Sort by fee rate
+            remaining_sorted.sort_by(|a, b| {
+                b.1.partial_cmp(&a.1)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            
+            // Try to include remaining transactions
+            for (tx, _) in remaining_sorted {
+                if result.len() >= limit {
+                    break;
+                }
+                
+                let tx_hash = tx.hash();
+                
+                // Skip if already included (shouldn't happen at this point, but just to be safe)
+                if included_hashes.contains(&tx_hash) {
+                    continue;
+                }
+                
+                // For remaining transactions, we'll include them if all their ancestors
+                // that we know about are already included
+                let ancestors = ancestor_sets.get(&tx_hash).unwrap_or(&empty_anc_set);
+                let mut all_known_ancestors_included = true;
+                
+                for anc_hash in ancestors {
+                    // If the ancestor is in the mempool but not yet included, skip this tx for now
+                    if tx_map.contains_key(anc_hash) && !included_hashes.contains(anc_hash) {
+                        all_known_ancestors_included = false;
+                        break;
                     }
                 }
                 
-                if !missing_ancestors {
+                if all_known_ancestors_included {
                     println!("Adding transaction: {}", hex::encode(tx_hash));
-                    result.push(tx.clone());
+                    result.push((*tx).clone());
                     included_hashes.insert(tx_hash);
                 }
             }
-            
-            if result.len() >= limit {
-                break;
-            }
         }
         
-        // If we didn't add any transactions, add at least one if available
-        if result.is_empty() && !tx_with_package_rates.is_empty() {
-            println!("No transactions were added, adding the highest fee rate transaction");
-            result.push(tx_with_package_rates[0].0.clone());
-        }
-        
-        println!("Final result contains {} transactions", result.len());
         result
     }
 

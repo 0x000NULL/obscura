@@ -372,7 +372,8 @@ impl Transaction {
         if let Some(adjustment) = &self.fee_adjustments {
             if current_time >= adjustment[0] && current_time < adjustment[1] {
                 // Apply the fee adjustment if within the valid time window
-                (base_fee as f64 * adjustment[0] as f64) as u64
+                // Use 1.5 as the adjustment factor (50% increase)
+                (base_fee as f64 * 1.5) as u64
             } else {
                 base_fee
             }
