@@ -108,7 +108,7 @@ impl HybridStateManager {
     }
 
     /// Creates a new state snapshot at the given block height
-    pub fn create_snapshot(&self, height: u64) -> Result<(), String> {
+    pub fn create_snapshot(&mut self, height: u64) -> Result<(), String> {
         // Get the current state from staking contract
         let staking_contract = self.staking_contract.read().map_err(|e| e.to_string())?;
         let validator_cache = self.validator_cache.read().map_err(|e| e.to_string())?;
@@ -140,7 +140,7 @@ impl HybridStateManager {
             total_stake += info.total_stake;
             
             // Check if validator is active
-            if info.is_active {
+            if info.last_active_time > 0 && !info.exit_requested && !info.slashed {
                 active_validators.insert(validator_id.clone());
             }
         }
@@ -511,7 +511,7 @@ mod tests {
     
     // Create a mock StakingContract for testing
     fn create_mock_staking_contract() -> Arc<RwLock<StakingContract>> {
-        let contract = StakingContract::default();
+        let contract = StakingContract::new(3600); // Using 1 hour as epoch duration
         Arc::new(RwLock::new(contract))
     }
     

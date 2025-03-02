@@ -929,6 +929,7 @@ mod tests {
             miner: None,
             privacy_flags: 0,
             padding_commitment: None,
+            hash: [0; 32],
         };
 
         let tx = Transaction {

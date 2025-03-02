@@ -227,7 +227,7 @@ impl ProofOfWork {
         let difficulty = self.difficulty_adjuster.get_current_difficulty() as f64;
         
         // The maximum hash value is 2^32 - 1
-        let max_hash = 0xFFFFFFFF_f64;
+        let max_hash: f64 = 0xFFFFFFFFu32 as f64;
         
         // The expected number of hashes to find a valid block is (max_hash / difficulty)
         let hashes_per_block = max_hash / difficulty;
@@ -362,7 +362,7 @@ mod tests {
         let pow = ProofOfWork {
             difficulty_adjuster: DifficultyAdjuster::new(),
             target_block_time: 60,
-            randomx_context,
+            randomx_context: randomx_context.clone(),
         };
         
         // Create a block to mine

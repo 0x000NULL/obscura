@@ -1,6 +1,6 @@
 use crate::blockchain::{Transaction, TransactionOutput};
 use crate::crypto;
-use crate::crypto::jubjub::{JubjubScalarExt, JubjubPointExt, JubjubKeypair, JubjubSignature, JubjubPoint};
+use crate::crypto::jubjub::{JubjubPointExt, JubjubKeypair, JubjubSignature, JubjubPoint};
 use rand::{Rng, rngs::OsRng};
 use rand_core::RngCore;
 use sha2::{Digest, Sha256};
@@ -390,7 +390,18 @@ impl ConfidentialTransactions {
         // Replace actual values with commitments
         for output in &mut obfuscated_tx.outputs {
             let commitment = self.create_commitment(output.value);
-            commitments.push(commitment.clone());
+            let mut commitment_array = [0u8; 32];
+            
+            // Convert the Vec<u8> commitment to [u8; 32]
+            if commitment.len() >= 32 {
+                commitment_array.copy_from_slice(&commitment[0..32]);
+            } else {
+                // If commitment is less than 32 bytes, copy what we have and pad with zeros
+                let len = commitment.len().min(32);
+                commitment_array[..len].copy_from_slice(&commitment[..len]);
+            }
+            
+            commitments.push(commitment_array);
             
             // In a real implementation, we would replace the value with the commitment
             // For this simplified version, we'll just modify the public_key_script

@@ -932,3 +932,32 @@ pub struct WalletBackupData {
 
 // Implement wallet tests module
 pub mod tests;
+
+// Add these helper methods for testing purposes only
+#[cfg(test)]
+impl Wallet {
+    /// Test helper: Set the wallet's UTXOs directly (for testing only)
+    pub fn set_utxos_for_testing(&mut self, utxos: HashMap<OutPoint, TransactionOutput>) {
+        self.utxos = utxos;
+    }
+    
+    /// Test helper: Set the wallet's balance directly (for testing only)
+    pub fn set_balance_for_testing(&mut self, balance: u64) {
+        self.balance = balance;
+    }
+    
+    /// Test helper: Get the wallet's UTXOs directly (for testing only)
+    pub fn get_utxos_for_testing(&self) -> &HashMap<OutPoint, TransactionOutput> {
+        &self.utxos
+    }
+    
+    /// Test helper: Add a pending spent outpoint (for testing only)
+    pub fn add_pending_outpoint_for_testing(&mut self, outpoint: OutPoint) {
+        self.pending_spent_outpoints.insert(outpoint);
+    }
+    
+    /// Test helper: Set the transaction timestamps (for testing only)
+    pub fn set_transaction_timestamps_for_testing(&mut self, timestamps: HashMap<[u8; 32], u64>) {
+        self.transaction_timestamps = timestamps;
+    }
+}

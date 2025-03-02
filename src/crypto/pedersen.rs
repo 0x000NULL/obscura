@@ -5,7 +5,7 @@ use ark_ed_on_bls12_381::{EdwardsProjective as JubjubPoint, EdwardsAffine, Fr as
 use ark_std::UniformRand;
 use ark_serialize::{CanonicalSerialize, CanonicalDeserialize};
 use ark_ff::PrimeField;
-use crate::crypto::jubjub::{JubjubPointExt, JubjubScalarExt};
+use crate::crypto::jubjub::JubjubPointExt;
 
 // Base Points for JubJub Pedersen commitments
 lazy_static::lazy_static! {

@@ -38,7 +38,7 @@ impl HybridValidator {
     }
 
     pub fn validate_block_hybrid(
-        &self,
+        &mut self,
         block: &Block,
         randomx: &Arc<RandomXContext>,
         stake_proof: &StakeProof,
@@ -154,7 +154,7 @@ pub fn validate_block_hybrid(
     randomx: &Arc<RandomXContext>,
     stake_proof: &StakeProof,
 ) -> bool {
-    let validator = HybridValidator::new();
+    let mut validator = HybridValidator::new();
     validator.validate_block_hybrid(block, randomx, stake_proof)
 }
 

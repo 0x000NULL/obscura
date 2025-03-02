@@ -177,7 +177,7 @@ fn create_privacy_network(node_count: usize) -> (Vec<TestNode>, Vec<Wallet>) {
 #[test]
 fn test_private_transaction_validation() {
     // Create a small network with 3 nodes
-    let (mut nodes, mut wallets) = create_privacy_network(3);
+    let (mut nodes, wallets) = create_privacy_network(3);
     
     // Create a private transaction from wallet 0 to wallet 1
     let recipient_pubkey = wallets[1].keypair.as_ref().unwrap().public;
@@ -382,7 +382,7 @@ fn test_integrated_privacy_and_consensus() {
 #[test]
 fn test_privacy_dandelion_stem_phase() {
     // Create a larger network topology for Dandelion testing
-    let (mut nodes, mut wallets) = create_privacy_network(6);
+    let (mut nodes, wallets) = create_privacy_network(6);
     
     // Establish the explicit Dandelion path by setting stem successors
     // Node 0 -> Node 2 -> Node 4 -> Fluff

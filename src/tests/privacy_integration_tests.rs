@@ -1,12 +1,9 @@
 use crate::wallet::Wallet;
-use crate::blockchain::{Transaction, TransactionOutput};
-use crate::crypto::privacy::{TransactionObfuscator, StealthAddressing, ConfidentialTransactions};
 use crate::networking::dandelion::{DandelionManager, PropagationState, PrivacyRoutingMode};
 use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 use std::collections::HashSet;
 use std::time::Duration;
-use crate::crypto::jubjub::{JubjubKeypair, JubjubPoint, JubjubSignature, generate_keypair};
-use rand::thread_rng;
+use crate::crypto::jubjub::generate_keypair;
 
 #[test]
 fn test_transaction_privacy() {

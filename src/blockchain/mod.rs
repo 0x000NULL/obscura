@@ -37,6 +37,7 @@ pub struct BlockHeader {
     // Add new fields for privacy features
     pub privacy_flags: u32,     // Flags for privacy features enabled in this block
     pub padding_commitment: Option<[u8; 32]>, // Commitment to padding data for privacy
+    pub hash: [u8; 32],         // Cached hash of the block header
 }
 
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
@@ -163,6 +164,7 @@ impl Block {
                 miner: None,
                 privacy_flags: 0,
                 padding_commitment: None,
+                hash: [0; 32],
             },
             transactions: Vec::new(),
         }
@@ -181,6 +183,7 @@ impl Block {
                 miner: None,
                 privacy_flags: 0,
                 padding_commitment: None,
+                hash: [0; 32],
             },
             transactions: Vec::new(),
         }

@@ -1,7 +1,6 @@
 use crate::blockchain::{Block, OutPoint, Transaction, TransactionInput, TransactionOutput};
 use crate::consensus::StakeProof;
-use crate::crypto::jubjub::{JubjubKeypair, JubjubSignature, generate_keypair};
-use rand::rngs::OsRng;
+use crate::crypto::jubjub::generate_keypair;
 
 pub fn create_test_block(nonce: u64) -> Block {
     let mut block = Block::new([0u8; 32]);

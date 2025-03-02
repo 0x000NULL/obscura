@@ -1,4 +1,6 @@
-// No imports needed, we'll use fully qualified paths
+use crate::crypto::jubjub::JubjubScalarExt;
+use crate::crypto::jubjub::{JubjubPoint, JubjubPointExt};
+use ark_std::UniformRand;
 
 #[test]
 fn test_wallet_creation() {
@@ -32,7 +34,7 @@ fn test_wallet_balance_calculation() {
 #[test]
 fn test_utxo_selection() {
     // Create a wallet with a keypair
-    let mut wallet = crate::wallet::Wallet::new_with_keypair();
+    let wallet = crate::wallet::Wallet::new_with_keypair();
     
     // Create a mock UTXO set for the wallet
     let outpoint1 = crate::blockchain::OutPoint {
@@ -58,18 +60,15 @@ fn test_utxo_selection() {
     utxos.insert(outpoint1, output1.clone());
     utxos.insert(outpoint2, output2.clone());
     
-    // Access wallet's private field using unsafe code (for testing only)
-    unsafe {
-        let wallet_ptr = &wallet as *const crate::wallet::Wallet as *mut crate::wallet::Wallet;
-        let wallet_mut = &mut *wallet_ptr;
-        std::ptr::replace(&mut wallet_mut.utxos, utxos);
-        wallet_mut.balance = 150; // 100 + 50
-    }
+    // Instead of unsafe code, use the new test helper methods
+    let mut wallet = wallet; // Convert to mutable
+    wallet.set_utxos_for_testing(utxos);
+    wallet.set_balance_for_testing(150); // 100 + 50
     
     // Create a recipient keypair
     let mut rng = rand::rngs::OsRng;
     let recipient_keypair = crate::crypto::jubjub::JubjubKeypair::new(
-        crate::crypto::jubjub::JubjubScalar::random(&mut rng)
+        crate::crypto::jubjub::JubjubScalar::rand(&mut rng)
     );
     
     // Create a transaction using the new method
@@ -132,18 +131,15 @@ fn test_pending_transactions() {
     let mut utxos = std::collections::HashMap::new();
     utxos.insert(outpoint, output.clone());
     
-    // Access wallet's private field using unsafe code (for testing only)
-    unsafe {
-        let wallet_ptr = &wallet as *const crate::wallet::Wallet as *mut crate::wallet::Wallet;
-        let wallet_mut = &mut *wallet_ptr;
-        std::ptr::replace(&mut wallet_mut.utxos, utxos);
-        wallet_mut.balance = 100;
-    }
+    // Instead of unsafe code, use the new test helper methods
+    let mut wallet = wallet; // Convert to mutable
+    wallet.set_utxos_for_testing(utxos);
+    wallet.set_balance_for_testing(100);
     
     // Create a recipient
     let mut rng = rand::rngs::OsRng;
     let recipient_keypair = crate::crypto::jubjub::JubjubKeypair::new(
-        crate::crypto::jubjub::JubjubScalar::random(&mut rng)
+        crate::crypto::jubjub::JubjubScalar::rand(&mut rng)
     );
     
     // Create a transaction
@@ -184,13 +180,10 @@ fn test_staking_transactions() {
     let mut utxos = std::collections::HashMap::new();
     utxos.insert(outpoint, output.clone());
     
-    // Access wallet's private field using unsafe code (for testing only)
-    unsafe {
-        let wallet_ptr = &wallet as *const crate::wallet::Wallet as *mut crate::wallet::Wallet;
-        let wallet_mut = &mut *wallet_ptr;
-        std::ptr::replace(&mut wallet_mut.utxos, utxos);
-        wallet_mut.balance = 1000;
-    }
+    // Instead of unsafe code, use the new test helper methods
+    let mut wallet = wallet; // Convert to mutable
+    wallet.set_utxos_for_testing(utxos);
+    wallet.set_balance_for_testing(1000);
     
     // Create a stake transaction
     let stake_tx = wallet.create_stake(500);
@@ -233,18 +226,15 @@ fn test_transaction_create_with_privacy() {
     let mut utxos = std::collections::HashMap::new();
     utxos.insert(outpoint, output.clone());
     
-    // Access wallet's private field using unsafe code (for testing only)
-    unsafe {
-        let wallet_ptr = &wallet as *const crate::wallet::Wallet as *mut crate::wallet::Wallet;
-        let wallet_mut = &mut *wallet_ptr;
-        std::ptr::replace(&mut wallet_mut.utxos, utxos);
-        wallet_mut.balance = 1000;
-    }
+    // Instead of unsafe code, use the new test helper methods
+    let mut wallet = wallet; // Convert to mutable
+    wallet.set_utxos_for_testing(utxos);
+    wallet.set_balance_for_testing(1000);
     
     // Create a recipient keypair
     let mut rng = rand::rngs::OsRng;
     let recipient_keypair = crate::crypto::jubjub::JubjubKeypair::new(
-        crate::crypto::jubjub::JubjubScalar::random(&mut rng)
+        crate::crypto::jubjub::JubjubScalar::rand(&mut rng)
     );
     
     // Enable privacy
@@ -266,7 +256,8 @@ fn test_transaction_create_with_privacy() {
 fn test_process_block() {
     let mut wallet = crate::wallet::Wallet::new_with_keypair();
     let _keypair = wallet.keypair.as_ref().unwrap();
-    let pubkey_bytes = crate::crypto::jubjub::JubjubPointExt::generator().to_bytes().to_vec();
+    
+    let pubkey_bytes = <JubjubPoint as JubjubPointExt>::generator().to_bytes().to_vec();
     
     // Create a transaction to us
     let mut tx = crate::blockchain::Transaction::default();

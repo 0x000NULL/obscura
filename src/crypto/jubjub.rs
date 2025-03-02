@@ -10,7 +10,6 @@ use ark_serialize::{CanonicalSerialize, CanonicalDeserialize};
 
 // Add derive traits for JubjubKeypair
 use std::fmt::{Debug};
-use ark_ec::AffineRepr;
 use ark_ff::{PrimeField, Zero, One};
 
 /// Placeholder for Jubjub params

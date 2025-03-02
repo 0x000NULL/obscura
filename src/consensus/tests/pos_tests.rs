@@ -662,6 +662,7 @@ fn create_mock_block(
         miner: Some(miner),
         privacy_flags: 0,
         padding_commitment: None,
+        hash: [0; 32],
     };
 
     // Create a unique hash for this block
