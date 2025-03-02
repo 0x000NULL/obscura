@@ -2,6 +2,56 @@
 
 All notable changes to the Obscura project will be documented in this file.
 
+## [0.5.2] - 2025-03-10
+
+### Added
+- **Enhanced Wallet Implementation**
+  - Implemented proper UTXO selection algorithm using coin selection strategy
+  - Added transaction fee calculation and estimation with priority levels
+  - Implemented pending transaction tracking mechanism
+  - Added get_available_balance and get_pending_balance methods
+  - Created submit_transaction functionality with proper UTXO tracking
+  - Implemented staking and unstaking transaction creation
+  - Added comprehensive wallet activity reporting
+
+- **Improved Privacy Features**
+  - Completed TransactionObfuscator implementation with mixing functionality
+  - Enhanced StealthAddressing implementation with ephemeral key management
+  - Implemented proper ownership proof creation and verification
+  - Added ConfidentialTransactions with commitment schemes
+  - Implemented range proof creation and verification
+  - Enhanced transaction graph protection methods
+  - Added transaction metadata stripping
+
+- **Cryptographic Enhancements**
+  - Completed JubjubKeypair implementation with proper signing
+  - Added stealth address cryptography with proper security
+  - Implemented Diffie-Hellman key exchange for one-time addresses
+  - Added proper transaction signature handling
+
+- **Consensus Optimizations**
+  - Implemented snapshot manager with state checkpoints
+  - Added state pruning configuration and implementation
+  - Enhanced parallel validation with thread pool management
+  - Implemented validator state tracking and state diffs
+  - Added proper mining implementation with transactions
+
+### Fixed
+- Fixed OutPoint by implementing Copy trait to resolve compiler errors
+- Fixed unused imports warnings in wallet test modules
+- Fixed wallet transaction creation with proper UTXOs selection
+- Resolved privacy implementation gaps with proper implementation
+
+### Testing
+- **Enhanced Testing Framework**
+  - Added comprehensive wallet tests covering all functionality
+  - Implemented test infrastructure for privacy features
+  - Added tests for transaction cryptography
+  - Implemented testing for staking and unstaking
+  - Added tests for all consensus components
+  - Fixed mock UTXOSet implementation in tests
+  - Enhanced test organization and structure
+
 ## [0.5.1] - 2025-03-02
 
 ### Fixed
