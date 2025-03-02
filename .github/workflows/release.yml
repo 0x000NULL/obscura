@@ -40,16 +40,14 @@ jobs:
           toolchain: stable
           override: true
 
-      # Ensure build.rs exists and is properly configured
+      # Ensure build.rs exists and is properly configured for test job
       - name: Ensure build.rs exists
         run: |
-          cat > build.rs << 'EOF'
-          fn main() {
-              println!("cargo:rustc-link-lib=stdc++");
-              println!("cargo:rustc-link-lib=randomx");
-              println!("cargo:rustc-link-search=native=/usr/local/lib");
-          }
-          EOF
+          echo 'fn main() {' > build.rs
+          echo '    println!("cargo:rustc-link-lib=stdc++");' >> build.rs
+          echo '    println!("cargo:rustc-link-lib=randomx");' >> build.rs
+          echo '    println!("cargo:rustc-link-search=native=/usr/local/lib");' >> build.rs
+          echo '}' >> build.rs
           cat build.rs
 
       # Add cargo caching to speed up builds
@@ -254,29 +252,23 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.platform }}" = "windows" ]; then
-            cat > build.rs << 'EOF'
-            fn main() {
-                // Windows-specific linking
-                println!("cargo:rustc-link-search=native=./RandomX/build/Release");
-                // We don't need to link stdc++ explicitly on Windows
-            }
-            EOF
+            echo 'fn main() {' > build.rs
+            echo '    // Windows-specific linking' >> build.rs
+            echo '    println!("cargo:rustc-link-search=native=./RandomX/build/Release");' >> build.rs
+            echo '    // We do not need to link stdc++ explicitly on Windows' >> build.rs
+            echo '}' >> build.rs
           elif [ "${{ matrix.platform }}" = "macos" ]; then
-            cat > build.rs << 'EOF'
-            fn main() {
-                println!("cargo:rustc-link-lib=c++");
-                println!("cargo:rustc-link-lib=randomx");
-                println!("cargo:rustc-link-search=native=/usr/local/lib");
-            }
-            EOF
+            echo 'fn main() {' > build.rs
+            echo '    println!("cargo:rustc-link-lib=c++");' >> build.rs
+            echo '    println!("cargo:rustc-link-lib=randomx");' >> build.rs
+            echo '    println!("cargo:rustc-link-search=native=/usr/local/lib");' >> build.rs
+            echo '}' >> build.rs
           else
-            cat > build.rs << 'EOF'
-            fn main() {
-                println!("cargo:rustc-link-lib=stdc++");
-                println!("cargo:rustc-link-lib=randomx");
-                println!("cargo:rustc-link-search=native=/usr/local/lib");
-            }
-            EOF
+            echo 'fn main() {' > build.rs
+            echo '    println!("cargo:rustc-link-lib=stdc++");' >> build.rs
+            echo '    println!("cargo:rustc-link-lib=randomx");' >> build.rs
+            echo '    println!("cargo:rustc-link-search=native=/usr/local/lib");' >> build.rs
+            echo '}' >> build.rs
           fi
           cat build.rs
 
