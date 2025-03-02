@@ -247,31 +247,6 @@ jobs:
           target: ${{ matrix.target }}
           override: true
 
-      # Ensure build.rs exists and is properly configured
-      - name: Ensure build.rs exists
-        shell: bash
-        run: |
-          if [ "${{ matrix.platform }}" = "windows" ]; then
-            echo 'fn main() {' > build.rs
-            echo '    // Windows-specific linking' >> build.rs
-            echo '    println!("cargo:rustc-link-search=native=./RandomX/build/Release");' >> build.rs
-            echo '    // We do not need to link stdc++ explicitly on Windows' >> build.rs
-            echo '}' >> build.rs
-          elif [ "${{ matrix.platform }}" = "macos" ]; then
-            echo 'fn main() {' > build.rs
-            echo '    println!("cargo:rustc-link-lib=c++");' >> build.rs
-            echo '    println!("cargo:rustc-link-lib=randomx");' >> build.rs
-            echo '    println!("cargo:rustc-link-search=native=/usr/local/lib");' >> build.rs
-            echo '}' >> build.rs
-          else
-            echo 'fn main() {' > build.rs
-            echo '    println!("cargo:rustc-link-lib=stdc++");' >> build.rs
-            echo '    println!("cargo:rustc-link-lib=randomx");' >> build.rs
-            echo '    println!("cargo:rustc-link-search=native=/usr/local/lib");' >> build.rs
-            echo '}' >> build.rs
-          fi
-          cat build.rs
-
       - uses: actions/cache@v3
         with:
           path: |
