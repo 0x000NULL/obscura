@@ -5,6 +5,10 @@ on:
     branches: [ main ]
   workflow_dispatch:  # Allows manual triggering
 
+# Add permissions block at the top level
+permissions:
+  contents: write  # This permission is needed to create releases
+
 jobs:
   # First job: Run tests to ensure code quality
   test:
