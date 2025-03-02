@@ -39,13 +39,14 @@ jobs:
       # Ensure build.rs exists and is properly configured
       - name: Ensure build.rs exists
         run: |
-          if [ ! -f "build.rs" ]; then
-            echo "fn main() {
-                println!(\"cargo:rustc-link-lib=stdc++\");
-                println!(\"cargo:rustc-link-lib=randomx\");
-                println!(\"cargo:rustc-link-search=native=/usr/local/lib\");
-            }" > build.rs
-          fi
+          cat > build.rs << 'EOF'
+          fn main() {
+              println!("cargo:rustc-link-lib=stdc++");
+              println!("cargo:rustc-link-lib=randomx");
+              println!("cargo:rustc-link-search=native=/usr/local/lib");
+          }
+          EOF
+          cat build.rs
 
       # Add cargo caching to speed up builds
       - uses: actions/cache@v3
@@ -214,7 +215,7 @@ jobs:
           git clone https://github.com/tevador/RandomX.git
           cd RandomX
           mkdir build && cd build
-          cmake ..
+          cmake .. -DCMAKE_CXX_FLAGS="-fPIC"
           make -j
           sudo make install
 
@@ -232,7 +233,7 @@ jobs:
           git clone https://github.com/tevador/RandomX.git
           cd RandomX
           mkdir build && cd build
-          cmake .. -DCMAKE_TOOLCHAIN_FILE=../../vcpkg/scripts/buildsystems/vcpkg.cmake
+          cmake .. -DCMAKE_TOOLCHAIN_FILE=../../vcpkg/scripts/buildsystems/vcpkg.cmake -DCMAKE_CXX_FLAGS="/EHsc" 
           cmake --build . --config Release
           cmake --install . --config Release
 
@@ -243,6 +244,37 @@ jobs:
           toolchain: stable
           target: ${{ matrix.target }}
           override: true
+
+      # Ensure build.rs exists and is properly configured
+      - name: Ensure build.rs exists
+        shell: bash
+        run: |
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            cat > build.rs << 'EOF'
+            fn main() {
+                // Windows-specific linking
+                println!("cargo:rustc-link-search=native=./RandomX/build/Release");
+                // We don't need to link stdc++ explicitly on Windows
+            }
+            EOF
+          elif [ "${{ matrix.platform }}" = "macos" ]; then
+            cat > build.rs << 'EOF'
+            fn main() {
+                println!("cargo:rustc-link-lib=c++");
+                println!("cargo:rustc-link-lib=randomx");
+                println!("cargo:rustc-link-search=native=/usr/local/lib");
+            }
+            EOF
+          else
+            cat > build.rs << 'EOF'
+            fn main() {
+                println!("cargo:rustc-link-lib=stdc++");
+                println!("cargo:rustc-link-lib=randomx");
+                println!("cargo:rustc-link-search=native=/usr/local/lib");
+            }
+            EOF
+          fi
+          cat build.rs
 
       - uses: actions/cache@v3
         with:
@@ -267,7 +299,7 @@ jobs:
         run: |
           # Set environment variables to help find libraries
           if [ "${{ matrix.platform }}" = "windows" ]; then
-            echo "RUSTFLAGS=-C link-arg=/LIBPATH:$(pwd)/RandomX/build/Release -C link-arg=stdc++.lib" >> $GITHUB_ENV
+            echo "RUSTFLAGS=-C link-arg=/LIBPATH:$(pwd)/RandomX/build/Release -C link-arg=stdc++.lib -C link-arg=libcmt.lib" >> $GITHUB_ENV
           elif [ "${{ matrix.platform }}" = "macos" ]; then
             echo "RUSTFLAGS=-L $(pwd)/RandomX/build -l stdc++" >> $GITHUB_ENV
           else
