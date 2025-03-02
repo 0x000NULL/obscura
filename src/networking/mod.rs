@@ -452,8 +452,7 @@ impl Node {
                 let now = Instant::now();
                 let mut rng = rand::thread_rng();
                 let transition_delay = Duration::from_secs(rng.gen_range(
-                    STEM_PHASE_MIN_TIMEOUT.as_secs(),
-                    STEM_PHASE_MAX_TIMEOUT.as_secs() + 1
+                    STEM_PHASE_MIN_TIMEOUT.as_secs()..=STEM_PHASE_MAX_TIMEOUT.as_secs()
                 ));
                 
                 manager.transactions.insert(tx_hash, PropagationMetadata {
@@ -479,7 +478,7 @@ impl Node {
         }
         
         // Add random delay before sending (for privacy)
-        let delay = rand::thread_rng().gen_range(50, 500);
+        let delay = rand::thread_rng().gen_range(50..=500);
         std::thread::sleep(Duration::from_millis(delay));
         
         // Try to send the transaction to the successor
@@ -613,9 +612,9 @@ impl Node {
                 // Create path only if we have enough peers
                 if all_peers.len() >= 3 {
                     // Determine path length - more hops = more privacy but higher failure risk
-                    let hop_count = rng.gen_range(MIN_ROUTING_PATH_LENGTH, MIN_ROUTING_PATH_LENGTH.max(
+                    let hop_count = rng.gen_range(MIN_ROUTING_PATH_LENGTH..=MIN_ROUTING_PATH_LENGTH.max(
                         all_peers.len().min(MAX_MULTI_HOP_LENGTH)
-                    ) + 1);
+                    ));
                     
                     // Select diverse peers for path
                     let mut available_peers = all_peers.clone();
@@ -666,8 +665,7 @@ impl Node {
         // Determine transition time (when to switch from stem to fluff)
         let transition_delay = if state != PropagationState::Fluff {
             Duration::from_secs(rng.gen_range(
-                STEM_PHASE_MIN_TIMEOUT.as_secs(),
-                STEM_PHASE_MAX_TIMEOUT.as_secs() + 1
+                STEM_PHASE_MIN_TIMEOUT.as_secs()..=STEM_PHASE_MAX_TIMEOUT.as_secs()
             ))
         } else {
             Duration::from_secs(0) // Immediate for fluff phase
@@ -973,7 +971,7 @@ impl Node {
         // Broadcast to targets with random delays
         for target in targets {
             // Add small random delay between broadcasts for privacy
-            let delay = rng.gen_range(10, 100);
+            let delay = rng.gen_range(10..=100);
             std::thread::sleep(std::time::Duration::from_millis(delay));
             
             // Send transaction to target
@@ -999,7 +997,7 @@ impl Node {
         // Create random subset of peers for initial broadcast (for privacy)
         let broadcast_count = std::cmp::min(
             peers.len(),
-            rng.gen_range(MIN_BROADCAST_PEERS, MAX_BROADCAST_PEERS + 1)
+            rng.gen_range(MIN_BROADCAST_PEERS..=MAX_BROADCAST_PEERS)
         );
         
         let mut target_peers = peers.to_vec();
@@ -1014,7 +1012,7 @@ impl Node {
             }
             
             // Add random delay between broadcasts
-            let delay = rng.gen_range(10, 200);
+            let delay = rng.gen_range(10..=200);
             std::thread::sleep(Duration::from_millis(delay));
             
             // Send transaction to peer
@@ -1052,7 +1050,7 @@ impl Node {
                 }
                 
                 // Add random delay
-                let delay = rng.gen_range(10, 200);
+                let delay = rng.gen_range(10..=200);
                 std::thread::sleep(Duration::from_millis(delay));
                 
                 // Send transaction to peer

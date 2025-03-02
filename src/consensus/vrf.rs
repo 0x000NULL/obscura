@@ -1,11 +1,12 @@
-use ed25519_dalek::{Keypair, PublicKey, Signature, Signer, Verifier};
+use crate::crypto::jubjub::{JubjubKeypair, JubjubPoint, JubjubSignature, JubjubPointExt};
 use sha2::{Digest, Sha256};
+use ark_ec::Group;
 
 /// VRF (Verifiable Random Function) implementation for validator selection
-/// This is a simplified implementation based on the ed25519 signature scheme
+/// This is a simplified implementation based on the JubJub signature scheme
 pub struct Vrf<'a> {
     #[allow(dead_code)]
-    keypair: &'a Keypair,
+    keypair: &'a JubjubKeypair,
 }
 
 /// VRF proof that can be verified by others
@@ -23,7 +24,7 @@ pub struct VrfProof {
 impl<'a> Vrf<'a> {
     /// Create a new VRF instance with the given keypair
     #[allow(dead_code)]
-    pub fn new(keypair: &'a Keypair) -> Self {
+    pub fn new(keypair: &'a JubjubKeypair) -> Self {
         Vrf { keypair }
     }
 
@@ -31,17 +32,17 @@ impl<'a> Vrf<'a> {
     #[allow(dead_code)]
     pub fn prove(&self, message: &[u8]) -> Result<VrfProof, &'static str> {
         // Sign the message with the private key
-        let signature = self.keypair.sign(message);
+        let signature = self.keypair.sign(message)?;
 
         // Hash the signature to get the VRF output
         let mut hasher = Sha256::new();
-        hasher.update(signature.to_bytes());
+        hasher.update(&signature.to_bytes());
         let mut output = [0u8; 32];
         output.copy_from_slice(&hasher.finalize());
 
         Ok(VrfProof {
             public_key: self.keypair.public.to_bytes().to_vec(),
-            signature: signature.to_bytes().to_vec(),
+            signature: signature.to_bytes(),
             message: message.to_vec(),
             output,
         })
@@ -50,24 +51,24 @@ impl<'a> Vrf<'a> {
     /// Verify a VRF proof and get the output
     pub fn verify(proof: &VrfProof) -> Result<[u8; 32], &'static str> {
         // Verify the signature
-        let public_key = match PublicKey::from_bytes(&proof.public_key) {
-            Ok(key) => key,
-            Err(_) => return Err("Invalid public key"),
+        let public_key = match JubjubPoint::from_bytes(&proof.public_key) {
+            Some(key) => key,
+            None => return Err("Invalid public key"),
         };
 
-        let signature = match Signature::from_bytes(&proof.signature) {
-            Ok(sig) => sig,
-            Err(_) => return Err("Invalid signature"),
+        let signature = match JubjubSignature::from_bytes(&proof.signature) {
+            Some(sig) => sig,
+            None => return Err("Invalid signature"),
         };
 
         // Verify the signature
-        if public_key.verify(&proof.message, &signature).is_err() {
+        if !public_key.verify(&proof.message, &signature) {
             return Err("Signature verification failed");
         }
 
         // Regenerate the output from the signature
         let mut hasher = Sha256::new();
-        hasher.update(signature.to_bytes());
+        hasher.update(&signature.to_bytes());
         let mut output = [0u8; 32];
         output.copy_from_slice(&hasher.finalize());
 
@@ -97,12 +98,12 @@ impl<'a> Vrf<'a> {
 mod tests {
     use super::*;
     use rand::rngs::OsRng;
+    use crate::crypto::jubjub::generate_keypair;
 
     #[test]
     fn test_vrf_proof_verification() {
         // Generate a keypair
-        let mut csprng = OsRng;
-        let keypair = Keypair::generate(&mut csprng);
+        let keypair = generate_keypair();
 
         // Create a VRF instance
         let vrf = Vrf::new(&keypair);
@@ -125,8 +126,7 @@ mod tests {
     #[test]
     fn test_vrf_with_different_messages() {
         // Generate a keypair
-        let mut csprng = OsRng;
-        let keypair = Keypair::generate(&mut csprng);
+        let keypair = generate_keypair();
 
         // Create a VRF instance
         let vrf = Vrf::new(&keypair);
@@ -149,8 +149,7 @@ mod tests {
     #[test]
     fn test_vrf_tamper_resistance() {
         // Generate a keypair
-        let mut csprng = OsRng;
-        let keypair = Keypair::generate(&mut csprng);
+        let keypair = generate_keypair();
 
         // Create a VRF instance
         let vrf = Vrf::new(&keypair);

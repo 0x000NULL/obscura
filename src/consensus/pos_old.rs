@@ -6,7 +6,7 @@ use crate::consensus::pos::*;
 
 use crate::consensus::sharding::{ShardManager, Shard, CrossShardCommittee};
 use bincode;
-use ed25519_dalek::{PublicKey, Signature, Signer, Verifier};
+use crate::crypto::jubjub::{JubjubKeypair, JubjubPointExt, JubjubScalarExt, JubjubPoint, JubjubSignature};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -713,12 +713,18 @@ impl ProofOfStake {
         }
 
         // Verify the signature
-        match PublicKey::from_bytes(&proof.public_key) {
-            Ok(public_key) => match Signature::from_bytes(&proof.signature) {
-                Ok(signature) => public_key.verify(block_data, &signature).is_ok(),
-                Err(_) => false,
+        match JubjubPoint::from_bytes(&proof.public_key) {
+            Some(public_key) => match JubjubSignature::from_bytes(&proof.signature) {
+                Some(signature) => {
+                    // Verify the signature
+                    if !public_key.verify(&block_data, &signature) {
+                        return false;
+                    }
+                    true
+                }
+                None => false,
             },
-            Err(_) => false,
+            None => false,
         }
     }
 
@@ -779,7 +785,7 @@ impl ProofOfStake {
     // Create BFT message
     pub fn create_bft_message(
         &self,
-        keypair: &ed25519_dalek::Keypair,
+        keypair: &crate::crypto::jubjub::JubjubKeypair,
         message_type: BftMessageType,
         block_hash: [u8; 32],
         round: usize,
@@ -808,7 +814,7 @@ impl ProofOfStake {
             block_hash,
             round,
             validator: keypair.public.to_bytes().to_vec(),
-            signature: signature.to_bytes().to_vec(),
+            signature: signature.expect("Failed to sign BFT message").to_bytes().to_vec(),
             timestamp: current_time,
         })
     }
@@ -2174,8 +2180,8 @@ impl StakingContract {
 
     // Verify BFT message signature
     fn verify_bft_signature(&self, message: &BftMessage) -> bool {
-        // Convert validator public key to ed25519 public key
-        if let Ok(public_key) = ed25519_dalek::PublicKey::from_bytes(&message.validator) {
+        // Convert validator public key to JubjubPoint
+        if let Some(public_key) = JubjubPoint::from_bytes(&message.validator) {
             // Create message to verify
             let mut data = Vec::new();
             match message.message_type {
@@ -2188,8 +2194,8 @@ impl StakingContract {
             data.extend_from_slice(&message.timestamp.to_le_bytes());
 
             // Verify signature
-            if let Ok(signature) = ed25519_dalek::Signature::from_bytes(&message.signature) {
-                return public_key.verify(&data, &signature).is_ok();
+            if let Some(signature) = JubjubSignature::from_bytes(&message.signature) {
+                return public_key.verify(&data, &signature);
             }
         }
 

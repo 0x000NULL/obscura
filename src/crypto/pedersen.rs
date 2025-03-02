@@ -4,19 +4,22 @@ use crate::blockchain::Transaction;
 use ark_ed_on_bls12_381::{EdwardsProjective as JubjubPoint, EdwardsAffine, Fr as JubjubScalar};
 use ark_std::UniformRand;
 use ark_serialize::{CanonicalSerialize, CanonicalDeserialize};
+use ark_ec::Group;
+use ark_ff::PrimeField;
+use crate::crypto::jubjub::{JubjubPointExt, JubjubScalarExt};
 
 // Base Points for JubJub Pedersen commitments
 lazy_static::lazy_static! {
     static ref PEDERSEN_G: JubjubPoint = {
         // Use the curve's base point for G
-        JubjubPoint::generator()
+        <JubjubPoint as JubjubPointExt>::generator()
     };
     
     static ref PEDERSEN_H: JubjubPoint = {
         // Derive H from G in a deterministic way
         // In a real implementation, this would be a nothing-up-my-sleeve point
         let mut bytes = Vec::new();
-        let g = JubjubPoint::generator();
+        let g = <JubjubPoint as JubjubPointExt>::generator();
         let g_affine = EdwardsAffine::from(g);
         g_affine.serialize_uncompressed(&mut bytes).unwrap();
         
@@ -31,7 +34,7 @@ lazy_static::lazy_static! {
         scalar_bytes.copy_from_slice(&hash[0..32]);
         
         // Create a point by multiplying the base point
-        JubjubPoint::generator() * JubjubScalar::from_le_bytes_mod_order(&scalar_bytes)
+        <JubjubPoint as JubjubPointExt>::generator() * JubjubScalar::from_le_bytes_mod_order(&scalar_bytes)
     };
 }
 
@@ -220,8 +223,8 @@ pub fn generate_random_jubjub_scalar() -> JubjubScalar {
             self.0.fill_bytes(dest)
         }
         
-        fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), ark_std::rand::Error> {
-            self.0.try_fill_bytes(dest).map_err(|_| ark_std::rand::Error)
+        fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
+            self.0.try_fill_bytes(dest).map_err(|_| rand_core::Error::new("Failed to fill bytes"))
         }
     }
     

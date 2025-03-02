@@ -15,10 +15,13 @@ pub mod pedersen;
 pub mod bls12_381;
 pub mod jubjub;
 
+// Import the extension traits
+use crate::crypto::jubjub::{JubjubScalarExt, JubjubPointExt};
+
 // Key management functions
 // These functions are intended for use in the wallet implementation
 #[allow(dead_code)] // Allow unused code as these are intended for future use
-pub fn generate_keypair() -> (jubjub::JubjubScalar, jubjub::JubjubPoint) {
+pub fn generate_keypair() -> jubjub::JubjubKeypair {
     // Use JubJub for key generation
     jubjub::generate_keypair()
 }

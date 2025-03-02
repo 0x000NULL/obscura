@@ -78,7 +78,7 @@ pub struct OutPoint {
     pub index: u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UTXOSet {
     utxos: HashMap<OutPoint, TransactionOutput>,
 }
@@ -90,30 +90,30 @@ impl UTXOSet {
         }
     }
 
-    pub fn add_utxo(&mut self, outpoint: OutPoint, output: TransactionOutput) {
-        self.utxos.insert(outpoint, output);
+    pub fn add(&mut self, tx: &Transaction) {
+        for (i, output) in tx.outputs.iter().enumerate() {
+            let outpoint = OutPoint {
+                transaction_hash: tx.hash(),
+                index: i as u32,
+            };
+            self.utxos.insert(outpoint, output.clone());
+        }
+    }
+
+    pub fn remove(&mut self, input: &TransactionInput) {
+        self.utxos.remove(&input.previous_output);
+    }
+
+    pub fn get(&self, outpoint: &OutPoint) -> Option<&TransactionOutput> {
+        self.utxos.get(outpoint)
     }
 
     pub fn contains(&self, outpoint: &OutPoint) -> bool {
         self.utxos.contains_key(outpoint)
     }
 
-    pub fn spend_utxo(&mut self, outpoint: &OutPoint) {
-        self.utxos.remove(outpoint);
-    }
-
     pub fn get_utxo(&self, outpoint: &OutPoint) -> Option<&TransactionOutput> {
         self.utxos.get(outpoint)
-    }
-
-    pub fn validate_transaction(&self, tx: &Transaction) -> bool {
-        // Check if all inputs exist in UTXO set
-        for input in &tx.inputs {
-            if !self.contains(&input.previous_output) {
-                return false;
-            }
-        }
-        true
     }
 }
 
@@ -338,29 +338,53 @@ pub fn validate_coinbase_transaction(tx: &Transaction, expected_reward: u64) -> 
 impl Transaction {
     pub fn hash(&self) -> [u8; 32] {
         let mut hasher = Sha256::new();
-
-        // Hash inputs
+        
+        // Add inputs to hash
         for input in &self.inputs {
             hasher.update(&input.previous_output.transaction_hash);
             hasher.update(&input.previous_output.index.to_le_bytes());
             hasher.update(&input.signature_script);
             hasher.update(&input.sequence.to_le_bytes());
         }
-
-        // Hash outputs
+        
+        // Add outputs to hash
         for output in &self.outputs {
             hasher.update(&output.value.to_le_bytes());
             hasher.update(&output.public_key_script);
         }
-
-        // Hash lock_time
+        
+        // Add other fields
         hasher.update(&self.lock_time.to_le_bytes());
-
-        // Finalize hash
+        
+        // If privacy features are present, include them in the hash
+        hasher.update(&self.privacy_flags.to_le_bytes());
+        
+        if let Some(obfuscated_id) = &self.obfuscated_id {
+            hasher.update(obfuscated_id);
+        }
+        
+        if let Some(ephemeral_pubkey) = &self.ephemeral_pubkey {
+            hasher.update(ephemeral_pubkey);
+        }
+        
         let result = hasher.finalize();
         let mut hash = [0u8; 32];
         hash.copy_from_slice(&result);
         hash
+    }
+
+    pub fn default() -> Self {
+        Transaction {
+            inputs: Vec::new(),
+            outputs: Vec::new(),
+            lock_time: 0,
+            fee_adjustments: None,
+            privacy_flags: 0,
+            obfuscated_id: None,
+            ephemeral_pubkey: None,
+            amount_commitments: None,
+            range_proofs: None,
+        }
     }
 
     pub fn calculate_adjusted_fee(&self, current_time: u64) -> u64 {
@@ -408,7 +432,7 @@ impl Transaction {
     
     /// Apply stealth addressing to transaction outputs
     pub fn apply_stealth_addressing(&mut self, stealth: &mut crate::crypto::privacy::StealthAddressing, 
-                                   recipient_pubkeys: &[ed25519_dalek::PublicKey]) {
+                                   recipient_pubkeys: &[crate::crypto::jubjub::JubjubPoint]) {
         if recipient_pubkeys.is_empty() {
             return;
         }
@@ -433,7 +457,7 @@ impl Transaction {
         self.outputs = new_outputs;
         
         // Store ephemeral public key in transaction
-        if let Some(ephemeral_pubkey) = stealth.get_last_ephemeral_pubkey() {
+        if let Some(ephemeral_pubkey) = stealth.get_ephemeral_pubkey() {
             // Convert Vec<u8> to [u8; 32]
             if ephemeral_pubkey.len() == 32 {
                 let mut key_array = [0u8; 32];

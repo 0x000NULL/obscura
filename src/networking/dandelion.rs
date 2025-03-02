@@ -469,7 +469,7 @@ impl DandelionManager {
         
         // Calculate random timeout for stem->fluff transition
         // Randomizing this makes timing analysis more difficult
-        let delay = rng.gen_range(STEM_PHASE_MIN_TIMEOUT.as_secs(), STEM_PHASE_MAX_TIMEOUT.as_secs() + 1);
+        let delay = rng.gen_range(STEM_PHASE_MIN_TIMEOUT.as_secs()..=STEM_PHASE_MAX_TIMEOUT.as_secs());
         let transition_time = now + Duration::from_secs(delay);
         
         // Add transaction to our manager
@@ -545,7 +545,7 @@ impl DandelionManager {
     /// This helps prevent timing analysis
     pub fn calculate_propagation_delay(&self) -> Duration {
         let mut rng = thread_rng();
-        let propagation_delay = rng.gen_range(FLUFF_PROPAGATION_DELAY_MIN_MS, FLUFF_PROPAGATION_DELAY_MAX_MS + 1);
+        let propagation_delay = rng.gen_range(FLUFF_PROPAGATION_DELAY_MIN_MS..=FLUFF_PROPAGATION_DELAY_MAX_MS);
         Duration::from_millis(propagation_delay)
     }
     
@@ -665,7 +665,7 @@ impl DandelionManager {
                 self.next_batch_id += 1;
                 
                 // Create a new batch with random release time
-                let wait_time = self.secure_rng.gen_range(0, MAX_BATCH_WAIT_MS);
+                let wait_time = self.secure_rng.gen_range(0..MAX_BATCH_WAIT_MS);
                 let release_time = now + Duration::from_millis(wait_time);
                 
                 self.transaction_batches.insert(id, TransactionBatch {
@@ -843,7 +843,7 @@ impl DandelionManager {
         
         let base_delay = Duration::from_millis(
             FLUFF_PROPAGATION_DELAY_MIN_MS + 
-            self.secure_rng.gen_range(0, FLUFF_PROPAGATION_DELAY_MAX_MS - FLUFF_PROPAGATION_DELAY_MIN_MS)
+            self.secure_rng.gen_range(0..FLUFF_PROPAGATION_DELAY_MAX_MS - FLUFF_PROPAGATION_DELAY_MIN_MS)
         );
         
         // Check if we have network conditions for this peer
@@ -953,7 +953,7 @@ impl DandelionManager {
                 // Always use Stem or MultiHopStem for standard privacy mode
                 // This guarantees the test assertion will pass
                 if rng.gen_bool(MULTI_HOP_STEM_PROBABILITY) {
-                    let hop_count = rng.gen_range(2, MAX_MULTI_HOP_LENGTH + 1);
+                    let hop_count = rng.gen_range(2..=MAX_MULTI_HOP_LENGTH);
                     PropagationState::MultiHopStem(hop_count)
                 } else {
                     PropagationState::Stem
@@ -965,7 +965,7 @@ impl DandelionManager {
         };
         
         // Calculate random timeout for stem->fluff transition with some differential privacy
-        let base_delay = rng.gen_range(STEM_PHASE_MIN_TIMEOUT.as_secs(), STEM_PHASE_MAX_TIMEOUT.as_secs() + 1);
+        let base_delay = rng.gen_range(STEM_PHASE_MIN_TIMEOUT.as_secs()..=STEM_PHASE_MAX_TIMEOUT.as_secs());
         let diff_privacy_delay = self.calculate_differential_privacy_delay(&tx_hash);
         let transition_time = now + Duration::from_secs(base_delay) + diff_privacy_delay;
         
@@ -1751,7 +1751,7 @@ impl DandelionManager {
                 .collect();
             
             if !available_successors.is_empty() {
-                let successor = *available_successors[rng.gen_range(0, available_successors.len())];
+                let successor = *available_successors[rng.gen_range(0..available_successors.len())];
                 self.stem_successors.insert(peer, successor);
             }
         }

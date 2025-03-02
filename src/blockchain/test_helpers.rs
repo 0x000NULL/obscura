@@ -1,13 +1,15 @@
 use super::*;
-use ed25519_dalek::Keypair;
+use crate::crypto::jubjub::generate_keypair;
+use crate::blockchain::{Transaction, TransactionInput, TransactionOutput, OutPoint};
+use crate::crypto::jubjub::{JubjubKeypair, JubjubPointExt};
 use rand::thread_rng;
 
 #[allow(dead_code)]
 pub fn create_test_transaction() -> Transaction {
-    let keypair = Keypair::generate(&mut thread_rng());
+    let keypair = generate_keypair();
     let output = TransactionOutput {
-        value: 50,
-        public_key_script: keypair.public.as_bytes().to_vec(),
+        value: 100,
+        public_key_script: keypair.public.to_bytes().to_vec(),
     };
 
     Transaction {

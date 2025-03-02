@@ -1,5 +1,5 @@
 use super::*;
-use ed25519_dalek::{Keypair, PublicKey};
+use crate::crypto::jubjub::{JubjubPoint, JubjubSignature, JubjubPointExt, generate_keypair};
 use rand::thread_rng;
 
 // Include the block structure tests
@@ -8,10 +8,10 @@ mod block_structure_tests;
 
 #[allow(dead_code)]
 pub fn create_test_transaction() -> Transaction {
-    let keypair = Keypair::generate(&mut thread_rng());
+    let keypair = generate_keypair();
     let output = TransactionOutput {
         value: 50,
-        public_key_script: keypair.public.as_bytes().to_vec(),
+        public_key_script: keypair.public.to_bytes().to_vec(),
     };
 
     Transaction {
@@ -49,17 +49,15 @@ pub fn create_transaction_with_fee(fee: u64) -> Transaction {
 pub fn validate_signature(
     input: &TransactionInput,
     message: &[u8],
-    public_key: &PublicKey,
+    public_key: &JubjubPoint,
 ) -> bool {
-    use ed25519_dalek::Verifier;
     if input.signature_script.len() != 64 {
         return false;
     }
-    let mut signature_bytes = [0u8; 64];
-    signature_bytes.copy_from_slice(&input.signature_script);
-    match ed25519_dalek::Signature::from_bytes(&signature_bytes) {
-        Ok(signature) => public_key.verify(message, &signature).is_ok(),
-        Err(_) => false,
+    
+    match JubjubSignature::from_bytes(&input.signature_script) {
+        Some(signature) => public_key.verify(message, &signature),
+        None => false,
     }
 }
 

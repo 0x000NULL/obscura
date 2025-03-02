@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use rand::{Rng, rngs::OsRng};
 use crate::crypto::bulletproofs::{RangeProof, verify_range_proof};
 use crate::crypto::pedersen::{PedersenCommitment, verify_commitment_sum};
-use ed25519_dalek::{Signature, PublicKey, Verifier};
+use crate::crypto::jubjub::{JubjubPoint, JubjubSignature, JubjubPointExt};
 use sha2::{Sha256, Digest, digest::{self, OutputSizeUser}};
 use blake2::{Blake2b, Blake2s, Blake2bCore, Blake2sCore};
 use hex;
@@ -421,11 +421,33 @@ impl Mempool {
         }
         
         // 2. Verify signature for each input
-        for (i, input) in tx.inputs.iter().enumerate() {
-            if !self.verify_input_signature(tx, input) {
-                println!("Validation failed: signature verification failed for input {}", i);
-                self.validation_cache.insert(tx.hash(), false);
-                return false;
+        for input in &tx.inputs {
+            // Extract the public key from the previous output
+            if let Some(utxo_set) = &self.utxo_set {
+                if let Some(prev_output) = utxo_set.get_utxo(&input.previous_output) {
+                    let pubkey_bytes = &prev_output.public_key_script;
+                    let pubkey = match JubjubPoint::from_bytes(pubkey_bytes) {
+                        Some(pk) => pk,
+                        None => return false,
+                    };
+                    
+                    // Create the message to verify (transaction hash)
+                    let tx_hash = tx.hash();
+                    
+                    // Verify the signature
+                    let signature_bytes = &input.signature_script;
+                    let signature = match JubjubSignature::from_bytes(signature_bytes) {
+                        Some(sig) => sig,
+                        None => return false,
+                    };
+                    
+                    // Verify the signature
+                    if !pubkey.verify(&tx_hash, &signature) {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
             }
         }
         
@@ -455,88 +477,6 @@ impl Mempool {
         println!("Transaction validation successful");
         self.validation_cache.insert(tx.hash(), true);
         true
-    }
-    
-    fn verify_input_signature(&self, _tx: &Transaction, _input: &crate::blockchain::TransactionInput) -> bool {
-        // For testing: Skip real verification
-        #[cfg(test)]
-        {
-            return true;
-        }
-        
-        #[cfg(not(test))]
-        {
-            // Get the referenced UTXO
-            let utxo_set = match &self.utxo_set {
-                Some(set) => set,
-                None => {
-                    println!("Signature verification failed: No UTXO set available");
-                    return false; // Can't verify without UTXO set
-                }
-            };
-            
-            // Get the UTXO from the set
-            let outpoint = &_input.previous_output;
-            println!("Checking UTXO for outpoint: {:?}", outpoint);
-            let utxo = match utxo_set.get_utxo(outpoint) {
-                Some(utxo) => utxo,
-                None => {
-                    println!("Signature verification failed: UTXO not found for outpoint: {:?}", outpoint);
-                    return false; // UTXO doesn't exist
-                }
-            };
-            
-            // Extract public key from the UTXO's script
-            let pubkey_bytes = match extract_pubkey_from_script(&utxo.public_key_script) {
-                Some(pk) => pk,
-                None => {
-                    println!("Signature verification failed: Couldn't extract public key from script");
-                    return false; // Couldn't extract public key
-                }
-            };
-            
-            // Create PublicKey from bytes
-            let pubkey = match PublicKey::from_bytes(&pubkey_bytes) {
-                Ok(pk) => pk,
-                Err(e) => {
-                    println!("Signature verification failed: Invalid public key - {:?}", e);
-                    return false; // Invalid public key
-                }
-            };
-            
-            // Create message that was signed (transaction with SIGHASH flags)
-            let message = create_signature_message(_tx, _input);
-            
-            // Extract signature from input's script_sig
-            let signature_bytes = match extract_signature_from_script(&_input.signature_script) {
-                Some(sig) => sig,
-                None => {
-                    println!("Signature verification failed: Couldn't extract signature from script");
-                    return false; // Couldn't extract signature
-                }
-            };
-            
-            // Create Signature from bytes
-            let signature = match Signature::from_bytes(&signature_bytes) {
-                Ok(sig) => sig,
-                Err(e) => {
-                    println!("Signature verification failed: Invalid signature - {:?}", e);
-                    return false; // Invalid signature
-                }
-            };
-            
-            // Verify the signature
-            match pubkey.verify(&message, &signature) {
-                Ok(_) => {
-                    println!("Signature verification succeeded");
-                    true
-                },
-                Err(e) => {
-                    println!("Signature verification failed: Verification error - {:?}", e);
-                    false
-                }
-            }
-        }
     }
     
     fn validate_privacy_features(&mut self, tx: &Transaction) -> bool {
@@ -620,9 +560,9 @@ impl Mempool {
         }
         
         // Convert to ed25519 PublicKey
-        let sponsor_pubkey = match PublicKey::from_bytes(sponsor_pubkey_bytes) {
-            Ok(pk) => pk,
-            Err(_) => return false,
+        let sponsor_pubkey = match JubjubPoint::from_bytes(sponsor_pubkey_bytes) {
+            Some(pk) => pk,
+            None => return false,
         };
         
         // Get the signature
@@ -632,9 +572,9 @@ impl Mempool {
         }
         
         // Convert to ed25519 Signature
-        let signature = match Signature::from_bytes(signature_bytes) {
-            Ok(sig) => sig,
-            Err(_) => return false,
+        let signature = match JubjubSignature::from_bytes(signature_bytes) {
+            Some(sig) => sig,
+            None => return false,
         };
         
         // Create message to verify: hash of transaction + sponsor fee
@@ -644,7 +584,11 @@ impl Mempool {
         let message: GenericArray<u8, <Sha256 as OutputSizeUser>::OutputSize> = hasher.finalize();
         
         // Verify the signature
-        sponsor_pubkey.verify(&message, &signature).is_ok()
+        if !sponsor_pubkey.verify(&message, &signature) {
+            return false;
+        }
+        
+        true
     }
 
     // SIZE LIMITS AND EVICTION
@@ -767,16 +711,16 @@ impl Mempool {
         
         // Random factor (0.0 to 1.0) for ordering
         let randomness = match self.privacy_mode {
-            PrivacyLevel::Standard => rng.gen_range(0.0, 0.05), // 0-5% variation
-            PrivacyLevel::Enhanced => rng.gen_range(0.0, 0.15), // 0-15% variation
-            PrivacyLevel::Maximum => rng.gen_range(0.0, 0.30), // 0-30% variation
+            PrivacyLevel::Standard => rng.gen_range(0.0..=0.05), // 0-5% variation
+            PrivacyLevel::Enhanced => rng.gen_range(0.0..=0.15), // 0-15% variation
+            PrivacyLevel::Maximum => rng.gen_range(0.0..=0.30), // 0-30% variation
         };
         
         // Random time offset for timing obfuscation (in milliseconds)
         let time_offset_ms = match self.privacy_mode {
-            PrivacyLevel::Standard => rng.gen_range(0, 100), // 0-100ms
-            PrivacyLevel::Enhanced => rng.gen_range(0, 250), // 0-250ms
-            PrivacyLevel::Maximum => rng.gen_range(0, TIMING_VARIATION_MAX_MS), // 0-500ms
+            PrivacyLevel::Standard => rng.gen_range(0..=100), // 0-100ms
+            PrivacyLevel::Enhanced => rng.gen_range(0..=250), // 0-250ms
+            PrivacyLevel::Maximum => rng.gen_range(0..=TIMING_VARIATION_MAX_MS), // 0-500ms
         };
         
         (randomness, Duration::from_millis(time_offset_ms))

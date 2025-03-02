@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use ed25519_dalek::{PublicKey, Signature, Verifier};
+use crate::crypto::jubjub::{JubjubPoint, JubjubSignature, JubjubPointExt};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
@@ -16,9 +16,9 @@ pub struct ThresholdSignature {
     /// Total number of participants
     pub total_participants: usize,
     /// Participant public keys
-    pub participants: Vec<PublicKey>,
+    pub participants: Vec<JubjubPoint>,
     /// Aggregated signatures (participant index -> signature)
-    pub signatures: HashMap<usize, Signature>,
+    pub signatures: HashMap<usize, JubjubSignature>,
     /// Message being signed
     pub message: Vec<u8>,
 }
@@ -38,7 +38,7 @@ impl ThresholdSignature {
     /// Create a new threshold signature scheme
     pub fn new(
         threshold: usize,
-        participants: Vec<PublicKey>,
+        participants: Vec<JubjubPoint>,
         message: Vec<u8>,
     ) -> Result<Self, ThresholdError> {
         // Validate threshold
@@ -63,7 +63,7 @@ impl ThresholdSignature {
     pub fn add_signature(
         &mut self,
         participant_index: usize,
-        signature: Signature,
+        signature: JubjubSignature,
     ) -> Result<bool, ThresholdError> {
         // Check if threshold already met
         if self.signatures.len() >= self.threshold {
@@ -81,8 +81,8 @@ impl ThresholdSignature {
         }
 
         // Verify signature
-        let public_key = self.participants[participant_index];
-        if public_key.verify(&self.message, &signature).is_err() {
+        let public_key = &self.participants[participant_index];
+        if !public_key.verify(&self.message, &signature) {
             return Err(ThresholdError::InvalidSignature);
         }
 
@@ -102,8 +102,8 @@ impl ThresholdSignature {
 
         // Verify each signature
         for (participant_index, signature) in &self.signatures {
-            let public_key = self.participants[*participant_index];
-            if public_key.verify(&self.message, signature).is_err() {
+            let public_key = &self.participants[*participant_index];
+            if !public_key.verify(&self.message, signature) {
                 return Err(ThresholdError::InvalidSignature);
             }
         }
@@ -144,7 +144,7 @@ pub struct ThresholdSchemeShamir {
     /// Total number of participants
     pub total_participants: usize,
     /// Participant public keys
-    pub participants: Vec<PublicKey>,
+    pub participants: Vec<JubjubPoint>,
     /// Shares for each participant (participant index -> share)
     pub shares: HashMap<usize, Vec<u8>>,
 }
@@ -173,7 +173,7 @@ impl ThresholdSchemeShamir {
     pub fn generate_shares(
         &mut self,
         secret: &[u8],
-        participants: Vec<PublicKey>,
+        participants: Vec<JubjubPoint>,
     ) -> Result<(), ThresholdError> {
         if participants.len() != self.total_participants {
             return Err(ThresholdError::InvalidParticipant);
@@ -259,7 +259,7 @@ impl ValidatorAggregation {
     /// Create a new validator aggregation for a block
     pub fn new(
         threshold: usize,
-        validators: Vec<PublicKey>,
+        validators: Vec<JubjubPoint>,
         block_hash: [u8; 32],
     ) -> Result<Self, ThresholdError> {
         let message = block_hash.to_vec();
@@ -276,7 +276,7 @@ impl ValidatorAggregation {
     pub fn add_validator_signature(
         &mut self,
         validator_index: usize,
-        signature: Signature,
+        signature: JubjubSignature,
     ) -> Result<bool, ThresholdError> {
         if self.is_complete {
             return Err(ThresholdError::ThresholdAlreadyMet);

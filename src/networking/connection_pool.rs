@@ -113,9 +113,9 @@ impl PeerScore {
         // Add noise to scores for privacy
         let mut rng = rand::thread_rng();
         let noise_factor = 0.05; // 5% maximum noise
-        let success_noise = rng.gen_range(-noise_factor, noise_factor);
-        let latency_noise = rng.gen_range(-noise_factor, noise_factor);
-        let diversity_noise = rng.gen_range(-noise_factor, noise_factor);
+        let success_noise = rng.gen_range(-noise_factor..=noise_factor);
+        let latency_noise = rng.gen_range(-noise_factor..=noise_factor);
+        let diversity_noise = rng.gen_range(-noise_factor..=noise_factor);
 
         // Combine factors with weights and noise
         let score = ((success_ratio + success_noise) * 0.4) + 
@@ -716,7 +716,7 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
         let top_n = std::cmp::min(3, candidates.len());
         if top_n > 0 {
             let mut rng = thread_rng();
-            let idx = rng.gen_range(0, top_n);
+            let idx = rng.gen_range(0..top_n);
             return Some(candidates[idx].0);
         }
         
