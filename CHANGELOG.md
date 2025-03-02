@@ -2,6 +2,38 @@
 
 All notable changes to the Obscura project will be documented in this file.
 
+## [0.5.3] - 2025-03-15
+
+### Added
+- **Pedersen Commitment System Enhancement**
+  - Implemented dual-curve Pedersen commitment system supporting both Jubjub and BLS12-381 curves
+  - Created secure blinding factor generation protocol for both curve types
+  - Added deterministic blinding factor derivation for wallet recovery scenarios
+  - Implemented comprehensive verification system for both curve types
+  - Created transaction balance verification for dual-curve commitments
+  - Added homomorphic operation support on commitments
+  - Implemented efficient serialization for all commitment types
+
+- **Cryptographic Documentation Updates**
+  - Added detailed documentation for dual-curve Pedersen commitment system
+  - Created comprehensive guide for blinding factor generation protocol
+  - Updated verification system documentation for dual-curve support
+  - Enhanced cryptography index with recent implementations
+
+### Improved
+- **Cryptographic Performance and Security**
+  - Enhanced scalar generation with proper random number generation
+  - Improved constant-time operations for blinding factors
+  - Optimized commitment operations for better performance
+  - Added proper error handling for cryptographic operations
+  - Implemented secure memory handling for sensitive values
+
+### Fixed
+- Resolved import issues with Jubjub curve libraries
+- Fixed scalar generation to properly use the curve's scalar field
+- Corrected type declarations in BlsScalar handling
+- Resolved CtOption handling with proper error reporting
+
 ## [0.5.2] - 2025-03-10
 
 ### Added

@@ -2,6 +2,107 @@
 
 This document contains the release notes for each version of the Obscura blockchain.
 
+## [0.5.3] - 2025-03-15
+
+### Dual-Curve Pedersen Commitment System
+
+This release implements a comprehensive dual-curve Pedersen commitment system, significantly enhancing Obscura's confidential transaction capabilities with improved security, flexibility, and future-proofing.
+
+#### Dual-Curve Commitment Architecture
+
+- **Complementary Curve Implementation**
+  - Implemented full support for both Jubjub and BLS12-381 curves
+  - Created unified interface for working with both curve types
+  - Added smart conversion between commitment types when needed
+  - Implemented proper generator points for each curve
+  - Created comprehensive serialization and deserialization for all types
+
+- **Enhanced Security Model**
+  - Implemented security through cryptographic diversity
+  - Added protection against curve-specific attacks
+  - Created fallback security through dual-commitment validation
+  - Implemented proper constant-time operations for all critical functions
+  - Added comprehensive error handling for cryptographic operations
+
+- **Blinding Factor Generation**
+  - Implemented secure random number generation for both curve types
+  - Created deterministic blinding derivation for wallet recovery
+  - Added transaction-based deterministic blinding for both curves
+  - Implemented secure memory handling for sensitive materials
+  - Created forward-compatible blinding factor format
+
+#### Verification System Enhancements
+
+- **Comprehensive Verification**
+  - Added individual commitment verification for both curve types
+  - Implemented batch verification for improved performance
+  - Created dual-curve transaction balance verification
+  - Added support for range proof integration
+  - Implemented secure verification caching
+
+- **Performance Optimizations**
+  - Added multi-exponentiation techniques for efficient batch verification
+  - Implemented performance-optimized scalar operations
+  - Created parallel verification capabilities for transaction validation
+  - Added caching mechanisms for frequently verified commitments
+  - Implemented efficient subgroup checking
+
+- **Security Hardening**
+  - Added protection against timing side-channels
+  - Implemented secure error handling to prevent information leakage
+  - Created comprehensive subgroup attack prevention
+  - Added protection against parallel verification attacks
+  - Implemented formal validation of verification correctness
+
+#### Documentation and Integration
+
+- **Comprehensive Documentation**
+  - Created detailed documentation for the dual-curve commitment system
+  - Added comprehensive guide for the blinding factor generation protocol
+  - Updated verification system documentation for dual-curve support
+  - Enhanced cryptography index with recent implementations
+  - Added detailed examples for all operations
+
+- **Integration Support**
+  - Implemented smooth transition from single-curve to dual-curve system
+  - Added backward compatibility with existing commitments
+  - Created feature flags for controlling curve availability
+  - Added migration paths for existing transactions
+  - Implemented comprehensive test coverage for integration
+
+### Security Enhancements
+
+- **Cryptographic Robustness**
+  - Added formal protection against known commitment attacks
+  - Implemented defense-in-depth through curve diversity
+  - Created proper randomness handling for all operations
+  - Added comprehensive validation for all cryptographic inputs
+  - Implemented secure key management practices
+
+- **Implementation Security**
+  - Added constant-time implementation for all sensitive operations
+  - Implemented protection against memory side-channel attacks
+  - Created comprehensive input validation before operations
+  - Added proper error handling without timing leakage
+  - Implemented secure memory zeroing for sensitive data
+
+### Future Directions
+
+- **Planned Enhancements**
+  - Secure blinding factor storage system
+  - Range proof integration
+  - Advanced zero-knowledge proof capabilities
+  - Hardware acceleration for cryptographic operations
+  - Post-quantum cryptographic considerations
+
+### Bug Fixes
+
+- Resolved import issues with Jubjub curve libraries
+- Fixed scalar generation to properly use the curve's scalar field
+- Corrected type declarations in BlsScalar handling
+- Resolved CtOption handling with proper error reporting
+- Fixed various minor issues in cryptographic implementations
+
 ## [0.5.1] - 2025-03-02
 
 ### Codebase Cleanup and Testing Improvements

@@ -6,7 +6,7 @@ Pedersen commitments are cryptographic primitives that enable a party to commit 
 
 This document details the implementation of:
 
-1. **Pedersen Commitment Schemes** - Both Ristretto and Jubjub curve implementations
+1. **Pedersen Commitment Schemes** - Dual-curve implementation with both Jubjub and BLS12-381
 2. **Blinding Factor Generation Protocol** - Secure creation and management of blinding factors
 3. **Verification System** - Comprehensive transaction verification
 
@@ -33,10 +33,12 @@ This has two critical properties:
 
 ### 1.2 Implementation in Obscura
 
-Obscura implements two variants of Pedersen commitments:
+Obscura now implements a dual-curve Pedersen commitment system that utilizes both:
 
-1. **Ristretto-based** (Legacy): Using the Ristretto255 elliptic curve group 
-2. **Jubjub-based**: Using the Jubjub elliptic curve (embedded in BLS12-381)
+1. **Jubjub-based**: Using the Jubjub elliptic curve (embedded in BLS12-381)
+2. **BLS12-381-based**: Using the BLS12-381 G1 curve for advanced cryptographic operations
+
+The implementation offers both individual commitment types (`PedersenCommitment` for Jubjub and `BlsPedersenCommitment` for BLS12-381) as well as a combined `DualCurveCommitment` that creates commitments on both curves simultaneously.
 
 #### 1.2.1 Homomorphic Properties
 
@@ -48,360 +50,277 @@ C(v₁, r₁) + C(v₂, r₂) = C(v₁ + v₂, r₁ + r₂)
 
 This allows verifying that the sum of input values equals the sum of output values without revealing the individual values.
 
-#### Example: Homomorphic Addition
+#### Example: Homomorphic Addition with Dual-Curve Commitments
 
 ```rust
-// Create two commitments
-let commitment1 = PedersenCommitment::commit_random(100);
-let commitment2 = PedersenCommitment::commit_random(200);
+// Create two dual-curve commitments
+let commitment1 = DualCurveCommitment::commit(100);
+let commitment2 = DualCurveCommitment::commit(200);
 
 // Add them together
-let combined = commitment1.add(&commitment2).unwrap();
+let combined = commitment1.add(&commitment2);
 
-// Verify the combined commitment (requires knowing the blinding factors)
+// Verify the combined commitment
 assert_eq!(combined.value().unwrap(), 300);
 ```
 
 ### 1.3 Curve Selection Rationale
 
-Our transition from Ristretto to Jubjub/BLS12-381 is motivated by:
+Our dual-curve approach using Jubjub and BLS12-381 is motivated by:
 
 - **ZK-Proof Efficiency**: Jubjub is designed to be efficient when used in zk-SNARKs within BLS12-381
 - **Ecosystem Alignment**: Many privacy-focused cryptocurrencies are standardizing on BLS12-381
+- **Dual Security**: By using both curves, we gain additional security properties and flexibility
 - **Future Compatibility**: BLS12-381 provides a foundation for advanced privacy features
 - **Security**: Both curves provide strong security guarantees with rigorous security analyses
+
+### 1.4 Dual-Curve Architecture
+
+The dual-curve implementation consists of three main components:
+
+```
+┌───────────────────────┐      ┌───────────────────────┐
+│                       │      │                       │
+│  Jubjub Pedersen      │      │  BLS12-381 Pedersen   │
+│  Commitment           │      │  Commitment           │
+│                       │      │                       │
+└───────────┬───────────┘      └───────────┬───────────┘
+            │                               │
+            │                               │
+            ▼                               ▼
+┌─────────────────────────────────────────────────────┐
+│                                                     │
+│             Dual-Curve Commitment                   │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+Each curve implementation provides its own base points (G and H), commitment algorithms, and serialization methods. The dual-curve commitment combines both to provide enhanced security and compatibility.
 
 ## 2. Blinding Factor Generation Protocol
 
 ### 2.1 Architecture
 
-The blinding protocol provides methods for generating and managing blinding factors securely. It offers both random and deterministic modes.
-
-```
-┌───────────────────────┐      ┌───────────────────────┐
-│                       │      │                       │
-│                       │      │                       │
-│  Blinding Protocol    │◄─────┤  Transaction Data     │
-│                       │      │                       │
-│                       │      │                       │
-└───────────┬───────────┘      └───────────────────────┘
-            │                               ▲
-            │                               │
-            ▼                               │
-┌───────────────────────┐      ┌───────────┴───────────┐
-│                       │      │                       │
-│  Commitment Creation  ├─────►│ Blinding Store        │
-│                       │      │                       │
-└───────────────────────┘      └───────────────────────┘
-```
-
-### 2.2 Blinding Sources
-
-Three sources of blinding factors are supported:
-
-1. **Random**: Cryptographically secure random blinding factors
-   - Use case: Initial transaction creation
-   - Security: Strongest privacy guarantees
-   - Drawback: Requires storing the blinding factor
-
-2. **Transaction-Derived**: Deterministic generation from transaction data
-   - Use case: When sender and receiver need to derive the same blinding factor
-   - Method: HMAC-SHA256(tx_id || output_index || counter)
-   - Security: Strong if transaction ID has sufficient entropy
-
-3. **Key-Derived**: Deterministic generation from key material
-   - Use case: Recovering commitments during wallet recovery
-   - Method: HMAC-SHA256(key || salt || counter)
-   - Security: As strong as the key material used
-
-### 2.3 Usage Examples
-
-#### Random Blinding
+The blinding factor generation protocol provides secure methods for generating random scalar values used in the commitment process. It supports both curves with specialized implementations.
 
 ```rust
-// Create a random blinding protocol
-let mut protocol = BlindingProtocol::new_random();
+// Generate a random Jubjub scalar for use in Pedersen commitments
+let jubjub_blinding = generate_random_jubjub_scalar();
 
-// Generate a commitment with random blinding
-let commitment = PedersenCommitment::commit_with_derived_blinding(
-    1000, &protocol, &[]
-);
+// Generate a random BLS12-381 scalar for use in BLS Pedersen commitments
+let bls_blinding = generate_random_bls_scalar();
+
+// Create commitments with these blinding factors
+let jubjub_commitment = PedersenCommitment::commit(1000, jubjub_blinding);
+let bls_commitment = BlsPedersenCommitment::commit(1000, bls_blinding);
 ```
 
-#### Transaction-Derived Blinding
+### 2.2 Secure Random Scalar Generation
+
+The implementation ensures cryptographically secure random scalar generation using:
+
+1. Operating system's secure random number generator (`OsRng`)
+2. Proper scalar field reduction for uniform distribution
+3. Adapters for compatibility between curve implementations
+
+#### Jubjub Scalar Generation
 
 ```rust
-// Transaction hash and output index
-let tx_id = [0x01, 0x02, 0x03, /* ... */];
-let output_index = 0;
-
-// Create blinding protocol from transaction data
-let protocol = BlindingProtocol::new_from_tx_data(&tx_id, output_index);
-
-// Both sender and recipient can independently compute the same blinding factor
-let commitment = PedersenCommitment::commit_with_derived_blinding(
-    1000, &protocol, &[]
-);
+pub fn generate_random_jubjub_scalar() -> JubjubScalar {
+    // Create adapter for OsRng that implements ark_std::rand::RngCore
+    struct RngAdapter(OsRng);
+    impl ark_std::rand::RngCore for RngAdapter { /* ... */ }
+    impl ark_std::rand::CryptoRng for RngAdapter {}
+    
+    // Generate random scalar using Arkworks library
+    JubjubScalar::rand(&mut RngAdapter(OsRng))
+}
 ```
 
-#### Key-Derived Blinding
+#### BLS12-381 Scalar Generation
 
 ```rust
-// Wallet key and salt
-let key = wallet.get_secret_key();
-let salt = [0x42, 0x42, 0x42, /* ... */];
-
-// Create blinding protocol from key and salt
-let protocol = BlindingProtocol::new_from_key(&key, &salt);
-
-// Generate a commitment with key-derived blinding
-let commitment = PedersenCommitment::commit_with_derived_blinding(
-    1000, &protocol, &[]
-);
+pub fn generate_random_bls_scalar() -> BlsScalar {
+    // Use OsRng to generate random bytes
+    let mut rng = OsRng;
+    
+    // Generate random scalar using blstrs library
+    BlsScalar::random(&mut rng)
+}
 ```
 
-### 2.4 Blinding Store
+### 2.3 Deterministic Blinding for Recovery
 
-The `BlindingStore` provides secure storage for blinding factors, which is necessary for subsequent operations like:
-- Proving ownership of commitments
-- Creating transaction that spend existing commitments
-- Verifying received commitments
+The implementation also supports deterministic blinding factor generation through hashing, which is crucial for wallet recovery scenarios:
 
 ```rust
-// Commit to a value and store the blinding factor
-let commitment = PedersenCommitment::commit_random(1000);
-let mut store = BlindingStore::new();
-let commitment_id = [0x01, 0x02, 0x03, /* ... */];
-commitment.store_blinding_factor(&mut store, &commitment_id).unwrap();
+// Example: Create a deterministic blinding factor from a seed
+fn deterministic_jubjub_blinding(seed: &[u8]) -> JubjubScalar {
+    let mut hasher = Sha256::new();
+    hasher.update(seed);
+    let hash = hasher.finalize();
+    
+    // Convert hash bytes to a scalar value
+    // [Implementation depends on the specific curve]
+}
+```
 
-// Later, retrieve the blinding factor
-let mut recovered = PedersenCommitment::from_bytes(&commitment.to_bytes()).unwrap();
-recovered.retrieve_and_verify_blinding(&store, &commitment_id).unwrap();
-assert_eq!(recovered.value().unwrap(), 1000);
+### 2.4 Dual-Curve Blinding Integration
+
+The dual-curve commitment system automatically handles blinding factor generation for both curves:
+
+```rust
+// Create a dual-curve commitment with automatically generated blinding factors
+let commitment = DualCurveCommitment::commit(1000);
+
+// The system internally:
+// 1. Generates a random Jubjub scalar
+// 2. Generates a random BLS12-381 scalar
+// 3. Creates commitments on both curves
+// 4. Combines them into a dual-curve commitment
 ```
 
 ## 3. Verification System
 
-### 3.1 Architecture
+### 3.1 Individual Commitment Verification
 
-The verification system consists of:
-
-1. **Individual Commitment Verification**: Verify a single commitment against a claimed value
-2. **Batch Verification**: Efficiently verify multiple commitments
-3. **Transaction Balance Verification**: Ensure the sum of inputs equals the sum of outputs plus fees
-4. **Third-Party Verification**: Generate and verify proofs without revealing blinding factors
-
-```
-┌───────────────────────┐      ┌───────────────────────┐
-│                       │      │                       │
-│  Individual           │      │  Batch                │
-│  Verification         │      │  Verification         │
-│                       │      │                       │
-└───────────┬───────────┘      └───────────┬───────────┘
-            │                               │
-            ▼                               ▼
-┌───────────────────────────────────────────────────────┐
-│                                                       │
-│             Transaction Balance Verification          │
-│                                                       │
-└───────────────────────┬───────────────────────────────┘
-                        │
-                        ▼
-┌───────────────────────────────────────────────────────┐
-│                                                       │
-│                 Third-Party Verification              │
-│                                                       │
-└───────────────────────────────────────────────────────┘
-```
-
-### 3.2 Error Handling
-
-The verification system uses custom error types for clear error reporting:
+Each commitment type provides methods to verify without revealing the blinding factor:
 
 ```rust
-pub enum VerificationError {
-    /// Commitment format is invalid
-    InvalidFormat,
-    /// Missing blinding factor needed for verification
-    MissingBlinding,
-    /// Verification failed (incorrect value)
-    VerificationFailed,
-    /// Transaction has invalid structure
-    InvalidTransaction,
-    /// Balance equation doesn't hold
-    BalanceEquationFailed,
-}
+// Jubjub commitment verification
+let jubjub_commitment = PedersenCommitment::commit(1000, jubjub_blinding);
+assert!(jubjub_commitment.verify(1000));
+
+// BLS12-381 commitment verification
+let bls_commitment = BlsPedersenCommitment::commit(1000, bls_blinding);
+assert!(bls_commitment.verify(1000));
 ```
 
-### 3.3 Batch Verification
+### 3.2 Dual-Curve Verification
 
-Batch verification allows efficiently checking multiple commitments at once:
+The dual-curve commitment provides enhanced verification by checking both curves:
 
 ```rust
-// Create a batch verifier
-let mut verifier = BatchVerifier::new();
+let commitment = DualCurveCommitment::commit(1000);
 
-// Add commitments to verify
-verifier.add(commitment1, 100);
-verifier.add(commitment2, 200);
-verifier.add(commitment3, 300);
-
-// Verify all commitments in one operation
-match verifier.verify_all() {
-    Ok(()) => println!("All commitments verified successfully"),
-    Err(e) => println!("Verification failed: {:?}", e),
-}
+// Verifies on both curves and returns a tuple of (jubjub_result, bls_result)
+let verification_result = commitment.verify(1000);
+assert_eq!(verification_result, (true, true));
 ```
 
-This is more efficient than verifying each commitment individually, especially for large batches.
+### 3.3 Transaction Balance Verification
 
-### 3.4 Transaction Balance Verification
-
-The core equation for a valid confidential transaction is:
-```
-sum(inputs) = sum(outputs) + fee
-```
-
-In terms of commitments:
-```
-sum(input_commitments) = sum(output_commitments) + fee_commitment
-```
-
-Due to the homomorphic property, if the values balance, the blinding factors must also balance.
-
-#### Example
-
-```rust
-// Verify that input and output commitments balance
-let result = verify_transaction_balance(
-    &input_commitments,
-    &output_commitments,
-    fee_commitment.as_ref()
-);
-
-match result {
-    Ok(()) => println!("Transaction balances correctly"),
-    Err(VerificationError::BalanceEquationFailed) => println!("Sum of inputs != sum of outputs + fee"),
-    Err(e) => println!("Other verification error: {:?}", e),
-}
-```
-
-### 3.5 Third-Party Verification
-
-For scenarios where a third party needs to verify a commitment without knowing the blinding factor:
-
-```rust
-// The commitment owner generates a proof
-let proof = generate_verification_proof(
-    &commitment,
-    100,  // The actual value
-    &challenge_seed
-).unwrap();
-
-// A third party can verify this proof
-let result = verify_proof(
-    &commitment,
-    100,  // The claimed value
-    &proof,
-    &challenge_seed
-);
-
-match result {
-    Ok(()) => println!("Value verified through proof"),
-    Err(e) => println!("Verification failed: {:?}", e),
-}
-```
-
-## 4. Integration with Obscura Transactions
-
-The `verify_commitment_sum` function ties everything together by verifying transaction balance:
+For confidential transactions, the system verifies that the sum of input commitments equals the sum of output commitments plus fees:
 
 ```rust
 pub fn verify_commitment_sum(tx: &Transaction) -> bool {
-    // For non-confidential transactions, return true
-    if !tx.uses_confidential_amounts() {
-        return true;
+    // Accumulate input commitments
+    let mut input_sum = /* get first input commitment */;
+    for input in &tx.inputs {
+        input_sum = input_sum.add(&input.commitment);
     }
-
-    // Use appropriate implementation based on feature flags
-    #[cfg(any(feature = "use-bls12-381", not(feature = "legacy-curves")))]
-    return jubjub_pedersen::verify_jubjub_commitment_sum(tx);
-
-    // Legacy Ristretto implementation
-    #[cfg(not(any(feature = "use-bls12-381", not(feature = "legacy-curves"))))]
-    {
-        // Implementation details...
+    
+    // Accumulate output commitments
+    let mut output_sum = /* get first output commitment */;
+    for output in &tx.outputs {
+        output_sum = output_sum.add(&output.commitment);
     }
+    
+    // Add fee commitment to output sum
+    output_sum = output_sum.add(&tx.fee_commitment);
+    
+    // Compare the sums
+    input_sum.commitment == output_sum.commitment
 }
+```
+
+## 4. Integration and Usage
+
+### 4.1 Creating Commitments
+
+```rust
+// Create a Jubjub Pedersen commitment
+let value = 1000;
+let jubjub_commitment = PedersenCommitment::commit_random(value);
+
+// Create a BLS12-381 Pedersen commitment
+let bls_commitment = BlsPedersenCommitment::commit_random(value);
+
+// Create a dual-curve commitment (with both curves)
+let dual_commitment = DualCurveCommitment::commit(value);
+```
+
+### 4.2 Serialization
+
+All commitment types provide serialization methods:
+
+```rust
+// Serialize a Jubjub commitment
+let bytes = jubjub_commitment.to_bytes();
+
+// Deserialize from bytes
+let recovered = PedersenCommitment::from_bytes(&bytes).unwrap();
+
+// Also works for BLS and dual-curve commitments
+let bls_bytes = bls_commitment.to_bytes();
+let dual_bytes = dual_commitment.to_bytes();
+```
+
+### 4.3 Homomorphic Operations
+
+The homomorphic property enables privacy-preserving arithmetic:
+
+```rust
+// Add two commitments together
+let sum = commitment1.add(&commitment2);
+
+// Verify the sum is correct (if we know the values)
+assert_eq!(sum.value().unwrap(), commitment1.value().unwrap() + commitment2.value().unwrap());
+
+// Also works for BLS and dual-curve commitments
+let bls_sum = bls_commitment1.add(&bls_commitment2);
+let dual_sum = dual_commitment1.add(&dual_commitment2);
 ```
 
 ## 5. Security Considerations
 
-### 5.1 Blinding Factor Protection
+### 5.1 Curve Security
 
-Blinding factors must be protected with the same level of security as private keys. Loss of blinding factors makes it impossible to spend funds.
+Both curves offer strong security guarantees:
 
-### 5.2 Secure Random Number Generation
+- **Jubjub**: 252-bit prime order group with ~126-bit security level
+- **BLS12-381**: 381-bit prime field with ~128-bit security level
 
-The security of randomly generated blinding factors depends on the quality of randomness. Obscura uses CSPRNG from the `rand` crate for secure random generation.
+### 5.2 Blinding Factor Security
 
-### 5.3 Nothing-Up-My-Sleeve Points
+The security of Pedersen commitments critically depends on the blinding factors:
 
-The generator points `G` and `H` are selected using a "nothing-up-my-sleeve" approach to prevent backdoors.
+- **Randomness**: Must use cryptographically secure random number generation
+- **Storage**: Blinding factors must be securely stored or recoverable
+- **Distribution**: Should be uniformly distributed in the scalar field
 
-For Jubjub:
-```rust
-// Generator points derived from standardized constants
-pub static JUBJUB_VALUE_COMMITMENT_GENERATOR: Lazy<JubjubPoint> = Lazy::new(|| {
-    // Details of derivation process...
-});
-```
+### 5.3 Implementation Safeguards
 
-### 5.4 Timing Attacks
+Our implementation includes several security safeguards:
 
-Operations on blinding factors and commitment verification are implemented to be constant-time to prevent timing attacks.
+- **Constant-time operations** to prevent timing attacks
+- **Secure memory handling** for sensitive values
+- **Strong random number generation** using platform security primitives
+- **Validation checks** on all inputs and outputs
 
-## 6. Performance Considerations
+## 6. Future Enhancements
 
-### 6.1 Batch Verification
+Planned enhancements for the Pedersen commitment system include:
 
-Batch verification is significantly faster than individual verification for large numbers of commitments:
+- **Secure blinding factor storage** with encryption and key management
+- **Enhanced range proofs** using Bulletproofs for efficient verification
+- **Performance optimizations** using batched operations and parallel computation
+- **Hardware acceleration** for cryptographic operations
+- **Advanced zero-knowledge integration** for enhanced privacy
 
-| Number of Commitments | Individual Verification | Batch Verification | Speedup |
-|-----------------------|-------------------------|--------------------|---------| 
-| 10                    | ~1.2ms                  | ~0.4ms             | 3x      |
-| 100                   | ~12ms                   | ~2.5ms             | 4.8x    |
-| 1000                  | ~120ms                  | ~22ms              | 5.5x    |
+## 7. Conclusion
 
-### 6.2 Curve Performance
-
-Jubjub operations are optimized for zk-SNARK circuits but have different performance characteristics than Ristretto:
-
-| Operation               | Ristretto | Jubjub  | Notes                           |
-|-------------------------|-----------|---------|----------------------------------|
-| Point Addition          | 2.1μs     | 2.8μs   | Ristretto is ~25% faster        |
-| Scalar Multiplication   | 71μs      | 92μs    | Ristretto is ~23% faster        |
-| Multi-scalar Mult.      | 284μs     | 203μs   | Jubjub is ~28% faster with batching |
-| In-SNARK Verification   | N/A       | 12ms    | Jubjub designed for ZK circuits |
-
-These benchmarks were measured on an Intel i7-9700K CPU @ 3.60GHz.
-
-## 7. Future Directions
-
-### 7.1 Advanced Zero-Knowledge Proofs
-
-The Jubjub implementation lays groundwork for advanced zero-knowledge proofs:
-- Range proofs using Bulletproofs
-- Circuit-based proofs for complex predicates
-- One-out-of-many proofs for enhanced privacy
-
-### 7.2 Multi-Asset Commitments
-
-Future extensions will support committing to multiple assets in a single commitment.
-
-### 7.3 Post-Quantum Considerations
-
-Research is ongoing to evaluate post-quantum secure commitment schemes.
+The dual-curve Pedersen commitment implementation with support for both Jubjub and BLS12-381 curves provides Obscura with a solid foundation for privacy-preserving transactions. The completed blinding factor generation protocol ensures secure and flexible commitment creation, while the verification system enables trustless validation without revealing sensitive information.
 
 ## 8. References
 

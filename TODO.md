@@ -230,8 +230,8 @@
   - [ ] Plan for advanced cryptographic primitives
     - [x] Research Pedersen commitment implementation
       - [x] Evaluate elliptic curve options (Selected BLS12-381 as primary and Jubjub as secondary)
-      - [ ] Design homomorphic commitment scheme using selected curves
-      - [ ] Create blinding factor generation protocol
+      - [x] Design homomorphic commitment scheme using selected curves
+      - [x] Create blinding factor generation protocol
       - [ ] Implement secure blinding factor storage
       - [ ] Add commitment verification system
     - [ ] Develop bulletproofs integration plan

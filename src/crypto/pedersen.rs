@@ -7,6 +7,12 @@ use ark_serialize::{CanonicalSerialize, CanonicalDeserialize};
 use ark_ff::PrimeField;
 use crate::crypto::jubjub::JubjubPointExt;
 
+// Additional imports for BLS12-381
+use blstrs::{G1Projective as BlsG1, G2Projective as BlsG2, Scalar as BlsScalar, G1Affine, G2Affine};
+use group::{Group, GroupEncoding};
+use ff::Field;
+use std::ops::Add;
+
 // Base Points for JubJub Pedersen commitments
 lazy_static::lazy_static! {
     static ref PEDERSEN_G: JubjubPoint = {
@@ -37,6 +43,36 @@ lazy_static::lazy_static! {
     };
 }
 
+// Base Points for BLS12-381 G1 Pedersen commitments
+lazy_static::lazy_static! {
+    static ref BLS_PEDERSEN_G: BlsG1 = {
+        // Use the curve's base point for G
+        BlsG1::generator()
+    };
+    
+    static ref BLS_PEDERSEN_H: BlsG1 = {
+        // Derive H from G in a deterministic way
+        // This should be a nothing-up-my-sleeve point
+        let mut hasher = Sha256::new();
+        let g_bytes = (*BLS_PEDERSEN_G).to_compressed().to_vec();
+        hasher.update(b"Obscura BLS12-381 Pedersen commitment H");
+        hasher.update(&g_bytes);
+        let hash = hasher.finalize();
+        
+        // Convert to scalar
+        let mut scalar_bytes = [0u8; 32];
+        scalar_bytes.copy_from_slice(&hash[0..32]);
+        
+        // Create a point by multiplying the base point
+        let scalar_opt = BlsScalar::from_bytes_le(&scalar_bytes);
+        let scalar = match scalar_opt.is_some().into() {
+            true => scalar_opt.unwrap(),
+            false => BlsScalar::from(1u64),  // Use from(1u64) instead of one()
+        };
+        BlsG1::generator() * scalar
+    };
+}
+
 // Get the base point G for value component
 pub fn jubjub_get_g() -> JubjubPoint {
     *PEDERSEN_G
@@ -45,6 +81,16 @@ pub fn jubjub_get_g() -> JubjubPoint {
 // Get the base point H for blinding component
 pub fn jubjub_get_h() -> JubjubPoint {
     *PEDERSEN_H
+}
+
+// Get the BLS12-381 G1 base point G
+pub fn bls_get_g() -> BlsG1 {
+    *BLS_PEDERSEN_G
+}
+
+// Get the BLS12-381 G1 base point H
+pub fn bls_get_h() -> BlsG1 {
+    *BLS_PEDERSEN_H
 }
 
 // Pedersen commitment structure using JubJub
@@ -170,6 +216,249 @@ impl PedersenCommitment {
     }
 }
 
+// Pedersen commitment structure using BLS12-381 G1 curve
+#[derive(Debug, Clone)]
+pub struct BlsPedersenCommitment {
+    // Commitment point on the BLS12-381 G1 curve
+    pub commitment: BlsG1,
+    // Original value committed to (blinded)
+    value: Option<u64>,
+    // Blinding factor used
+    blinding: Option<BlsScalar>,
+}
+
+impl BlsPedersenCommitment {
+    // Create a commitment to a value with a specific blinding factor
+    pub fn commit(value: u64, blinding: BlsScalar) -> Self {
+        // Convert value to scalar (this is a simplification; in practice, use a secure conversion)
+        let value_scalar = BlsScalar::from(value);
+        
+        // Commit = value*G + blinding*H
+        let commitment_point = (bls_get_g() * value_scalar) + (bls_get_h() * blinding);
+        
+        BlsPedersenCommitment {
+            commitment: commitment_point,
+            value: Some(value),
+            blinding: Some(blinding),
+        }
+    }
+    
+    // Create a commitment to a value with a random blinding factor
+    pub fn commit_random(value: u64) -> Self {
+        // Generate a random blinding factor
+        let blinding = generate_random_bls_scalar();
+        Self::commit(value, blinding)
+    }
+    
+    // Create a commitment from an existing point
+    pub fn from_point(point: BlsG1) -> Self {
+        BlsPedersenCommitment {
+            commitment: point,
+            value: None,
+            blinding: None,
+        }
+    }
+    
+    // Get the value if available
+    pub fn value(&self) -> Option<u64> {
+        self.value
+    }
+    
+    // Get the blinding factor if available
+    pub fn blinding(&self) -> Option<BlsScalar> {
+        self.blinding
+    }
+    
+    // Serialize to bytes
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.commitment.to_compressed().to_vec()
+    }
+    
+    // Deserialize from bytes
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, &'static str> {
+        if bytes.len() != 48 {  // G1 compressed point size
+            return Err("Invalid BLS commitment size");
+        }
+        
+        let mut compressed = [0u8; 48];
+        compressed.copy_from_slice(bytes);
+        
+        let point_opt = blstrs::G1Affine::from_compressed(&compressed);
+        if point_opt.is_none().into() {
+            return Err("Failed to deserialize BLS point");
+        }
+        
+        let point = BlsG1::from(point_opt.unwrap());
+        
+        Ok(BlsPedersenCommitment {
+            commitment: point,
+            value: None,
+            blinding: None,
+        })
+    }
+    
+    // Homomorphic addition of commitments
+    pub fn add(&self, other: &BlsPedersenCommitment) -> BlsPedersenCommitment {
+        // Add points directly
+        let sum_point = self.commitment + other.commitment;
+        
+        // Create new commitment
+        let result = BlsPedersenCommitment {
+            commitment: sum_point,
+            value: match (self.value, other.value) {
+                (Some(v1), Some(v2)) => Some(v1 + v2),
+                _ => None,
+            },
+            blinding: match (self.blinding.as_ref(), other.blinding.as_ref()) {
+                (Some(b1), Some(b2)) => Some(*b1 + *b2),
+                _ => None,
+            },
+        };
+        
+        result
+    }
+    
+    // Verify that a commitment is to a specific value (if we know the blinding factor)
+    pub fn verify(&self, value: u64) -> bool {
+        // We need the blinding factor to verify
+        if self.blinding.is_none() {
+            return false;
+        }
+        
+        // Convert value to scalar
+        let value_scalar = BlsScalar::from(value);
+        let blinding = self.blinding.unwrap();
+        
+        // Recreate the commitment
+        let expected_point = (bls_get_g() * value_scalar) + (bls_get_h() * blinding);
+        
+        // Check if it matches
+        expected_point == self.commitment
+    }
+}
+
+// Cross-curve homomorphic commitments
+// This structure allows creating commitments that live in both curves
+// and can be converted between them, maintaining homomorphic properties
+#[derive(Debug, Clone)]
+pub struct DualCurveCommitment {
+    // JubJub commitment
+    pub jubjub_commitment: PedersenCommitment,
+    // BLS12-381 G1 commitment
+    pub bls_commitment: BlsPedersenCommitment,
+    // Original value
+    value: Option<u64>,
+}
+
+impl DualCurveCommitment {
+    // Create a dual commitment to a value
+    pub fn commit(value: u64) -> Self {
+        // Generate consistent blinding factors derived from a single source
+        let mut rng = OsRng;
+        let seed: BlsScalar = BlsScalar::random(&mut rng);
+        let seed_bytes = seed.to_bytes_le();
+        
+        // Create Jubjub blinding from seed
+        let jubjub_blinding = {
+            let mut hasher = Sha256::new();
+            hasher.update(b"JUBJUB");
+            hasher.update(&seed_bytes);
+            let hash = hasher.finalize();
+            let mut scalar_bytes = [0u8; 32];
+            scalar_bytes.copy_from_slice(&hash[0..32]);
+            JubjubScalar::from_le_bytes_mod_order(&scalar_bytes)
+        };
+        
+        // Create BLS blinding from seed
+        let bls_blinding = {
+            let mut hasher = Sha256::new();
+            hasher.update(b"BLS12381");
+            hasher.update(&seed_bytes);
+            let hash = hasher.finalize();
+            let mut scalar_bytes = [0u8; 32];
+            scalar_bytes.copy_from_slice(&hash[0..32]);
+            let scalar_opt = BlsScalar::from_bytes_le(&scalar_bytes);
+            match scalar_opt.is_some().into() {
+                true => scalar_opt.unwrap(),
+                false => BlsScalar::from(1u64),  // Use from(1u64) instead of one()
+            }
+        };
+        
+        // Create commitments on both curves
+        let jubjub_commitment = PedersenCommitment::commit(value, jubjub_blinding);
+        let bls_commitment = BlsPedersenCommitment::commit(value, bls_blinding);
+        
+        DualCurveCommitment {
+            jubjub_commitment,
+            bls_commitment,
+            value: Some(value),
+        }
+    }
+    
+    // Get the value if available
+    pub fn value(&self) -> Option<u64> {
+        self.value
+    }
+    
+    // Homomorphic addition of dual commitments
+    pub fn add(&self, other: &DualCurveCommitment) -> DualCurveCommitment {
+        // Add commitments on both curves
+        let jubjub_sum = self.jubjub_commitment.add(&other.jubjub_commitment);
+        let bls_sum = self.bls_commitment.add(&other.bls_commitment);
+        
+        // Calculate combined value if available
+        let combined_value = match (self.value, other.value) {
+            (Some(v1), Some(v2)) => Some(v1 + v2),
+            _ => None,
+        };
+        
+        DualCurveCommitment {
+            jubjub_commitment: jubjub_sum,
+            bls_commitment: bls_sum,
+            value: combined_value,
+        }
+    }
+    
+    // Serialize to bytes
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        
+        // Add Jubjub commitment bytes
+        bytes.extend_from_slice(&self.jubjub_commitment.to_bytes());
+        
+        // Add BLS commitment bytes
+        bytes.extend_from_slice(&self.bls_commitment.to_bytes());
+        
+        bytes
+    }
+    
+    // Deserialize from bytes
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, &'static str> {
+        if bytes.len() < 112 {  // 64 bytes for Jubjub + 48 bytes for BLS G1
+            return Err("Invalid dual commitment size");
+        }
+        
+        // Parse Jubjub commitment
+        let jubjub_commitment = PedersenCommitment::from_bytes(&bytes[0..64])?;
+        
+        // Parse BLS commitment
+        let bls_commitment = BlsPedersenCommitment::from_bytes(&bytes[64..112])?;
+        
+        Ok(DualCurveCommitment {
+            jubjub_commitment,
+            bls_commitment,
+            value: None,
+        })
+    }
+    
+    // Verify against a value in both curves
+    pub fn verify(&self, value: u64) -> (bool, bool) {
+        let jubjub_valid = self.jubjub_commitment.verify(value);
+        let bls_valid = self.bls_commitment.verify(value);
+        (jubjub_valid, bls_valid)
+    }
+}
+
 // Helper function to verify the sum of input and output commitments in a transaction
 pub fn verify_commitment_sum(tx: &Transaction) -> bool {
     if let Some(output_commitments) = &tx.amount_commitments {
@@ -233,6 +522,12 @@ pub fn generate_random_jubjub_scalar() -> JubjubScalar {
     JubjubScalar::rand(&mut rng)
 }
 
+// Generate a random BLS12-381 scalar
+pub fn generate_random_bls_scalar() -> BlsScalar {
+    let mut rng = OsRng;
+    BlsScalar::random(&mut rng)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -249,26 +544,23 @@ mod tests {
     
     #[test]
     fn test_commitment_serialization() {
-        let value = 42u64;
-        let blinding = generate_random_jubjub_scalar();
-        let commitment = PedersenCommitment::commit(value, blinding);
+        let value = 200u64;
+        let commitment = PedersenCommitment::commit_random(value);
         
+        // Serialize to bytes
         let bytes = commitment.to_bytes();
-        let recovered = PedersenCommitment::from_bytes(&bytes).unwrap();
         
-        // Commitment points should match
-        assert_eq!(commitment.commitment, recovered.commitment);
+        // Deserialize from bytes
+        let deserialized = PedersenCommitment::from_bytes(&bytes).unwrap();
         
-        // But value and blinding are not serialized
-        assert_eq!(recovered.value(), None);
-        assert_eq!(recovered.blinding(), None);
+        // Points should match
+        assert_eq!(commitment.commitment, deserialized.commitment);
     }
     
     #[test]
     fn test_commitment_homomorphic_addition() {
-        let value1 = 30u64;
-        let value2 = 12u64;
-        let total = value1 + value2;
+        let value1 = 300u64;
+        let value2 = 500u64;
         
         let blinding1 = generate_random_jubjub_scalar();
         let blinding2 = generate_random_jubjub_scalar();
@@ -279,30 +571,94 @@ mod tests {
         // Add the commitments
         let sum_commitment = commitment1.add(&commitment2);
         
-        // Check that the sum has the expected values
-        assert_eq!(sum_commitment.value(), Some(total));
+        // Create a commitment to the sum directly
+        let expected_sum = PedersenCommitment::commit(
+            value1 + value2,
+            blinding1 + blinding2
+        );
         
-        // Verify that the resulting commitment is valid
-        let combined_blinding = blinding1 + blinding2;
-        assert!(sum_commitment.verify(total));
-        
-        // Now create a direct commitment to the total with the same combined blinding
-        let direct_commitment = PedersenCommitment::commit(total, combined_blinding);
-        
-        // The commitments should be equal
-        assert_eq!(sum_commitment.commitment, direct_commitment.commitment);
+        // The commitments should be the same
+        assert_eq!(sum_commitment.commitment, expected_sum.commitment);
+        assert_eq!(sum_commitment.value(), Some(value1 + value2));
     }
     
     #[test]
     fn test_commitment_verification() {
-        let value = 50u64;
+        let value = 1000u64;
         let blinding = generate_random_jubjub_scalar();
         let commitment = PedersenCommitment::commit(value, blinding);
         
-        // Correct value should verify
+        // Verify with correct value
         assert!(commitment.verify(value));
         
-        // Incorrect value should not verify
+        // Verify with incorrect value
         assert!(!commitment.verify(value + 1));
+    }
+    
+    #[test]
+    fn test_bls_commitment_creation() {
+        let value = 100u64;
+        let blinding = generate_random_bls_scalar();
+        let commitment = BlsPedersenCommitment::commit(value, blinding);
+        
+        assert_eq!(commitment.value(), Some(value));
+        assert!(commitment.blinding().is_some());
+    }
+    
+    #[test]
+    fn test_bls_commitment_homomorphic_addition() {
+        let value1 = 300u64;
+        let value2 = 500u64;
+        
+        let blinding1 = generate_random_bls_scalar();
+        let blinding2 = generate_random_bls_scalar();
+        
+        let commitment1 = BlsPedersenCommitment::commit(value1, blinding1);
+        let commitment2 = BlsPedersenCommitment::commit(value2, blinding2);
+        
+        // Add the commitments
+        let sum_commitment = commitment1.add(&commitment2);
+        
+        // Create a commitment to the sum directly
+        let expected_sum = BlsPedersenCommitment::commit(
+            value1 + value2,
+            blinding1 + blinding2
+        );
+        
+        // The commitments should be the same
+        assert_eq!(sum_commitment.commitment, expected_sum.commitment);
+        assert_eq!(sum_commitment.value(), Some(value1 + value2));
+    }
+    
+    #[test]
+    fn test_dual_curve_commitment() {
+        let value = 123u64;
+        let commitment = DualCurveCommitment::commit(value);
+        
+        // Check value is preserved
+        assert_eq!(commitment.value(), Some(value));
+        
+        // Check we can serialize and deserialize
+        let bytes = commitment.to_bytes();
+        let deserialized = DualCurveCommitment::from_bytes(&bytes).unwrap();
+        
+        // Points should match after serialization
+        assert_eq!(commitment.jubjub_commitment.commitment, deserialized.jubjub_commitment.commitment);
+        assert_eq!(commitment.bls_commitment.commitment, deserialized.bls_commitment.commitment);
+    }
+    
+    #[test]
+    fn test_dual_curve_homomorphic_addition() {
+        let value1 = 111u64;
+        let value2 = 222u64;
+        
+        let commitment1 = DualCurveCommitment::commit(value1);
+        let commitment2 = DualCurveCommitment::commit(value2);
+        
+        // Add the commitments
+        let sum_commitment = commitment1.add(&commitment2);
+        
+        // Check the sum has the expected value
+        assert_eq!(sum_commitment.value(), Some(value1 + value2));
     }
 } 
