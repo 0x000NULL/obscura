@@ -1,8 +1,6 @@
 use rand::Rng;
 use sha2::{Sha256, Digest};
 use rand::rngs::OsRng;
-use crate::crypto::pedersen::generate_random_jubjub_scalar;
-use crate::crypto::jubjub::JubjubScalar;
 
 // Range Proof structure for proving a value is within a range without revealing it
 #[derive(Debug, Clone)]
@@ -167,7 +165,7 @@ pub fn batch_verify_range_proofs(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crypto::pedersen::PedersenCommitment;
+    use crate::crypto::pedersen::{PedersenCommitment, generate_random_jubjub_scalar};
     
     #[test]
     fn test_range_proof_creation() {

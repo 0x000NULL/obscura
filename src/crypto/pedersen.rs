@@ -4,7 +4,6 @@ use crate::blockchain::Transaction;
 use ark_ed_on_bls12_381::{EdwardsProjective as JubjubPoint, EdwardsAffine, Fr as JubjubScalar};
 use ark_std::UniformRand;
 use ark_serialize::{CanonicalSerialize, CanonicalDeserialize};
-use ark_ec::Group;
 use ark_ff::PrimeField;
 use crate::crypto::jubjub::{JubjubPointExt, JubjubScalarExt};
 

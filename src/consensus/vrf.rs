@@ -1,6 +1,5 @@
 use crate::crypto::jubjub::{JubjubKeypair, JubjubPoint, JubjubSignature, JubjubPointExt};
 use sha2::{Digest, Sha256};
-use ark_ec::Group;
 
 /// VRF (Verifiable Random Function) implementation for validator selection
 /// This is a simplified implementation based on the JubJub signature scheme

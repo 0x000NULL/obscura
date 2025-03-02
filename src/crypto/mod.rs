@@ -1,7 +1,4 @@
 use crate::blockchain::Transaction;
-use rand::rngs::OsRng;
-use std::fmt;
-use rand::Rng;
 use sha2::{Sha256, Digest};
 
 // Add the privacy module

@@ -4,16 +4,15 @@ use crate::crypto::jubjub::{JubjubKeypair, generate_keypair};
 #[test]
 fn test_key_generation() {
     let keypair = generate_keypair();
-    assert!(keypair.is_some());
-
+    
     let message = b"test message";
-    let signature = keypair.as_ref().unwrap().sign(message).expect("Signing failed");
-    assert!(keypair.unwrap().public.verify(message, &signature).is_ok());
+    let signature = keypair.sign(message).expect("Signing failed");
+    assert!(keypair.public.verify(message, &signature));
 }
 
 #[test]
 fn test_key_serialization() {
-    let keypair = generate_keypair().unwrap();
+    let keypair = generate_keypair();
     let keypair_tuple = (keypair.secret, keypair.public);
     let serialized = serialize_keypair(&keypair_tuple);
     let deserialized = deserialize_keypair(&serialized).unwrap();
@@ -23,7 +22,7 @@ fn test_key_serialization() {
 
 #[test]
 fn test_key_encryption() {
-    let keypair = generate_keypair().unwrap();
+    let keypair = generate_keypair();
     let keypair_tuple = (keypair.secret, keypair.public);
     let password = b"test password";
     let password_str = std::str::from_utf8(password).unwrap();

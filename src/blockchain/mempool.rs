@@ -7,7 +7,7 @@ use crate::crypto::bulletproofs::{RangeProof, verify_range_proof};
 use crate::crypto::pedersen::{PedersenCommitment, verify_commitment_sum};
 use crate::crypto::jubjub::{JubjubPoint, JubjubSignature, JubjubPointExt};
 use sha2::{Sha256, Digest, digest::{self, OutputSizeUser}};
-use blake2::{Blake2b, Blake2s, Blake2bCore, Blake2sCore};
+use blake2::{Blake2b, Blake2s};
 use hex;
 use sha2::digest::generic_array::GenericArray;
 

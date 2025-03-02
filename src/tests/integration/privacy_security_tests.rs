@@ -3,6 +3,7 @@ use crate::consensus::StakeProof;
 use crate::networking::{Node, dandelion::PrivacyRoutingMode};
 use crate::wallet::Wallet;
 use crate::tests::common::{create_test_block, create_test_stake_proof};
+use crate::crypto::jubjub::{JubjubPointExt, JubjubScalarExt};
 use std::time::Duration;
 use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 use std::collections::HashMap;
@@ -180,7 +181,7 @@ fn test_private_transaction_validation() {
     
     // Create a private transaction from wallet 0 to wallet 1
     let recipient_pubkey = wallets[1].keypair.as_ref().unwrap().public;
-    let mut tx = wallets[0].create_transaction(recipient_pubkey, 100_000).unwrap();
+    let mut tx = wallets[0].create_transaction(&recipient_pubkey, 100_000).unwrap();
     
     // Ensure privacy flags are set for testing purposes
     tx.privacy_flags = 0x03; // Set both obfuscation and stealth addressing flags
@@ -223,7 +224,7 @@ fn test_stealth_address_transaction_privacy() {
     
     // Create transaction
     let recipient_pubkey = recipient_wallet.keypair.as_ref().unwrap().public;
-    let mut tx = sender_wallet.create_transaction(recipient_pubkey, 250_000).unwrap();
+    let mut tx = sender_wallet.create_transaction(&recipient_pubkey, 250_000).unwrap();
     
     // Manually apply stealth addressing for testing purposes
     // 1. Create mock ephemeral keys
@@ -241,10 +242,10 @@ fn test_stealth_address_transaction_privacy() {
     // 5. Manually derive the stealth address as we would in the real implementation
     let mut hasher = sha2::Sha256::new();
     hasher.update(&ephemeral_key);
-    hasher.update(secret_key.as_bytes());
+    hasher.update(secret_key.to_bytes());
     let shared_secret = hasher.finalize();
     
-    let recipient_pubkey_bytes = recipient_pubkey.as_bytes();
+    let recipient_pubkey_bytes = recipient_pubkey.to_bytes();
     let mut hasher = sha2::Sha256::new();
     hasher.update(&shared_secret);
     hasher.update(recipient_pubkey_bytes);
@@ -294,7 +295,7 @@ fn test_confidential_transactions_amount_hiding() {
     
     // Create transaction with confidential amounts
     let recipient_pubkey = recipient_wallet.keypair.as_ref().unwrap().public;
-    let tx = sender_wallet.create_transaction(recipient_pubkey, 150_000).unwrap();
+    let tx = sender_wallet.create_transaction(&recipient_pubkey, 150_000).unwrap();
     
     // Verify confidential transactions features are applied
     assert!(tx.amount_commitments.is_some(), "Transaction should have amount commitments");
@@ -328,7 +329,7 @@ fn test_integrated_privacy_and_consensus() {
     
     // Create a private transaction
     let recipient_pubkey = wallets[1].keypair.as_ref().unwrap().public;
-    let mut tx = wallets[0].create_transaction(recipient_pubkey, 200_000).unwrap();
+    let mut tx = wallets[0].create_transaction(&recipient_pubkey, 200_000).unwrap();
     
     // Ensure privacy flags are set for testing
     tx.privacy_flags = 0x03; // Set both obfuscation and stealth addressing flags
@@ -399,7 +400,7 @@ fn test_privacy_dandelion_stem_phase() {
     
     // Create a private transaction
     let recipient_pubkey = wallets[5].keypair.as_ref().unwrap().public;
-    let tx = wallets[0].create_transaction(recipient_pubkey, 75_000).unwrap();
+    let tx = wallets[0].create_transaction(&recipient_pubkey, 75_000).unwrap();
     
     // Add the transaction to first node, it should enter stem phase
     nodes[0].add_transaction_with_privacy(tx.clone(), PrivacyRoutingMode::Standard);

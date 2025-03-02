@@ -2,18 +2,16 @@
 // This placeholder will be replaced with a proper implementation later
 
 use rand::rngs::OsRng;
-use rand::RngCore;  // Import RngCore trait for fill_bytes
+  // Import RngCore trait for fill_bytes
 use sha2::{Sha256, Digest};
-use ark_ed_on_bls12_381::{EdwardsProjective, EdwardsAffine, Fr, JubjubConfig};
-use ark_std::{UniformRand, rand::SeedableRng};
+use ark_ed_on_bls12_381::{EdwardsProjective, EdwardsAffine, Fr};
+use ark_std::UniformRand;
 use ark_serialize::{CanonicalSerialize, CanonicalDeserialize};
-use std::ops::{Add, Mul};
 
 // Add derive traits for JubjubKeypair
-use std::fmt::{self, Debug};
-use serde::{Serialize, Deserialize};
-use ark_ec::{Group, CurveGroup, AffineRepr};
-use ark_ff::{PrimeField, Field, Zero, One};
+use std::fmt::{Debug};
+use ark_ec::AffineRepr;
+use ark_ff::{PrimeField, Zero, One};
 
 /// Placeholder for Jubjub params
 pub struct JubjubParams;
@@ -385,33 +383,68 @@ pub fn generator() -> JubjubPoint {
 mod tests {
     use super::*;
     
-    // These tests are placeholders that would need to be updated
-    // with actual implementations once the Jubjub library is properly integrated
-    
     #[test]
-    #[ignore] // Ignore until implementation is complete
     fn test_keypair_generation() {
-        let (_sk, _pk) = generate_keypair();
-        // Assert statements would go here
+        let keypair = generate_keypair();
+        assert_ne!(keypair.public, JubjubPoint::default());
+        
+        // Verify that the public key is correctly derived from the secret key
+        let expected_public = <JubjubPoint as JubjubPointExt>::generator() * keypair.secret;
+        assert_eq!(keypair.public, expected_public);
     }
     
     #[test]
-    #[ignore] // Ignore until implementation is complete
     fn test_sign_and_verify() {
-        let (_sk, _pk) = generate_keypair();
+        let keypair = generate_keypair();
         let message = b"test message";
         
-        //let signature = sign(&sk, message);
-        //assert!(verify(&pk, message, &signature));
+        let signature = sign(&keypair.secret, message);
+        assert!(verify(&keypair.public, message, &signature));
+        
+        // Test that verification fails with wrong message
+        let wrong_message = b"wrong message";
+        assert!(!verify(&keypair.public, wrong_message, &signature));
     }
     
     #[test]
-    #[ignore] // Ignore until implementation is complete
     fn test_stealth_address() {
-        let (_sk, _pk) = generate_keypair();
+        let recipient_keypair = generate_keypair();
         
-        //let (ephemeral_key, stealth_address) = create_stealth_address(&pk);
-        //let recovered_sk = recover_stealth_private_key(&sk, &ephemeral_key);
-        // Assert that recovered_sk corresponds to stealth_address
+        let (ephemeral_key, stealth_address) = create_stealth_address(&recipient_keypair.public);
+        let stealth_private_key = recover_stealth_private_key(&recipient_keypair.secret, &(<JubjubPoint as JubjubPointExt>::generator() * ephemeral_key));
+        
+        // Verify that the stealth private key corresponds to the stealth address
+        let derived_public = <JubjubPoint as JubjubPointExt>::generator() * stealth_private_key;
+        assert_eq!(derived_public, stealth_address);
+    }
+    
+    #[test]
+    fn test_keypair_methods() {
+        let keypair = generate_keypair();
+        let message = b"test signing with keypair methods";
+        
+        // Test signature creation and verification using the keypair methods
+        let signature = keypair.sign(message).expect("Signature creation should succeed");
+        assert!(keypair.verify(message, &signature));
+        
+        // Test serialization and deserialization
+        let keypair_bytes = keypair.to_bytes();
+        let restored_keypair = JubjubKeypair::from_bytes(&keypair_bytes).expect("Keypair restoration should succeed");
+        
+        assert_eq!(restored_keypair.public, keypair.public);
+        assert_eq!(restored_keypair.secret, keypair.secret);
+    }
+    
+    #[test]
+    fn test_diffie_hellman() {
+        let alice_keypair = generate_keypair();
+        let bob_keypair = generate_keypair();
+        
+        // Calculate shared secrets
+        let alice_shared = diffie_hellman(&alice_keypair.secret, &bob_keypair.public);
+        let bob_shared = diffie_hellman(&bob_keypair.secret, &alice_keypair.public);
+        
+        // Both parties should arrive at the same shared secret
+        assert_eq!(alice_shared, bob_shared);
     }
 } 

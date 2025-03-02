@@ -72,7 +72,7 @@ pub struct TransactionOutput {
     pub public_key_script: Vec<u8>,
 }
 
-#[derive(Clone, Eq, Hash, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Eq, Hash, PartialEq, Debug, Serialize, Deserialize, Copy)]
 pub struct OutPoint {
     pub transaction_hash: [u8; 32],
     pub index: u32,
@@ -114,6 +114,31 @@ impl UTXOSet {
 
     pub fn get_utxo(&self, outpoint: &OutPoint) -> Option<&TransactionOutput> {
         self.utxos.get(outpoint)
+    }
+
+    // Add new methods for testing
+    pub fn add_utxo(&mut self, outpoint: OutPoint, output: TransactionOutput) {
+        self.utxos.insert(outpoint, output);
+    }
+
+    pub fn spend_utxo(&mut self, outpoint: &OutPoint) {
+        self.utxos.remove(outpoint);
+    }
+
+    pub fn validate_transaction(&self, tx: &Transaction) -> bool {
+        // Basic validation: check that all inputs refer to existing UTXOs
+        for input in &tx.inputs {
+            if !self.contains(&input.previous_output) {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+impl Default for UTXOSet {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

@@ -1,6 +1,5 @@
 use super::*;
 use crate::crypto::jubjub::{JubjubPoint, JubjubSignature, JubjubPointExt, generate_keypair};
-use rand::thread_rng;
 
 // Include the block structure tests
 #[cfg(test)]

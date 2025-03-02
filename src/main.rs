@@ -14,6 +14,7 @@ use log::{info, error, debug};
 use crate::consensus::HybridConsensus;
 use crate::networking::Node;
 use crate::crypto::jubjub::JubjubKeypair;
+use crate::utils::{current_time, is_timestamp_valid, time_since, format_time_diff};
 
 // Initialize cryptographic components
 fn init_crypto() -> Option<JubjubKeypair> {
@@ -59,65 +60,114 @@ fn init_networking() -> Node {
 // Start network services
 fn start_network_services(mempool: Arc<Mutex<blockchain::mempool::Mempool>>) -> thread::JoinHandle<()> {
     info!("Starting network services...");
-    let _mempool_clone = Arc::clone(&mempool);
-    thread::spawn(move || {
-        debug!("Network service thread started");
-        // Simulate network activity
+    // Would normally initialize P2P server and client here
+    
+    // Simulate network activity in a background thread
+    let handle = thread::spawn(move || {
         loop {
-            thread::sleep(Duration::from_secs(10));
-            debug!("Network heartbeat: checking for new peers and messages");
-            // Here we would normally handle incoming connections, sync with peers, etc.
+            thread::sleep(Duration::from_secs(5));
+            // This is where we would process network messages
+            
+            // Log timing information using our utility functions
+            let start_time = current_time();
+            process_mempool(&mempool);
+            let elapsed = time_since(start_time);
+            
+            // Only log if processing took longer than 1 second
+            if elapsed > 1 {
+                info!("Mempool processing took {} seconds", elapsed);
+            }
         }
-    })
+    });
+    
+    handle
 }
 
-// Process mempool transactions
+// Process transactions in the mempool
 fn process_mempool(mempool: &Arc<Mutex<blockchain::mempool::Mempool>>) -> usize {
-    let mempool_size = mempool.lock().unwrap().size();
-    if mempool_size > 0 {
-        info!("Processing {} transactions in mempool", mempool_size);
-        // Here we would process transactions and potentially create a new block
-    }
-    mempool_size
+    let lock = mempool.lock().unwrap();
+    // In a real implementation, we would:
+    // 1. Get a list of transactions from the mempool
+    // 2. Validate each transaction
+    // 3. Create a new block with valid transactions
+    // 4. Submit the block to the consensus engine
+    
+    // For now, just return a placeholder count
+    lock.size()
 }
 
-// Main loop
+// Main application loop
 fn run_main_loop(mempool: Arc<Mutex<blockchain::mempool::Mempool>>) {
-    info!("Node is running. Press Ctrl+C to stop.");
-    let running = true;
-    while running {
-        // Process any pending transactions in the mempool
-        process_mempool(&mempool);
-        
-        // Sleep to avoid high CPU usage
+    info!("Entering main application loop...");
+    
+    let start_time = current_time();
+    
+    loop {
+        // Process any pending tasks
         thread::sleep(Duration::from_secs(1));
         
-        // In a real implementation, we would check for interrupt signals here
-        // if interrupt_received() { running = false; }
+        // Periodically process transactions in the mempool
+        if time_since(start_time) % 5 == 0 {
+            let processed = process_mempool(&mempool);
+            if processed > 0 {
+                debug!("Processed {} transactions from mempool", processed);
+            }
+        }
+        
+        // Log uptime every minute using our time formatting utility
+        let uptime = time_since(start_time);
+        if uptime % 60 == 0 && uptime > 0 {
+            info!("Node has been running for {}", format_time_diff(start_time, false));
+            info!("Current mempool size: {}", mempool.lock().unwrap().size());
+        }
+        
+        // Check if we need to perform hourly maintenance tasks
+        if uptime % 3600 == 0 && uptime > 0 {
+            perform_maintenance_tasks();
+        }
     }
+}
+
+// Perform periodic maintenance tasks
+fn perform_maintenance_tasks() {
+    debug!("Performing maintenance tasks...");
+    
+    // Record the timestamp for this maintenance run
+    let maintenance_timestamp = current_time();
+    
+    // Validate that the maintenance timestamp is reasonable
+    // This could help detect system clock issues
+    if !is_timestamp_valid(maintenance_timestamp, 60, 60) {
+        error!("System clock may have changed unexpectedly!");
+    }
+    
+    // Perform various maintenance tasks here...
+    
+    debug!("Maintenance tasks completed");
 }
 
 fn main() {
-    // Initialize logging
-    env_logger::init();
-    info!("Obscura OBX Node Starting...");
+    // Initialize logger (not implemented in this example)
     
-    // Initialize components
-    let keypair = match init_crypto() {
-        Some(kp) => kp,
-        None => return,
-    };
+    info!("Starting Obscura node...");
+    info!("Current time: {}", current_time());
     
+    // Initialize system components
+    let keypair = init_crypto().unwrap();
     let wallet = init_wallet(Some(keypair));
     let (mempool, utxo_set) = init_blockchain();
     let consensus_engine = init_consensus();
     let node = init_networking();
     
-    // Start network services
+    // Start network services in a background thread
     let network_handle = start_network_services(Arc::clone(&mempool));
     
-    // Run main loop
+    // Enter the main application loop
     run_main_loop(mempool);
     
-    info!("Obscura OBX Node shutting down...");
+    // We'll never reach this point in the current implementation
+    // But in a real app we would join the network thread before exiting
+    // network_handle.join().unwrap();
+    
+    info!("Obscura node shutting down...");
 }

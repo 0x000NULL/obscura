@@ -1,8 +1,7 @@
 use super::*;
 use crate::crypto::jubjub::generate_keypair;
-use crate::blockchain::{Transaction, TransactionInput, TransactionOutput, OutPoint};
-use crate::crypto::jubjub::{JubjubKeypair, JubjubPointExt};
-use rand::thread_rng;
+use crate::blockchain::{Transaction, TransactionOutput};
+use crate::crypto::jubjub::JubjubPointExt;
 
 #[allow(dead_code)]
 pub fn create_test_transaction() -> Transaction {

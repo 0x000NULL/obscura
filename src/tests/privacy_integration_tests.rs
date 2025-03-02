@@ -23,7 +23,7 @@ fn test_transaction_privacy() {
     
     // Create a transaction with privacy features
     let recipient_pubkey = recipient_wallet.keypair.as_ref().unwrap().public;
-    let tx = sender_wallet.create_transaction(recipient_pubkey, 500).unwrap();
+    let tx = sender_wallet.create_transaction(&recipient_pubkey, 500).unwrap();
     
     // Verify privacy features are applied
     assert_ne!(tx.privacy_flags, 0);
@@ -69,8 +69,8 @@ fn test_transaction_linkability_attack() {
     let recipient1_pubkey = recipient1_wallet.keypair.as_ref().unwrap().public;
     let recipient2_pubkey = recipient2_wallet.keypair.as_ref().unwrap().public;
     
-    let tx1 = sender_wallet.create_transaction(recipient1_pubkey, 500).unwrap();
-    let tx2 = sender_wallet.create_transaction(recipient2_pubkey, 700).unwrap();
+    let tx1 = sender_wallet.create_transaction(&recipient1_pubkey, 500).unwrap();
+    let tx2 = sender_wallet.create_transaction(&recipient2_pubkey, 700).unwrap();
     
     // Check for linkability resistance
     
@@ -119,7 +119,7 @@ fn test_privacy_through_dandelion() {
     let recipient = generate_keypair().public;
     
     // Create transaction
-    let tx = wallet.create_transaction(recipient, 300).unwrap();
+    let tx = wallet.create_transaction(&recipient, 300).unwrap();
     let tx_hash = tx.hash();
     
     // Add transaction to Dandelion with privacy routing
@@ -182,11 +182,11 @@ fn test_amount_hiding_with_confidential_transactions() {
     let recipient2 = generate_keypair().public;
     
     // Create first transaction
-    let tx1 = wallet.create_transaction(recipient1, 500).unwrap();
+    let tx1 = wallet.create_transaction(&recipient1, 500).unwrap();
     let balance_after_tx1 = wallet.balance;
     
     // Create second transaction
-    let tx2 = wallet.create_transaction(recipient2, 700).unwrap();
+    let tx2 = wallet.create_transaction(&recipient2, 700).unwrap();
     
     // Both transactions should use confidential transactions
     assert!(tx1.amount_commitments.is_some());
@@ -248,7 +248,7 @@ fn test_multiple_wallet_privacy() {
     // Each wallet creates a transaction to the same recipient
     let mut transactions = Vec::new();
     for wallet in &mut wallets {
-        let tx = wallet.create_transaction(recipient, 200).unwrap();
+        let tx = wallet.create_transaction(&recipient, 200).unwrap();
         transactions.push(tx);
     }
     

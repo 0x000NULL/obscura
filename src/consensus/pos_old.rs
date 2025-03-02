@@ -6,7 +6,7 @@ use crate::consensus::pos::*;
 
 use crate::consensus::sharding::{ShardManager, Shard, CrossShardCommittee};
 use bincode;
-use crate::crypto::jubjub::{JubjubKeypair, JubjubPointExt, JubjubScalarExt, JubjubPoint, JubjubSignature};
+use crate::crypto::jubjub::{JubjubPointExt, JubjubPoint, JubjubSignature};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{SystemTime, UNIX_EPOCH};
