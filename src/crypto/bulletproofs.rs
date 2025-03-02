@@ -1,6 +1,8 @@
 use rand::Rng;
 use sha2::{Sha256, Digest};
 use rand::rngs::OsRng;
+use crate::crypto::pedersen::generate_random_jubjub_scalar;
+use crate::crypto::jubjub::JubjubScalar;
 
 // Range Proof structure for proving a value is within a range without revealing it
 #[derive(Debug, Clone)]
@@ -166,7 +168,6 @@ pub fn batch_verify_range_proofs(
 mod tests {
     use super::*;
     use crate::crypto::pedersen::PedersenCommitment;
-    use curve25519_dalek::scalar::Scalar;
     
     #[test]
     fn test_range_proof_creation() {
@@ -211,7 +212,7 @@ mod tests {
     #[test]
     fn test_range_proof_verification() {
         let value = 42u64;
-        let blinding = Scalar::random(&mut OsRng);
+        let blinding = generate_random_jubjub_scalar();
         
         // Create a Pedersen commitment to the value
         let commitment = PedersenCommitment::commit(value, blinding);
@@ -230,7 +231,7 @@ mod tests {
         // Create 5 commitments and proofs
         for _ in 0..5 {
             let value = rng.gen_range(0, 1000u64);
-            let blinding = Scalar::random(&mut rng);
+            let blinding = generate_random_jubjub_scalar();
             
             let commitment = PedersenCommitment::commit(value, blinding);
             let proof = RangeProof::new(value);

@@ -1,12 +1,15 @@
-use blstrs::{G1Projective, G2Projective, Scalar as BlsScalar};
-use group::Group;  // Import the Group trait for generator() method
-use ff::Field;  // Import the Field trait for random() method
+use blstrs::{G1Projective, G2Projective, Scalar as BlsScalar, G1Affine, G2Affine, Bls12, pairing};
+use group::{Curve, Group, GroupEncoding};  // Import Group traits
+use ff::Field;  // Import Field trait for random() method
 use sha2::{Sha256, Digest};
+use ark_std::rand::Rng;
+use rand::rngs::OsRng;
 
 /// BLS12-381 curve implementation for Obscura's cryptographic needs
 /// 
-/// This module provides functionality for the primary pairing-friendly curve
-/// used in the Obscura blockchain, primarily for zk-SNARK operations.
+/// This module provides a comprehensive implementation of the BLS12-381 curve
+/// used in the Obscura blockchain, primarily for zk-SNARK operations, signatures,
+/// and aggregated verification.
 
 /// Returns a zero scalar for BlsScalar
 fn scalar_zero() -> BlsScalar {
@@ -18,16 +21,13 @@ fn scalar_zero() -> BlsScalar {
 /// 
 /// Returns a tuple of (secret key, public key)
 pub fn generate_keypair() -> (BlsScalar, G2Projective) {
-    // Generate a secret key from a hardcoded value (FOR TESTING ONLY)
-    // In a real implementation, this would use a proper RNG
-    let seed = [1u8; 32]; // Predictable seed for testing
-    let sk = BlsScalar::from_bytes_be(&seed)
-        .unwrap_or_else(|| {
-            // If conversion fails, use a simple non-zero scalar
-            BlsScalar::from(1234567890u64)
-        });
+    // Create a secure random number generator
+    let mut rng = OsRng;
     
-    // Multiply by the generator to get the public key
+    // Generate a random secret key
+    let sk = BlsScalar::random(&mut rng);
+    
+    // Compute the public key as a point on G2
     let pk = G2Projective::generator() * sk;
     
     (sk, pk)
@@ -55,13 +55,21 @@ pub fn sign(secret_key: &BlsScalar, message: &[u8]) -> G1Projective {
 /// 
 /// # Returns
 /// True if the signature is valid
-pub fn verify(_public_key: &G2Projective, message: &[u8], _signature: &G1Projective) -> bool {
-    let _h = hash_to_g1(message);
+pub fn verify(public_key: &G2Projective, message: &[u8], signature: &G1Projective) -> bool {
+    let h = hash_to_g1(message);
     
-    // In a real implementation, this would use pairing to verify
-    // e(signature, g2) == e(h, public_key)
-    // For now, we'll just return true as a placeholder
-    true
+    // Convert to affine points for pairing
+    let g2_affine = G2Affine::from(*public_key);
+    let sig_affine = G1Affine::from(*signature);
+    let h_affine = G1Affine::from(h);
+    let g2_gen_affine = G2Affine::generator();
+    
+    // Compute the pairings
+    let pairing1 = pairing(&sig_affine, &g2_gen_affine);
+    let pairing2 = pairing(&h_affine, &g2_affine);
+    
+    // Verify: e(signature, g2) == e(h, public_key)
+    pairing1 == pairing2
 }
 
 /// Hash a message to a point on the G1 curve
@@ -72,24 +80,41 @@ pub fn verify(_public_key: &G2Projective, message: &[u8], _signature: &G1Project
 /// # Returns
 /// A point on the G1 curve
 fn hash_to_g1(message: &[u8]) -> G1Projective {
-    // In a real implementation, this would use a proper hash-to-curve algorithm
-    // For now, we'll just hash the message and use it as a scalar to multiply the generator
+    // This is a simplified hash-to-curve implementation
+    // In production, use a proper hash-to-curve algorithm like SWU
     
     // Hash the message
     let mut hasher = Sha256::new();
     hasher.update(message);
     let hash = hasher.finalize();
     
-    // Convert the hash to a scalar (use first 32 bytes)
-    let mut scalar_bytes = [0u8; 32];
-    scalar_bytes.copy_from_slice(&hash[0..32]);
-    
-    // Convert to scalar
-    let scalar = BlsScalar::from_bytes_be(&scalar_bytes)
-        .unwrap_or_else(|| scalar_zero());
-    
-    // Multiply the generator by the scalar
-    G1Projective::generator() * scalar
+    // Try different counter values until we find a valid point
+    let mut counter = 0u8;
+    loop {
+        let mut data = Vec::with_capacity(hash.len() + 1);
+        data.extend_from_slice(&hash);
+        data.push(counter);
+        
+        let mut hasher = Sha256::new();
+        hasher.update(&data);
+        let attempt = hasher.finalize();
+        
+        // Try to convert to a scalar
+        let mut scalar_bytes = [0u8; 32];
+        scalar_bytes.copy_from_slice(&attempt);
+        
+        // This is a simplified approach - proper implementation would use a 
+        // constant-time map-to-curve algorithm like SWU or Fouque-Tibouchi
+        if let Some(scalar) = BlsScalar::from_bytes(&scalar_bytes).into() {
+            return G1Projective::generator() * scalar;
+        }
+        
+        counter += 1;
+        if counter > 100 {
+            // Fallback to avoid infinite loop
+            return G1Projective::generator() * BlsScalar::from(42u64);
+        }
+    }
 }
 
 /// Aggregate multiple BLS signatures into a single signature
@@ -112,29 +137,30 @@ pub fn aggregate_signatures(signatures: &[G1Projective]) -> G1Projective {
 /// 
 /// # Returns
 /// True if the signature is valid
-pub fn verify_aggregated(_public_keys: &[G2Projective], messages: &[&[u8]], _aggregated_signature: &G1Projective) -> bool {
-    // In a real implementation, this would verify that
-    // e(aggregated_signature, g2) == ∏ e(hash_to_g1(messages[i]), public_keys[i])
-    
-    // For now, we'll just hash each message and return true as a placeholder
-    for message in messages {
-        let mut hasher = Sha256::new();
-        hasher.update(message);
-        let hash = hasher.finalize();
-        
-        // Convert to scalar (use first 32 bytes)
-        let mut scalar_bytes = [0u8; 32];
-        scalar_bytes.copy_from_slice(&hash[0..32]);
-        
-        // Convert the hash to a scalar
-        let challenge = BlsScalar::from_bytes_be(&scalar_bytes)
-            .unwrap_or_else(|| scalar_zero());
-        
-        // In a real implementation, we would use this challenge in the verification
-        let _ = challenge;
+pub fn verify_aggregated(public_keys: &[G2Projective], messages: &[&[u8]], aggregated_signature: &G1Projective) -> bool {
+    // The number of public keys must match the number of messages
+    if public_keys.len() != messages.len() || public_keys.is_empty() {
+        return false;
     }
     
-    true
+    // Convert aggregated signature to affine
+    let agg_sig_affine = G1Affine::from(*aggregated_signature);
+    
+    // Using the pairing-based verification approach
+    let mut lhs = pairing(&agg_sig_affine, &G2Affine::generator());
+    
+    // Compute right-hand side of the verification equation
+    let mut rhs = Bls12::identity();
+    for (pk, msg) in public_keys.iter().zip(messages.iter()) {
+        let h = hash_to_g1(msg);
+        let h_affine = G1Affine::from(h);
+        let pk_affine = G2Affine::from(*pk);
+        
+        rhs = rhs * pairing(&h_affine, &pk_affine);
+    }
+    
+    // Check if the pairings are equal
+    lhs == rhs
 }
 
 /// A proof of possession for a BLS public key
@@ -153,9 +179,14 @@ impl ProofOfPossession {
     /// # Returns
     /// A proof of possession
     pub fn new(secret_key: &BlsScalar) -> Self {
-        // In a real implementation, this would sign a specific message
-        // derived from the public key
-        let signature = G1Projective::generator() * secret_key;
+        // For a proof of possession, we sign a message derived from the public key
+        let public_key = G2Projective::generator() * (*secret_key);
+        
+        // Serialize the public key and use it as the message
+        let pk_bytes = public_key.to_bytes();
+        
+        // Sign the serialized public key
+        let signature = hash_to_g1(&pk_bytes) * (*secret_key);
         
         Self { signature }
     }
@@ -167,10 +198,25 @@ impl ProofOfPossession {
     /// 
     /// # Returns
     /// True if the proof is valid
-    pub fn verify(&self, _public_key: &G2Projective) -> bool {
-        // In a real implementation, this would verify the signature
-        // against a specific message derived from the public key
-        true
+    pub fn verify(&self, public_key: &G2Projective) -> bool {
+        // Serialize the public key to create the message
+        let pk_bytes = public_key.to_bytes();
+        
+        // Hash the serialized public key to a point
+        let h = hash_to_g1(&pk_bytes);
+        
+        // Convert to affine points for pairing
+        let g2_affine = G2Affine::from(*public_key);
+        let sig_affine = G1Affine::from(self.signature);
+        let h_affine = G1Affine::from(h);
+        let g2_gen_affine = G2Affine::generator();
+        
+        // Compute the pairings
+        let pairing1 = pairing(&sig_affine, &g2_gen_affine);
+        let pairing2 = pairing(&h_affine, &g2_affine);
+        
+        // Verify: e(signature, g2) == e(h, public_key)
+        pairing1 == pairing2
     }
 }
 
@@ -184,31 +230,32 @@ pub struct DLProof {
 
 impl DLProof {
     /// Create a proof of knowledge of the secret key corresponding to a public key
-    pub fn create(secret_key: &BlsScalar, _public_key: &G2Projective) -> Self {
-        // Use a deterministic approach for testing (NOT FOR PRODUCTION)
-        // In a real implementation, this would use a proper RNG
+    pub fn create(secret_key: &BlsScalar, public_key: &G2Projective) -> Self {
+        let mut rng = OsRng;
         
-        // Choose a deterministic blinding factor
-        let r_seed = [2u8; 32]; // Different predictable seed
-        let r = BlsScalar::from_bytes_be(&r_seed)
-            .unwrap_or_else(|| BlsScalar::from(9876543210u64));
+        // Choose a random blinding factor
+        let r = BlsScalar::random(&mut rng);
         
-        // Calculate commitment
+        // Calculate commitment R = r·G₁
         let commitment = G1Projective::generator() * r;
         
-        // Calculate challenge (in a real implementation, this would involve Fiat-Shamir)
+        // Serialize public key and commitment for challenge generation
+        let pk_bytes = public_key.to_bytes();
+        let commitment_bytes = commitment.to_bytes();
+        
+        // Calculate challenge e = H(P || R)
         let mut hasher = Sha256::new();
-        // Would need to serialize points properly in a real implementation
-        hasher.update(b"DL proof");
+        hasher.update(&pk_bytes);
+        hasher.update(&commitment_bytes);
         let hash = hasher.finalize();
         
         // Convert hash to scalar
         let mut bytes = [0u8; 32];
-        bytes.copy_from_slice(&hash[0..32]);
+        bytes.copy_from_slice(&hash);
         let challenge = BlsScalar::from_bytes_be(&bytes)
             .unwrap_or(scalar_zero());
         
-        // Calculate response: r + challenge * secret_key
+        // Calculate response s = r + e·sk
         let response = r + (challenge * secret_key);
         
         DLProof {
@@ -219,11 +266,42 @@ impl DLProof {
     }
     
     /// Verify a proof of knowledge
-    pub fn verify(&self, _public_key: &G2Projective) -> bool {
-        // In a real implementation, this would verify using pairings
-        // For now, we just return true as a placeholder
-        true
+    pub fn verify(&self, public_key: &G2Projective) -> bool {
+        // Recalculate the challenge
+        let pk_bytes = public_key.to_bytes();
+        let commitment_bytes = self.commitment.to_bytes();
+        
+        let mut hasher = Sha256::new();
+        hasher.update(&pk_bytes);
+        hasher.update(&commitment_bytes);
+        let hash = hasher.finalize();
+        
+        let mut bytes = [0u8; 32];
+        bytes.copy_from_slice(&hash);
+        let challenge = BlsScalar::from_bytes_be(&bytes)
+            .unwrap_or(scalar_zero());
+        
+        // Verify challenge matches
+        if challenge != self.challenge {
+            return false;
+        }
+        
+        // Verify response: s·G₁ = R + e·P (in G₁)
+        let left = G1Projective::generator() * self.response;
+        
+        // Map public key from G₂ to G₁ (simplified)
+        let pk_in_g1 = G1Projective::generator() * BlsScalar::from(42u64); // This is a placeholder
+        
+        let right = self.commitment + (pk_in_g1 * self.challenge);
+        
+        left == right
     }
+}
+
+/// Generate a random BLS scalar
+pub fn generate_random_scalar() -> BlsScalar {
+    let mut rng = OsRng;
+    BlsScalar::random(&mut rng)
 }
 
 #[cfg(test)]
@@ -235,6 +313,10 @@ mod tests {
         let (sk, pk) = generate_keypair();
         assert!(!bool::from(sk.is_zero()));
         assert_ne!(pk, G2Projective::identity());
+        
+        // Verify that public key is sk·G₂
+        let expected_pk = G2Projective::generator() * sk;
+        assert_eq!(pk, expected_pk);
     }
     
     #[test]
@@ -244,13 +326,59 @@ mod tests {
         
         let signature = sign(&sk, message);
         assert!(verify(&pk, message, &signature));
+        
+        // Test with incorrect message
+        let wrong_message = b"wrong message";
+        assert!(!verify(&pk, wrong_message, &signature));
+    }
+    
+    #[test]
+    fn test_aggregated_signatures() {
+        // Create multiple keypairs
+        let (sk1, pk1) = generate_keypair();
+        let (sk2, pk2) = generate_keypair();
+        
+        // Different messages for each signer
+        let msg1 = b"message 1";
+        let msg2 = b"message 2";
+        
+        // Sign messages
+        let sig1 = sign(&sk1, msg1);
+        let sig2 = sign(&sk2, msg2);
+        
+        // Aggregate signatures
+        let aggregated_sig = aggregate_signatures(&[sig1, sig2]);
+        
+        // Verify the aggregated signature
+        assert!(verify_aggregated(&[pk1, pk2], &[msg1, msg2], &aggregated_sig));
+        
+        // Verify that changing a message fails
+        assert!(!verify_aggregated(&[pk1, pk2], &[msg1, b"wrong message"], &aggregated_sig));
+    }
+    
+    #[test]
+    fn test_proof_of_possession() {
+        let (sk, pk) = generate_keypair();
+        
+        // Create a proof of possession
+        let pop = ProofOfPossession::new(&sk);
+        
+        // Verify the proof
+        assert!(pop.verify(&pk));
+        
+        // Verify that a different key fails
+        let (_, other_pk) = generate_keypair();
+        assert!(!pop.verify(&other_pk));
     }
     
     #[test]
     fn test_dl_proof() {
         let (sk, pk) = generate_keypair();
         
+        // Create a proof of knowledge
         let proof = DLProof::create(&sk, &pk);
+        
+        // Verify the proof
         assert!(proof.verify(&pk));
     }
 } 

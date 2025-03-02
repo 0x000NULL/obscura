@@ -1,5 +1,4 @@
 use crate::blockchain::Transaction;
-use ed25519_dalek::Keypair;
 use rand::rngs::OsRng;
 use std::fmt;
 use rand::Rng;
@@ -8,62 +7,54 @@ use sha2::{Sha256, Digest};
 // Add the privacy module
 pub mod privacy;
 
-// Add the new modules for cryptographic privacy features
+// Add crypto modules
 pub mod bulletproofs;
 pub mod pedersen;
 
-// Add new curve modules
-#[cfg(any(feature = "use-bls12-381", not(feature = "legacy-curves")))]
+// Add curve modules
 pub mod bls12_381;
-
-#[cfg(any(feature = "use-jubjub", not(feature = "legacy-curves")))]
 pub mod jubjub;
 
 // Key management functions
 // These functions are intended for use in the wallet implementation
 #[allow(dead_code)] // Allow unused code as these are intended for future use
-pub fn generate_keypair() -> Option<Keypair> {
-    // Always generate a keypair regardless of feature flags to make tests pass
-    let mut csprng = OsRng;
-    Some(Keypair::generate(&mut csprng))
-    
-    // Original code for reference:
-    // #[cfg(feature = "legacy-curves")]
-    // {
-    //    let mut csprng = OsRng;
-    //    Some(Keypair::generate(&mut csprng))
-    // }
-    
-    // #[cfg(not(feature = "legacy-curves"))]
-    // {
-    //    // For backwards compatibility, still return Option<ed25519_dalek::Keypair>
-    //    // In a real migration, we would eventually change this signature
-    //    None
-    // }
+pub fn generate_keypair() -> (jubjub::JubjubScalar, jubjub::JubjubPoint) {
+    // Use JubJub for key generation
+    jubjub::generate_keypair()
 }
 
 #[allow(dead_code)]
-pub fn serialize_keypair(keypair: &Keypair) -> Vec<u8> {
-    let mut bytes = Vec::with_capacity(64);
-    bytes.extend_from_slice(keypair.public.as_bytes());
-    bytes.extend_from_slice(keypair.secret.as_bytes());
+pub fn serialize_keypair(keypair: &(jubjub::JubjubScalar, jubjub::JubjubPoint)) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(96); // 32 bytes for scalar + 64 bytes for point
+    
+    // Serialize the secret key (32 bytes)
+    let secret_bytes = keypair.0.to_bytes();
+    bytes.extend_from_slice(&secret_bytes);
+    
+    // Serialize the public key (64 bytes)
+    let public_bytes = keypair.1.to_bytes();
+    bytes.extend_from_slice(&public_bytes);
+    
     bytes
 }
 
 #[allow(dead_code)]
-pub fn deserialize_keypair(bytes: &[u8]) -> Option<Keypair> {
-    if bytes.len() != 64 {
+pub fn deserialize_keypair(bytes: &[u8]) -> Option<(jubjub::JubjubScalar, jubjub::JubjubPoint)> {
+    if bytes.len() != 96 {
         return None;
     }
     
-    let secret = ed25519_dalek::SecretKey::from_bytes(&bytes[32..64]).ok()?;
-    let public = ed25519_dalek::PublicKey::from_bytes(&bytes[0..32]).ok()?;
+    // Deserialize the secret key
+    let secret = jubjub::JubjubScalar::from_bytes(&bytes[0..32])?;
     
-    Some(Keypair { public, secret })
+    // Deserialize the public key
+    let public = jubjub::JubjubPoint::from_bytes(&bytes[32..96])?;
+    
+    Some((secret, public))
 }
 
 #[allow(dead_code)]
-pub fn encrypt_keypair(keypair: &Keypair, password: &str) -> Vec<u8> {
+pub fn encrypt_keypair(keypair: &(jubjub::JubjubScalar, jubjub::JubjubPoint), password: &str) -> Vec<u8> {
     // Simplified version - just demonstrates the concept
     // A real implementation would use a proper encryption scheme
     let serialized = serialize_keypair(keypair);
@@ -84,7 +75,7 @@ pub fn encrypt_keypair(keypair: &Keypair, password: &str) -> Vec<u8> {
 }
 
 #[allow(dead_code)]
-pub fn decrypt_keypair(encrypted: &[u8], password: &str) -> Option<Keypair> {
+pub fn decrypt_keypair(encrypted: &[u8], password: &str) -> Option<(jubjub::JubjubScalar, jubjub::JubjubPoint)> {
     // Derive the encryption key from the password
     let mut hasher = Sha256::new();
     hasher.update(password.as_bytes());

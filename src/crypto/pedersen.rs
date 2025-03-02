@@ -1,79 +1,90 @@
-use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
-use curve25519_dalek::scalar::Scalar;
-use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use rand::rngs::OsRng;
 use sha2::{Sha256, Digest};
 use crate::blockchain::Transaction;
+use ark_ed_on_bls12_381::{EdwardsProjective as JubjubPoint, EdwardsAffine, Fr as JubjubScalar};
+use ark_std::UniformRand;
+use ark_serialize::{CanonicalSerialize, CanonicalDeserialize};
 
-// Pedersen commitment base points
+// Base Points for JubJub Pedersen commitments
 lazy_static::lazy_static! {
-    static ref G: RistrettoPoint = RISTRETTO_BASEPOINT_POINT;
-    static ref H: RistrettoPoint = {
+    static ref PEDERSEN_G: JubjubPoint = {
+        // Use the curve's base point for G
+        JubjubPoint::generator()
+    };
+    
+    static ref PEDERSEN_H: JubjubPoint = {
+        // Derive H from G in a deterministic way
         // In a real implementation, this would be a nothing-up-my-sleeve point
-        // For example, hashing "Obscura Pedersen commitment H" to create a base point
+        let mut bytes = Vec::new();
+        let g = JubjubPoint::generator();
+        let g_affine = EdwardsAffine::from(g);
+        g_affine.serialize_uncompressed(&mut bytes).unwrap();
+        
+        // Hash the base point to get a "random" scalar
         let mut hasher = Sha256::new();
-        hasher.update(b"Obscura Pedersen commitment H");
+        hasher.update(b"Obscura JubJub Pedersen commitment H");
+        hasher.update(&bytes);
         let hash = hasher.finalize();
         
-        let mut bytes = [0u8; 32];
-        bytes.copy_from_slice(&hash);
+        // Convert to scalar
+        let mut scalar_bytes = [0u8; 32];
+        scalar_bytes.copy_from_slice(&hash[0..32]);
         
-        // Create a point by hashing and ensuring it's on the curve
-        let mut point_bytes = [0u8; 32];
-        for i in 0..32 {
-            point_bytes[i] = bytes[i];
-        }
-        
-        // Clear the high bit to ensure it's a valid Ristretto encoding
-        point_bytes[31] &= 0x7F;
-        
-        // Try to parse the point, or fall back to a default
-        CompressedRistretto(point_bytes)
-            .decompress()
-            .unwrap_or(RISTRETTO_BASEPOINT_POINT)
+        // Create a point by multiplying the base point
+        JubjubPoint::generator() * JubjubScalar::from_le_bytes_mod_order(&scalar_bytes)
     };
 }
 
-// Pedersen commitment structure
+// Get the base point G for value component
+pub fn jubjub_get_g() -> JubjubPoint {
+    *PEDERSEN_G
+}
+
+// Get the base point H for blinding component
+pub fn jubjub_get_h() -> JubjubPoint {
+    *PEDERSEN_H
+}
+
+// Pedersen commitment structure using JubJub
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct PedersenCommitment {
-    // Compressed commitment value (point on the curve)
-    pub commitment: CompressedRistretto,
+    // Commitment point on the JubJub curve
+    pub commitment: JubjubPoint,
     // Original value committed to (blinded)
     value: Option<u64>,
     // Blinding factor used
-    blinding: Option<Scalar>,
+    blinding: Option<JubjubScalar>,
 }
 
 impl PedersenCommitment {
-    // Create a commitment to a value with a random blinding factor
-    #[allow(dead_code)]
-    pub fn commit_random(value: u64) -> Self {
-        let mut rng = OsRng;
-        let blinding = Scalar::random(&mut rng);
-        Self::commit(value, blinding)
-    }
-    
     // Create a commitment to a value with a specific blinding factor
     #[allow(dead_code)]
-    pub fn commit(value: u64, blinding: Scalar) -> Self {
+    pub fn commit(value: u64, blinding: JubjubScalar) -> Self {
         // Commit = value*G + blinding*H
-        let value_scalar = Scalar::from(value);
-        let commitment_point = (value_scalar * G.clone()) + (blinding * H.clone());
+        let value_scalar = JubjubScalar::from(value);
+        let commitment_point = (jubjub_get_g() * value_scalar) + (jubjub_get_h() * blinding);
         
         PedersenCommitment {
-            commitment: commitment_point.compress(),
+            commitment: commitment_point,
             value: Some(value),
             blinding: Some(blinding),
         }
     }
     
-    // Create a commitment from an existing compressed point (for deserialization)
+    // Create a commitment to a value with a random blinding factor
     #[allow(dead_code)]
-    pub fn from_compressed(compressed: CompressedRistretto) -> Self {
+    pub fn commit_random(value: u64) -> Self {
+        // Generate a random blinding factor
+        let blinding = generate_random_jubjub_scalar();
+        Self::commit(value, blinding)
+    }
+    
+    // Create a commitment from an existing point
+    #[allow(dead_code)]
+    pub fn from_point(point: JubjubPoint) -> Self {
         PedersenCommitment {
-            commitment: compressed,
+            commitment: point,
             value: None,
             blinding: None,
         }
@@ -87,26 +98,29 @@ impl PedersenCommitment {
     
     // Get the blinding factor if available
     #[allow(dead_code)]
-    pub fn blinding(&self) -> Option<Scalar> {
-        self.blinding.clone()
+    pub fn blinding(&self) -> Option<JubjubScalar> {
+        self.blinding
     }
     
     // Serialize to bytes
-    pub fn to_bytes(&self) -> [u8; 32] {
-        self.commitment.to_bytes()
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        let affine = EdwardsAffine::from(self.commitment);
+        affine.serialize_uncompressed(&mut bytes).unwrap();
+        bytes
     }
     
     // Deserialize from bytes
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, &'static str> {
-        if bytes.len() != 32 {
+        if bytes.len() < 64 {
             return Err("Invalid commitment size");
         }
         
-        let mut commitment_bytes = [0u8; 32];
-        commitment_bytes.copy_from_slice(bytes);
+        let point = EdwardsAffine::deserialize_uncompressed(bytes)
+            .map_err(|_| "Failed to deserialize point")?;
         
         Ok(PedersenCommitment {
-            commitment: CompressedRistretto(commitment_bytes),
+            commitment: JubjubPoint::from(point),
             value: None,
             blinding: None,
         })
@@ -116,35 +130,24 @@ impl PedersenCommitment {
     // If C1 = v1*G + r1*H and C2 = v2*G + r2*H
     // Then C1 + C2 = (v1+v2)*G + (r1+r2)*H
     #[allow(dead_code)]
-    pub fn add(&self, other: &PedersenCommitment) -> Result<PedersenCommitment, &'static str> {
-        // Decompress points
-        let self_point = match self.commitment.decompress() {
-            Some(p) => p,
-            None => return Err("Invalid commitment format"),
-        };
-        
-        let other_point = match other.commitment.decompress() {
-            Some(p) => p,
-            None => return Err("Invalid commitment format"),
-        };
-        
-        // Add points
-        let sum_point = self_point + other_point;
+    pub fn add(&self, other: &PedersenCommitment) -> PedersenCommitment {
+        // Add points directly (JubJub supports point addition)
+        let sum_point = self.commitment + other.commitment;
         
         // Create new commitment
         let result = PedersenCommitment {
-            commitment: sum_point.compress(),
+            commitment: sum_point,
             value: match (self.value, other.value) {
                 (Some(v1), Some(v2)) => Some(v1 + v2),
                 _ => None,
             },
             blinding: match (self.blinding.as_ref(), other.blinding.as_ref()) {
-                (Some(b1), Some(b2)) => Some(b1 + b2),
+                (Some(b1), Some(b2)) => Some(*b1 + *b2),
                 _ => None,
             },
         };
         
-        Ok(result)
+        result
     }
     
     // Verify that a commitment is to a specific value (if we know the blinding factor)
@@ -156,13 +159,12 @@ impl PedersenCommitment {
         }
         
         // Recreate the commitment with the claimed value and stored blinding factor
-        let value_scalar = Scalar::from(value);
+        let value_scalar = JubjubScalar::from(value);
         let blinding = self.blinding.unwrap();
-        let expected_point = (value_scalar * G.clone()) + (blinding * H.clone());
-        let expected_compressed = expected_point.compress();
+        let expected_point = (jubjub_get_g() * value_scalar) + (jubjub_get_h() * blinding);
         
         // Check if it matches the stored commitment
-        expected_compressed == self.commitment
+        expected_point == self.commitment
     }
 }
 
@@ -182,16 +184,12 @@ pub fn verify_commitment_sum(tx: &Transaction) -> bool {
         
         // Validate format of commitments
         for commitment_bytes in output_commitments.iter() {
-            if commitment_bytes.len() != 32 {
+            if commitment_bytes.len() < 64 {  // JubJub points are 64 bytes uncompressed
                 return false;
             }
             
             // Try to parse the commitment
-            let mut bytes = [0u8; 32];
-            bytes.copy_from_slice(commitment_bytes);
-            
-            let compressed = CompressedRistretto(bytes);
-            if compressed.decompress().is_none() {
+            if PedersenCommitment::from_bytes(commitment_bytes).is_err() {
                 return false;
             }
         }
@@ -203,6 +201,36 @@ pub fn verify_commitment_sum(tx: &Transaction) -> bool {
     }
 }
 
+// Generate a random JubjubScalar
+#[allow(dead_code)]
+pub fn generate_random_jubjub_scalar() -> JubjubScalar {
+    // Adapter to convert OsRng to the type expected by arkworks
+    struct RngAdapter(OsRng);
+    
+    impl ark_std::rand::RngCore for RngAdapter {
+        fn next_u32(&mut self) -> u32 {
+            self.0.next_u32()
+        }
+        
+        fn next_u64(&mut self) -> u64 {
+            self.0.next_u64()
+        }
+        
+        fn fill_bytes(&mut self, dest: &mut [u8]) {
+            self.0.fill_bytes(dest)
+        }
+        
+        fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), ark_std::rand::Error> {
+            self.0.try_fill_bytes(dest).map_err(|_| ark_std::rand::Error)
+        }
+    }
+    
+    impl ark_std::rand::CryptoRng for RngAdapter {}
+    
+    let mut rng = RngAdapter(OsRng);
+    JubjubScalar::rand(&mut rng)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -210,7 +238,7 @@ mod tests {
     #[test]
     fn test_commitment_creation() {
         let value = 100u64;
-        let blinding = Scalar::random(&mut OsRng);
+        let blinding = generate_random_jubjub_scalar();
         let commitment = PedersenCommitment::commit(value, blinding);
         
         assert_eq!(commitment.value(), Some(value));
@@ -220,14 +248,14 @@ mod tests {
     #[test]
     fn test_commitment_serialization() {
         let value = 42u64;
-        let blinding = Scalar::random(&mut OsRng);
+        let blinding = generate_random_jubjub_scalar();
         let commitment = PedersenCommitment::commit(value, blinding);
         
         let bytes = commitment.to_bytes();
         let recovered = PedersenCommitment::from_bytes(&bytes).unwrap();
         
-        // Recovered commitment should match original
-        assert_eq!(commitment.commitment.as_bytes(), recovered.commitment.as_bytes());
+        // Commitment points should match
+        assert_eq!(commitment.commitment, recovered.commitment);
         
         // But value and blinding are not serialized
         assert_eq!(recovered.value(), None);
@@ -240,33 +268,39 @@ mod tests {
         let value2 = 12u64;
         let total = value1 + value2;
         
-        let blinding1 = Scalar::random(&mut OsRng);
-        let blinding2 = Scalar::random(&mut OsRng);
+        let blinding1 = generate_random_jubjub_scalar();
+        let blinding2 = generate_random_jubjub_scalar();
         
         let commitment1 = PedersenCommitment::commit(value1, blinding1);
         let commitment2 = PedersenCommitment::commit(value2, blinding2);
         
         // Add the commitments
-        let sum_commitment = commitment1.add(&commitment2).unwrap();
+        let sum_commitment = commitment1.add(&commitment2);
+        
+        // Check that the sum has the expected values
         assert_eq!(sum_commitment.value(), Some(total));
         
-        // The sum should equal a direct commitment to the total with the sum of blindings
+        // Verify that the resulting commitment is valid
         let combined_blinding = blinding1 + blinding2;
+        assert!(sum_commitment.verify(total));
+        
+        // Now create a direct commitment to the total with the same combined blinding
         let direct_commitment = PedersenCommitment::commit(total, combined_blinding);
         
-        assert_eq!(sum_commitment.commitment.as_bytes(), direct_commitment.commitment.as_bytes());
+        // The commitments should be equal
+        assert_eq!(sum_commitment.commitment, direct_commitment.commitment);
     }
     
     #[test]
     fn test_commitment_verification() {
-        let value = 75u64;
-        let blinding = Scalar::random(&mut OsRng);
+        let value = 50u64;
+        let blinding = generate_random_jubjub_scalar();
         let commitment = PedersenCommitment::commit(value, blinding);
         
-        // Verify correct value
+        // Correct value should verify
         assert!(commitment.verify(value));
         
-        // Verify incorrect value
+        // Incorrect value should not verify
         assert!(!commitment.verify(value + 1));
     }
 } 

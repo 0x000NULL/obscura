@@ -15,17 +15,17 @@ Obscura is a privacy-focused cryptocurrency that combines cutting-edge cryptogra
 
 ## Cryptographic Migration
 
-Obscura is currently migrating from curve25519-dalek/ed25519 to a dual-curve system using:
+Obscura has completed its migration from curve25519-dalek/ed25519 to a dual-curve system using:
 
 1. **BLS12-381**: A pairing-friendly curve used for zk-SNARKs and complex zero-knowledge proofs
 2. **Jubjub**: An efficient elliptic curve defined over the BLS12-381 scalar field, used for signatures and commitments
 
-This migration will enable:
+This migration enables:
 - More advanced privacy features through zk-SNARK integration
 - Better cross-chain compatibility with other privacy-focused cryptocurrencies
 - Improved performance for complex cryptographic operations
 
-For more information, see our [Migration Guide](docs/MIGRATION_GUIDE.md) and [Cryptography Documentation](docs/CRYPTOGRAPHY.md).
+For more information, see our [Cryptography Documentation](docs/CRYPTOGRAPHY.md).
 
 ## Getting Started
 
@@ -41,14 +41,8 @@ For more information, see our [Migration Guide](docs/MIGRATION_GUIDE.md) and [Cr
 git clone https://github.com/obscura-org/obscura.git
 cd obscura
 
-# Build with default features
+# Build the project
 cargo build --release
-
-# Build with new cryptographic curves
-cargo build --release --features "use-bls12-381 use-jubjub"
-
-# Build with legacy support during migration
-cargo build --release --features "use-bls12-381 use-jubjub legacy-curves"
 ```
 
 ### Running Tests
@@ -95,7 +89,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Transaction Obfuscation**: Protect transaction graphs and prevent linkability
 - **Stealth Addressing**: One-time addresses for enhanced recipient privacy
 - **Confidential Transactions**: Hide transaction amounts using Pedersen commitments and Bulletproofs
-- **Signature Verification**: Strong cryptographic verification using ED25519
+- **Signature Verification**: Strong cryptographic verification using BLS12-381 and JubJub curves
 - **Zero-Knowledge Proofs**: Range proofs to verify transaction validity without revealing amounts
 - **Fee Obfuscation**: Prevent transaction linkability through fee analysis
 
