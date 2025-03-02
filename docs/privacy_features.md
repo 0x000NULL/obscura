@@ -85,31 +85,164 @@ impl PedersenCommitment {
 
 #### Range Proofs
 
-Range proofs allow us to verify that a committed amount is positive without revealing the actual amount.
+Range proofs allow us to verify that a committed amount is positive without revealing the actual amount. Obscura implements bulletproofs from the arkworks-rs library for efficient, zero-knowledge range proofs.
 
 ```rust
 // From src/crypto/bulletproofs.rs
 pub struct RangeProof {
+    /// The compressed range proof
     pub compressed_proof: Vec<u8>,
+    /// Minimum value in the range (inclusive)
     pub min_value: u64,
+    /// Maximum value in the range (inclusive)
     pub max_value: u64,
+    /// Number of bits in the range proof (determines the range)
+    bits: usize,
 }
 
 impl RangeProof {
-    // Create a new range proof for a value in [min_value, max_value]
-    pub fn new_with_range(value: u64, min_value: u64, max_value: u64) -> Option<Self> {
-        if value < min_value || value > max_value {
-            return None;
-        }
-        // Create zero-knowledge proof that value is within range
-        // ...
+    /// Create a new range proof for a value in [0, 2^64)
+    pub fn new(value: u64) -> Self {
+        Self::new_with_bits(value, 64)
+    }
+    
+    /// Create a new range proof with a specific bit length
+    pub fn new_with_bits(value: u64, bits: usize) -> Self {
+        // Create bulletproof using arkworks-rs/bulletproofs
+        let mut rng = OsRng;
+        let blinding = JubjubScalar::rand(&mut rng);
+        
+        // Create a transcript for the zero-knowledge proof
+        let mut transcript = Transcript::new(b"Obscura Range Proof");
+        
+        // Convert our values to bulletproofs format
+        let bp_blinding = jubjub_scalar_to_bulletproofs_scalar(&blinding);
+        
+        // Create the range proof
+        let (proof, committed_value) = ArkRangeProof::prove_single(
+            BP_GENS.deref(),
+            PC_GENS.deref(),
+            &mut transcript,
+            value,
+            &bp_blinding,
+            bits,
+            &mut rng,
+        ).expect("Failed to create range proof");
+        
+        // Implementation details...
     }
 }
 
 // Verify a range proof against a commitment
 pub fn verify_range_proof(commitment: &PedersenCommitment, proof: &RangeProof) -> bool {
-    // Verify the range proof cryptographically
-    // ...
+    // Create a transcript for verification
+    let mut transcript = Transcript::new(b"Obscura Range Proof");
+    
+    // Deserialize the proof
+    let bp_proof: ArkRangeProof = match bincode::deserialize(&proof.compressed_proof) {
+        Ok(p) => p,
+        Err(_) => return false,
+    };
+    
+    // Convert the Pedersen commitment to the format expected by bulletproofs
+    let commitment_point = commitment.commitment;
+    let bp_commitment = convert_commitment_to_bulletproofs(commitment_point);
+    
+    // Verify the range proof
+    bp_proof.verify_single(
+        &BP_GENS,
+        &PC_GENS,
+        &mut transcript,
+        &bp_commitment,
+        proof.bits,
+    ).is_ok()
+}
+
+#### Multi-Output Range Proofs
+
+Our implementation also supports creating and verifying range proofs for multiple outputs at once, which is significantly more efficient than creating individual proofs:
+
+```rust
+/// Structure for creating proofs for multiple outputs efficiently
+pub struct MultiOutputRangeProof {
+    /// The compressed multi-output range proof
+    pub compressed_proof: Vec<u8>,
+    /// Number of values in the proof
+    pub num_values: usize,
+    /// Bit length for each value
+    pub bits_per_value: usize,
+}
+
+impl MultiOutputRangeProof {
+    /// Create a new multi-output range proof for a set of values
+    pub fn new(values: &[u64], bits: usize) -> Self {
+        // Generate random blinding factors
+        let blindings: Vec<curve25519_dalek::scalar::Scalar> = (0..values.len())
+            .map(|_| {
+                let jubjub_scalar = JubjubScalar::rand(&mut rng);
+                jubjub_scalar_to_bulletproofs_scalar(&jubjub_scalar)
+            })
+            .collect();
+        
+        // Create the multi-output range proof
+        let (proof, committed_values) = ArkRangeProof::prove_multiple(
+            BP_GENS.deref(),
+            PC_GENS.deref(),
+            &mut transcript,
+            values,
+            &blindings,
+            bits,
+            &mut rng,
+        ).expect("Failed to create multi-output range proof");
+        
+        // Implementation details...
+    }
+}
+
+/// Verify a multi-output range proof against multiple Pedersen commitments
+pub fn verify_multi_output_range_proof(
+    commitments: &[PedersenCommitment],
+    proof: &MultiOutputRangeProof,
+) -> bool {
+    // Verification implementation...
+}
+```
+
+#### Batch Verification
+
+For improved performance when verifying multiple proofs, we implement batch verification:
+
+```rust
+/// Batch verification of multiple range proofs for efficiency
+/// This is significantly more efficient than verifying each proof individually
+pub fn batch_verify_range_proofs(
+    commitments: &[PedersenCommitment],
+    proofs: &[RangeProof],
+) -> bool {
+    // Create a transcript for verification
+    let mut transcript = Transcript::new(b"Obscura Batch Range Proof");
+    
+    // Convert all proofs and commitments to bulletproofs format
+    for (i, (commitment, proof)) in commitments.iter().zip(proofs.iter()).enumerate() {
+        // Deserialize the proof
+        let bp_proof: ArkRangeProof = match bincode::deserialize(&proof.compressed_proof) {
+            Ok(p) => p,
+            Err(_) => return false,
+        };
+        
+        // Add proof and commitment to batch
+        // Implementation details...
+    }
+    
+    // Use bulletproofs batch verification API
+    ArkRangeProof::batch_verify(
+        &BP_GENS,
+        &PC_GENS,
+        &mut verification_transcript,
+        &bp_commitments,
+        &bp_proofs,
+        &bits_vec,
+    ).is_ok()
 }
 ```
 

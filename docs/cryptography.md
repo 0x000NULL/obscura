@@ -219,13 +219,139 @@ pub fn verify_transaction(
 
 ### Bulletproofs
 
-Bulletproofs are short non-interactive zero-knowledge proofs that require no trusted setup.
+Bulletproofs are short non-interactive zero-knowledge proofs that require no trusted setup. Obscura uses the arkworks-rs/bulletproofs library to implement range proofs for confidential transactions.
 
 #### Properties
 
-- **Succinct**: Logarithmic proof size
-- **No Trusted Setup**: Does not require a complex setup ceremony
-- **Efficient Verification**: Batch verification for multiple proofs
+- **Succinct**: Logarithmic proof size (O(log n)) compared to the size of the statement being proven
+- **No Trusted Setup**: Does not require a complex setup ceremony, reducing security assumptions
+- **Efficient Verification**: Batch verification for multiple proofs, significantly reducing verification cost
+- **Powerful Range Proofs**: Efficiently proves that a committed value is within a specific range without revealing the value
+
+#### Implementation
+
+Our implementation includes:
+
+```rust
+// Range proof structure
+pub struct RangeProof {
+    /// The compressed range proof
+    pub compressed_proof: Vec<u8>,
+    /// Minimum value in the range (inclusive)
+    pub min_value: u64,
+    /// Maximum value in the range (inclusive)
+    pub max_value: u64,
+    /// Number of bits in the range proof (determines the range)
+    bits: usize,
+}
+
+// Range proof generation
+impl RangeProof {
+    /// Create a new range proof for a value in [0, 2^64)
+    pub fn new(value: u64) -> Self {
+        Self::new_with_bits(value, 64)
+    }
+    
+    /// Create a new range proof with a specific bit length
+    pub fn new_with_bits(value: u64, bits: usize) -> Self {
+        let mut rng = OsRng;
+        let blinding = JubjubScalar::rand(&mut rng);
+        
+        // Create a transcript for the zero-knowledge proof
+        let mut transcript = Transcript::new(b"Obscura Range Proof");
+        
+        // Convert to bulletproofs format and create proof
+        // ...
+    }
+    
+    /// Create a new range proof for a value in [min_value, max_value]
+    pub fn new_with_range(value: u64, min_value: u64, max_value: u64) -> Option<Self> {
+        // Create range proof for specific min/max bounds
+        // ...
+    }
+}
+```
+
+#### Multi-Output Range Proofs
+
+For transactions with multiple outputs, we provide an efficient multi-output range proof system:
+
+```rust
+pub struct MultiOutputRangeProof {
+    /// The compressed multi-output range proof
+    pub compressed_proof: Vec<u8>,
+    /// Number of values in the proof
+    pub num_values: usize,
+    /// Bit length for each value
+    pub bits_per_value: usize,
+}
+
+impl MultiOutputRangeProof {
+    /// Create a new multi-output range proof for a set of values
+    pub fn new(values: &[u64], bits: usize) -> Self {
+        // Implementation creates a single proof for multiple values
+        // Much more efficient than creating individual proofs
+    }
+}
+```
+
+#### Verification System
+
+Our verification system includes single proof verification, multi-output verification, and batch verification:
+
+```rust
+// Single proof verification
+pub fn verify_range_proof(commitment: &PedersenCommitment, proof: &RangeProof) -> bool {
+    // Verify a single range proof against a commitment
+}
+
+// Multi-output verification
+pub fn verify_multi_output_range_proof(
+    commitments: &[PedersenCommitment],
+    proof: &MultiOutputRangeProof,
+) -> bool {
+    // Verify a multi-output proof against multiple commitments
+}
+
+// Batch verification
+pub fn batch_verify_range_proofs(
+    commitments: &[PedersenCommitment],
+    proofs: &[RangeProof],
+) -> bool {
+    // Batch verify multiple proofs - significantly more efficient
+}
+```
+
+#### Curve Conversion
+
+Our bulletproofs implementation works with our existing Jubjub curve infrastructure through careful conversion mechanics:
+
+```rust
+// Convert JubjubPoint to format compatible with bulletproofs
+fn jubjub_to_ristretto_point(point: JubjubPoint) -> curve25519_dalek::ristretto::RistrettoPoint {
+    // Conversion logic to maintain compatibility
+}
+
+// Convert JubjubScalar to bulletproofs Scalar
+fn jubjub_scalar_to_bulletproofs_scalar(scalar: &JubjubScalar) -> curve25519_dalek::scalar::Scalar {
+    // Scalar conversion logic
+}
+```
+
+#### Security Considerations
+
+- **Transcript Management**: Using Merlin transcripts for Fiat-Shamir transformation to prevent multi-target attacks
+- **Randomness Sources**: Secure random number generation for blinding factors
+- **Validation Checks**: Comprehensive validation at each step of proof creation and verification
+- **Side-Channel Resistance**: Implemented with constant-time operations where possible
+
+#### Performance Optimizations
+
+- **Lazy Generator Creation**: Generate bulletproofs generators once and reuse
+- **Batch Verification**: Significantly reduces verification time for multiple proofs
+- **Optimized Multi-Output Proofs**: More efficient than individual proofs for transactions with multiple outputs
+
+For a comprehensive guide to our bulletproofs implementation, see the [detailed bulletproofs documentation](crypto/bulletproofs.md).
 
 ### zk-SNARKs
 

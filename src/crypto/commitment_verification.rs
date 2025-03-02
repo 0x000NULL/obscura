@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::blockchain::{Transaction, TransactionInput, TransactionOutput, OutPoint};
+use crate::blockchain::transaction;
 use crate::crypto::pedersen::{
     PedersenCommitment, BlsPedersenCommitment, DualCurveCommitment,
     jubjub_get_g, jubjub_get_h, bls_get_g, bls_get_h, get_blinding_store
@@ -338,11 +339,38 @@ impl CommitmentVerifier {
             return Ok(true);
         }
         
-        for (i, output) in tx.outputs.iter().enumerate() {
-            if let Some(range_proof_data) = &output.range_proof {
-                if let Some(commitment_data) = &output.commitment {
+        // Check if the transaction has range proofs and commitments
+        let range_proofs = match &tx.range_proofs {
+            Some(proofs) => proofs,
+            None => return Ok(true), // No range proofs to verify
+        };
+        
+        let commitments = match &tx.amount_commitments {
+            Some(commits) => commits,
+            None => {
+                if context.strict_mode && range_proofs.len() > 0 {
+                    return Err(VerificationError::MissingData(
+                        "Transaction has range proofs but no commitments".to_string()
+                    ));
+                }
+                return Ok(true);
+            }
+        };
+        
+        // Ensure the number of range proofs matches the number of outputs
+        if range_proofs.len() != tx.outputs.len() || commitments.len() != tx.outputs.len() {
+            return Err(VerificationError::MissingData(
+                format!("Mismatch in number of outputs ({}) vs range proofs ({}) or commitments ({})",
+                    tx.outputs.len(), range_proofs.len(), commitments.len())
+            ));
+        }
+        
+        // Verify each range proof
+        for i in 0..range_proofs.len() {
+            if !range_proofs[i].is_empty() {
+                if i < commitments.len() && !commitments[i].iter().all(|&b| b == 0) {
                     // Parse the range proof
-                    let range_proof = match RangeProof::from_bytes(range_proof_data) {
+                    let range_proof = match RangeProof::from_bytes(&range_proofs[i]) {
                         Ok(proof) => proof,
                         Err(e) => return Err(VerificationError::RangeProofError(
                             format!("Failed to parse range proof for output {}: {}", i, e)
@@ -350,7 +378,7 @@ impl CommitmentVerifier {
                     };
                     
                     // Parse the commitment
-                    let commitment = match DualCurveCommitment::from_bytes(commitment_data) {
+                    let commitment = match DualCurveCommitment::from_bytes(&commitments[i]) {
                         Ok(commitment) => commitment,
                         Err(e) => return Err(VerificationError::InvalidCommitment(
                             format!("Failed to parse commitment for output {}: {}", i, e)
@@ -358,7 +386,7 @@ impl CommitmentVerifier {
                     };
                     
                     // Verify the range proof
-                    if !range_proof.verify(&commitment) {
+                    if !crate::crypto::bulletproofs::verify_range_proof(&commitment.jubjub_commitment, &range_proof) {
                         return Err(VerificationError::RangeProofError(
                             format!("Range proof verification failed for output {}", i)
                         ));
@@ -368,7 +396,7 @@ impl CommitmentVerifier {
                         format!("Output {} has range proof but no commitment", i)
                     ));
                 }
-            } else if context.strict_mode && output.commitment.is_some() {
+            } else if context.strict_mode && i < commitments.len() && !commitments[i].iter().all(|&b| b == 0) {
                 // In strict mode, if we have a commitment we should also have a range proof
                 return Err(VerificationError::MissingData(
                     format!("Output {} has commitment but no range proof", i)
@@ -386,7 +414,7 @@ impl CommitmentVerifier {
         context: &VerificationContext
     ) -> VerificationResult {
         // Skip coinbase transactions for balance checks
-        if !tx.is_coinbase() {
+        if !tx.inputs.is_empty() {
             // First verify balance
             Self::verify_transaction_commitment_balance(tx, known_fee, context)?;
         }

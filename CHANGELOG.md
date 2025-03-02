@@ -2,6 +2,48 @@
 
 All notable changes to the Obscura project will be documented in this file.
 
+## [0.5.5] - 2025-03-25
+
+### Added
+- **Bulletproofs Integration Completion**
+  - Implemented complete range proof system for confidential transactions
+  - Added multi-output range proof optimization for transaction efficiency
+  - Implemented high-performance batch verification system
+  - Created seamless integration with Jubjub-based Pedersen commitments
+  - Added secure blinding factor generation and management
+  - Implemented commitment-to-proof linking for verification
+  - Added transaction validation with range proof verification
+  - Created balance verification with commitment homomorphism
+  - Implemented side-channel resistant operations
+  - Added secure randomness generation for proofs
+  - Created comprehensive subgroup checking
+  - Implemented comprehensive documentation and test cases
+
+### Improved
+- **Cryptographic Performance**
+  - Enhanced range proof verification speed with batch processing
+  - Optimized proof generation for common transaction sizes
+  - Improved memory usage for cryptographic operations
+  - Reduced proof size with optimized encoding
+  - Enhanced overall transaction validation performance
+  
+### Documentation
+- **Bulletproofs Documentation**
+  - Created detailed bulletproofs implementation guide in `docs/crypto/bulletproofs.md`
+  - Added comprehensive API documentation for bulletproofs components
+  - Updated cryptography index to include bulletproofs documentation
+  - Added examples for common bulletproofs usage scenarios
+  - Updated privacy features documentation with bulletproofs details
+  - Created security and performance considerations guide
+
+### Testing
+- **Comprehensive Test Suite**
+  - Added extensive unit tests for bulletproofs components
+  - Implemented integration tests with transaction validation
+  - Created property-based tests for range proof correctness
+  - Added performance benchmarks for verification operations
+  - Implemented edge case testing for proof generation and verification
+
 ## [0.5.4] - 2025-03-20
 
 ### Added

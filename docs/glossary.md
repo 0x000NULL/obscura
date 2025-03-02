@@ -24,6 +24,9 @@ The metadata of a block, including the previous block hash, merkle root, timesta
 ### Blockchain
 A distributed ledger that records transactions across multiple computers in a way that ensures the data cannot be altered retroactively.
 
+### Bulletproofs
+A cryptographic zero-knowledge proof system that allows proving a value is in a certain range without revealing the value itself. In Obscura, bulletproofs are used to implement confidential transactions by proving transaction amounts are valid without disclosing the actual amounts. Key features include logarithmic proof size, no trusted setup, and efficient batch verification.
+
 ## C
 
 ### ChaCha20

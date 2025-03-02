@@ -32,6 +32,7 @@ This document serves as an index for all documentation related to cryptography i
 ## Advanced Cryptography
 
 - [Zero-Knowledge Proofs](zero_knowledge_proofs.md): Information about zero-knowledge proofs in Obscura.
+- [Bulletproofs](bulletproofs.md): Comprehensive documentation on Bulletproofs implementation for range proofs in confidential transactions.
 - [Multi-signature Schemes](multisignature.md): Information about multi-signature schemes in Obscura.
 - [Threshold Signatures](threshold_signatures.md): Information about threshold signatures in Obscura.
 - [Homomorphic Encryption](homomorphic_encryption.md): Information about homomorphic encryption in Obscura.

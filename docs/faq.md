@@ -84,6 +84,19 @@ Replace-By-Fee (RBF) is a mechanism that allows a transaction to be replaced wit
 ### What is Child-Pays-For-Parent (CPFP)?
 Child-Pays-For-Parent (CPFP) is a transaction fee mechanism where a child transaction can pay a higher fee to incentivize miners to include both it and its parent transaction in a block. This is useful when a parent transaction is stuck due to low fees.
 
+### What are bulletproofs and how do they work in Obscura?
+Bulletproofs are short, non-interactive zero-knowledge proofs that require no trusted setup. In Obscura, bulletproofs are used to implement range proofs for confidential transactions, allowing users to prove that a transaction amount is within a valid range (e.g., positive and not causing overflow) without revealing the actual amount. Our implementation leverages the arkworks-rs/bulletproofs library and integrates with our Jubjub curve-based Pedersen commitments.
+
+### What privacy features do bulletproofs provide?
+Bulletproofs enable confidential transactions by:
+1. Proving that transaction amounts are positive without revealing the values
+2. Ensuring that the sum of inputs equals the sum of outputs plus fees
+3. Preventing value overflow in calculations
+All of this is done while maintaining the privacy of the actual transaction amounts.
+
+### Do bulletproofs make transactions larger or slower?
+Bulletproofs are logarithmic in size (O(log n)), making them compact compared to other range proof systems. While generating and verifying individual bulletproofs can be computationally intensive, Obscura implements batch verification, which significantly improves performance when verifying multiple proofs simultaneously.
+
 ### How long does it take for a transaction to be confirmed?
 The average block time in Obscura is 60 seconds. A transaction is typically considered confirmed after 6 blocks, which takes about 6 minutes. However, for larger transactions, waiting for more confirmations is recommended.
 

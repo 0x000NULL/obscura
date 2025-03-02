@@ -227,19 +227,19 @@
     - [x] Add transaction balance verification
     - [x] Implement output value obfuscation
     - [x] Create simple range proof system
-  - [ ] Plan for advanced cryptographic primitives
+  - [x] Plan for advanced cryptographic primitives
     - [x] Research Pedersen commitment implementation
       - [x] Evaluate elliptic curve options (Selected BLS12-381 as primary and Jubjub as secondary)
       - [x] Design homomorphic commitment scheme using selected curves
       - [x] Create blinding factor generation protocol
       - [x] Implement secure blinding factor storage
       - [x] Add commitment verification system
-    - [ ] Develop bulletproofs integration plan
-      - [ ] Evaluate bulletproofs libraries (compatible with BLS12-381/Jubjub)
-      - [ ] Design range proof protocol for transaction amounts
-      - [ ] Create efficient verification mechanism
-      - [ ] Implement multi-output proofs
-      - [ ] Add batch verification optimization
+    - [x] Develop bulletproofs integration plan
+      - [x] Evaluate bulletproofs libraries (compatible with BLS12-381/Jubjub) (Will use arkworks-rs\bulletproofs)
+      - [x] Design range proof protocol for transaction amounts
+      - [x] Create efficient verification mechanism
+      - [x] Implement multi-output proofs
+      - [x] Add batch verification optimization
     - [ ] Design proper Diffie-Hellman key exchange for stealth addressing
       - [ ] Implement appropriate key exchange for Jubjub curve
       - [ ] Create secure ephemeral key generation

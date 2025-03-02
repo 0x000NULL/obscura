@@ -2,6 +2,87 @@
 
 This document contains the release notes for each version of the Obscura blockchain.
 
+## [0.5.5] - 2025-03-25
+
+### Bulletproofs Integration Completion
+
+This release marks the completion of the bulletproofs integration for transaction amount privacy, providing a robust and efficient implementation of confidential transactions in the Obscura blockchain.
+
+#### Core Bulletproofs Implementation
+
+- **Complete Range Proof System**
+  - Implemented bulletproofs for transaction amount verification
+  - Added support for various range proof sizes (32-bit, 64-bit, and custom ranges)
+  - Created efficient serialization and deserialization of proofs
+  - Implemented comprehensive error handling for proof operations
+  - Added proper transcript management for Fiat-Shamir transformations
+
+- **Multi-Output Range Proof Optimization**
+  - Implemented efficient multi-output range proofs for transactions
+  - Added combined proof generation for multiple transaction outputs
+  - Created optimized verification for multi-output proofs
+  - Implemented memory-efficient proof representation
+  - Added support for heterogeneous bit sizes in multi-output proofs
+
+- **Batch Verification System**
+  - Implemented high-performance batch verification for range proofs
+  - Added optimized multi-exponentiation algorithms
+  - Created efficient proof aggregation
+  - Implemented parallel verification capabilities
+  - Added automatic batching for transaction verification
+
+#### Integration with Existing Systems
+
+- **Pedersen Commitment Integration**
+  - Fully integrated with Jubjub-based Pedersen commitments
+  - Implemented secure blinding factor generation and management
+  - Added commitment-to-proof linking for verification
+  - Created comprehensive test vectors for integration testing
+  - Implemented conversion utilities between curve representations
+
+- **Transaction Verification Integration**
+  - Enhanced transaction validation with range proof verification
+  - Added support for confidential transaction creation
+  - Implemented secure verification context with privacy guarantees
+  - Created balance verification with commitment homomorphism
+  - Added comprehensive test suite for transaction scenarios
+
+#### Security and Performance
+
+- **Security Hardening**
+  - Implemented side-channel resistant operations
+  - Added secure randomness generation for all operations
+  - Created comprehensive subgroup checking
+  - Implemented constant-time operations where required
+  - Added transcript separation for multiple proof domains
+
+- **Performance Optimization**
+  - Optimized proof generation for common use cases
+  - Implemented efficient verification algorithms
+  - Added memory pooling for large batch operations
+  - Created benchmark suite for performance monitoring
+  - Implemented caching strategies for repeated operations
+
+#### Documentation and Testing
+
+- **Comprehensive Documentation**
+  - Created detailed bulletproofs implementation guide
+  - Added API documentation for all bulletproofs components
+  - Implemented usage examples for common scenarios
+  - Created security considerations guide
+  - Added performance tuning documentation
+
+- **Extensive Testing**
+  - Implemented comprehensive unit test suite
+  - Added integration tests for transaction scenarios
+  - Created property-based tests for correctness verification
+  - Implemented edge case testing for unusual values
+  - Added fuzzing tests for robustness verification
+
+### Remarks
+
+The bulletproofs implementation completes a major privacy milestone for Obscura, enabling confidential transactions with efficient verification. The implementation leverages the arkworks-rs/bulletproofs library while providing seamless integration with our Jubjub curve infrastructure. All related TODO items have been marked as completed.
+
 ## [0.5.4] - 2025-03-20
 
 ### Commitment Verification System Enhancement
