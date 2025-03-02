@@ -232,8 +232,8 @@
       - [x] Evaluate elliptic curve options (Selected BLS12-381 as primary and Jubjub as secondary)
       - [x] Design homomorphic commitment scheme using selected curves
       - [x] Create blinding factor generation protocol
-      - [ ] Implement secure blinding factor storage
-      - [ ] Add commitment verification system
+      - [x] Implement secure blinding factor storage
+      - [x] Add commitment verification system
     - [ ] Develop bulletproofs integration plan
       - [ ] Evaluate bulletproofs libraries (compatible with BLS12-381/Jubjub)
       - [ ] Design range proof protocol for transaction amounts

@@ -2,6 +2,58 @@
 
 All notable changes to the Obscura project will be documented in this file.
 
+## [0.5.4] - 2025-03-20
+
+### Added
+- **Enhanced Commitment Verification System**
+  - Implemented structured error handling system with detailed categorization
+  - Created verification context with configurable options
+  - Added comprehensive transaction validation with balance checking
+  - Implemented support for specialized verification environments
+  - Created configurable strict and lenient verification modes
+  - Added efficient UTXO-based verification with caching
+  - Implemented transaction graph validation with consistency checks
+  - Created helper utilities for commitment comparison and hashing
+  - Added optimized serialization for verification operations
+
+- **Performance Optimizations**
+  - Implemented fast-path validation for common scenarios
+  - Added caching options for verification context
+  - Created efficient commitment equality checks
+  - Implemented batch verification optimizations
+  - Added performance-focused verification mode options
+
+- **Security Enhancements**
+  - Added protection against timing side-channel attacks
+  - Implemented secure error handling to prevent information leakage
+  - Created comprehensive input validation with bound checking
+  - Added protection against malformed commitment data
+  - Implemented secure integration with blinding factor storage
+  - Added transaction consistency verification
+
+- **Developer Tools and Documentation**
+  - Created comprehensive verification system guide
+  - Added detailed API reference for all verification components
+  - Implemented integration examples with wallet and node components
+  - Created troubleshooting guide for verification issues
+  - Added performance optimization guidelines
+  - Implemented tutorials for common verification patterns
+
+### Improved
+- Enhanced transaction validation with more robust commitment verification
+- Optimized verification performance for production environments
+- Improved error reporting for verification failures
+- Enhanced integration with blinding factor storage
+- Added more comprehensive test coverage for verification components
+- Improved usability with better developer-facing APIs
+
+### Fixed
+- Resolved edge cases in transaction balance verification
+- Fixed potential timing vulnerabilities in verification operations
+- Corrected error handling in batch verification processes
+- Addressed inconsistencies in verification context initialization
+- Fixed resource leaks in verification error handling
+
 ## [0.5.3] - 2025-03-15
 
 ### Added
@@ -14,10 +66,23 @@ All notable changes to the Obscura project will be documented in this file.
   - Added homomorphic operation support on commitments
   - Implemented efficient serialization for all commitment types
 
+- **Commitment Verification System**
+  - Implemented robust verification framework for all commitment types
+  - Added transaction-level verification with input-output balance checking
+  - Created verification context for passing UTXOs and configuration options
+  - Implemented strict and lenient verification modes
+  - Added integration with secure blinding factor storage
+  - Created comprehensive error handling system with detailed categorization
+  - Added batch verification for multiple transactions
+  - Implemented support for range proof verification
+  - Created utility functions for commitment comparison and hashing
+
 - **Cryptographic Documentation Updates**
   - Added detailed documentation for dual-curve Pedersen commitment system
   - Created comprehensive guide for blinding factor generation protocol
   - Updated verification system documentation for dual-curve support
+  - Added detailed API reference for the commitment verification system
+  - Created integration examples for verification components
   - Enhanced cryptography index with recent implementations
 
 ### Improved
@@ -27,6 +92,10 @@ All notable changes to the Obscura project will be documented in this file.
   - Optimized commitment operations for better performance
   - Added proper error handling for cryptographic operations
   - Implemented secure memory handling for sensitive values
+  - Enhanced transaction validation with robust commitment verification
+  - Improved privacy protection with better verification primitives
+  - Added protection against timing side-channel attacks
+  - Implemented comprehensive input validation for all verification operations
 
 ### Fixed
 - Resolved import issues with Jubjub curve libraries

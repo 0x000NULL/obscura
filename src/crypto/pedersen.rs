@@ -13,6 +13,35 @@ use group::{Group, GroupEncoding};
 use ff::Field;
 use std::ops::Add;
 
+// Import the blinding store
+use crate::crypto::blinding_store::BlindingStore;
+use std::path::Path;
+use std::sync::Arc;
+use std::sync::RwLock;
+use once_cell::sync::Lazy;
+
+// Global blinding store instance with lazy initialization
+static BLINDING_STORE: Lazy<Arc<RwLock<Option<BlindingStore>>>> = Lazy::new(|| {
+    Arc::new(RwLock::new(None))
+});
+
+// Initialize the blinding store
+pub fn initialize_blinding_store(data_dir: &Path, password: &str) -> Result<(), String> {
+    let store = BlindingStore::new(data_dir);
+    store.initialize(password)?;
+    
+    // Update the global instance
+    let mut store_lock = BLINDING_STORE.write().unwrap();
+    *store_lock = Some(store);
+    
+    Ok(())
+}
+
+// Get a reference to the blinding store
+pub fn get_blinding_store() -> Option<BlindingStore> {
+    BLINDING_STORE.read().unwrap().clone()
+}
+
 // Base Points for JubJub Pedersen commitments
 lazy_static::lazy_static! {
     static ref PEDERSEN_G: JubjubPoint = {
@@ -121,11 +150,45 @@ impl PedersenCommitment {
     }
     
     // Create a commitment to a value with a random blinding factor
+    // Store the blinding factor securely if tx_id is provided
     #[allow(dead_code)]
     pub fn commit_random(value: u64) -> Self {
         // Generate a random blinding factor
         let blinding = generate_random_jubjub_scalar();
         Self::commit(value, blinding)
+    }
+    
+    // Create a commitment with secure blinding factor storage
+    #[allow(dead_code)]
+    pub fn commit_with_storage(value: u64, tx_id: [u8; 32], output_index: u32) -> Result<Self, String> {
+        // Generate a random blinding factor
+        let blinding = generate_random_jubjub_scalar();
+        
+        // Create the commitment
+        let commitment = Self::commit(value, blinding);
+        
+        // Store the blinding factor if blinding store is initialized
+        if let Some(store) = get_blinding_store() {
+            store.store_jubjub_blinding_factor(tx_id, output_index, &blinding)?;
+        } else {
+            return Err("Blinding store not initialized".to_string());
+        }
+        
+        Ok(commitment)
+    }
+    
+    // Retrieve a commitment using stored blinding factor
+    #[allow(dead_code)]
+    pub fn from_stored_blinding(value: u64, tx_id: &[u8; 32], output_index: u32) -> Result<Self, String> {
+        // Get the blinding store
+        let store = get_blinding_store()
+            .ok_or_else(|| "Blinding store not initialized".to_string())?;
+        
+        // Retrieve the blinding factor
+        let blinding = store.get_jubjub_blinding_factor(tx_id, output_index)?;
+        
+        // Create the commitment
+        Ok(Self::commit(value, blinding))
     }
     
     // Create a commitment from an existing point
@@ -248,6 +311,37 @@ impl BlsPedersenCommitment {
         // Generate a random blinding factor
         let blinding = generate_random_bls_scalar();
         Self::commit(value, blinding)
+    }
+    
+    // Create a commitment with secure blinding factor storage
+    pub fn commit_with_storage(value: u64, tx_id: [u8; 32], output_index: u32) -> Result<Self, String> {
+        // Generate a random blinding factor
+        let blinding = generate_random_bls_scalar();
+        
+        // Create the commitment
+        let commitment = Self::commit(value, blinding);
+        
+        // Store the blinding factor if blinding store is initialized
+        if let Some(store) = get_blinding_store() {
+            store.store_bls_blinding_factor(tx_id, output_index, &blinding)?;
+        } else {
+            return Err("Blinding store not initialized".to_string());
+        }
+        
+        Ok(commitment)
+    }
+    
+    // Retrieve a commitment using stored blinding factor
+    pub fn from_stored_blinding(value: u64, tx_id: &[u8; 32], output_index: u32) -> Result<Self, String> {
+        // Get the blinding store
+        let store = get_blinding_store()
+            .ok_or_else(|| "Blinding store not initialized".to_string())?;
+        
+        // Retrieve the blinding factor
+        let blinding = store.get_bls_blinding_factor(tx_id, output_index)?;
+        
+        // Create the commitment
+        Ok(Self::commit(value, blinding))
     }
     
     // Create a commitment from an existing point
@@ -393,6 +487,31 @@ impl DualCurveCommitment {
             bls_commitment,
             value: Some(value),
         }
+    }
+    
+    // Create a commitment with secure blinding factor storage
+    pub fn commit_with_storage(value: u64, tx_id: [u8; 32], output_index: u32) -> Result<Self, String> {
+        // Get the blinding store
+        let store = get_blinding_store()
+            .ok_or_else(|| "Blinding store not initialized".to_string())?;
+        
+        // Generate random blinding factors
+        let jubjub_blinding = generate_random_jubjub_scalar();
+        let bls_blinding = generate_random_bls_scalar();
+        
+        // Store the blinding factors
+        store.store_jubjub_blinding_factor(tx_id, output_index, &jubjub_blinding)?;
+        store.store_bls_blinding_factor(tx_id, output_index, &bls_blinding)?;
+        
+        // Create the commitments
+        let jubjub_commitment = PedersenCommitment::commit(value, jubjub_blinding);
+        let bls_commitment = BlsPedersenCommitment::commit(value, bls_blinding);
+        
+        Ok(DualCurveCommitment {
+            jubjub_commitment,
+            bls_commitment,
+            value: Some(value),
+        })
     }
     
     // Get the value if available

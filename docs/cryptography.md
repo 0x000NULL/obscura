@@ -110,6 +110,113 @@ Where G and H are independent generators of the Jubjub curve.
 - **Binding**: Cannot find a different (value, blinding) pair that opens to the same commitment
 - **Homomorphic**: Commit(a) + Commit(b) = Commit(a+b)
 
+#### Implementation
+
+Obscura implements a dual-curve Pedersen commitment system supporting both Jubjub and BLS12-381 curves:
+
+```rust
+// Jubjub commitment
+pub fn commit_jubjub(value: u64, blinding: JubjubScalar) -> PedersenCommitment {
+    let value_scalar = JubjubScalar::from(value);
+    let commitment_point = (jubjub_get_g() * value_scalar) + (jubjub_get_h() * blinding);
+    PedersenCommitment::new(commitment_point, Some(value), Some(blinding))
+}
+
+// BLS commitment
+pub fn commit_bls(value: u64, blinding: BlsScalar) -> BlsPedersenCommitment {
+    let value_scalar = BlsScalar::from(value);
+    let commitment_point = (bls_get_g() * value_scalar) + (bls_get_h() * blinding);
+    BlsPedersenCommitment::new(commitment_point, Some(value), Some(blinding))
+}
+
+// Dual-curve commitment
+pub fn commit_dual(value: u64) -> DualCurveCommitment {
+    let jubjub_blinding = generate_random_jubjub_scalar();
+    let bls_blinding = generate_random_bls_scalar();
+    
+    let jubjub_commitment = commit_jubjub(value, jubjub_blinding);
+    let bls_commitment = commit_bls(value, bls_blinding);
+    
+    DualCurveCommitment::new(jubjub_commitment, bls_commitment, Some(value))
+}
+```
+
+### Blinding Factor Storage
+
+Obscura provides a secure, encrypted storage system for blinding factors:
+
+```rust
+// Store a blinding factor
+pub fn store_blinding_factor(tx_id: [u8; 32], output_index: u32, blinding: &JubjubScalar) -> Result<(), String> {
+    let blinding_store = get_blinding_store()
+        .ok_or_else(|| "Blinding store not initialized".to_string())?;
+    
+    blinding_store.store_jubjub_blinding_factor(tx_id, output_index, blinding)
+}
+
+// Retrieve a blinding factor
+pub fn get_blinding_factor(tx_id: &[u8; 32], output_index: u32) -> Result<JubjubScalar, String> {
+    let blinding_store = get_blinding_store()
+        .ok_or_else(|| "Blinding store not initialized".to_string())?;
+    
+    blinding_store.get_jubjub_blinding_factor(tx_id, output_index)
+}
+```
+
+### Commitment Verification System
+
+Obscura implements a comprehensive commitment verification system to validate transaction integrity while preserving privacy:
+
+#### Core Components
+
+- **CommitmentVerifier**: Provides methods to verify individual commitments and transaction balance
+- **VerificationContext**: Contains necessary data and settings for verification operations
+- **Error Handling**: A structured error type for different verification failure categories
+
+#### Key Features
+
+- **Individual Commitment Verification**: Verify that a commitment matches a claimed value
+- **Transaction Balance Verification**: Ensure that the sum of inputs equals the sum of outputs plus fees
+- **Range Proof Verification**: Verify that committed values are within valid ranges
+- **Batch Verification**: Efficiently verify multiple transactions in a batch
+
+#### Implementation
+
+```rust
+// Verify a JubjubScalar commitment
+pub fn verify_jubjub_commitment(
+    commitment: &PedersenCommitment, 
+    value: u64, 
+    blinding: &JubjubScalar
+) -> VerificationResult {
+    let value_scalar = JubjubScalar::from(value);
+    let expected_point = (jubjub_get_g() * value_scalar) + (jubjub_get_h() * *blinding);
+    
+    Ok(expected_point == commitment.commitment)
+}
+
+// Verify transaction balance
+pub fn verify_transaction_balance(
+    tx: &Transaction, 
+    known_fee: Option<u64>,
+    context: &VerificationContext
+) -> VerificationResult {
+    // Implementation verifies that:
+    // sum(inputs) = sum(outputs) + fee
+    // Details in the codebase
+}
+
+// Comprehensive transaction verification
+pub fn verify_transaction(
+    tx: &Transaction,
+    known_fee: Option<u64>,
+    context: &VerificationContext
+) -> VerificationResult {
+    // Verifies balance and range proofs
+    // Details in the codebase
+}
+```
+
 ### Bulletproofs
 
 Bulletproofs are short non-interactive zero-knowledge proofs that require no trusted setup.
@@ -144,6 +251,14 @@ The codebase uses feature flags to control which curve systems are active:
 
 The cryptographic implementations aim to be constant-time to prevent timing attacks. However, complete side-channel resistance requires additional hardening at the application level.
 
+### Secure Blinding Factor Management
+
+Blinding factors are crucial for maintaining privacy:
+
+1. **Secure Generation**: Using secure random number generators
+2. **Encrypted Storage**: Password-protected AES-256-GCM encryption
+3. **Lifecycle Management**: Tracking spent blinding factors and secure cleanup
+
 ### Random Number Generation
 
 We use the operating system's secure random number generator (`OsRng`) for all cryptographic operations requiring randomness.
@@ -160,3 +275,4 @@ We use the operating system's secure random number generator (`OsRng`) for all c
 2. Jubjub: https://z.cash/technology/jubjub/
 3. Bulletproofs: https://eprint.iacr.org/2017/1066.pdf
 4. zk-SNARKs: https://eprint.iacr.org/2013/279.pdf 
+5. Pedersen Commitments: https://link.springer.com/chapter/10.1007/3-540-46766-1_9 

@@ -2,6 +2,87 @@
 
 This document contains the release notes for each version of the Obscura blockchain.
 
+## [0.5.4] - 2025-03-20
+
+### Commitment Verification System Enhancement
+
+This release focuses on enhancing the commitment verification system implemented in v0.5.3, providing more robust privacy guarantees and transaction validation capabilities.
+
+#### Comprehensive Verification Framework
+
+- **Robust Error Handling and Reporting**
+  - Implemented structured error type with detailed categorization
+  - Added informative error messages for all verification failures
+  - Created context-specific error handling for different verification stages
+  - Added debugging support with detailed error reporting
+  - Implemented graceful recovery from verification failures
+
+- **Enhanced Transaction Validation**
+  - Added comprehensive balance verification (sum of inputs = sum of outputs + fee)
+  - Implemented coinbase transaction special handling
+  - Created verification context with configurable options
+  - Added support for both strict and lenient verification modes
+  - Implemented transaction graph validation with commitment consistency checks
+  - Added efficient UTXO-based verification with caching
+
+- **Flexible Verification Strategies**
+  - Created configurable verification context with multiple options
+  - Implemented strict mode for full security guarantees
+  - Added lenient mode for compatibility and partial verification
+  - Created verification modes with/without range proof checking
+  - Implemented customizable UTXO set for efficient verification
+  - Added support for specialized verification environments
+
+#### Performance and Security
+
+- **Verification Performance**
+  - Implemented batch verification for multiple transactions
+  - Added optimized commitment equality checks
+  - Created efficient serialization for verification operations
+  - Implemented fast-path validation for common scenarios
+  - Added caching options for verification context
+
+- **Additional Security Guarantees**
+  - Added protection against timing side-channel attacks
+  - Implemented secure error handling to prevent information leakage
+  - Created comprehensive input validation with bound checking
+  - Added protection against malformed commitment data
+  - Implemented secure integration with blinding factor storage
+  - Added transaction consistency checking
+
+#### Usability and Integration
+
+- **Developer-Friendly API**
+  - Created intuitive verification system interface
+  - Added comprehensive API documentation
+  - Implemented common verification patterns
+  - Created helper utilities for commitment comparison and hashing
+  - Added examples for all verification operation types
+
+- **Comprehensive Testing**
+  - Added unit tests for all verification components
+  - Created integration tests for transaction validation
+  - Implemented property-based tests for verification properties
+  - Added edge case testing for verification error handling
+  - Created comprehensive test coverage for all verification paths
+
+### Documentation
+
+- **Verification System Documentation**
+  - Added comprehensive verification system guide
+  - Created detailed API reference for all verification components
+  - Added integration examples with wallet and node components
+  - Implemented troubleshooting guide for verification issues
+  - Created performance optimization guidelines
+  - Added security best practices for verification
+
+- **Integration Tutorials**
+  - Added tutorial for integrating verification in wallet implementations
+  - Created guide for node validation with verification system
+  - Added examples for batch verification implementation
+  - Created documentation for custom verification context usage
+  - Implemented error handling patterns documentation
+
 ## [0.5.3] - 2025-03-15
 
 ### Dual-Curve Pedersen Commitment System
@@ -33,12 +114,29 @@ This release implements a comprehensive dual-curve Pedersen commitment system, s
 
 #### Verification System Enhancements
 
-- **Comprehensive Verification**
-  - Added individual commitment verification for both curve types
-  - Implemented batch verification for improved performance
-  - Created dual-curve transaction balance verification
-  - Added support for range proof integration
-  - Implemented secure verification caching
+- **Comprehensive Verification System**
+  - Implemented robust commitment verification framework with detailed error reporting
+  - Added individual commitment verification for all commitment types (Jubjub, BLS, and dual-curve)
+  - Created transaction-level balance verification (inputs = outputs + fee)
+  - Implemented integration with range proof verification
+  - Added support for both strict and lenient verification modes
+  - Created verification context for passing UTXOs and configuration options
+  - Implemented secure error handling with detailed categorization
+  - Added batch transaction verification for improved performance
+
+- **Secure Blinding Factor Storage Integration**
+  - Integrated verification system with secure blinding factor storage
+  - Implemented verification using stored blinding factors
+  - Added secure blinding factor retrieval and validation
+  - Created lifecycle management for blinding factors (marking as spent)
+  - Implemented proper error handling for storage-related operations
+
+- **Transaction Privacy Verification**
+  - Added comprehensive verification of confidential transactions
+  - Implemented validation for dual-curve commitment consistency
+  - Created safeguards for privacy-preserving transaction processing
+  - Added verification for transaction input-output balance
+  - Implemented coinbase transaction special handling
 
 - **Performance Optimizations**
   - Added multi-exponentiation techniques for efficient batch verification
@@ -59,9 +157,10 @@ This release implements a comprehensive dual-curve Pedersen commitment system, s
 - **Comprehensive Documentation**
   - Created detailed documentation for the dual-curve commitment system
   - Added comprehensive guide for the blinding factor generation protocol
-  - Updated verification system documentation for dual-curve support
-  - Enhanced cryptography index with recent implementations
-  - Added detailed examples for all operations
+  - Created detailed documentation for the commitment verification system
+  - Added API reference documentation for verification components
+  - Updated cryptography index with recent implementations
+  - Enhanced integration examples with verification use cases
 
 - **Integration Support**
   - Implemented smooth transition from single-curve to dual-curve system

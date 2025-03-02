@@ -7,6 +7,8 @@ pub mod privacy;
 // Add crypto modules
 pub mod bulletproofs;
 pub mod pedersen;
+pub mod blinding_store;
+pub mod commitment_verification;
 
 // Add curve modules
 pub mod bls12_381;
@@ -14,6 +16,12 @@ pub mod jubjub;
 
 // Import the extension traits
 use crate::crypto::jubjub::{JubjubScalarExt, JubjubPointExt};
+
+// Re-export BlindingStore for easier access
+pub use blinding_store::BlindingStore;
+// Re-export CommitmentVerifier for easier access
+pub use commitment_verification::CommitmentVerifier;
+pub use commitment_verification::{VerificationContext, VerificationResult, VerificationError};
 
 // Key management functions
 // These functions are intended for use in the wallet implementation
