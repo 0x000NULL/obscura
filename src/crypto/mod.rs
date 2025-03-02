@@ -25,13 +25,13 @@ pub fn generate_keypair() -> jubjub::JubjubKeypair {
 
 #[allow(dead_code)]
 pub fn serialize_keypair(keypair: &(jubjub::JubjubScalar, jubjub::JubjubPoint)) -> Vec<u8> {
-    let mut bytes = Vec::with_capacity(96); // 32 bytes for scalar + 64 bytes for point
+    let mut bytes = Vec::with_capacity(64); // 32 bytes for scalar + 32 bytes for point
     
     // Serialize the secret key (32 bytes)
     let secret_bytes = keypair.0.to_bytes();
     bytes.extend_from_slice(&secret_bytes);
     
-    // Serialize the public key (64 bytes)
+    // Serialize the public key (32 bytes)
     let public_bytes = keypair.1.to_bytes();
     bytes.extend_from_slice(&public_bytes);
     
@@ -40,7 +40,7 @@ pub fn serialize_keypair(keypair: &(jubjub::JubjubScalar, jubjub::JubjubPoint)) 
 
 #[allow(dead_code)]
 pub fn deserialize_keypair(bytes: &[u8]) -> Option<(jubjub::JubjubScalar, jubjub::JubjubPoint)> {
-    if bytes.len() != 96 {
+    if bytes.len() != 64 {
         return None;
     }
     
@@ -48,7 +48,7 @@ pub fn deserialize_keypair(bytes: &[u8]) -> Option<(jubjub::JubjubScalar, jubjub
     let secret = jubjub::JubjubScalar::from_bytes(&bytes[0..32])?;
     
     // Deserialize the public key
-    let public = jubjub::JubjubPoint::from_bytes(&bytes[32..96])?;
+    let public = jubjub::JubjubPoint::from_bytes(&bytes[32..64])?;
     
     Some((secret, public))
 }

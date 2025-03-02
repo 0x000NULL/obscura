@@ -2,9 +2,10 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use rayon::prelude::*;
+use sha2::{Sha256, Digest};
 
 use super::pos_old::{StakeProof, StakingContract};
-use crate::blockchain::Block;
+use crate::blockchain::{Block, Transaction, OutPoint, TransactionInput, TransactionOutput};
 
 /// Manages the state of the hybrid consensus system with optimizations
 pub struct HybridStateManager {
@@ -563,9 +564,60 @@ mod tests {
     fn test_validation_manager() {
         let validation_manager = ValidationManager::new(4);
         
-        // Create some dummy transactions
-        let tx1 = Transaction::default();
-        let tx2 = Transaction::default();
+        // Create valid transactions instead of empty ones
+        let mut tx1 = Transaction::default();
+        let mut tx2 = Transaction::default();
+        
+        // Add a dummy input to each transaction
+        let mut hasher = Sha256::new();
+        hasher.update(b"dummy_transaction_1");
+        let mut tx_hash1 = [0u8; 32];
+        tx_hash1.copy_from_slice(&hasher.finalize());
+        
+        let outpoint1 = OutPoint {
+            transaction_hash: tx_hash1,
+            index: 0,
+        };
+        
+        let input1 = TransactionInput {
+            previous_output: outpoint1,
+            signature_script: vec![1, 2, 3], // dummy signature
+            sequence: 0,
+        };
+        
+        hasher = Sha256::new();
+        hasher.update(b"dummy_transaction_2");
+        let mut tx_hash2 = [0u8; 32];
+        tx_hash2.copy_from_slice(&hasher.finalize());
+        
+        let outpoint2 = OutPoint {
+            transaction_hash: tx_hash2,
+            index: 0,
+        };
+        
+        let input2 = TransactionInput {
+            previous_output: outpoint2,
+            signature_script: vec![4, 5, 6], // dummy signature
+            sequence: 0,
+        };
+        
+        // Add a dummy output to each transaction
+        let output1 = TransactionOutput {
+            value: 100,
+            public_key_script: vec![7, 8, 9], // dummy public key
+        };
+        
+        let output2 = TransactionOutput {
+            value: 200,
+            public_key_script: vec![10, 11, 12], // dummy public key
+        };
+        
+        // Add inputs and outputs to transactions
+        tx1.inputs.push(input1);
+        tx1.outputs.push(output1);
+        
+        tx2.inputs.push(input2);
+        tx2.outputs.push(output2);
         
         let transactions = vec![tx1, tx2];
         

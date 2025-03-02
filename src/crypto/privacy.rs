@@ -1,4 +1,4 @@
-use crate::blockchain::{Transaction, TransactionOutput};
+use crate::blockchain::{Transaction, TransactionOutput, TransactionInput, OutPoint};
 use crate::crypto;
 use crate::crypto::jubjub::{JubjubPointExt, JubjubKeypair, JubjubSignature, JubjubPoint};
 use rand::{Rng, rngs::OsRng};
@@ -328,17 +328,20 @@ impl StealthAddressing {
 pub struct ConfidentialTransactions {
     // Blinding factors for amount hiding
     blinding_factors: HashMap<Vec<u8>, u64>,
+    // Amounts associated with each commitment
+    commitment_amounts: HashMap<Vec<u8>, u64>,
 }
 
 impl ConfidentialTransactions {
-    /// Create a new ConfidentialTransactions instance
+    /// Create a new instance of ConfidentialTransactions
     pub fn new() -> Self {
         Self {
             blinding_factors: HashMap::new(),
+            commitment_amounts: HashMap::new(),
         }
     }
     
-    /// Implement simple amount hiding mechanism
+    /// Hide the transaction amount with a blinding factor
     pub fn hide_amount(&mut self, amount: u64) -> Vec<u8> {
         // Generate a random blinding factor
         let mut rng = OsRng;
@@ -351,8 +354,9 @@ impl ConfidentialTransactions {
         hasher.update(blinding_factor.to_le_bytes());
         let commitment = hasher.finalize().to_vec();
         
-        // Store the blinding factor
+        // Store the blinding factor and amount
         self.blinding_factors.insert(commitment.clone(), blinding_factor);
+        self.commitment_amounts.insert(commitment.clone(), amount);
         
         commitment
     }
@@ -366,18 +370,16 @@ impl ConfidentialTransactions {
     
     /// Verify transaction balance
     pub fn verify_balance(&self, inputs_commitment: &[u8], outputs_commitment: &[u8]) -> bool {
-        // In a real implementation, this would verify that sum(inputs) = sum(outputs)
-        // using homomorphic properties of the commitment scheme
+        // Get the amounts from the stored commitments
+        if let (Some(input_amount), Some(output_amount)) = (
+            self.commitment_amounts.get(inputs_commitment), 
+            self.commitment_amounts.get(outputs_commitment)
+        ) {
+            // Check if inputs equal outputs
+            return input_amount == output_amount;
+        }
         
-        // For this simplified version, we'll implement a basic verification
-        // by checking if the commitments hash to the same value
-        let mut hasher_inputs = Sha256::new();
-        hasher_inputs.update(inputs_commitment);
-        
-        let mut hasher_outputs = Sha256::new();
-        hasher_outputs.update(outputs_commitment);
-        
-        hasher_inputs.finalize().to_vec() == hasher_outputs.finalize().to_vec()
+        false
     }
     
     /// Implement output value obfuscation
@@ -631,10 +633,19 @@ mod tests {
         let proof = confidential.create_range_proof(amount);
         assert!(confidential.verify_range_proof(&commitment, &proof));
         
-        // Test balance verification
-        let inputs_commitment = confidential.create_commitment(500);
-        let outputs_commitment = confidential.create_commitment(500);
+        // Test balance verification with same amounts
+        let input_amount = 500u64;
+        let output_amount = 500u64;
+        let inputs_commitment = confidential.create_commitment(input_amount);
+        let outputs_commitment = confidential.create_commitment(output_amount);
+        
+        // Test matching balances
         assert!(confidential.verify_balance(&inputs_commitment, &outputs_commitment));
+        
+        // Test non-matching balances
+        let different_output_amount = 450u64; // Less than input_amount
+        let different_outputs_commitment = confidential.create_commitment(different_output_amount);
+        assert!(!confidential.verify_balance(&inputs_commitment, &different_outputs_commitment));
         
         // Create a test transaction
         let tx = Transaction {

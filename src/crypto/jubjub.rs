@@ -151,9 +151,15 @@ impl JubjubKeypair {
     
     /// Sign a message using this keypair
     pub fn sign(&self, message: &[u8]) -> Result<JubjubSignature, &'static str> {
-        // Generate a random scalar for the signature
-        let mut rng = OsRng;
-        let r = JubjubScalar::random(&mut rng);
+        // Instead of generating a random scalar, derive it deterministically from the message and secret key
+        // This makes the VRF deterministic for the same input and keypair
+        let mut hasher = Sha256::new();
+        hasher.update(&self.secret.to_bytes()); // Include the secret key
+        hasher.update(message); // Include the message
+        let r_bytes = hasher.finalize();
+        
+        // Convert hash to scalar
+        let r = JubjubScalar::hash_to_scalar(&r_bytes);
         
         // Compute R = r·G
         let r_point = <JubjubPoint as JubjubPointExt>::generator() * r;
