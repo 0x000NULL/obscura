@@ -1048,8 +1048,8 @@ mod tests {
         }
         
         // Mock transactions with matching short_ids
-        let mut tx1 = Transaction::default();
-        let mut tx2 = Transaction::default();
+        let tx1 = Transaction::default();
+        let tx2 = Transaction::default();
         
         // Monkey patch the process_transaction method to directly remove the short_ids
         // without calculating them (since default Transaction doesn't have a proper hash)

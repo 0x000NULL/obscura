@@ -230,7 +230,7 @@ mod tests {
         
         // Create 5 commitments and proofs
         for _ in 0..5 {
-            let value = rng.gen_range(0, 1000u64);
+            let value = rng.gen_range(0..1000u64);
             let blinding = generate_random_jubjub_scalar();
             
             let commitment = PedersenCommitment::commit(value, blinding);

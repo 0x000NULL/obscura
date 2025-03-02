@@ -559,7 +559,7 @@ impl Mempool {
             return false;
         }
         
-        // Convert to ed25519 PublicKey
+        // Convert to JubjubPoint
         let sponsor_pubkey = match JubjubPoint::from_bytes(sponsor_pubkey_bytes) {
             Some(pk) => pk,
             None => return false,
@@ -571,7 +571,7 @@ impl Mempool {
             return false;
         }
         
-        // Convert to ed25519 Signature
+        // Convert to JubjubSignature
         let signature = match JubjubSignature::from_bytes(signature_bytes) {
             Some(sig) => sig,
             None => return false,

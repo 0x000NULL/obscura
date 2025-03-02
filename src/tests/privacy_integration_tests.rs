@@ -5,7 +5,7 @@ use crate::networking::dandelion::{DandelionManager, PropagationState, PrivacyRo
 use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 use std::collections::HashSet;
 use std::time::Duration;
-use ed25519_dalek::{Keypair, PublicKey};
+use crate::crypto::jubjub::{JubjubKeypair, JubjubPoint, JubjubSignature, generate_keypair};
 use rand::thread_rng;
 
 #[test]
@@ -116,7 +116,7 @@ fn test_privacy_through_dandelion() {
     wallet.balance = 1000;
     
     // Create a recipient
-    let recipient = Keypair::generate(&mut thread_rng()).public;
+    let recipient = generate_keypair().public;
     
     // Create transaction
     let tx = wallet.create_transaction(recipient, 300).unwrap();
@@ -178,8 +178,8 @@ fn test_amount_hiding_with_confidential_transactions() {
     wallet.balance = 2000;
     
     // Create multiple recipients
-    let recipient1 = Keypair::generate(&mut thread_rng()).public;
-    let recipient2 = Keypair::generate(&mut thread_rng()).public;
+    let recipient1 = generate_keypair().public;
+    let recipient2 = generate_keypair().public;
     
     // Create first transaction
     let tx1 = wallet.create_transaction(recipient1, 500).unwrap();
@@ -243,7 +243,7 @@ fn test_multiple_wallet_privacy() {
     }
     
     // Create a recipient
-    let recipient = Keypair::generate(&mut thread_rng()).public;
+    let recipient = generate_keypair().public;
     
     // Each wallet creates a transaction to the same recipient
     let mut transactions = Vec::new();
@@ -279,10 +279,10 @@ fn test_adversarial_transaction_analysis() {
     sender_wallet.enable_privacy();
     sender_wallet.balance = 1000;
     
-    let recipient = Keypair::generate(&mut thread_rng()).public;
+    let recipient = generate_keypair().public;
     
     // Create a transaction
-    let tx = sender_wallet.create_transaction(recipient, 500).unwrap();
+    let tx = sender_wallet.create_transaction(&recipient, 500).unwrap();
     
     // Extract transaction properties an adversary might analyze
     let inputs_count = tx.inputs.len();
@@ -291,7 +291,7 @@ fn test_adversarial_transaction_analysis() {
     
     // Create a second transaction with a different amount
     sender_wallet.balance = 500; // Reset balance after first transaction
-    let tx2 = sender_wallet.create_transaction(recipient, 300).unwrap();
+    let tx2 = sender_wallet.create_transaction(&recipient, 300).unwrap();
     
     // Extract properties of second transaction
     let inputs_count2 = tx2.inputs.len();

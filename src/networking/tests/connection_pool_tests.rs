@@ -374,7 +374,7 @@ fn test_reputation_privacy_guarantees() {
     let all_addrs = [ipv4_addrs, ipv6_addrs].concat();
     for addr in &all_addrs {
         // Update reputation with a random score between 0.5 and 1.0
-        let score = rand::thread_rng().gen_range(0.5, 1.0);
+        let score = rand::thread_rng().gen_range(0.5..1.0);
         assert!(pool.update_peer_reputation(*addr, score).is_ok());
     }
 

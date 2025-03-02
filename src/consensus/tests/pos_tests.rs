@@ -3,8 +3,7 @@ use crate::consensus::pos_old::{
     ProposalAction, BlockInfo, BftMessage
 };
 use crate::consensus::pos_old::{ProofOfStake, StakeProof, StakingContract, SlashingOffense};
-use ed25519_dalek::{Keypair, Signer};
-use rand::rngs::OsRng;
+use crate::crypto::jubjub::{JubjubKeypair, generate_keypair, JubjubPointExt};
 use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -94,9 +93,8 @@ fn test_enhanced_security_features() {
     let mut contract = StakingContract::new(24 * 60 * 60);
 
     // Create validators
-    let mut csprng = OsRng;
-    let keypair1 = Keypair::generate(&mut csprng);
-    let keypair2 = Keypair::generate(&mut csprng);
+    let keypair1 = generate_keypair();
+    let keypair2 = generate_keypair();
 
     let public_key1 = keypair1.public.to_bytes().to_vec();
     let public_key2 = keypair2.public.to_bytes().to_vec();
@@ -154,9 +152,8 @@ fn test_performance_optimizations() {
     let mut contract = StakingContract::new(24 * 60 * 60);
 
     // Create validators
-    let mut csprng = OsRng;
-    let keypair1 = Keypair::generate(&mut csprng);
-    let keypair2 = Keypair::generate(&mut csprng);
+    let keypair1 = generate_keypair();
+    let keypair2 = generate_keypair();
 
     let public_key1 = keypair1.public.to_bytes().to_vec();
     let public_key2 = keypair2.public.to_bytes().to_vec();
@@ -209,9 +206,8 @@ fn test_expanded_functionality() {
     let mut contract = StakingContract::new(24 * 60 * 60);
 
     // Create validators
-    let mut csprng = OsRng;
-    let keypair1 = Keypair::generate(&mut csprng);
-    let keypair2 = Keypair::generate(&mut csprng);
+    let keypair1 = generate_keypair();
+    let keypair2 = generate_keypair();
 
     let public_key1 = keypair1.public.to_bytes().to_vec();
     let public_key2 = keypair2.public.to_bytes().to_vec();
@@ -233,7 +229,7 @@ fn test_expanded_functionality() {
         .is_ok());
 
     // Test delegation cap
-    let delegator_keypair = Keypair::generate(&mut csprng);
+    let delegator_keypair = generate_keypair();
     let delegator_key = delegator_keypair.public.to_bytes().to_vec();
 
     // Create a large stake for the delegator
@@ -271,9 +267,8 @@ fn test_advanced_staking_features() {
     let mut contract = StakingContract::new(24 * 60 * 60);
 
     // Create validators
-    let mut csprng = OsRng;
-    let keypair1 = Keypair::generate(&mut csprng);
-    let keypair2 = Keypair::generate(&mut csprng);
+    let keypair1 = generate_keypair();
+    let keypair2 = generate_keypair();
 
     let public_key1 = keypair1.public.to_bytes().to_vec();
     let public_key2 = keypair2.public.to_bytes().to_vec();
@@ -303,7 +298,7 @@ fn test_advanced_staking_features() {
     assert!(contract.active_validators.contains(&public_key2));
 
     // Test liquid staking
-    let staker_keypair = Keypair::generate(&mut csprng);
+    let staker_keypair = generate_keypair();
     let staker_key = staker_keypair.public.to_bytes().to_vec();
 
     let liquid_result = contract.add_to_liquid_pool(staker_key.clone(), 2000);
@@ -359,19 +354,18 @@ fn test_bft_finality_and_fork_choice() {
     let mut staking_contract = StakingContract::new(24 * 60 * 60);
     
     // Create test keypairs
-    let mut csprng = OsRng;
-    let keypair1 = Keypair::generate(&mut csprng);
-    let keypair2 = Keypair::generate(&mut csprng);
-    let keypair3 = Keypair::generate(&mut csprng);
+    let keypair1 = generate_keypair();
+    let keypair2 = generate_keypair();
+    let keypair3 = generate_keypair();
     
     // Initialize BFT consensus
     let mut bft = staking_contract.init_bft_consensus();
     
     // Add validators to committee
     bft.committee = vec![
-        keypair1.public.as_bytes().to_vec(),
-        keypair2.public.as_bytes().to_vec(),
-        keypair3.public.as_bytes().to_vec(),
+        keypair1.public.to_bytes().to_vec(),
+        keypair2.public.to_bytes().to_vec(),
+        keypair3.public.to_bytes().to_vec(),
     ];
     
     // Create test chains
@@ -422,8 +416,8 @@ fn test_bft_finality_and_fork_choice() {
         message_type: BftMessageType::Prepare,
         block_hash,
         round: 0,
-        validator: keypair1.public.as_bytes().to_vec(),
-        signature: keypair1.sign(&block_hash).to_bytes().to_vec(),
+        validator: keypair1.public.to_bytes().to_vec(),
+        signature: keypair1.sign(&block_hash).expect("Signing failed").to_bytes(),
         timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
     };
     
@@ -431,8 +425,8 @@ fn test_bft_finality_and_fork_choice() {
         message_type: BftMessageType::Prepare,
         block_hash,
         round: 0,
-        validator: keypair2.public.as_bytes().to_vec(),
-        signature: keypair2.sign(&block_hash).to_bytes().to_vec(),
+        validator: keypair2.public.to_bytes().to_vec(),
+        signature: keypair2.sign(&block_hash).expect("Signing failed").to_bytes(),
         timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
     };
     
@@ -460,12 +454,11 @@ fn test_validator_rotation() {
     let mut contract = StakingContract::new(24 * 60 * 60);
 
     // Create validators
-    let mut csprng = OsRng;
     let mut validators = Vec::new();
 
     // Create 10 validators with different stakes
     for i in 0..10 {
-        let keypair = Keypair::generate(&mut csprng);
+        let keypair = generate_keypair();
         let public_key = keypair.public.to_bytes().to_vec();
         let stake_amount = 1000 + (i * 500); // Different stake amounts
 

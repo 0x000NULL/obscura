@@ -1,12 +1,11 @@
 use crate::consensus::vrf::{Vrf};
-use ed25519_dalek::{Keypair};
+use crate::crypto::jubjub::{JubjubKeypair, generate_keypair};
 use rand::{rngs::OsRng, RngCore};
 
 #[test]
 fn test_vrf_basic_functionality() {
     // Generate a keypair
-    let mut csprng = OsRng {};
-    let keypair = Keypair::generate(&mut csprng);
+    let keypair = generate_keypair();
 
     // Create a VRF instance
     let vrf = Vrf::new(&keypair);
@@ -25,8 +24,7 @@ fn test_vrf_basic_functionality() {
 #[test]
 fn test_vrf_deterministic_output() {
     // Generate a keypair
-    let mut csprng = OsRng {};
-    let keypair = Keypair::generate(&mut csprng);
+    let keypair = generate_keypair();
 
     // Create a VRF instance
     let vrf = Vrf::new(&keypair);
@@ -48,9 +46,8 @@ fn test_vrf_deterministic_output() {
 #[test]
 fn test_vrf_different_keypairs() {
     // Generate two different keypairs
-    let mut csprng = OsRng {};
-    let keypair1 = Keypair::generate(&mut csprng);
-    let keypair2 = Keypair::generate(&mut csprng);
+    let keypair1 = generate_keypair();
+    let keypair2 = generate_keypair();
 
     // Create two VRF instances
     let vrf1 = Vrf::new(&keypair1);
@@ -73,8 +70,7 @@ fn test_vrf_different_keypairs() {
 #[test]
 fn test_vrf_random_value_generation() {
     // Generate a keypair
-    let mut csprng = OsRng {};
-    let keypair = Keypair::generate(&mut csprng);
+    let keypair = generate_keypair();
 
     // Create a VRF instance
     let vrf = Vrf::new(&keypair);
@@ -107,16 +103,16 @@ fn test_vrf_validator_selection_simulation() {
     // Simulate validator selection using VRF
 
     // Create a set of validators with different stake amounts
-    let mut csprng = OsRng {};
     let mut validators = Vec::new();
     for i in 0..5 {
-        let keypair = Keypair::generate(&mut csprng);
+        let keypair = generate_keypair();
         let _stake = 1000 + (i * 500); // Different stake amounts
         validators.push((keypair, _stake));
     }
 
     // Create a random beacon
     let mut random_beacon = [0u8; 32];
+    let mut csprng = OsRng {};
     csprng.fill_bytes(&mut random_beacon);
 
     // Generate VRF proofs for each validator

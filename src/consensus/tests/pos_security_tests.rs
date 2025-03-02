@@ -6,11 +6,11 @@ use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use rand::{Rng, thread_rng};
 use rand::distributions::{Distribution, Uniform};
-use ed25519_dalek::{Keypair, Signer, Verifier};
+use crate::crypto::jubjub::{JubjubKeypair, generate_keypair};
 
 // Helper function to create a test validator
 fn create_test_validator(stake_amount: u64) -> Validator {
-    let keypair = Keypair::generate(&mut thread_rng());
+    let keypair = generate_keypair();
     Validator {
         id: keypair.public.to_bytes().to_vec(),
         stake_amount,
@@ -28,12 +28,12 @@ fn create_test_validator(stake_amount: u64) -> Validator {
 }
 
 // Helper function to create a stake proof with valid signature
-fn create_signed_stake_proof(amount: u64, keypair: &Keypair) -> StakeProof {
+fn create_signed_stake_proof(amount: u64, keypair: &JubjubKeypair) -> StakeProof {
     let mut data_to_sign = Vec::new();
     data_to_sign.extend_from_slice(&amount.to_le_bytes());
     data_to_sign.extend_from_slice(b"STAKE");
     
-    let signature = keypair.sign(&data_to_sign).to_bytes().to_vec();
+    let signature = keypair.sign(&data_to_sign).expect("Signing failed").to_bytes();
     
     StakeProof {
         stake_amount: amount,
@@ -46,7 +46,7 @@ fn create_signed_stake_proof(amount: u64, keypair: &Keypair) -> StakeProof {
 #[test]
 fn test_stake_proof_validation() {
     // Create a keypair for signing
-    let keypair = Keypair::generate(&mut thread_rng());
+    let keypair = generate_keypair();
     
     // Create a valid stake proof
     let valid_proof = create_signed_stake_proof(1_000_000, &keypair);
@@ -126,7 +126,7 @@ fn test_slashing_for_double_signing() {
     let mut pos = ProofOfStake::new();
     
     // Add a validator
-    let keypair = Keypair::generate(&mut thread_rng());
+    let keypair = generate_keypair();
     let validator_id = keypair.public.to_bytes().to_vec();
     let initial_stake = 5_000_000;
     
@@ -164,8 +164,8 @@ fn test_slashing_for_double_signing() {
     let block1_hash = block1.hash();
     let block2_hash = block2.hash();
     
-    let sig1 = keypair.sign(&block1_hash).to_bytes().to_vec();
-    let sig2 = keypair.sign(&block2_hash).to_bytes().to_vec();
+    let sig1 = keypair.sign(&block1_hash).expect("Signing failed").to_bytes();
+    let sig2 = keypair.sign(&block2_hash).expect("Signing failed").to_bytes();
     
     // Report double signing
     let evidence = DoubleSigningEvidence {

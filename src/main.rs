@@ -13,22 +13,19 @@ use std::time::Duration;
 use log::{info, error, debug};
 use crate::consensus::HybridConsensus;
 use crate::networking::Node;
+use crate::crypto::jubjub::JubjubKeypair;
 
 // Initialize cryptographic components
-fn init_crypto() -> Option<ed25519_dalek::Keypair> {
+fn init_crypto() -> Option<JubjubKeypair> {
     info!("Initializing cryptographic components...");
-    let keypair = match crypto::generate_keypair() {
-        Some(kp) => kp,
-        None => {
-            error!("Failed to generate keypair. Exiting.");
-            return None;
-        }
-    };
+    let keypair = crypto::generate_keypair();
+    
+    // For JubjubKeypair, we wrap it in Some since it doesn't return an Option
     Some(keypair)
 }
 
 // Initialize wallet components
-fn init_wallet(keypair: Option<ed25519_dalek::Keypair>) -> wallet::Wallet {
+fn init_wallet(keypair: Option<JubjubKeypair>) -> wallet::Wallet {
     info!("Initializing wallet...");
     let mut wallet = wallet::Wallet::new();
     if keypair.is_some() {

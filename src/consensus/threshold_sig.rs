@@ -308,16 +308,14 @@ impl ValidatorAggregation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::rngs::OsRng;
-    use ed25519_dalek::{Keypair, Signer};
+    use crate::crypto::jubjub::{generate_keypair, JubjubKeypair};
 
     #[test]
     fn test_threshold_signature_basic() {
         // Create keypairs for participants
-        let mut csprng = OsRng;
-        let keypair1 = Keypair::generate(&mut csprng);
-        let keypair2 = Keypair::generate(&mut csprng);
-        let keypair3 = Keypair::generate(&mut csprng);
+        let keypair1 = generate_keypair();
+        let keypair2 = generate_keypair();
+        let keypair3 = generate_keypair();
 
         let participants = vec![keypair1.public, keypair2.public, keypair3.public];
 
@@ -328,12 +326,12 @@ mod tests {
         let mut threshold_sig = ThresholdSignature::new(2, participants, message.clone()).unwrap();
 
         // Add signatures from participants 0 and 2
-        let sig1 = keypair1.sign(&message);
+        let sig1 = keypair1.sign(&message).expect("Signing failed");
         let result = threshold_sig.add_signature(0, sig1);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), false); // Threshold not met yet
 
-        let sig3 = keypair3.sign(&message);
+        let sig3 = keypair3.sign(&message).expect("Signing failed");
         let result = threshold_sig.add_signature(2, sig3);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), true); // Threshold met
@@ -352,9 +350,8 @@ mod tests {
     #[test]
     fn test_threshold_signature_errors() {
         // Create keypairs for participants
-        let mut csprng = OsRng;
-        let keypair1 = Keypair::generate(&mut csprng);
-        let keypair2 = Keypair::generate(&mut csprng);
+        let keypair1 = generate_keypair();
+        let keypair2 = generate_keypair();
 
         let participants = vec![keypair1.public, keypair2.public];
 
@@ -372,17 +369,17 @@ mod tests {
         let mut threshold_sig = ThresholdSignature::new(2, participants, message.clone()).unwrap();
 
         // Test invalid participant index
-        let sig1 = keypair1.sign(&message);
+        let sig1 = keypair1.sign(&message).expect("Signing failed");
         let result = threshold_sig.add_signature(2, sig1);
         assert!(matches!(result, Err(ThresholdError::InvalidParticipant)));
 
         // Add a valid signature
-        let sig1 = keypair1.sign(&message);
+        let sig1 = keypair1.sign(&message).expect("Signing failed");
         let result = threshold_sig.add_signature(0, sig1);
         assert!(result.is_ok());
 
         // Test duplicate signature
-        let sig1_again = keypair1.sign(&message);
+        let sig1_again = keypair1.sign(&message).expect("Signing failed");
         let result = threshold_sig.add_signature(0, sig1_again);
         assert!(matches!(result, Err(ThresholdError::DuplicateSignature)));
 
@@ -403,11 +400,10 @@ mod tests {
     #[test]
     fn test_validator_aggregation() {
         // Create keypairs for validators
-        let mut csprng = OsRng;
-        let keypair1 = Keypair::generate(&mut csprng);
-        let keypair2 = Keypair::generate(&mut csprng);
-        let keypair3 = Keypair::generate(&mut csprng);
-        let keypair4 = Keypair::generate(&mut csprng);
+        let keypair1 = generate_keypair();
+        let keypair2 = generate_keypair();
+        let keypair3 = generate_keypair();
+        let keypair4 = generate_keypair();
 
         let validators = vec![
             keypair1.public,
@@ -426,17 +422,17 @@ mod tests {
         let mut aggregation = ValidatorAggregation::new(3, validators, block_hash).unwrap();
 
         // Add signatures from validators 0, 1, and 3
-        let sig1 = keypair1.sign(&block_hash);
+        let sig1 = keypair1.sign(&block_hash).expect("Signing failed");
         let result = aggregation.add_validator_signature(0, sig1);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), false); // Threshold not met yet
 
-        let sig2 = keypair2.sign(&block_hash);
+        let sig2 = keypair2.sign(&block_hash).expect("Signing failed");
         let result = aggregation.add_validator_signature(1, sig2);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), false); // Threshold not met yet
 
-        let sig4 = keypair4.sign(&block_hash);
+        let sig4 = keypair4.sign(&block_hash).expect("Signing failed");
         let result = aggregation.add_validator_signature(3, sig4);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), true); // Threshold met

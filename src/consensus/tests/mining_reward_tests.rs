@@ -474,7 +474,7 @@ fn create_test_transaction_with_fee(index: u8, output_value: u64) -> Transaction
 #[test]
 fn test_transaction_prioritization() {
     // Test the prioritize_transactions function
-    let mut test_utxo_set = UTXOSet::new();
+    let test_utxo_set = UTXOSet::new();
     
     // Create some test transactions
     let tx1 = create_test_transaction_with_fee(1, 900);

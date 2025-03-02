@@ -1,12 +1,10 @@
 use crate::blockchain::{Transaction, TransactionInput, TransactionOutput, OutPoint};
 use crate::crypto::privacy::{TransactionObfuscator, StealthAddressing, ConfidentialTransactions};
-use ed25519_dalek::{Keypair, Verifier, Signer, PublicKey, SecretKey};
-use rand::rngs::OsRng;
+use crate::crypto::jubjub::{JubjubKeypair, JubjubPoint, generate_keypair};
 
 // Helper function to create a basic transaction for testing
 fn create_test_transaction() -> Transaction {
-    let mut csprng = OsRng;
-    let keypair = Keypair::generate(&mut csprng);
+    let keypair = generate_keypair();
 
     Transaction {
         inputs: vec![TransactionInput {
@@ -14,7 +12,7 @@ fn create_test_transaction() -> Transaction {
                 transaction_hash: [0u8; 32],
                 index: 0,
             },
-            signature_script: keypair.sign(b"test_transaction").to_bytes().to_vec(),
+            signature_script: keypair.sign(b"test_transaction").expect("Signing failed").to_bytes().to_vec(),
             sequence: 0,
         }],
         outputs: vec![TransactionOutput {
@@ -86,8 +84,7 @@ fn test_stealth_addressing_creation() {
 #[test]
 fn test_stealth_one_time_address_generation() {
     let mut stealth = StealthAddressing::new();
-    let mut csprng = OsRng;
-    let recipient_keypair = Keypair::generate(&mut csprng);
+    let recipient_keypair = generate_keypair();
     
     // Generate one-time address
     let one_time_address = stealth.generate_one_time_address(&recipient_keypair.public);
@@ -106,11 +103,10 @@ fn test_stealth_one_time_address_generation() {
 #[test]
 fn test_stealth_address_derivation() {
     let mut stealth = StealthAddressing::new();
-    let mut csprng = OsRng;
-    let recipient_keypair = Keypair::generate(&mut csprng);
+    let recipient_keypair = generate_keypair();
     
     // Generate ephemeral keypair and get pubkey
-    let ephemeral_keypair = Keypair::generate(&mut csprng);
+    let ephemeral_keypair = generate_keypair();
     let ephemeral_pubkey = ephemeral_keypair.public;
     
     // Derive stealth address using recipient's secret key
@@ -123,7 +119,7 @@ fn test_stealth_address_derivation() {
     assert!(!derived_address.is_empty());
     
     // Create another derivation and verify it's different
-    let another_keypair = Keypair::generate(&mut csprng);
+    let another_keypair = generate_keypair();
     let another_address = stealth.derive_address(
         &ephemeral_pubkey, 
         &another_keypair.secret
@@ -135,14 +131,13 @@ fn test_stealth_address_derivation() {
 #[test]
 fn test_address_scanning() {
     let mut stealth = StealthAddressing::new();
-    let mut csprng = OsRng;
-    let recipient_keypair = Keypair::generate(&mut csprng);
+    let recipient_keypair = generate_keypair();
     
     // Create a transaction with stealth address
     let mut tx = create_test_transaction();
     
     // Generate ephemeral keypair and get pubkey
-    let ephemeral_keypair = Keypair::generate(&mut csprng);
+    let ephemeral_keypair = generate_keypair();
     let ephemeral_pubkey = ephemeral_keypair.public;
     
     // Derive stealth address
@@ -153,7 +148,7 @@ fn test_address_scanning() {
     
     // Set the transaction's output to use the derived stealth address
     tx.outputs[0].public_key_script = derived_address.clone();
-    tx.ephemeral_pubkey = Some(ephemeral_pubkey.as_bytes().to_vec());
+    tx.ephemeral_pubkey = Some(ephemeral_pubkey.to_bytes().to_vec());
     
     // Scan for transactions
     let found_outputs = stealth.scan_for_addresses(
@@ -275,8 +270,7 @@ fn test_transaction_integration() {
     
     // Apply stealth addressing
     let mut stealth = StealthAddressing::new();
-    let mut csprng = OsRng;
-    let recipient_keypair = Keypair::generate(&mut csprng);
+    let recipient_keypair = generate_keypair();
     tx.apply_stealth_addressing(&mut stealth, &[recipient_keypair.public]);
     assert!(tx.ephemeral_pubkey.is_some());
     
@@ -294,7 +288,7 @@ fn test_transaction_integration() {
 // Helper extension methods for Transaction to make tests easier
 trait TransactionPrivacyExtensions {
     fn obfuscate(&mut self, obfuscator: &mut TransactionObfuscator);
-    fn apply_stealth_addressing(&mut self, stealth: &mut StealthAddressing, recipients: &[PublicKey]);
+    fn apply_stealth_addressing(&mut self, stealth: &mut StealthAddressing, recipients: &[JubjubPoint]);
     fn apply_confidential_transactions(&mut self, confidential: &mut ConfidentialTransactions);
 }
 
@@ -306,7 +300,7 @@ impl TransactionPrivacyExtensions for Transaction {
         self.privacy_flags |= 0x01; // Set obfuscation flag
     }
     
-    fn apply_stealth_addressing(&mut self, stealth: &mut StealthAddressing, recipients: &[PublicKey]) {
+    fn apply_stealth_addressing(&mut self, stealth: &mut StealthAddressing, recipients: &[JubjubPoint]) {
         if recipients.is_empty() {
             return;
         }

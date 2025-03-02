@@ -1,13 +1,15 @@
 use super::*;
-use ed25519_dalek::{Keypair, PublicKey, Signer, Verifier};
+use crate::crypto::jubjub::{JubjubKeypair, JubjubPoint, JubjubSignature, generate_keypair};
 
-pub fn validate_signature(input: &TransactionInput, message: &[u8], public_key: &PublicKey) -> bool {
+pub fn validate_signature(input: &TransactionInput, message: &[u8], public_key: &JubjubPoint) -> bool {
     if input.signature_script.len() != 64 {
         return false;
     }
     let mut signature_bytes = [0u8; 64];
     signature_bytes.copy_from_slice(&input.signature_script);
-    match ed25519_dalek::Signature::from_bytes(&signature_bytes) {
+    
+    // Convert signature bytes to JubjubSignature
+    match JubjubSignature::from_bytes(&signature_bytes) {
         Ok(signature) => public_key.verify(message, &signature).is_ok(),
         Err(_) => false
     }
@@ -15,7 +17,7 @@ pub fn validate_signature(input: &TransactionInput, message: &[u8], public_key: 
 
 #[test]
 fn test_transaction_creation() {
-    let keypair = Keypair::generate(&mut rand::thread_rng());
+    let keypair = generate_keypair();
     let input = TransactionInput {
         previous_output: OutPoint {
             transaction_hash: [0u8; 32],
@@ -27,7 +29,7 @@ fn test_transaction_creation() {
     
     let output = TransactionOutput {
         value: 100,
-        public_key_script: keypair.public.as_bytes().to_vec(),
+        public_key_script: keypair.public.to_bytes().to_vec(),
     };
     
     let tx = Transaction {
@@ -44,9 +46,9 @@ fn test_transaction_creation() {
 
 #[test]
 fn test_transaction_validation() {
-    let keypair = Keypair::generate(&mut rand::thread_rng());
+    let keypair = generate_keypair();
     let message = b"transaction data";
-    let signature = keypair.sign(message);
+    let signature = keypair.sign(message).expect("Signing failed");
     
     let input = TransactionInput {
         previous_output: OutPoint {

@@ -10,6 +10,7 @@ mod main_tests {
     use std::time::Duration;
     use log::{error, debug};
     use tempfile;
+    use crate::crypto::jubjub::JubjubKeypair;
 
     // Test helper to set up log capture
     fn setup_logging() -> tempfile::NamedTempFile {
@@ -42,7 +43,7 @@ mod main_tests {
         
         // Test with keypair
         let keypair = crypto::generate_keypair();
-        let _wallet_with_keypair = init_wallet(keypair);
+        let _wallet_with_keypair = init_wallet(Some(keypair));
         // Add assertions based on wallet implementation
     }
     
@@ -163,13 +164,18 @@ mod main_tests {
     fn test_error_handling() {
         // Create a mock function to simulate keypair generation failure
         // In a real implementation, you would use a mocking framework
-        fn mock_generate_keypair_failure() -> Option<ed25519_dalek::Keypair> {
+        fn mock_generate_keypair_failure() -> Option<JubjubKeypair> {
             None
+        }
+        
+        // Wrapper that converts crypto::generate_keypair to return Option<JubjubKeypair>
+        fn working_keypair_generator() -> Option<JubjubKeypair> {
+            Some(crypto::generate_keypair())
         }
         
         // Test function that uses our mock
         fn test_init_with_generator<F>(generator: F) -> bool 
-        where F: FnOnce() -> Option<ed25519_dalek::Keypair>
+        where F: FnOnce() -> Option<JubjubKeypair>
         {
             let keypair = generator();
             if keypair.is_none() {
@@ -184,7 +190,7 @@ mod main_tests {
                 "Should return false when keypair generation fails");
         
         // Test with working generator
-        assert!(test_init_with_generator(crypto::generate_keypair), 
+        assert!(test_init_with_generator(working_keypair_generator), 
                 "Should return true when keypair generation succeeds");
     }
 } 

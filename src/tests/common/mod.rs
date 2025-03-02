@@ -1,6 +1,6 @@
 use crate::blockchain::{Block, OutPoint, Transaction, TransactionInput, TransactionOutput};
 use crate::consensus::StakeProof;
-use ed25519_dalek::{Keypair, Signer};
+use crate::crypto::jubjub::{JubjubKeypair, JubjubSignature, generate_keypair};
 use rand::rngs::OsRng;
 
 pub fn create_test_block(nonce: u64) -> Block {
@@ -12,8 +12,9 @@ pub fn create_test_block(nonce: u64) -> Block {
 
 #[allow(dead_code)]
 pub fn create_test_transaction() -> Transaction {
-    let mut csprng = OsRng;
-    let keypair = Keypair::generate(&mut csprng);
+    let keypair = generate_keypair();
+    let message = b"test_block";
+    let signature = keypair.sign(message).expect("Signing failed");
 
     Transaction {
         inputs: vec![TransactionInput {
@@ -21,7 +22,7 @@ pub fn create_test_transaction() -> Transaction {
                 transaction_hash: [0u8; 32],
                 index: 0,
             },
-            signature_script: keypair.sign(b"test_block").to_bytes().to_vec(),
+            signature_script: signature.to_bytes(),
             sequence: 0,
         }],
         outputs: vec![TransactionOutput {

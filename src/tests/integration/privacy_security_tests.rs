@@ -261,7 +261,7 @@ fn test_stealth_address_transaction_privacy() {
     
     // Convert ephemeral_pubkey to PublicKey for the test
     if let Some(ephemeral_bytes) = &tx.ephemeral_pubkey {
-        // We'll skip the actual PublicKey conversion since our test key is not a valid ed25519 key
+        // We'll skip the actual PublicKey conversion since our test key is not a valid JubJub key
         // Instead we'll manually check if the output matches our expected derived address
         
         // Check that the first output uses this address
