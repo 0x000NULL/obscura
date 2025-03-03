@@ -449,29 +449,26 @@ impl Wallet {
         
         // Apply confidential transactions features
         // Create amount commitments and range proofs
-        let mut amount_commitments = Vec::with_capacity(tx.outputs.len());
-        let mut range_proofs = Vec::with_capacity(tx.outputs.len());
+        let mut amount_commitments = Vec::new();
+        let mut range_proofs = Vec::new();
+        
+        // Generate a random blinding factor for commitments
+        let blinding_factor = rand::random::<u64>();
         
         for output in &tx.outputs {
-            // Create a simple commitment for the amount
-            // In a real implementation, this would use Pedersen commitments
+            // Create a commitment to the amount
             let mut commitment_hasher = Sha256::new();
             commitment_hasher.update(output.value.to_le_bytes());
+            commitment_hasher.update(blinding_factor.to_le_bytes());
+            let commitment = commitment_hasher.finalize();
             
-            // Add a blinding factor for the commitment
-            let blinding_factor = JubjubScalar::random(&mut rng);
-            commitment_hasher.update(&blinding_factor.to_bytes());
+            // Store the commitment
+            amount_commitments.push(commitment.to_vec());
             
-            let mut commitment = [0u8; 32];
-            commitment.copy_from_slice(&commitment_hasher.finalize());
-            amount_commitments.push(commitment);
-            
-            // Create a simple range proof
-            // In a real implementation, this would use zero-knowledge proofs
+            // Create a simple range proof (in a real implementation, this would be a zero-knowledge proof)
             let mut range_proof_hasher = Sha256::new();
-            range_proof_hasher.update(b"range_proof_for");
-            range_proof_hasher.update(output.value.to_le_bytes());
-            range_proof_hasher.update(&blinding_factor.to_bytes());
+            range_proof_hasher.update(commitment);
+            range_proof_hasher.update(b"range_proof");
             
             let range_proof = range_proof_hasher.finalize().to_vec();
             range_proofs.push(range_proof);

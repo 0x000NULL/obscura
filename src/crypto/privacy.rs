@@ -382,34 +382,23 @@ impl ConfidentialTransactions {
         false
     }
     
-    /// Implement output value obfuscation
-    pub fn obfuscate_output_value(&mut self, tx: &Transaction) -> Transaction {
+    /// Obfuscate output values in a transaction
+    pub fn obfuscate_output_value(&mut self, tx: &mut Transaction) -> Transaction {
         let mut obfuscated_tx = tx.clone();
-        
-        // Generate commitments for each output value
         let mut commitments = Vec::new();
         
         // Replace actual values with commitments
-        for output in &mut obfuscated_tx.outputs {
-            let commitment = self.create_commitment(output.value);
-            let mut commitment_array = [0u8; 32];
+        for (i, output) in obfuscated_tx.outputs.iter_mut().enumerate() {
+            // Create a commitment to the amount
+            let commitment_array = self.create_commitment(output.value);
             
-            // Convert the Vec<u8> commitment to [u8; 32]
-            if commitment.len() >= 32 {
-                commitment_array.copy_from_slice(&commitment[0..32]);
-            } else {
-                // If commitment is less than 32 bytes, copy what we have and pad with zeros
-                let len = commitment.len().min(32);
-                commitment_array[..len].copy_from_slice(&commitment[..len]);
-            }
+            // Store the commitment
+            commitments.push(commitment_array.to_vec());
             
-            commitments.push(commitment_array);
-            
-            // In a real implementation, we would replace the value with the commitment
-            // For this simplified version, we'll just modify the public_key_script
+            // Embed the commitment in the output script
             // to include the commitment
             let mut obfuscated_script = output.public_key_script.clone();
-            obfuscated_script.extend_from_slice(&commitment);
+            obfuscated_script.extend_from_slice(&commitment_array);
             output.public_key_script = obfuscated_script;
         }
         
@@ -671,7 +660,7 @@ mod tests {
         };
         
         // Test output value obfuscation
-        let obfuscated = confidential.obfuscate_output_value(&tx);
+        let obfuscated = confidential.obfuscate_output_value(&mut tx.clone());
         assert_eq!(obfuscated.outputs.len(), tx.outputs.len());
         assert!(obfuscated.outputs[0].public_key_script.len() > tx.outputs[0].public_key_script.len());
         assert!(obfuscated.amount_commitments.is_some());

@@ -29,9 +29,9 @@ fn init_crypto() -> Option<JubjubKeypair> {
 fn init_wallet(keypair: Option<JubjubKeypair>) -> wallet::Wallet {
     info!("Initializing wallet...");
     let mut wallet = wallet::Wallet::new();
-    if keypair.is_some() {
+    if let Some(kp) = keypair {
         // In a real implementation, would pass the keypair to the wallet
-        // wallet.set_keypair(keypair.unwrap());
+        wallet.set_keypair(kp);
     }
     wallet.enable_privacy();
     wallet

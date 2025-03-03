@@ -56,7 +56,7 @@ pub struct Transaction {
     pub privacy_flags: u32,
     pub obfuscated_id: Option<[u8; 32]>,
     pub ephemeral_pubkey: Option<[u8; 32]>,
-    pub amount_commitments: Option<Vec<[u8; 32]>>,
+    pub amount_commitments: Option<Vec<Vec<u8>>>,
     pub range_proofs: Option<Vec<Vec<u8>>>,
 }
 
@@ -500,24 +500,14 @@ impl Transaction {
     
     /// Apply confidential transactions to hide amounts
     pub fn apply_confidential_transactions(&mut self, confidential: &mut crate::crypto::privacy::ConfidentialTransactions) {
-        // Create commitments for each output amount
-        let mut commitments = Vec::with_capacity(self.outputs.len());
-        let mut range_proofs = Vec::with_capacity(self.outputs.len());
+        let mut commitments = Vec::new();
+        let mut range_proofs = Vec::new();
         
-        for output in &self.outputs {
-            let commitment_vec = confidential.create_commitment(output.value);
+        for (i, output) in self.outputs.iter().enumerate() {
+            let commitment = confidential.create_commitment(output.value);
             let range_proof = confidential.create_range_proof(output.value);
             
-            // Convert Vec<u8> commitment to [u8; 32]
-            let mut commitment = [0u8; 32];
-            if commitment_vec.len() >= 32 {
-                commitment.copy_from_slice(&commitment_vec[0..32]);
-            } else {
-                // If commitment is less than 32 bytes, copy what we have and leave the rest as zeros
-                commitment[..commitment_vec.len()].copy_from_slice(&commitment_vec);
-            }
-            
-            commitments.push(commitment);
+            commitments.push(commitment.to_vec());
             range_proofs.push(range_proof);
         }
         

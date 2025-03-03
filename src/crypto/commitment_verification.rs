@@ -264,9 +264,12 @@ impl CommitmentVerifier {
                             // Parse the commitment data
                             match DualCurveCommitment::from_bytes(&amount_commitments[output_index]) {
                                 Ok(commitment) => input_commitments.push(commitment),
-                                Err(e) => return Err(VerificationError::InvalidCommitment(
-                                    format!("Failed to parse input commitment: {}", e)
-                                )),
+                                Err(e) => {
+                                    error!("Failed to parse input commitment: {}", e);
+                                    return Err(VerificationError::InvalidCommitment(
+                                        format!("Failed to parse input commitment: {}", e)
+                                    ));
+                                }
                             }
                         } else if context.strict_mode {
                             return Err(VerificationError::MissingData(
@@ -298,9 +301,12 @@ impl CommitmentVerifier {
                     // Parse the commitment data
                     match DualCurveCommitment::from_bytes(commitment_data) {
                         Ok(commitment) => output_commitments.push(commitment),
-                        Err(e) => return Err(VerificationError::InvalidCommitment(
-                            format!("Failed to parse output commitment: {}", e)
-                        )),
+                        Err(e) => {
+                            error!("Failed to parse output commitment: {}", e);
+                            return Err(VerificationError::InvalidCommitment(
+                                format!("Failed to parse output commitment: {}", e)
+                            ));
+                        }
                     }
                 }
             }
@@ -317,17 +323,30 @@ impl CommitmentVerifier {
                     "No commitments found to verify balance".into()
                 ));
             } else {
+                debug!("No commitments to verify in non-strict mode");
                 return Ok(true);
             }
         }
         
         // Sum up input commitments
+        if input_commitments.is_empty() {
+            return Err(VerificationError::MissingData(
+                "No input commitments found to verify balance".into()
+            ));
+        }
+        
         let mut sum_inputs = input_commitments[0].clone();
         for i in 1..input_commitments.len() {
             sum_inputs = sum_inputs.add(&input_commitments[i]);
         }
         
         // Sum up output commitments
+        if output_commitments.is_empty() {
+            return Err(VerificationError::MissingData(
+                "No output commitments found to verify balance".into()
+            ));
+        }
+        
         let mut sum_outputs = output_commitments[0].clone();
         for i in 1..output_commitments.len() {
             sum_outputs = sum_outputs.add(&output_commitments[i]);
@@ -375,7 +394,10 @@ impl CommitmentVerifier {
         // Check if the transaction has range proofs and commitments
         let range_proofs = match &tx.range_proofs {
             Some(proofs) => proofs,
-            None => return Ok(true), // No range proofs to verify
+            None => {
+                debug!("No range proofs to verify");
+                return Ok(true); // No range proofs to verify
+            }
         };
         
         let commitments = match &tx.amount_commitments {
@@ -386,6 +408,7 @@ impl CommitmentVerifier {
                         "Transaction has range proofs but no commitments".to_string()
                     ));
                 }
+                debug!("No commitments to verify range proofs against");
                 return Ok(true);
             }
         };
@@ -407,24 +430,41 @@ impl CommitmentVerifier {
                 // Convert commitment to the format expected by range proof verifier
                 let commitment = match DualCurveCommitment::from_bytes(commitment_data) {
                     Ok(commitment) => commitment,
-                    Err(e) => return Err(VerificationError::InvalidCommitment(
-                        format!("Failed to parse commitment for range proof: {}", e)
-                    )),
+                    Err(e) => {
+                        error!("Failed to parse commitment for range proof: {}", e);
+                        return Err(VerificationError::InvalidCommitment(
+                            format!("Failed to parse commitment for range proof: {}", e)
+                        ));
+                    }
                 };
                 
                 // Create a range proof object
                 let range_proof = match RangeProof::from_bytes(proof_data) {
                     Ok(proof) => proof,
-                    Err(e) => return Err(VerificationError::RangeProofError(
-                        format!("Failed to parse range proof: {}", e)
-                    )),
+                    Err(e) => {
+                        error!("Failed to parse range proof: {}", e);
+                        return Err(VerificationError::RangeProofError(
+                            format!("Failed to parse range proof: {}", e)
+                        ));
+                    }
                 };
                 
                 // Verify the range proof
-                if !crate::crypto::bulletproofs::verify_range_proof(&commitment.jubjub_commitment, &range_proof) {
-                    return Err(VerificationError::RangeProofError(
-                        format!("Range proof verification failed for output {}", i)
-                    ));
+                match crate::crypto::bulletproofs::verify_range_proof(&commitment.jubjub_commitment, &range_proof) {
+                    Ok(valid) => {
+                        if !valid {
+                            error!("Range proof verification failed for output {}", i);
+                            return Err(VerificationError::RangeProofError(
+                                format!("Range proof verification failed for output {}", i)
+                            ));
+                        }
+                    },
+                    Err(e) => {
+                        error!("Range proof verification error for output {}: {:?}", i, e);
+                        return Err(VerificationError::RangeProofError(
+                            format!("Range proof verification error for output {}: {:?}", i, e)
+                        ));
+                    }
                 }
             } else if context.strict_mode && i < commitments.len() && !commitments[i].is_empty() {
                 // In strict mode, if we have a commitment we should also have a range proof
@@ -434,6 +474,7 @@ impl CommitmentVerifier {
             }
         }
         
+        debug!("All range proofs verified successfully");
         Ok(true)
     }
     

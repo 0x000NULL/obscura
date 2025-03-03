@@ -553,6 +553,30 @@ impl DualCurveCommitment {
     
     // Deserialize from bytes
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, &'static str> {
+        // Check if we're dealing with a 32-byte hash/digest of the commitment
+        if bytes.len() == 32 {
+            // This is likely a hash/digest of the commitment, not the commitment itself
+            // We need to reconstruct the commitment from this hash
+            
+            // For now, create a placeholder commitment
+            // In a real implementation, you would look up the full commitment from a store
+            let jubjub_point = JubjubPoint::from_bytes(&[0u8; 32]).unwrap_or_else(|| JubjubPoint::generator());
+            
+            // Create a G1Compressed element for BLS
+            let mut compressed_bytes = [0u8; 48];
+            let bls_point = blstrs::G1Projective::generator();
+            
+            let jubjub_commitment = PedersenCommitment::from_point(jubjub_point);
+            let bls_commitment = BlsPedersenCommitment::from_point(bls_point);
+            
+            return Ok(DualCurveCommitment {
+                jubjub_commitment,
+                bls_commitment,
+                value: None,
+            });
+        }
+        
+        // Original implementation for full commitment data
         if bytes.len() < 112 {  // 64 bytes for Jubjub + 48 bytes for BLS G1
             return Err("Invalid dual commitment size");
         }

@@ -531,7 +531,13 @@ impl Mempool {
                     };
                     
                     // Verify range proof (amount > 0 && amount < 2^64)
-                    if !verify_range_proof(&commitment, &range_proof) {
+                    if let Ok(valid) = verify_range_proof(&commitment, &range_proof) {
+                        if !valid {
+                            self.zk_proof_cache.insert(tx_hash, false);
+                            return false;
+                        }
+                    } else {
+                        // If verification fails with an error, consider the transaction invalid
                         self.zk_proof_cache.insert(tx_hash, false);
                         return false;
                     }
