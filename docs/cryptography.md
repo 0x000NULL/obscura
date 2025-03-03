@@ -323,7 +323,7 @@ pub fn verify_transaction(
 
 ### Bulletproofs
 
-Bulletproofs are short non-interactive zero-knowledge proofs that require no trusted setup. Obscura uses the arkworks-rs/bulletproofs library to implement range proofs for confidential transactions.
+Bulletproofs are short non-interactive zero-knowledge proofs that require no trusted setup. Obscura uses a custom Jubjub curve-based bulletproofs implementation for range proofs in confidential transactions.
 
 #### Properties
 
@@ -331,6 +331,7 @@ Bulletproofs are short non-interactive zero-knowledge proofs that require no tru
 - **No Trusted Setup**: Does not require a complex setup ceremony, reducing security assumptions
 - **Efficient Verification**: Batch verification for multiple proofs, significantly reducing verification cost
 - **Powerful Range Proofs**: Efficiently proves that a committed value is within a specific range without revealing the value
+- **Comprehensive Testing**: Extensive test suite covering edge cases, error handling, and all public functions
 
 #### Implementation
 
@@ -340,32 +341,29 @@ Our implementation includes:
 // Range proof structure
 pub struct RangeProof {
     /// The compressed range proof
-    pub compressed_proof: Vec<u8>,
+    pub proof: Vec<u8>,
     /// Minimum value in the range (inclusive)
     pub min_value: u64,
     /// Maximum value in the range (inclusive)
     pub max_value: u64,
     /// Number of bits in the range proof (determines the range)
-    bits: usize,
+    pub bits: u32,
 }
 
 // Range proof generation
 impl RangeProof {
     /// Create a new range proof for a value in [0, 2^64)
-    pub fn new(value: u64) -> Self {
-        Self::new_with_bits(value, 64)
-    }
-    
-    /// Create a new range proof with a specific bit length
-    pub fn new_with_bits(value: u64, bits: usize) -> Self {
+    pub fn new(value: u64, bits: u32) -> (Self, JubjubScalar) {
         let mut rng = OsRng;
         let blinding = JubjubScalar::rand(&mut rng);
         
         // Create a transcript for the zero-knowledge proof
-        let mut transcript = Transcript::new(b"Obscura Range Proof");
+        let mut transcript = Transcript::new(TRANSCRIPT_LABEL_RANGE_PROOF);
         
         // Convert to bulletproofs format and create proof
         // ...
+        
+        (proof, blinding)
     }
     
     /// Create a new range proof for a value in [min_value, max_value]

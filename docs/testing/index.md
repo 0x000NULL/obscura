@@ -48,8 +48,21 @@ We aim for high test coverage across the codebase, with particular emphasis on c
 
 - Core cryptographic operations: 100% coverage
 - Consensus mechanisms: 95%+ coverage
+- Privacy features: 95%+ coverage
 - Transaction processing: 90%+ coverage
 - Networking protocols: 85%+ coverage
+
+### Bulletproofs Test Coverage
+
+The bulletproofs implementation has comprehensive test coverage including:
+
+- Basic functionality tests for range proofs and multi-output range proofs
+- Edge case tests (zero values, maximum values, boundary conditions)
+- Error handling tests for invalid inputs and corrupted proofs
+- Validation tests for batch verification requirements
+- Generator and serialization tests
+
+For more details, see the [Bulletproofs Documentation](../crypto/bulletproofs.md#test-coverage).
 
 To measure test coverage, we use [cargo-tarpaulin](https://github.com/xd009642/tarpaulin):
 

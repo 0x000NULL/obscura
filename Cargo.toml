@@ -42,7 +42,6 @@ ark-ec = "0.4"
 ark-ff = "0.4"
 zcash_primitives = "0.11"
 halo2_proofs = "0.3"
-curve25519-dalek-ng = "4.1"
 
 # Networking dependencies
 tokio = { version = "1.28", features = ["full"] }
@@ -61,7 +60,6 @@ sled = "0.34"
 # Consensus dependencies
 randomx-rs = { version = "0.2", optional = true }
 threshold_crypto = "0.4"
-bulletproofs = "4.0"
 
 # CLI and configuration
 config = "0.13"
