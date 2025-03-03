@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::blockchain::{Transaction, TransactionInput, TransactionOutput, OutPoint};
-use crate::blockchain::transaction;
 use crate::crypto::pedersen::{
     PedersenCommitment, BlsPedersenCommitment, DualCurveCommitment,
     jubjub_get_g, jubjub_get_h, bls_get_g, bls_get_h, get_blinding_store
@@ -11,7 +10,6 @@ use crate::crypto::blinding_store::BlindingStore;
 use crate::crypto::jubjub::{JubjubPoint, JubjubScalar};
 use crate::crypto::bulletproofs::RangeProof;
 
-use ark_ed_on_bls12_381::{EdwardsProjective as JubjubPoint, Fr as JubjubScalar};
 use blstrs::{G1Projective as BlsG1, Scalar as BlsScalar};
 use sha2::{Sha256, Digest};
 use log::{debug, warn, error};
@@ -70,6 +68,10 @@ pub struct VerificationContext {
     pub blinding_store: Option<BlindingStore>,
     /// Known UTXOs that can be used as verification reference
     pub utxo_cache: HashMap<OutPoint, TransactionOutput>,
+    /// Mapping from outpoints to source transaction hash for commitment lookup
+    pub utxo_sources: HashMap<OutPoint, [u8; 32]>,
+    /// Cache of transaction amount commitments (tx_hash -> commitment bytes)
+    pub commitment_cache: HashMap<[u8; 32], Vec<Vec<u8>>>,
     /// Flag to enable or disable strict verification
     pub strict_mode: bool,
     /// Flag to enable range proof verification
@@ -81,6 +83,8 @@ impl Default for VerificationContext {
         VerificationContext {
             blinding_store: get_blinding_store(),
             utxo_cache: HashMap::new(),
+            utxo_sources: HashMap::new(),
+            commitment_cache: HashMap::new(),
             strict_mode: true,
             verify_range_proofs: true,
         }
@@ -93,6 +97,8 @@ impl VerificationContext {
         VerificationContext {
             blinding_store: get_blinding_store(),
             utxo_cache: HashMap::new(),
+            utxo_sources: HashMap::new(),
+            commitment_cache: HashMap::new(),
             strict_mode,
             verify_range_proofs,
         }
@@ -106,6 +112,16 @@ impl VerificationContext {
     /// Add multiple UTXOs to the verification context
     pub fn add_utxos(&mut self, utxos: HashMap<OutPoint, TransactionOutput>) {
         self.utxo_cache.extend(utxos);
+    }
+    
+    /// Add transaction to the commitment cache
+    pub fn add_transaction_commitments(&mut self, tx_hash: [u8; 32], commitments: Vec<Vec<u8>>) {
+        self.commitment_cache.insert(tx_hash, commitments);
+    }
+    
+    /// Register an outpoint as coming from a specific transaction
+    pub fn register_utxo_source(&mut self, outpoint: OutPoint, tx_hash: [u8; 32]) {
+        self.utxo_sources.insert(outpoint, tx_hash);
     }
 }
 
@@ -231,7 +247,7 @@ impl CommitmentVerifier {
         context: &VerificationContext
     ) -> VerificationResult {
         // Skip coinbase transactions as they create new coins
-        if tx.is_coinbase() {
+        if tx.inputs.is_empty() {
             return Ok(true);
         }
         
@@ -240,17 +256,31 @@ impl CommitmentVerifier {
         for input in &tx.inputs {
             // Look up the corresponding UTXO
             if let Some(utxo) = context.utxo_cache.get(&input.previous_output) {
-                if let Some(commitment_data) = &utxo.commitment {
-                    // Parse the commitment data
-                    match DualCurveCommitment::from_bytes(commitment_data) {
-                        Ok(commitment) => input_commitments.push(commitment),
-                        Err(e) => return Err(VerificationError::InvalidCommitment(
-                            format!("Failed to parse input commitment: {}", e)
-                        )),
+                if let Some(tx_hash) = context.utxo_sources.get(&input.previous_output) {
+                    // Try to find the source transaction's amount_commitments
+                    if let Some(amount_commitments) = context.commitment_cache.get(tx_hash) {
+                        let output_index = input.previous_output.index as usize;
+                        if output_index < amount_commitments.len() {
+                            // Parse the commitment data
+                            match DualCurveCommitment::from_bytes(&amount_commitments[output_index]) {
+                                Ok(commitment) => input_commitments.push(commitment),
+                                Err(e) => return Err(VerificationError::InvalidCommitment(
+                                    format!("Failed to parse input commitment: {}", e)
+                                )),
+                            }
+                        } else if context.strict_mode {
+                            return Err(VerificationError::MissingData(
+                                "Input UTXO commitment index out of bounds".into()
+                            ));
+                        }
+                    } else if context.strict_mode {
+                        return Err(VerificationError::MissingData(
+                            "Input UTXO does not have commitments".into()
+                        ));
                     }
                 } else if context.strict_mode {
                     return Err(VerificationError::MissingData(
-                        "Input UTXO does not have a commitment".into()
+                        "Input UTXO source transaction not found".into()
                     ));
                 }
             } else if context.strict_mode {
@@ -262,19 +292,22 @@ impl CommitmentVerifier {
         
         // Get commitments from outputs
         let mut output_commitments = Vec::new();
-        for output in &tx.outputs {
-            if let Some(commitment_data) = &output.commitment {
-                match DualCurveCommitment::from_bytes(commitment_data) {
-                    Ok(commitment) => output_commitments.push(commitment),
-                    Err(e) => return Err(VerificationError::InvalidCommitment(
-                        format!("Failed to parse output commitment: {}", e)
-                    )),
+        if let Some(commitments) = &tx.amount_commitments {
+            for (i, commitment_data) in commitments.iter().enumerate() {
+                if i < tx.outputs.len() {
+                    // Parse the commitment data
+                    match DualCurveCommitment::from_bytes(commitment_data) {
+                        Ok(commitment) => output_commitments.push(commitment),
+                        Err(e) => return Err(VerificationError::InvalidCommitment(
+                            format!("Failed to parse output commitment: {}", e)
+                        )),
+                    }
                 }
-            } else if context.strict_mode {
-                return Err(VerificationError::MissingData(
-                    "Output does not have a commitment".into()
-                ));
             }
+        } else if context.strict_mode {
+            return Err(VerificationError::MissingData(
+                "Transaction does not have amount_commitments".into()
+            ));
         }
         
         // If we don't have any commitments to verify, don't fail in non-strict mode
@@ -348,7 +381,7 @@ impl CommitmentVerifier {
         let commitments = match &tx.amount_commitments {
             Some(commits) => commits,
             None => {
-                if context.strict_mode && range_proofs.len() > 0 {
+                if context.strict_mode && !range_proofs.is_empty() {
                     return Err(VerificationError::MissingData(
                         "Transaction has range proofs but no commitments".to_string()
                     ));
@@ -368,35 +401,32 @@ impl CommitmentVerifier {
         // Verify each range proof
         for i in 0..range_proofs.len() {
             if !range_proofs[i].is_empty() {
-                if i < commitments.len() && !commitments[i].iter().all(|&b| b == 0) {
-                    // Parse the range proof
-                    let range_proof = match RangeProof::from_bytes(&range_proofs[i]) {
-                        Ok(proof) => proof,
-                        Err(e) => return Err(VerificationError::RangeProofError(
-                            format!("Failed to parse range proof for output {}: {}", i, e)
-                        )),
-                    };
-                    
-                    // Parse the commitment
-                    let commitment = match DualCurveCommitment::from_bytes(&commitments[i]) {
-                        Ok(commitment) => commitment,
-                        Err(e) => return Err(VerificationError::InvalidCommitment(
-                            format!("Failed to parse commitment for output {}: {}", i, e)
-                        )),
-                    };
-                    
-                    // Verify the range proof
-                    if !crate::crypto::bulletproofs::verify_range_proof(&commitment.jubjub_commitment, &range_proof) {
-                        return Err(VerificationError::RangeProofError(
-                            format!("Range proof verification failed for output {}", i)
-                        ));
-                    }
-                } else if context.strict_mode {
-                    return Err(VerificationError::MissingData(
-                        format!("Output {} has range proof but no commitment", i)
+                let proof_data = &range_proofs[i];
+                let commitment_data = &commitments[i];
+                
+                // Convert commitment to the format expected by range proof verifier
+                let commitment = match DualCurveCommitment::from_bytes(commitment_data) {
+                    Ok(commitment) => commitment,
+                    Err(e) => return Err(VerificationError::InvalidCommitment(
+                        format!("Failed to parse commitment for range proof: {}", e)
+                    )),
+                };
+                
+                // Create a range proof object
+                let range_proof = match RangeProof::from_bytes(proof_data) {
+                    Ok(proof) => proof,
+                    Err(e) => return Err(VerificationError::RangeProofError(
+                        format!("Failed to parse range proof: {}", e)
+                    )),
+                };
+                
+                // Verify the range proof
+                if !crate::crypto::bulletproofs::verify_range_proof(&commitment.jubjub_commitment, &range_proof) {
+                    return Err(VerificationError::RangeProofError(
+                        format!("Range proof verification failed for output {}", i)
                     ));
                 }
-            } else if context.strict_mode && i < commitments.len() && !commitments[i].iter().all(|&b| b == 0) {
+            } else if context.strict_mode && i < commitments.len() && !commitments[i].is_empty() {
                 // In strict mode, if we have a commitment we should also have a range proof
                 return Err(VerificationError::MissingData(
                     format!("Output {} has commitment but no range proof", i)
@@ -426,6 +456,8 @@ impl CommitmentVerifier {
     }
     
     /// Batch verification of multiple transactions
+    /// This verifies both balance and range proofs for a batch of transactions
+    /// Coinbase transactions (those with empty inputs) will only have range proofs verified
     pub fn verify_transactions_batch(
         txs: &[Transaction],
         fees: &HashMap<[u8; 32], u64>, // Map from tx hash to fee
@@ -549,17 +581,15 @@ mod tests {
     fn test_dual_commitment_verification() {
         // Create a dual commitment
         let value = 300u64;
-        let jubjub_blinding = generate_random_jubjub_scalar();
-        let bls_blinding = generate_random_bls_scalar();
         
-        let jubjub_commitment = PedersenCommitment::commit(value, jubjub_blinding.clone());
-        let bls_commitment = BlsPedersenCommitment::commit(value, bls_blinding.clone());
+        // Create the commitment using the standard commit method
+        let dual_commitment = DualCurveCommitment::commit(value);
         
-        let dual_commitment = DualCurveCommitment {
-            jubjub_commitment,
-            bls_commitment,
-            value: Some(value),
-        };
+        // Get the blinding factors from the commitment
+        let jubjub_blinding = dual_commitment.jubjub_commitment.blinding()
+            .expect("Jubjub blinding should be available");
+        let bls_blinding = dual_commitment.bls_commitment.blinding()
+            .expect("BLS blinding should be available");
         
         // Verify with both blinding factors
         let result = CommitmentVerifier::verify_dual_commitment(

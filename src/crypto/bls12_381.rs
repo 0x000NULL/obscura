@@ -1,9 +1,11 @@
-use blstrs::{G1Projective, G2Projective, Scalar as BlsScalar, G1Affine, G2Affine, pairing};
+use blstrs::{G1Projective, G2Projective, G1Affine, G2Affine, pairing};
+pub use blstrs::Scalar as BlsScalar;
 use group::Group;  // Import Group traits
 use group::prime::PrimeCurveAffine;  // Import PrimeCurveAffine for generator method
 use ff::Field;  // Import Field trait for random() method
 use sha2::{Sha256, Digest};
-use rand::rngs::OsRng;
+use rand::{rngs::OsRng, RngCore};
+use std::ops::Mul;
 
 /// BLS12-381 curve implementation for Obscura's cryptographic needs
 /// 

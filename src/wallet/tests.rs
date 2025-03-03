@@ -152,7 +152,7 @@ fn test_fee_calculation() {
 
 #[test]
 fn test_pending_transactions() {
-    let mut wallet = crate::wallet::Wallet::new_with_keypair();
+    let wallet = crate::wallet::Wallet::new_with_keypair();
     
     // Create a mock UTXO set for the wallet
     let outpoint = crate::blockchain::OutPoint {
@@ -229,7 +229,7 @@ fn test_pending_transactions() {
 
 #[test]
 fn test_staking_transactions() {
-    let mut wallet = crate::wallet::Wallet::new_with_keypair();
+    let wallet = crate::wallet::Wallet::new_with_keypair();
     
     // Create a mock UTXO set for the wallet
     let outpoint = crate::blockchain::OutPoint {
@@ -275,7 +275,7 @@ fn test_staking_transactions() {
 
 #[test]
 fn test_transaction_create_with_privacy() {
-    let mut wallet = crate::wallet::Wallet::new_with_keypair();
+    let wallet = crate::wallet::Wallet::new_with_keypair();
     
     // Create a mock UTXO set for the wallet
     let outpoint = crate::blockchain::OutPoint {

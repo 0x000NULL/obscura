@@ -42,6 +42,7 @@ ark-ec = "0.4"
 ark-ff = "0.4"
 zcash_primitives = "0.11"
 halo2_proofs = "0.3"
+curve25519-dalek-ng = "4.1"
 
 # Networking dependencies
 tokio = { version = "1.28", features = ["full"] }
