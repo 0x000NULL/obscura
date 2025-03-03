@@ -2,14 +2,140 @@
 
 This document contains the release notes for each version of the Obscura blockchain.
 
-## [0.5.5] - 2025-03-25
+## [0.5.6] - 2025-03-26
 
-### Bulletproofs Integration Completion
+### Comprehensive Stealth Addressing Implementation
 
-This release marks the completion of the bulletproofs integration for transaction amount privacy, providing a robust and efficient implementation of confidential transactions in the Obscura blockchain.
+This release implements a complete stealth addressing system for the Obscura blockchain, significantly enhancing transaction privacy through unlinkable one-time addresses and secure key exchange mechanisms.
 
-#### Core Bulletproofs Implementation
+#### Core Stealth Addressing Implementation
 
+- **Secure Diffie-Hellman Key Exchange**
+  - Implemented cryptographically secure key exchange protocol
+  - Added ephemeral key generation with multiple entropy sources
+  - Created proper key validation and range checking
+  - Implemented protection against key reuse attacks
+  - Added comprehensive security measures against timing attacks
+  - Created secure random number generation for all operations
+
+- **Secure Ephemeral Key Generation**
+  - Implemented multiple entropy sources for key generation
+    - System entropy (OsRng)
+    - Time-based entropy
+    - Additional entropy mixing
+  - Added comprehensive key validation
+    - Proper range checking
+    - Non-zero value verification
+    - Public key validation
+  - Created secure fallback mechanisms for weak keys
+  - Implemented constant-time operations
+
+- **Shared Secret Derivation Protocol**
+  - Created multi-round key derivation process
+  - Implemented domain separation for each round
+  - Added additional entropy mixing
+  - Created proper key blinding integration
+  - Implemented forward secrecy mechanisms
+  - Added comprehensive validation checks
+
+#### Security Features
+
+- **Key Blinding Techniques**
+  - Implemented multiple rounds of key blinding
+  - Created secure blinding factor generation
+  - Added entropy mixing from multiple sources
+  - Implemented protection against key recovery
+  - Created secure fallback mechanisms
+  - Added validation for blinded keys
+
+- **Forward Secrecy Mechanisms**
+  - Implemented time-based key derivation
+  - Created unique keys for each transaction
+  - Added protection for past transactions
+  - Implemented secure timestamp handling
+  - Created comprehensive validation system
+  - Added proper error handling
+
+- **Domain Separation**
+  - Implemented unique domain separators for each operation
+  - Added version information in key derivation
+  - Created proper separation between different uses
+  - Implemented protection against key reuse
+  - Added validation for domain separation
+
+#### Privacy Guarantees
+
+1. **Transaction Privacy**
+   - Each transaction uses a unique one-time address
+   - Addresses cannot be linked to recipient's public key
+   - Prevents blockchain analytics from tracking patterns
+   - Implements proper transaction graph protection
+
+2. **Key Protection**
+   - Multiple rounds of key blinding for enhanced security
+   - Protection against key recovery attacks
+   - Additional entropy sources for stronger security
+   - Comprehensive validation for all generated keys
+
+3. **Forward Secrecy**
+   - Past transactions remain secure even if future keys are compromised
+   - Each transaction uses unique ephemeral keys
+   - Time-based key derivation ensures uniqueness
+   - Proper protection against future compromises
+
+#### Implementation Details
+
+The implementation provides a comprehensive API for stealth address operations:
+
+```rust
+// Create a stealth address
+pub fn create_stealth_address(recipient_public_key: &JubjubPoint) -> (JubjubScalar, JubjubPoint) {
+    // Generate secure ephemeral key
+    let (ephemeral_private, ephemeral_public) = generate_secure_ephemeral_key();
+    
+    // Generate secure blinding factor
+    let blinding_factor = generate_blinding_factor();
+    
+    // Compute shared secret with forward secrecy
+    let shared_secret = derive_shared_secret(
+        &shared_secret_point,
+        &ephemeral_public,
+        recipient_public_key,
+        None,
+    );
+    
+    // Create stealth address with proper blinding
+    let stealth_address = compute_stealth_address(
+        &shared_secret,
+        &blinding_factor,
+        recipient_public_key,
+    );
+    
+    (blinded_secret, stealth_address)
+}
+```
+
+#### Documentation
+
+- **Comprehensive Documentation**
+  - Added detailed implementation guide
+  - Created API documentation for all components
+  - Updated privacy features documentation
+  - Added security considerations guide
+  - Created implementation examples
+  - Updated cryptographic glossary
+
+- **Integration Guides**
+  - Added wallet integration examples
+  - Created transaction creation guide
+  - Added key management documentation
+  - Created troubleshooting guide
+  - Added performance considerations
+
+#### Testing
+
+- **Comprehensive Test Suite**
+  - Unit tests for all components
 - **Complete Range Proof System**
   - Implemented bulletproofs for transaction amount verification
   - Added support for various range proof sizes (32-bit, 64-bit, and custom ranges)

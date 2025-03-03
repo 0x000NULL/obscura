@@ -169,4 +169,23 @@ A system that manages the orderly exit of validators from the network, with queu
 A mechanism that periodically rotates validators between shards to enhance security and prevent collusion.
 
 ### VRF
-**Verifiable Random Function** - A cryptographic function that provides publicly verifiable proofs of its outputs' correctness. Used in Obscura for validator selection. 
+**Verifiable Random Function** - A cryptographic function that provides publicly verifiable proofs of its outputs' correctness. Used in Obscura for validator selection.
+
+## Cryptographic Terms
+
+### Stealth Addressing
+
+- **Stealth Address**: A one-time address generated for each transaction that cannot be linked to the recipient's public key.
+- **Ephemeral Key**: A temporary key pair used for a single transaction in stealth addressing.
+- **Key Blinding**: A technique that obscures the relationship between public and private keys using additional entropy.
+- **Forward Secrecy**: A property ensuring that past transactions remain secure even if future keys are compromised.
+- **Shared Secret**: A secret value derived through Diffie-Hellman key exchange for stealth addressing.
+- **Blinding Factor**: A random value used in key blinding to prevent key recovery attacks.
+- **Domain Separation**: The practice of using different domain separators in cryptographic operations to prevent key reuse.
+
+### Key Exchange
+
+- **Diffie-Hellman Key Exchange**: A method for securely exchanging cryptographic keys over a public channel.
+- **Ephemeral Key Exchange**: A variant of Diffie-Hellman where at least one of the keys is temporary.
+- **Key Derivation**: The process of deriving cryptographic keys from other keys or secrets.
+- **Entropy Mixing**: The practice of combining multiple sources of randomness for stronger security. 

@@ -2,6 +2,47 @@
 
 All notable changes to the Obscura project will be documented in this file.
 
+## [0.5.6] - 2025-03-26
+
+### Added
+- **Comprehensive Stealth Addressing Implementation**
+  - Implemented secure Diffie-Hellman key exchange for stealth addressing
+  - Created secure ephemeral key generation with multiple entropy sources
+  - Added shared secret derivation protocol with key blinding
+  - Implemented forward secrecy mechanisms with time-based key derivation
+  - Created comprehensive key blinding techniques
+  - Added domain separation for cryptographic operations
+  - Implemented secure random number generation
+  - Created comprehensive test suite for all components
+
+### Security Features
+- **Enhanced Transaction Privacy**
+  - Added unlinkable one-time addresses for each transaction
+  - Implemented protection against key recovery attacks
+  - Created forward secrecy guarantees for past transactions
+  - Added multiple rounds of key blinding for enhanced security
+  - Implemented secure entropy mixing from multiple sources
+  - Created comprehensive validation for all generated keys
+  - Added timing attack protection measures
+
+### Documentation
+- **Stealth Addressing Documentation**
+  - Added detailed implementation guide in cryptography documentation
+  - Created comprehensive API documentation for all components
+  - Updated privacy features documentation with stealth addressing
+  - Added security considerations and best practices
+  - Created implementation examples and usage guides
+  - Updated glossary with new cryptographic terms
+
+### Testing
+- **Comprehensive Test Suite**
+  - Added extensive unit tests for all stealth addressing components
+  - Created integration tests for the complete workflow
+  - Implemented property-based tests for cryptographic properties
+  - Added edge case testing for key generation and validation
+  - Created performance benchmarks for critical operations
+  - Implemented security validation tests
+
 ## [0.5.5] - 2025-03-25
 
 ### Added
