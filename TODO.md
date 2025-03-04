@@ -247,8 +247,8 @@
       - [x] Implement key blinding techniques
       - [x] Add forward secrecy mechanisms
     - [ ] Implement BLS12-381 specific functions
-      - [ ] Create optimized BLS12-381 curve operations
-      - [ ] Implement Jubjub curve for efficient in-circuit operations
+      - [x] Create optimized BLS12-381 curve operations
+      - [x] Implement Jubjub curve for efficient in-circuit operations
       - [ ] Develop cross-curve operations for atomic swaps
       - [ ] Create test vectors for curve operations
       - [ ] Add benchmarking for cryptographic performance

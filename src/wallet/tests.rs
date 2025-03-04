@@ -184,9 +184,7 @@ fn test_pending_transactions() {
 
     // Create a recipient
     let mut rng = rand::rngs::OsRng;
-    let recipient_keypair = crate::crypto::jubjub::JubjubKeypair::new(
-        crate::crypto::jubjub::JubjubScalar::rand(&mut rng),
-    );
+    let recipient_keypair = generate_keypair();
 
     // Create a custom transaction that uses our actual UTXO
     let mut tx = crate::blockchain::Transaction::default();
@@ -195,7 +193,7 @@ fn test_pending_transactions() {
     let keypair = wallet.keypair.as_ref().unwrap();
     let message = b"Authorize transaction";
     let signature = keypair.sign(message);
-    let signature_bytes = signature.expect("Failed to sign transaction").to_bytes();
+    let signature_bytes = signature.to_bytes();
 
     let input = crate::blockchain::TransactionInput {
         previous_output: outpoint,
@@ -205,7 +203,7 @@ fn test_pending_transactions() {
     tx.inputs.push(input);
 
     // Add recipient output
-    let recipient_bytes = crate::wallet::jubjub_point_to_bytes(&recipient_keypair.public);
+    let recipient_bytes = jubjub_point_to_bytes(&recipient_keypair.public);
     let payment_output = crate::blockchain::TransactionOutput {
         value: 50,
         public_key_script: recipient_bytes,
@@ -215,7 +213,7 @@ fn test_pending_transactions() {
     // Add change output
     let change_output = crate::blockchain::TransactionOutput {
         value: 50,
-        public_key_script: crate::wallet::jubjub_point_to_bytes(&keypair.public),
+        public_key_script: jubjub_point_to_bytes(&keypair.public),
     };
     tx.outputs.push(change_output);
 
@@ -307,9 +305,7 @@ fn test_transaction_create_with_privacy() {
 
     // Create a recipient keypair
     let mut rng = rand::rngs::OsRng;
-    let recipient_keypair = crate::crypto::jubjub::JubjubKeypair::new(
-        crate::crypto::jubjub::JubjubScalar::rand(&mut rng),
-    );
+    let recipient_keypair = generate_keypair();
 
     // Enable privacy
     wallet.enable_privacy();

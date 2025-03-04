@@ -437,7 +437,6 @@ fn test_bft_finality_and_fork_choice() {
         validator: keypair1.public.to_bytes().to_vec(),
         signature: keypair1
             .sign(&block_hash)
-            .expect("Signing failed")
             .to_bytes(),
         timestamp: SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -452,7 +451,6 @@ fn test_bft_finality_and_fork_choice() {
         validator: keypair2.public.to_bytes().to_vec(),
         signature: keypair2
             .sign(&block_hash)
-            .expect("Signing failed")
             .to_bytes(),
         timestamp: SystemTime::now()
             .duration_since(UNIX_EPOCH)

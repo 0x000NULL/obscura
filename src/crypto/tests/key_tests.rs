@@ -6,7 +6,7 @@ fn test_key_generation() {
     let keypair = generate_keypair();
 
     let message = b"test message";
-    let signature = keypair.sign(message).expect("Signing failed");
+    let signature = keypair.sign(message);
     assert!(keypair.public.verify(message, &signature));
 }
 

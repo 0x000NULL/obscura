@@ -5,6 +5,9 @@ use rand::{rngs::OsRng, Rng};
 use rand_core::RngCore;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use ark_serialize::{CanonicalSerialize, CanonicalDeserialize};
+use ark_ed_on_bls12_381::{EdwardsAffine, EdwardsProjective, Fr};
+use ark_ec::CurveGroup;
 
 // Import the JubjubScalar type
 use crate::crypto::jubjub::JubjubScalar;
@@ -315,10 +318,7 @@ impl StealthAddressing {
     pub fn create_ownership_proof(&self, address: &[u8], keypair: &JubjubKeypair) -> Vec<u8> {
         // Sign the address with the keypair to prove ownership
         // This will return a signature over the address using the keypair
-        match keypair.sign(address) {
-            Ok(signature) => signature.to_bytes(),
-            Err(_) => Vec::new(), // Return empty bytes on error
-        }
+        keypair.sign(address).to_bytes()
     }
 
     /// Verify address ownership proof
@@ -505,6 +505,46 @@ impl ConfidentialTransactions {
         // Always return true for this implementation
         // In a real implementation, we would verify the range proof
         true
+    }
+}
+
+impl JubjubSignature {
+    /// Convert signature to bytes
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        
+        // Create a buffer for R point
+        let mut r_buffer = Vec::new();
+        self.r.into_affine().serialize_compressed(&mut r_buffer).unwrap();
+        bytes.extend_from_slice(&r_buffer);
+        
+        // Create a buffer for s scalar
+        let mut s_buffer = Vec::new();
+        self.s.serialize_compressed(&mut s_buffer).unwrap();
+        bytes.extend_from_slice(&s_buffer);
+        
+        bytes
+    }
+
+    /// Create signature from bytes
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() != 64 {  // 32 bytes for R + 32 bytes for s
+            return None;
+        }
+
+        // Split bytes into R and s components
+        let r_bytes = &bytes[0..32];
+        let s_bytes = &bytes[32..64];
+
+        // Deserialize R point
+        let r = EdwardsAffine::deserialize_compressed(r_bytes)
+            .ok()
+            .map(EdwardsProjective::from)?;
+
+        // Deserialize s scalar
+        let s = Fr::deserialize_compressed(s_bytes).ok()?;
+
+        Some(JubjubSignature { r, s })
     }
 }
 

@@ -809,7 +809,6 @@ impl ProofOfStake {
             round,
             validator: keypair.public.to_bytes().to_vec(),
             signature: signature
-                .expect("Failed to sign BFT message")
                 .to_bytes()
                 .to_vec(),
             timestamp: current_time,

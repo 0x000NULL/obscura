@@ -31,7 +31,7 @@ impl<'a> Vrf<'a> {
     #[allow(dead_code)]
     pub fn prove(&self, message: &[u8]) -> Result<VrfProof, &'static str> {
         // Sign the message with the private key
-        let signature = self.keypair.sign(message)?;
+        let signature = self.keypair.sign(message);
 
         // Hash the signature to get the VRF output
         let mut hasher = Sha256::new();

@@ -48,7 +48,7 @@ fn test_transaction_creation() {
 fn test_transaction_validation() {
     let keypair = generate_keypair();
     let message = b"transaction data";
-    let signature = keypair.sign(message).expect("Signing failed");
+    let signature = keypair.sign(message);
     
     let input = TransactionInput {
         previous_output: OutPoint {

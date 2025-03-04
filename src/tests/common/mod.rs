@@ -1,6 +1,6 @@
 use crate::blockchain::{Block, OutPoint, Transaction, TransactionInput, TransactionOutput};
 use crate::consensus::StakeProof;
-use crate::crypto::jubjub::generate_keypair;
+use crate::crypto::jubjub::{generate_keypair, JubjubPointExt};
 
 pub fn create_test_block(nonce: u64) -> Block {
     let mut block = Block::new([0u8; 32]);
@@ -13,7 +13,8 @@ pub fn create_test_block(nonce: u64) -> Block {
 pub fn create_test_transaction() -> Transaction {
     let keypair = generate_keypair();
     let message = b"test_block";
-    let signature = keypair.sign(message).expect("Signing failed");
+    let signature = keypair.sign(message);
+    assert!(keypair.public.verify(message, &signature));
 
     Transaction {
         inputs: vec![TransactionInput {

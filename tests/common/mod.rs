@@ -17,7 +17,7 @@ pub fn create_test_block(nonce: u64) -> Block {
 pub fn create_test_transaction() -> Transaction {
     let keypair = generate_keypair();
     let message = b"test_block";
-    let signature = keypair.sign(message).expect("Signing failed");
+    let signature = keypair.sign(message);
 
     Transaction {
         inputs: vec![TransactionInput {

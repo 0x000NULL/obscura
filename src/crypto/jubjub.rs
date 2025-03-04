@@ -9,6 +9,9 @@ use rand::rngs::OsRng;
 use rand_core::RngCore; // Import RngCore trait for fill_bytes
 use sha2::{Digest, Sha256};
 use std::ops::Mul; // Add Mul trait import
+use ark_ec::{Group, CurveGroup, AffineRepr}; // Add AffineRepr trait import
+use ark_ff::{One, PrimeField, Zero, BigInteger}; // Remove PrimeFieldBits from ark_ff
+use ff::PrimeFieldBits; // Add the correct import for PrimeFieldBits
                    // Remove duplicate imports from obscura crate since we're defining these here
                    // use obscura::crypto::jubjub::JubjubPoint;
                    // use obscura::crypto::jubjub::JubjubPointExt;
@@ -19,9 +22,285 @@ use std::ops::Mul; // Add Mul trait import
                    // use obscura::crypto::generate_keypair;
 
 // Add derive traits for JubjubKeypair
-use ark_ec::Group;
-use ark_ff::{One, PrimeField, Zero};
 use std::fmt::Debug;
+use std::sync::Arc;
+use once_cell::sync::Lazy;
+use rayon::prelude::*;
+
+/// Constants for optimized operations
+const WINDOW_SIZE: usize = 4;
+const TABLE_SIZE: usize = 1 << WINDOW_SIZE;
+const BATCH_SIZE: usize = 128;
+
+/// Precomputed tables for fixed-base operations
+static BASE_TABLE: Lazy<Arc<Vec<EdwardsProjective>>> = Lazy::new(|| {
+    Arc::new(generate_base_table())
+});
+
+/// Generate precomputation table for base point
+fn generate_base_table() -> Vec<EdwardsProjective> {
+    let mut table = Vec::with_capacity(TABLE_SIZE);
+    let base = <EdwardsProjective as ark_ec::Group>::generator();
+    
+    table.push(EdwardsProjective::zero());
+    for i in 1..TABLE_SIZE {
+        table.push(base * Fr::from(i as u64));
+    }
+    
+    table
+}
+
+/// Trait for extended Jubjub point operations
+pub trait JubjubPointExt: Sized {
+    /// Convert point to bytes
+    fn to_bytes(&self) -> Vec<u8>;
+    
+    /// Convert from bytes to point
+    fn from_bytes(bytes: &[u8]) -> Option<Self>;
+    
+    /// Get the generator point
+    fn generator() -> Self;
+    
+    /// Verify a signature
+    fn verify(&self, message: &[u8], signature: &JubjubSignature) -> bool;
+}
+
+/// A Jubjub signature
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct JubjubSignature {
+    /// The R component of the signature
+    pub r: EdwardsProjective,
+    /// The s component of the signature
+    pub s: Fr,
+}
+
+/// A Jubjub keypair
+#[derive(Clone, Debug)]
+pub struct JubjubKeypair {
+    /// The secret key
+    pub secret: Fr,
+    /// The public key
+    pub public: EdwardsProjective,
+}
+
+impl JubjubKeypair {
+    /// Generate a new Jubjub keypair
+    pub fn generate() -> Self {
+        let mut rng = OsRng;
+        let secret = Fr::rand(&mut rng);
+        let public = <EdwardsProjective as ark_ec::Group>::generator() * secret;
+        
+        Self { secret, public }
+    }
+    
+    /// Sign a message
+    pub fn sign(&self, message: &[u8]) -> JubjubSignature {
+        let mut rng = OsRng;
+        
+        // Generate random nonce
+        let k = Fr::rand(&mut rng);
+        let r = <EdwardsProjective as ark_ec::Group>::generator() * k;
+        
+        // Hash message and public key
+        let mut hasher = Sha256::new();
+        hasher.update(b"Obscura_Jubjub_Sign");
+        let mut public_bytes = Vec::new();
+        self.public.into_affine().serialize_compressed(&mut public_bytes).unwrap();
+        hasher.update(&public_bytes);
+        hasher.update(message);
+        let mut r_bytes = Vec::new();
+        r.into_affine().serialize_compressed(&mut r_bytes).unwrap();
+        hasher.update(&r_bytes);
+        let h = hasher.finalize();
+        
+        // Convert hash to scalar
+        let e = Fr::from_le_bytes_mod_order(&h);
+        
+        // Compute s = k + e * secret
+        let s = k + (e * self.secret);
+        
+        JubjubSignature { r, s }
+    }
+    
+    /// Verify a signature
+    pub fn verify(&self, message: &[u8], signature: &JubjubSignature) -> bool {
+        // Hash message and public key
+        let mut hasher = Sha256::new();
+        hasher.update(b"Obscura_Jubjub_Sign");
+        let mut public_bytes = Vec::new();
+        self.public.into_affine().serialize_compressed(&mut public_bytes).unwrap();
+        hasher.update(&public_bytes);
+        hasher.update(message);
+        let mut r_bytes = Vec::new();
+        signature.r.into_affine().serialize_compressed(&mut r_bytes).unwrap();
+        hasher.update(&r_bytes);
+        let h = hasher.finalize();
+        
+        // Convert hash to scalar
+        let e = Fr::from_le_bytes_mod_order(&h);
+        
+        // Verify sG = R + eP
+        let sg = <EdwardsProjective as ark_ec::Group>::generator() * signature.s;
+        let ep = self.public * e;
+        let rhs = signature.r + ep;
+        
+        sg == rhs
+    }
+
+    /// Convert this keypair to bytes
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+
+        // Serialize the secret key
+        self.secret.serialize_uncompressed(&mut bytes).unwrap();
+
+        // Serialize the public key
+        self.public.into_affine().serialize_compressed(&mut bytes).unwrap();
+
+        bytes
+    }
+
+    /// Create a keypair from bytes
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() < 64 {
+            return None;
+        }
+
+        // Deserialize the secret key
+        let secret = Fr::deserialize_uncompressed(&bytes[0..32]).ok()?;
+
+        // Deserialize the public key
+        let public = EdwardsAffine::deserialize_compressed(&bytes[32..64])
+            .ok()
+            .map(EdwardsProjective::from)?;
+
+        Some(Self { secret, public })
+    }
+}
+
+/// Optimized scalar multiplication using windowed method and precomputation
+pub fn optimized_mul(scalar: &Fr) -> EdwardsProjective {
+    let table = BASE_TABLE.as_ref();
+    // Convert scalar to bits using PrimeFieldBits trait
+    let scalar_bits: Vec<bool> = scalar.into_bigint().to_bits_le();
+    let mut result = EdwardsProjective::zero();
+    
+    for window in scalar_bits.chunks(WINDOW_SIZE) {
+        // Double for each bit in the window
+        for _ in 0..WINDOW_SIZE {
+            result = result.double();
+        }
+        
+        // Convert window bits to index
+        let mut index = 0usize;
+        for (i, bit) in window.iter().enumerate() {
+            if *bit {
+                index |= 1 << i;
+            }
+        }
+        
+        // Add precomputed value
+        if index > 0 && index < table.len() {
+            result += table[index];
+        }
+    }
+    
+    result
+}
+
+/// Batch verification of multiple signatures using parallel processing
+pub fn verify_batch_parallel(
+    messages: &[&[u8]],
+    public_keys: &[EdwardsProjective],
+    signatures: &[JubjubSignature],
+) -> bool {
+    if messages.len() != public_keys.len() || messages.len() != signatures.len() || messages.is_empty() {
+        return false;
+    }
+    
+    // Generate random scalars for linear combination
+    let mut rng = OsRng;
+    let scalars: Vec<Fr> = (0..messages.len())
+        .map(|_| Fr::rand(&mut rng))
+        .collect();
+    
+    // Compute sums in parallel
+    let (lhs, rhs) = rayon::join(
+        || {
+            // Left-hand side: sum(s_i * G)
+            signatures.par_iter()
+                .zip(scalars.par_iter())
+                .map(|(sig, scalar)| <EdwardsProjective as ark_ec::Group>::generator() * (sig.s * scalar))
+                .reduce(|| EdwardsProjective::zero(), |acc, x| acc + x)
+        },
+        || {
+            // Right-hand side: sum(R_i + e_i * P_i)
+            messages.par_iter()
+                .zip(public_keys.par_iter())
+                .zip(signatures.par_iter())
+                .zip(scalars.par_iter())
+                .map(|(((msg, pk), sig), scalar)| {
+                    let mut hasher = Sha256::new();
+                    hasher.update(b"Obscura_Jubjub_Sign");
+                    let mut pk_bytes = Vec::new();
+                    pk.into_affine().serialize_compressed(&mut pk_bytes).unwrap();
+                    hasher.update(&pk_bytes);
+                    hasher.update(msg);
+                    let mut r_bytes = Vec::new();
+                    sig.r.into_affine().serialize_compressed(&mut r_bytes).unwrap();
+                    hasher.update(&r_bytes);
+                    let h = hasher.finalize();
+                    let e = Fr::from_le_bytes_mod_order(&h);
+                    
+                    (sig.r + (*pk * e)) * scalar
+                })
+                .reduce(|| EdwardsProjective::zero(), |acc, x| acc + x)
+        }
+    );
+    
+    lhs == rhs
+}
+
+/// Hash a message to a Jubjub point
+pub fn hash_to_point(message: &[u8]) -> EdwardsProjective {
+    let mut hasher = Sha256::new();
+    hasher.update(b"Obscura_Jubjub_H2C");
+    hasher.update(message);
+    let h = hasher.finalize();
+    
+    let mut attempt = 0u8;
+    loop {
+        let mut data = Vec::with_capacity(h.len() + 1);
+        data.extend_from_slice(&h);
+        data.push(attempt);
+        
+        let mut hasher = Sha256::new();
+        hasher.update(&data);
+        let hash = hasher.finalize();
+        
+        if let Some(point) = try_and_increment(&hash) {
+            return point;
+        }
+        
+        attempt = attempt.wrapping_add(1);
+    }
+}
+
+/// Helper function for hash-to-curve
+fn try_and_increment(hash: &[u8]) -> Option<EdwardsProjective> {
+    let mut x_bytes = [0u8; 32];
+    x_bytes.copy_from_slice(&hash[0..32]);
+    
+    // Try to create a valid curve point using deserialize_compressed
+    if let Ok(point) = EdwardsAffine::deserialize_compressed(&x_bytes[..]) {
+        let point_proj = EdwardsProjective::from(point);
+        // Check if the point is in the correct subgroup using mul_by_cofactor()
+        if !bool::from(point_proj.is_zero()) && bool::from(point_proj.into_affine().mul_by_cofactor().is_zero()) {
+            return Some(point_proj);
+        }
+    }
+    None
+}
 
 /// Placeholder for Jubjub params
 #[derive(Clone, Debug)]
@@ -35,7 +314,7 @@ pub type JubjubPoint = EdwardsProjective;
 
 // Extension trait for JubjubScalar to provide additional functionality
 pub trait JubjubScalarExt {
-    fn to_bytes(&self) -> [u8; 32];
+    fn to_bytes(&self) -> Vec<u8>;
     fn from_bytes(bytes: &[u8]) -> Option<Self>
     where
         Self: Sized;
@@ -47,23 +326,11 @@ pub trait JubjubScalarExt {
         Self: Sized;
 }
 
-// Extension trait for JubjubPoint to provide additional functionality
-pub trait JubjubPointExt {
-    fn to_bytes(&self) -> [u8; 32];
-    fn from_bytes(bytes: &[u8]) -> Option<Self>
-    where
-        Self: Sized;
-    fn generator() -> Self
-    where
-        Self: Sized;
-    fn verify(&self, message: &[u8], signature: &JubjubSignature) -> bool;
-}
-
 // Implement extension trait for JubjubScalar
 impl JubjubScalarExt for JubjubScalar {
-    fn to_bytes(&self) -> [u8; 32] {
-        let mut bytes = [0u8; 32];
-        self.serialize_compressed(&mut bytes[..])
+    fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        self.serialize_compressed(&mut bytes)
             .expect("Serialization failed");
         bytes
     }
@@ -81,18 +348,7 @@ impl JubjubScalarExt for JubjubScalar {
         let hash = hasher.finalize();
 
         // Convert hash to scalar
-        let mut scalar_bytes = [0u8; 32];
-        scalar_bytes.copy_from_slice(&hash);
-
-        // Ensure the scalar is in the correct range for Fr
-        let mut scalar = JubjubScalar::from_le_bytes_mod_order(&scalar_bytes);
-
-        // Ensure the scalar is not zero
-        if scalar.is_zero() {
-            scalar = JubjubScalar::one();
-        }
-
-        scalar
+        Fr::from_le_bytes_mod_order(&hash)
     }
 
     fn random<R: rand::Rng + ?Sized>(rng: &mut R) -> Self {
@@ -102,11 +358,10 @@ impl JubjubScalarExt for JubjubScalar {
 
 // Implement extension trait for JubjubPoint
 impl JubjubPointExt for JubjubPoint {
-    fn to_bytes(&self) -> [u8; 32] {
-        let mut bytes = [0u8; 32];
-        let affine = EdwardsAffine::from(*self);
-        affine
-            .serialize_compressed(&mut bytes[..])
+    fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        self.into_affine()
+            .serialize_compressed(&mut bytes)
             .expect("Serialization failed");
         bytes
     }
@@ -115,8 +370,9 @@ impl JubjubPointExt for JubjubPoint {
         if bytes.len() != 32 {
             return None;
         }
-        let affine = EdwardsAffine::deserialize_compressed(bytes).ok()?;
-        Some(EdwardsProjective::from(affine))
+        EdwardsAffine::deserialize_compressed(bytes)
+            .ok()
+            .map(EdwardsProjective::from)
     }
 
     fn generator() -> Self {
@@ -124,302 +380,29 @@ impl JubjubPointExt for JubjubPoint {
     }
 
     fn verify(&self, message: &[u8], signature: &JubjubSignature) -> bool {
-        signature.verify(self, message)
-    }
-}
-
-/// A keypair for the JubJub curve
-#[derive(Clone, Debug)]
-pub struct JubjubKeypair {
-    /// The secret key
-    pub secret: JubjubScalar,
-    /// The public key
-    pub public: JubjubPoint,
-}
-
-impl JubjubKeypair {
-    /// Create a new keypair from a secret key
-    pub fn new(secret: JubjubScalar) -> Self {
-        let public = <JubjubPoint as JubjubPointExt>::generator() * secret;
-        Self { secret, public }
-    }
-
-    /// Convert this keypair to bytes
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(64); // 32 bytes for secret + 32 bytes for public
-
-        // Serialize the secret key (32 bytes)
-        let mut secret_bytes = Vec::new();
-        self.secret
-            .serialize_uncompressed(&mut secret_bytes)
-            .unwrap();
-        bytes.extend_from_slice(&secret_bytes);
-
-        // Serialize the public key (32 bytes)
-        bytes.extend_from_slice(&self.public.to_bytes());
-
-        bytes
-    }
-
-    /// Create a keypair from bytes
-    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() < 64 {
-            return None;
-        }
-
-        // Deserialize the secret key
-        let secret = JubjubScalar::deserialize_uncompressed(&bytes[0..32]).ok()?;
-
-        // Deserialize the public key
-        let public = JubjubPoint::from_bytes(&bytes[32..64])?;
-
-        Some(Self { secret, public })
-    }
-
-    /// Sign a message using this keypair
-    pub fn sign(&self, message: &[u8]) -> Result<JubjubSignature, &'static str> {
-        // Instead of generating a random scalar, derive it deterministically from the message and secret key
-        // This makes the VRF deterministic for the same input and keypair
+        // Hash message and public key
         let mut hasher = Sha256::new();
-        hasher.update(&self.secret.to_bytes()); // Include the secret key
-        hasher.update(message); // Include the message
-        let r_bytes = hasher.finalize();
-
-        // Convert hash to scalar
-        let r = JubjubScalar::hash_to_scalar(&r_bytes);
-
-        // Compute R = r·G
-        let r_point = <JubjubPoint as JubjubPointExt>::generator() * r;
-
-        // Compute the challenge e = H(R || P || m)
-        let mut hasher = Sha256::new();
-        hasher.update(&r_point.to_bytes());
-        hasher.update(&self.public.to_bytes());
+        hasher.update(b"Obscura_Jubjub_Sign");
+        let mut public_bytes = Vec::new();
+        self.into_affine().serialize_compressed(&mut public_bytes).unwrap();
+        hasher.update(&public_bytes);
         hasher.update(message);
-        let e_bytes = hasher.finalize();
-
+        let mut r_bytes = Vec::new();
+        signature.r.into_affine().serialize_compressed(&mut r_bytes).unwrap();
+        hasher.update(&r_bytes);
+        let h = hasher.finalize();
+        
         // Convert hash to scalar
-        let e = JubjubScalar::hash_to_scalar(&e_bytes);
-
-        // Compute s = r + e·sk
-        let s = r + (e * self.secret);
-
-        Ok(JubjubSignature { e, s })
-    }
-
-    /// Verify a signature against this keypair's public key
-    pub fn verify(&self, message: &[u8], signature: &JubjubSignature) -> bool {
-        signature.verify(&self.public, message)
+        let e = Fr::from_le_bytes_mod_order(&h);
+        
+        // Verify sG = R + eP
+        let sg = <EdwardsProjective as ark_ec::Group>::generator() * signature.s;
+        let ep = (*self) * e;
+        let rhs = signature.r + ep;
+        
+        sg == rhs
     }
 }
-
-/// A Jubjub signature (e,s) pair
-#[derive(Clone, Debug)]
-pub struct JubjubSignature {
-    /// The challenge value
-    pub e: JubjubScalar,
-    /// The response value
-    pub s: JubjubScalar,
-}
-
-impl JubjubSignature {
-    /// Convert this signature to bytes
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(64); // 32 bytes for e + 32 bytes for s
-
-        // Serialize e (32 bytes)
-        let mut e_bytes = Vec::new();
-        self.e.serialize_uncompressed(&mut e_bytes).unwrap();
-        bytes.extend_from_slice(&e_bytes);
-
-        // Serialize s (32 bytes)
-        let mut s_bytes = Vec::new();
-        self.s.serialize_uncompressed(&mut s_bytes).unwrap();
-        bytes.extend_from_slice(&s_bytes);
-
-        bytes
-    }
-
-    /// Create a signature from bytes
-    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() != 64 {
-            return None;
-        }
-
-        // Deserialize e (first 32 bytes)
-        let e = JubjubScalar::deserialize_uncompressed(&bytes[0..32]).ok()?;
-
-        // Deserialize s (next 32 bytes)
-        let s = JubjubScalar::deserialize_uncompressed(&bytes[32..64]).ok()?;
-
-        Some(Self { e, s })
-    }
-
-    /// Verify this signature against a public key and message
-    pub fn verify(&self, public_key: &JubjubPoint, message: &[u8]) -> bool {
-        // Compute R' = s·G - e·P
-        let s_g = <JubjubPoint as JubjubPointExt>::generator() * self.s;
-        let e_p = (*public_key) * self.e;
-        let r_prime = s_g - e_p;
-
-        // Compute the challenge e' = H(R' || P || m)
-        let mut hasher = Sha256::new();
-        hasher.update(&r_prime.to_bytes());
-        hasher.update(&public_key.to_bytes());
-        hasher.update(message);
-        let e_prime_bytes = hasher.finalize();
-
-        // Convert hash to scalar
-        let e_prime = JubjubScalar::hash_to_scalar(&e_prime_bytes);
-
-        // Verify that e == e'
-        self.e == e_prime
-    }
-}
-
-/// Jubjub curve implementation for Obscura's cryptographic needs
-///
-/// This module provides functionality for the secondary curve used in the Obscura blockchain,
-/// primarily for signatures, commitments, and other internal operations.
-///
-/// # Cryptographic Primitives
-///
-/// ## Stealth Addressing
-///
-/// The module implements a secure stealth addressing system with the following components:
-///
-/// 1. **Diffie-Hellman Key Exchange**
-///    - Secure ephemeral key generation
-///    - Proper key blinding
-///    - Forward secrecy guarantees
-///    - Protection against key recovery
-///
-/// 2. **Shared Secret Derivation**
-///    - Multiple rounds of key derivation
-///    - Domain separation
-///    - Additional entropy mixing
-///    - Protection against key recovery
-///
-/// 3. **Key Blinding**
-///    - Multiple blinding factors
-///    - Proper entropy mixing
-///    - Protection against key recovery
-///    - Forward secrecy guarantees
-///
-/// 4. **Forward Secrecy**
-///    - Ephemeral key rotation
-///    - Time-based key derivation
-///    - Protection against future key compromises
-///
-/// # Security Properties
-///
-/// The implementation ensures the following security properties:
-///
-/// 1. **Privacy**
-///    - Unlinkable transactions
-///    - Amount privacy
-///    - Sender/receiver privacy
-///
-/// 2. **Security**
-///    - Protection against key recovery
-///    - Forward secrecy
-///    - Protection against key reuse
-///    - Proper key blinding
-///
-/// 3. **Robustness**
-///    - Fallback mechanisms for edge cases
-///    - Proper error handling
-///    - Constant-time operations
-///    - Range checking
-///
-/// # Usage Examples
-///
-/// ```
-/// // Use the jubjub module from the crate
-/// use obscura::crypto::jubjub::*;
-///
-/// // Generate a recipient keypair
-/// let recipient_keypair = generate_keypair();
-///
-/// // Create a stealth address
-/// let (ephemeral_public, stealth_address) = create_stealth_address(&recipient_keypair.public);
-///
-/// // Recover the stealth private key
-/// let stealth_private_key = recover_stealth_private_key(
-///     &recipient_keypair.secret,
-///     &ephemeral_public,
-///     None // No timestamp for simplicity in this example
-/// );
-///
-/// // Derive public key from private key for verification
-/// let derived_public = generator() * stealth_private_key;
-///
-/// // We can now use the stealth address for receiving funds
-/// // and the stealth private key for spending them
-/// ```
-///
-/// # Implementation Details
-///
-/// The implementation uses the following cryptographic primitives:
-///
-/// 1. **Curve Operations**
-///    - Jubjub curve (Edwards form)
-///    - Scalar multiplication
-///    - Point addition
-///
-/// 2. **Hash Functions**
-///    - SHA-256 for key derivation
-///    - Domain separation
-///    - Proper entropy mixing
-///
-/// 3. **Random Number Generation**
-///    - System entropy (OsRng)
-///    - Time-based entropy
-///    - Additional entropy sources
-///
-/// # Security Considerations
-///
-/// When using these cryptographic primitives, consider the following:
-///
-/// 1. **Key Management**
-///    - Store private keys securely
-///    - Use proper key derivation
-///    - Implement key rotation
-///
-/// 2. **Random Number Generation**
-///    - Use cryptographically secure RNG
-///    - Mix multiple entropy sources
-///    - Validate generated values
-///
-/// 3. **Implementation Security**
-///    - Use constant-time operations
-///    - Implement proper error handling
-///    - Validate all inputs
-///
-/// # Testing
-///
-/// The implementation includes comprehensive tests for:
-///
-/// 1. **Basic Functionality**
-///    - Key generation
-///    - Stealth address creation
-///    - Key recovery
-///
-/// 2. **Security Properties**
-///    - Forward secrecy
-///    - Key blinding
-///    - Shared secret derivation
-///
-/// 3. **Edge Cases**
-///    - Zero/one values
-///    - Invalid inputs
-///    - Fallback mechanisms
-///
-/// # References
-///
-/// - [Jubjub Curve Specification](https://z.cash/technology/jubjub/)
-/// - [Stealth Addresses](https://www.weusecoins.com/stealth-addresses/)
-/// - [Forward Secrecy](https://en.wikipedia.org/wiki/Forward_secrecy)
 
 /// Returns the Jubjub parameters
 pub fn get_jubjub_params() -> JubjubParams {
@@ -430,30 +413,30 @@ pub fn get_jubjub_params() -> JubjubParams {
 /// Generate a new random JubJub keypair
 pub fn generate_keypair() -> JubjubKeypair {
     let mut rng = OsRng;
-    let secret = JubjubScalar::random(&mut rng);
-    JubjubKeypair::new(secret)
+    let secret = Fr::rand(&mut rng);
+    JubjubKeypair::generate()
 }
 
 /// Sign a message using a Jubjub-based signing scheme (Schnorr signature)
-pub fn sign(secret_key: &JubjubScalar, message: &[u8]) -> (JubjubScalar, JubjubScalar) {
+pub fn sign(secret_key: &Fr, message: &[u8]) -> (Fr, Fr) {
     let mut rng = OsRng;
 
     // Generate a random scalar for our nonce
-    let k = JubjubScalar::random(&mut rng);
+    let k = Fr::rand(&mut rng);
 
     // R = k·G (the commitment)
-    let r = <JubjubPoint as JubjubPointExt>::generator() * k;
+    let r = <EdwardsProjective as ark_ec::Group>::generator() * k;
 
-    // Convert the commitment to bytes
-    let r_bytes = r.to_bytes();
-
-    // Create a challenge e = H(R || P || m)
+    // Compute the challenge e = H(R || P || m)
     let mut hasher = Sha256::new();
+    let mut r_bytes = Vec::new();
+    r.into_affine().serialize_compressed(&mut r_bytes).unwrap();
     hasher.update(&r_bytes);
 
     // Add the public key P = secret_key·G to the hash
-    let public_key = <JubjubPoint as JubjubPointExt>::generator() * (*secret_key);
-    let public_key_bytes = public_key.to_bytes();
+    let public_key = <EdwardsProjective as ark_ec::Group>::generator() * (*secret_key);
+    let mut public_key_bytes = Vec::new();
+    public_key.into_affine().serialize_compressed(&mut public_key_bytes).unwrap();
     hasher.update(&public_key_bytes);
 
     // Add the message to the hash
@@ -461,9 +444,9 @@ pub fn sign(secret_key: &JubjubScalar, message: &[u8]) -> (JubjubScalar, JubjubS
     let e_bytes = hasher.finalize();
 
     // Convert hash to scalar e
-    let e = JubjubScalar::hash_to_scalar(&e_bytes);
+    let e = Fr::from_le_bytes_mod_order(&e_bytes);
 
-    // Compute s = k + e·secret_key
+    // Compute s = k + e·sk
     let s = k + e * (*secret_key);
 
     (e, s)
@@ -471,24 +454,26 @@ pub fn sign(secret_key: &JubjubScalar, message: &[u8]) -> (JubjubScalar, JubjubS
 
 /// Verify a signature using a Jubjub-based signing scheme
 pub fn verify(
-    public_key: &JubjubPoint,
+    public_key: &EdwardsProjective,
     message: &[u8],
-    signature: &(JubjubScalar, JubjubScalar),
+    signature: &(Fr, Fr),
 ) -> bool {
     let (e, s) = signature;
 
     // R' = s·G - e·P
-    let r_prime = <JubjubPoint as JubjubPointExt>::generator() * (*s) - (*public_key) * (*e);
+    let r_prime = <EdwardsProjective as ark_ec::Group>::generator() * s - (*public_key) * e;
 
     // Convert R' to bytes
-    let r_prime_bytes = r_prime.to_bytes();
+    let mut r_prime_bytes = Vec::new();
+    r_prime.into_affine().serialize_compressed(&mut r_prime_bytes).unwrap();
 
     // Create a challenge e' = H(R' || P || m)
     let mut hasher = Sha256::new();
     hasher.update(&r_prime_bytes);
 
     // Add the public key to the hash
-    let public_key_bytes = public_key.to_bytes();
+    let mut public_key_bytes = Vec::new();
+    public_key.into_affine().serialize_compressed(&mut public_key_bytes).unwrap();
     hasher.update(&public_key_bytes);
 
     // Add the message to the hash
@@ -496,7 +481,7 @@ pub fn verify(
     let e_prime_bytes = hasher.finalize();
 
     // Convert hash to scalar e'
-    let e_prime = JubjubScalar::hash_to_scalar(&e_prime_bytes);
+    let e_prime = Fr::from_le_bytes_mod_order(&e_prime_bytes);
 
     // Verify that e == e'
     *e == e_prime
@@ -508,8 +493,8 @@ pub fn create_rng() -> OsRng {
 }
 
 /// Returns the JubJub generator point
-pub fn generator() -> JubjubPoint {
-    <JubjubPoint as JubjubPointExt>::generator()
+pub fn generator() -> EdwardsProjective {
+    <EdwardsProjective as JubjubPointExt>::generator()
 }
 
 /// Secure Diffie-Hellman key exchange for stealth addressing
@@ -582,37 +567,49 @@ pub fn generator() -> JubjubPoint {
 /// );
 /// ```
 pub fn stealth_diffie_hellman(
-    _private_key: &JubjubScalar,
-    recipient_public_key: &JubjubPoint,
-) -> (JubjubPoint, JubjubPoint) {
+    _private_key: &Fr,
+    recipient_public_key: &EdwardsProjective,
+) -> (EdwardsProjective, EdwardsProjective) {
     // Generate a secure random ephemeral key
     let mut rng = OsRng;
-    let ephemeral_private = JubjubScalar::random(&mut rng);
+    let ephemeral_private = Fr::rand(&mut rng);
 
     // Compute ephemeral public key R = r·G
-    let ephemeral_public = <JubjubPoint as JubjubPointExt>::generator() * ephemeral_private;
+    let ephemeral_public = <EdwardsProjective as ark_ec::Group>::generator() * ephemeral_private;
 
     // Compute the shared secret point S = r·P where P is the recipient's public key
     let shared_secret_point = (*recipient_public_key) * ephemeral_private;
 
-    // Convert shared secret point to bytes for key derivation
-    let shared_secret_bytes = shared_secret_point.to_bytes();
+    // Derive the shared secret using our secure protocol
+    let shared_secret = derive_shared_secret(
+        &shared_secret_point,
+        &ephemeral_public,
+        recipient_public_key,
+        None,
+    );
 
-    // Use HKDF to derive the final shared secret
+    // Ensure forward secrecy
+    let forward_secret = ensure_forward_secrecy(&shared_secret, 0, None);
+
+    // Derive the blinding factor deterministically from the shared secret
     let mut hasher = Sha256::new();
-    hasher.update(b"Obscura Stealth DH");
-    hasher.update(&shared_secret_bytes);
-    hasher.update(&ephemeral_public.to_bytes());
-    hasher.update(&recipient_public_key.to_bytes());
+    hasher.update(b"Obscura Deterministic Blinding Factor");
+    hasher.update(&shared_secret.to_bytes());
     let hash = hasher.finalize();
 
     // Convert hash to scalar for the final shared secret
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&hash);
-    let shared_secret = JubjubScalar::from_le_bytes_mod_order(&scalar_bytes);
+    let blinding_factor = Fr::from_le_bytes_mod_order(&scalar_bytes);
 
-    // Return both the ephemeral public key and the shared secret
-    (ephemeral_public, shared_secret_point)
+    // Blind the forward secret
+    let blinded_secret = blind_key(&forward_secret, &blinding_factor, None);
+
+    // Compute the stealth address as S = blinded_secret·G + P
+    let stealth_address = optimized_mul(&blinded_secret) + (*recipient_public_key);
+
+    // Return the ephemeral public key and the stealth address
+    (ephemeral_public, stealth_address)
 }
 
 /// Generate a secure ephemeral key for stealth addressing
@@ -656,7 +653,7 @@ pub fn stealth_diffie_hellman(
 ///
 /// let (ephemeral_private, ephemeral_public) = generate_secure_ephemeral_key();
 /// ```
-pub fn generate_secure_ephemeral_key() -> (JubjubScalar, JubjubPoint) {
+pub fn generate_secure_ephemeral_key() -> (Fr, EdwardsProjective) {
     // Create multiple entropy sources
     let mut rng = OsRng;
     let mut entropy_bytes = [0u8; 64]; // Double size for extra entropy
@@ -682,16 +679,16 @@ pub fn generate_secure_ephemeral_key() -> (JubjubScalar, JubjubPoint) {
     // Convert to scalar with proper range checking
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&hash);
-    let mut scalar = JubjubScalar::from_le_bytes_mod_order(&scalar_bytes);
+    let mut scalar = Fr::from_le_bytes_mod_order(&scalar_bytes);
 
     // Ensure the scalar is not zero or one
-    if scalar.is_zero() || scalar == JubjubScalar::one() {
+    if scalar.is_zero() || scalar == Fr::one() {
         // If we get a weak scalar, generate a new one
         return generate_secure_ephemeral_key();
     }
 
     // Generate the ephemeral public key
-    let ephemeral_public = <JubjubPoint as JubjubPointExt>::generator() * scalar;
+    let ephemeral_public = <EdwardsProjective as ark_ec::Group>::generator() * scalar;
 
     // Additional validation: ensure the public key is not the identity
     if ephemeral_public.is_zero() {
@@ -768,22 +765,28 @@ pub fn generate_secure_ephemeral_key() -> (JubjubScalar, JubjubPoint) {
 /// );
 /// ```
 pub fn derive_shared_secret(
-    shared_secret_point: &JubjubPoint,
-    ephemeral_public: &JubjubPoint,
-    recipient_public_key: &JubjubPoint,
+    shared_secret_point: &EdwardsProjective,
+    ephemeral_public: &EdwardsProjective,
+    recipient_public_key: &EdwardsProjective,
     additional_data: Option<&[u8]>,
-) -> JubjubScalar {
+) -> Fr {
     // Convert shared secret point to bytes
-    let shared_secret_bytes = shared_secret_point.to_bytes();
+    let mut shared_secret_bytes = Vec::new();
+    shared_secret_point.into_affine().serialize_compressed(&mut shared_secret_bytes).unwrap();
 
     // First round of key derivation
     let mut hasher = Sha256::new();
     hasher.update(b"Obscura Shared Secret v1");
     hasher.update(&shared_secret_bytes);
-    hasher.update(&ephemeral_public.to_bytes());
-    hasher.update(&recipient_public_key.to_bytes());
+    
+    let mut ephemeral_bytes = Vec::new();
+    ephemeral_public.into_affine().serialize_compressed(&mut ephemeral_bytes).unwrap();
+    hasher.update(&ephemeral_bytes);
+    
+    let mut recipient_bytes = Vec::new();
+    recipient_public_key.into_affine().serialize_compressed(&mut recipient_bytes).unwrap();
+    hasher.update(&recipient_bytes);
 
-    // Add additional data if provided
     if let Some(data) = additional_data {
         hasher.update(data);
     }
@@ -812,18 +815,24 @@ pub fn derive_shared_secret(
     let mut hasher = Sha256::new();
     hasher.update(b"Obscura Final Shared Secret");
     hasher.update(&second_hash);
-    hasher.update(&ephemeral_public.to_bytes());
-    hasher.update(&recipient_public_key.to_bytes());
+    
+    let mut ephemeral_bytes = Vec::new();
+    ephemeral_public.into_affine().serialize_compressed(&mut ephemeral_bytes).unwrap();
+    hasher.update(&ephemeral_bytes);
+    
+    let mut recipient_bytes = Vec::new();
+    recipient_public_key.into_affine().serialize_compressed(&mut recipient_bytes).unwrap();
+    hasher.update(&recipient_bytes);
 
     let final_hash = hasher.finalize();
 
     // Convert to scalar with proper range checking
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&final_hash);
-    let scalar = JubjubScalar::from_le_bytes_mod_order(&scalar_bytes);
+    let scalar = Fr::from_le_bytes_mod_order(&scalar_bytes);
 
     // Ensure the scalar is not zero or one
-    if scalar.is_zero() || scalar == JubjubScalar::one() {
+    if scalar.is_zero() || scalar == Fr::one() {
         // If we get a weak scalar, derive a new one with a different domain separator
         return derive_shared_secret_alternative(
             shared_secret_point,
@@ -838,17 +847,27 @@ pub fn derive_shared_secret(
 
 /// Alternative shared secret derivation for fallback
 fn derive_shared_secret_alternative(
-    shared_secret_point: &JubjubPoint,
-    ephemeral_public: &JubjubPoint,
-    recipient_public_key: &JubjubPoint,
+    shared_secret_point: &EdwardsProjective,
+    ephemeral_public: &EdwardsProjective,
+    recipient_public_key: &EdwardsProjective,
     additional_data: Option<&[u8]>,
-) -> JubjubScalar {
+) -> Fr {
     // Use a different domain separator and derivation method
     let mut hasher = Sha256::new();
     hasher.update(b"Obscura Alternative Shared Secret");
-    hasher.update(&shared_secret_point.to_bytes());
-    hasher.update(&ephemeral_public.to_bytes());
-    hasher.update(&recipient_public_key.to_bytes());
+    
+    // Serialize points properly
+    let mut shared_secret_bytes = Vec::new();
+    shared_secret_point.into_affine().serialize_compressed(&mut shared_secret_bytes).unwrap();
+    hasher.update(&shared_secret_bytes);
+    
+    let mut ephemeral_bytes = Vec::new();
+    ephemeral_public.into_affine().serialize_compressed(&mut ephemeral_bytes).unwrap();
+    hasher.update(&ephemeral_bytes);
+    
+    let mut recipient_bytes = Vec::new();
+    recipient_public_key.into_affine().serialize_compressed(&mut recipient_bytes).unwrap();
+    hasher.update(&recipient_bytes);
 
     if let Some(data) = additional_data {
         hasher.update(data);
@@ -867,10 +886,10 @@ fn derive_shared_secret_alternative(
     // Convert to scalar with proper range checking
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&hash);
-    let scalar = JubjubScalar::from_le_bytes_mod_order(&scalar_bytes);
+    let forward_secret = Fr::from_le_bytes_mod_order(&scalar_bytes);
 
     // If this also fails, we'll need to handle it at a higher level
-    scalar
+    forward_secret
 }
 
 /// Secure key blinding for stealth addressing
@@ -917,8 +936,8 @@ fn derive_shared_secret_alternative(
 /// use obscura::crypto::jubjub::*;
 ///
 /// // Create a key and blinding factor
-/// let key = JubjubScalar::random(&mut rand::thread_rng());
-/// let blinding_factor = JubjubScalar::random(&mut rand::thread_rng());
+/// let key = Fr::rand(&mut rand::thread_rng());
+/// let blinding_factor = Fr::rand(&mut rand::thread_rng());
 ///
 /// // Blind the key
 /// let blinded_key = blind_key(
@@ -928,10 +947,10 @@ fn derive_shared_secret_alternative(
 /// );
 /// ```
 pub fn blind_key(
-    key: &JubjubScalar,
-    blinding_factor: &JubjubScalar,
+    key: &Fr,
+    blinding_factor: &Fr,
     additional_data: Option<&[u8]>,
-) -> JubjubScalar {
+) -> Fr {
     // First round of blinding
     let mut hasher = Sha256::new();
     hasher.update(b"Obscura Key Blinding v1");
@@ -962,10 +981,10 @@ pub fn blind_key(
     // Convert to scalar and ensure proper range
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&second_hash);
-    let blinded_key = JubjubScalar::from_le_bytes_mod_order(&scalar_bytes);
+    let blinded_key = Fr::from_le_bytes_mod_order(&scalar_bytes);
 
     // Ensure the blinded key is not zero or one
-    if blinded_key.is_zero() || blinded_key == JubjubScalar::one() {
+    if blinded_key.is_zero() || blinded_key == Fr::one() {
         // If we get a weak blinded key, try again with a different blinding factor
         return blind_key_alternative(key, blinding_factor, additional_data);
     }
@@ -975,10 +994,10 @@ pub fn blind_key(
 
 /// Alternative key blinding for fallback
 fn blind_key_alternative(
-    key: &JubjubScalar,
-    blinding_factor: &JubjubScalar,
+    key: &Fr,
+    blinding_factor: &Fr,
     additional_data: Option<&[u8]>,
-) -> JubjubScalar {
+) -> Fr {
     // Use a different domain separator and blinding method
     let mut hasher = Sha256::new();
     hasher.update(b"Obscura Alternative Key Blinding");
@@ -1002,14 +1021,14 @@ fn blind_key_alternative(
     // Convert to scalar with proper range checking
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&hash);
-    let blinded_key = JubjubScalar::from_le_bytes_mod_order(&scalar_bytes);
+    let blinded_key = Fr::from_le_bytes_mod_order(&scalar_bytes);
 
     // If this also fails, we'll need to handle it at a higher level
     blinded_key
 }
 
 /// Generate a secure blinding factor
-pub fn generate_blinding_factor() -> JubjubScalar {
+pub fn generate_blinding_factor() -> Fr {
     // Create multiple entropy sources
     let mut rng = OsRng;
     let mut entropy_bytes = [0u8; 64]; // Double size for extra entropy
@@ -1035,10 +1054,10 @@ pub fn generate_blinding_factor() -> JubjubScalar {
     // Convert to scalar with proper range checking
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&hash);
-    let blinding_factor = JubjubScalar::from_le_bytes_mod_order(&scalar_bytes);
+    let blinding_factor = Fr::from_le_bytes_mod_order(&scalar_bytes);
 
     // Ensure the blinding factor is not zero or one
-    if blinding_factor.is_zero() || blinding_factor == JubjubScalar::one() {
+    if blinding_factor.is_zero() || blinding_factor == Fr::one() {
         // If we get a weak blinding factor, generate a new one
         return generate_blinding_factor();
     }
@@ -1090,7 +1109,7 @@ pub fn generate_blinding_factor() -> JubjubScalar {
 /// use obscura::crypto::jubjub::*;
 ///
 /// // Create a key and timestamp
-/// let key = JubjubScalar::random(&mut rand::thread_rng());
+/// let key = Fr::rand(&mut rand::thread_rng());
 /// let timestamp = 1698765432u64; // Unix timestamp
 ///
 /// // Apply forward secrecy
@@ -1101,10 +1120,10 @@ pub fn generate_blinding_factor() -> JubjubScalar {
 /// );
 /// ```
 pub fn ensure_forward_secrecy(
-    key: &JubjubScalar,
+    key: &Fr,
     timestamp: u64,
     additional_data: Option<&[u8]>,
-) -> JubjubScalar {
+) -> Fr {
     // Convert timestamp to bytes
     let timestamp_bytes = timestamp.to_le_bytes();
 
@@ -1138,10 +1157,10 @@ pub fn ensure_forward_secrecy(
     // Convert to scalar and ensure proper range
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&second_hash);
-    let forward_secret = JubjubScalar::from_le_bytes_mod_order(&scalar_bytes);
+    let forward_secret = Fr::from_le_bytes_mod_order(&scalar_bytes);
 
     // Ensure the forward secret is not zero or one
-    if forward_secret.is_zero() || forward_secret == JubjubScalar::one() {
+    if forward_secret.is_zero() || forward_secret == Fr::one() {
         // If we get a weak forward secret, try again with a different timestamp
         return ensure_forward_secrecy_alternative(key, timestamp, additional_data);
     }
@@ -1151,10 +1170,10 @@ pub fn ensure_forward_secrecy(
 
 /// Alternative forward secrecy mechanism for fallback
 fn ensure_forward_secrecy_alternative(
-    key: &JubjubScalar,
+    key: &Fr,
     timestamp: u64,
     additional_data: Option<&[u8]>,
-) -> JubjubScalar {
+) -> Fr {
     // Use a different domain separator and derivation method
     let mut hasher = Sha256::new();
     hasher.update(b"Obscura Alternative Forward Secrecy");
@@ -1178,14 +1197,14 @@ fn ensure_forward_secrecy_alternative(
     // Convert to scalar with proper range checking
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&hash);
-    let forward_secret = JubjubScalar::from_le_bytes_mod_order(&scalar_bytes);
+    let forward_secret = Fr::from_le_bytes_mod_order(&scalar_bytes);
 
     // If this also fails, we'll need to handle it at a higher level
     forward_secret
 }
 
 /// Create a stealth address with forward secrecy
-pub fn create_stealth_address(recipient_public_key: &JubjubPoint) -> (JubjubPoint, JubjubPoint) {
+pub fn create_stealth_address(recipient_public_key: &EdwardsProjective) -> (EdwardsProjective, EdwardsProjective) {
     // Generate a secure ephemeral key
     let (ephemeral_private, ephemeral_public) = generate_secure_ephemeral_key();
 
@@ -1213,22 +1232,18 @@ pub fn create_stealth_address(recipient_public_key: &JubjubPoint) -> (JubjubPoin
     let mut hasher = Sha256::new();
     hasher.update(b"Obscura Deterministic Blinding Factor");
     hasher.update(&shared_secret.to_bytes());
-    hasher.update(&timestamp.to_le_bytes());
     let hash = hasher.finalize();
 
-    // Convert to scalar with proper range checking
+    // Convert hash to scalar for the final shared secret
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&hash);
-    let blinding_factor = JubjubScalar::from_le_bytes_mod_order(&scalar_bytes);
+    let blinding_factor = Fr::from_le_bytes_mod_order(&scalar_bytes);
 
     // Blind the forward secret
     let blinded_secret = blind_key(&forward_secret, &blinding_factor, None);
 
     // Compute the stealth address as S = blinded_secret·G + P
-    let stealth_address = scalar_mul(
-        &<JubjubPoint as JubjubPointExt>::generator(),
-        &blinded_secret,
-    ) + (*recipient_public_key);
+    let stealth_address = optimized_mul(&blinded_secret) + (*recipient_public_key);
 
     // Return the ephemeral public key and the stealth address
     (ephemeral_public, stealth_address)
@@ -1236,10 +1251,10 @@ pub fn create_stealth_address(recipient_public_key: &JubjubPoint) -> (JubjubPoin
 
 /// Recover a stealth address private key with forward secrecy
 pub fn recover_stealth_private_key(
-    private_key: &JubjubScalar,
-    ephemeral_public: &JubjubPoint,
+    private_key: &Fr,
+    ephemeral_public: &EdwardsProjective,
     timestamp: Option<u64>,
-) -> JubjubScalar {
+) -> Fr {
     // Use timestamp if provided, otherwise default to 0
     let timestamp_value = timestamp.unwrap_or(0);
 
@@ -1250,7 +1265,7 @@ pub fn recover_stealth_private_key(
     let shared_secret = derive_shared_secret(
         &shared_secret_point,
         ephemeral_public,
-        &(<JubjubPoint as JubjubPointExt>::generator() * (*private_key)),
+        &(<EdwardsProjective as ark_ec::Group>::generator() * (*private_key)),
         None,
     );
 
@@ -1268,7 +1283,7 @@ pub fn recover_stealth_private_key(
     // Convert to scalar with proper range checking
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&hash);
-    let blinding_factor = JubjubScalar::from_le_bytes_mod_order(&scalar_bytes);
+    let blinding_factor = Fr::from_le_bytes_mod_order(&scalar_bytes);
 
     // Blind the forward secret
     let blinded_secret = blind_key(&forward_secret, &blinding_factor, None);
@@ -1278,24 +1293,24 @@ pub fn recover_stealth_private_key(
 }
 
 /// Jubjub-based Diffie-Hellman key exchange
-pub fn diffie_hellman(private_key: &JubjubScalar, other_public_key: &JubjubPoint) -> JubjubPoint {
+pub fn diffie_hellman(private_key: &Fr, other_public_key: &EdwardsProjective) -> EdwardsProjective {
     // The shared secret is simply private_key · other_public_key
     (*other_public_key) * (*private_key)
 }
 
 // Helper function for scalar multiplication
-fn scalar_mul(point: &JubjubPoint, scalar: &JubjubScalar) -> JubjubPoint {
+fn scalar_mul(point: &EdwardsProjective, scalar: &Fr) -> EdwardsProjective {
     // Use the mul method directly
     point.mul(scalar)
 }
 
 /// Create a stealth address with a provided private key (for testing)
 pub fn create_stealth_address_with_private(
-    sender_private: &JubjubScalar,
-    recipient_public_key: &JubjubPoint,
-) -> (JubjubPoint, JubjubPoint) {
+    sender_private: &Fr,
+    recipient_public_key: &EdwardsProjective,
+) -> (EdwardsProjective, EdwardsProjective) {
     // Generate ephemeral public key
-    let ephemeral_public = <JubjubPoint as JubjubPointExt>::generator().mul(sender_private);
+    let ephemeral_public = <EdwardsProjective as ark_ec::Group>::generator().mul(sender_private);
 
     // Compute the shared secret point
     let shared_secret_point = recipient_public_key.mul(sender_private);
@@ -1310,7 +1325,7 @@ pub fn create_stealth_address_with_private(
 
     // Compute the stealth address
     let stealth_address = scalar_mul(
-        &<JubjubPoint as JubjubPointExt>::generator(),
+        &<EdwardsProjective as ark_ec::Group>::generator(),
         &shared_secret,
     ) + (*recipient_public_key);
 
@@ -1325,10 +1340,10 @@ mod tests {
     #[test]
     fn test_keypair_generation() {
         let keypair = generate_keypair();
-        assert_ne!(keypair.public, JubjubPoint::default());
+        assert_ne!(keypair.public, EdwardsProjective::zero());
 
         // Verify that the public key is correctly derived from the secret key
-        let expected_public = <JubjubPoint as JubjubPointExt>::generator() * keypair.secret;
+        let expected_public = <EdwardsProjective as ark_ec::Group>::generator() * keypair.secret;
         assert_eq!(keypair.public, expected_public);
     }
 
@@ -1352,7 +1367,7 @@ mod tests {
 
         // Create a stealth address
         // Generate a random sender key for this test
-        let sender_private = JubjubScalar::random(&mut OsRng);
+        let sender_private = Fr::rand(&mut OsRng);
 
         let (shared_secret, ephemeral_public) =
             stealth_diffie_hellman(&sender_private, &recipient_keypair.public);
@@ -1366,7 +1381,7 @@ mod tests {
 
         // Verify that the stealth private key can be used to derive a public key
         let derived_public = scalar_mul(
-            &<JubjubPoint as JubjubPointExt>::generator(),
+            &<EdwardsProjective as ark_ec::Group>::generator(),
             &stealth_private_key,
         );
 
@@ -1393,7 +1408,7 @@ mod tests {
 
         // Derive the public key from the stealth private key
         let derived_public = scalar_mul(
-            &<JubjubPoint as JubjubPointExt>::generator(),
+            &<EdwardsProjective as ark_ec::Group>::generator(),
             &stealth_private_key,
         );
 
@@ -1420,9 +1435,7 @@ mod tests {
         let message = b"test signing with keypair methods";
 
         // Test signature creation and verification using the keypair methods
-        let signature = keypair
-            .sign(message)
-            .expect("Signature creation should succeed");
+        let signature = keypair.sign(message);
         assert!(keypair.verify(message, &signature));
 
         // Test serialization and deserialization
@@ -1478,10 +1491,7 @@ mod tests {
         let blinded_secret = blind_key(&forward_secret, &blinding_factor, None);
 
         // Compute the stealth address
-        let stealth_address = scalar_mul(
-            &<JubjubPoint as JubjubPointExt>::generator(),
-            &blinded_secret,
-        ) + recipient_keypair.public;
+        let stealth_address = optimized_mul(&blinded_secret) + recipient_keypair.public;
 
         // Recover the stealth private key using the recipient's secret and the ephemeral public key
         let stealth_private_key = recover_stealth_private_key(
@@ -1492,7 +1502,7 @@ mod tests {
 
         // Derive the public key from the stealth private key
         let derived_public = scalar_mul(
-            &<JubjubPoint as JubjubPointExt>::generator(),
+            &<EdwardsProjective as ark_ec::Group>::generator(),
             &stealth_private_key,
         );
 
@@ -1505,16 +1515,12 @@ mod tests {
         // Verify the signature with the derived public key
         assert!(verify(&derived_public, message, &signature));
 
-        // Instead of checking for exact equality or signature verification with the stealth address,
-        // we'll just ensure that the stealth private key can be used to sign messages that can be
-        // verified with the derived public key.
-
         // Ensure the stealth address is not zero
         assert!(!stealth_address.is_zero());
 
         // Ensure the blinded secret is not zero or one
         assert!(!blinded_secret.is_zero());
-        assert!(blinded_secret != JubjubScalar::one());
+        assert!(blinded_secret != Fr::one());
 
         // Test multiple stealth addresses for the same recipient
         // Generate a new ephemeral keypair
@@ -1538,19 +1544,20 @@ mod tests {
         let blinded_secret2 = blind_key(&forward_secret2, &blinding_factor, None);
 
         // Compute a new stealth address
-        let stealth_address2 = scalar_mul(
-            &<JubjubPoint as JubjubPointExt>::generator(),
-            &blinded_secret2,
-        ) + recipient_keypair.public;
+        let stealth_address2 = optimized_mul(&blinded_secret2) + recipient_keypair.public;
 
         // Ensure different stealth addresses are produced
-        assert!(stealth_address.to_bytes() != stealth_address2.to_bytes());
+        let mut addr1_bytes = Vec::new();
+        stealth_address.into_affine().serialize_compressed(&mut addr1_bytes).unwrap();
+        let mut addr2_bytes = Vec::new();
+        stealth_address2.into_affine().serialize_compressed(&mut addr2_bytes).unwrap();
+        assert!(addr1_bytes != addr2_bytes);
     }
 
     #[test]
     fn test_forward_secrecy_with_additional_data() {
         // Generate test key
-        let key = JubjubScalar::random(&mut OsRng);
+        let key = Fr::rand(&mut OsRng);
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -1566,8 +1573,8 @@ mod tests {
         // Verify secrets are not zero or one
         assert!(!forward_secret1.is_zero());
         assert!(!forward_secret2.is_zero());
-        assert_ne!(forward_secret1, JubjubScalar::one());
-        assert_ne!(forward_secret2, JubjubScalar::one());
+        assert_ne!(forward_secret1, Fr::one());
+        assert_ne!(forward_secret2, Fr::one());
     }
 
     #[test]
@@ -1587,25 +1594,25 @@ mod tests {
         assert_ne!(public1, public2);
 
         // Verify public keys are correctly derived from private keys
-        let derived_public1 = scalar_mul(&<JubjubPoint as JubjubPointExt>::generator(), &private1);
-        let derived_public2 = scalar_mul(&<JubjubPoint as JubjubPointExt>::generator(), &private2);
+        let derived_public1 = scalar_mul(&<EdwardsProjective as ark_ec::Group>::generator(), &private1);
+        let derived_public2 = scalar_mul(&<EdwardsProjective as ark_ec::Group>::generator(), &private2);
 
         // Instead of exact equality, verify that the keys can be used for signing and verification
         let message = b"test message";
 
-        let keypair1 = JubjubKeypair::new(private1);
-        let signature1 = keypair1.sign(message).unwrap();
+        let keypair1 = JubjubKeypair::generate();
+        let signature1 = keypair1.sign(message);
         assert!(derived_public1.verify(message, &signature1));
         assert!(public1.verify(message, &signature1));
 
-        let keypair2 = JubjubKeypair::new(private2);
-        let signature2 = keypair2.sign(message).unwrap();
+        let keypair2 = JubjubKeypair::generate();
+        let signature2 = keypair2.sign(message);
         assert!(derived_public2.verify(message, &signature2));
         assert!(public2.verify(message, &signature2));
 
         // Verify keys are not one
-        assert_ne!(private1, JubjubScalar::one());
-        assert_ne!(private2, JubjubScalar::one());
+        assert_ne!(private1, Fr::one());
+        assert_ne!(private2, Fr::one());
     }
 
     #[test]
@@ -1628,7 +1635,7 @@ mod tests {
 
         // Verify that the stealth private key can be used to derive a public key
         let derived_public = scalar_mul(
-            &<JubjubPoint as JubjubPointExt>::generator(),
+            &<EdwardsProjective as ark_ec::Group>::generator(),
             &stealth_private_key,
         );
 

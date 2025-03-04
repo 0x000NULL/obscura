@@ -6,6 +6,7 @@ use crate::crypto::jubjub::{
     JubjubKeypair, JubjubPoint, JubjubPointExt, JubjubScalar, JubjubScalarExt,
 };
 use crate::utils::{current_time, format_time_diff};
+use ark_ec::CurveGroup;
 use chrono::Utc;
 use crypto::jubjub;
 use rand::rngs::OsRng;
@@ -51,7 +52,7 @@ impl Wallet {
 
     pub fn new_with_keypair() -> Self {
         let mut rng = OsRng;
-        let keypair = JubjubKeypair::new(JubjubScalar::random(&mut rng));
+        let keypair = JubjubKeypair::generate();
 
         Wallet {
             balance: 0,
@@ -275,7 +276,12 @@ impl Wallet {
             // In a real implementation, we would sign the transaction hash
             let message = b"Authorize transaction";
             let signature = keypair.sign(message);
-            let signature_bytes = signature.expect("Failed to sign transaction").to_bytes();
+            // Serialize both components of the signature
+            let mut signature_bytes = Vec::with_capacity(64);
+            let r_affine = signature.r.into_affine();
+            let r_projective = JubjubPoint::from(r_affine);
+            signature_bytes.extend_from_slice(&<JubjubPoint as JubjubPointExt>::to_bytes(&r_projective));
+            signature_bytes.extend_from_slice(&signature.s.to_bytes());
 
             let input = TransactionInput {
                 previous_output: outpoint.clone(),
@@ -382,7 +388,12 @@ impl Wallet {
         // In a real implementation, we would sign the transaction hash
         let message = b"Authorize transaction";
         let signature = keypair.sign(message);
-        let signature_bytes = signature.expect("Failed to sign transaction").to_bytes();
+        // Serialize both components of the signature
+        let mut signature_bytes = Vec::with_capacity(64);
+        let r_affine = signature.r.into_affine();
+        let r_projective = JubjubPoint::from(r_affine);
+        signature_bytes.extend_from_slice(&<JubjubPoint as JubjubPointExt>::to_bytes(&r_projective));
+        signature_bytes.extend_from_slice(&signature.s.to_bytes());
 
         let input = TransactionInput {
             previous_output: outpoint,
@@ -839,7 +850,12 @@ impl Wallet {
         let keypair = self.keypair.as_ref().unwrap();
         let message = b"Unstake transaction";
         let signature = keypair.sign(message);
-        let signature_bytes = signature.expect("Failed to sign transaction").to_bytes();
+        // Serialize both components of the signature
+        let mut signature_bytes = Vec::with_capacity(64);
+        let r_affine = signature.r.into_affine();
+        let r_projective = JubjubPoint::from(r_affine);
+        signature_bytes.extend_from_slice(&<JubjubPoint as JubjubPointExt>::to_bytes(&r_projective));
+        signature_bytes.extend_from_slice(&signature.s.to_bytes());
 
         let input = TransactionInput {
             previous_output: stake_outpoint,
@@ -1034,7 +1050,11 @@ impl Wallet {
                 let secret = JubjubScalar::from_bytes(&scalar_bytes)
                     .ok_or("Invalid private key in backup")?;
 
-                self.keypair = Some(JubjubKeypair::new(secret));
+                // Create the public key by multiplying the generator point by the secret key
+                let public = <JubjubPoint as JubjubPointExt>::generator() * secret;
+                
+                // Create the keypair with the secret and derived public key
+                self.keypair = Some(JubjubKeypair { secret, public });
 
                 // Verify that the restored public key matches the backup
                 let public_key_bytes =

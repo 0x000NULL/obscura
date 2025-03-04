@@ -6,6 +6,8 @@ This section contains technical documentation about Obscura's cryptographic syst
 
 ## Key Documentation
 
+- [BLS12-381 Optimizations](./bls12_381_optimizations.md) - Comprehensive documentation of the optimized BLS12-381 curve operations, including SIMD optimizations, precomputation tables, and improved hash-to-curve implementation.
+- [Jubjub Optimizations](./jubjub_optimizations.md) - Detailed documentation of the optimized Jubjub curve operations for efficient in-circuit operations, including parallel processing and secure hash-to-point implementation.
 - [Pedersen Commitments](./pedersen_commitments.md) - Details on the dual-curve Pedersen commitment scheme implemented in Obscura, supporting both Jubjub and BLS12-381 curves.
 - [Blinding Factor Protocol](./blinding_protocol.md) - Comprehensive documentation of the blinding factor generation protocol, which has been fully implemented.
 - [Verification System](./verification_system.md) - Overview of the commitment verification system, including both individual and batch verification for both curve types.
@@ -16,11 +18,13 @@ This section contains technical documentation about Obscura's cryptographic syst
 
 Obscura's privacy features are built on strong cryptographic foundations:
 
-1. **Dual-Curve Pedersen Commitments**: Homomorphic commitments using both Jubjub and BLS12-381 curves
-2. **Secure Blinding Factor Generation**: Protocols for generating and managing blinding factors
-3. **Secure Blinding Factor Storage**: Encrypted system for securely storing and managing blinding factors
-4. **Comprehensive Commitment Verification**: Robust verification system ensuring transaction integrity and privacy
-5. **Zero-Knowledge Proofs**: Integration with ZK systems for privacy-preserving verification
+1. **Optimized BLS12-381 Operations**: High-performance curve operations with SIMD support and precomputation
+2. **Optimized Jubjub Operations**: Efficient in-circuit operations with parallel processing and secure hash-to-point
+3. **Dual-Curve Pedersen Commitments**: Homomorphic commitments using both Jubjub and BLS12-381 curves
+4. **Secure Blinding Factor Generation**: Protocols for generating and managing blinding factors
+5. **Secure Blinding Factor Storage**: Encrypted system for securely storing and managing blinding factors
+6. **Comprehensive Commitment Verification**: Robust verification system ensuring transaction integrity and privacy
+7. **Zero-Knowledge Proofs**: Integration with ZK systems for privacy-preserving verification
 
 ## Security Focus
 
@@ -44,10 +48,10 @@ Upcoming features in Obscura's cryptographic systems include:
 
 ## Recent Updates
 
-- **2023-07**: Comprehensive commitment verification system implemented, supporting transaction-level verification
-- **2023-06**: Secure blinding factor storage system implemented with password-based encryption
-- **2023-06**: Dual-curve Pedersen commitment system implemented, supporting both Jubjub and BLS12-381 curves
-- **2023-06**: Blinding factor generation protocol completed with support for deterministic and random blinding factors
-- **2023-06**: Verification system updated to support both curve types and dual-curve commitments
+- **2025-03-27**: Implemented comprehensive BLS12-381 and Jubjub curve optimizations
+- **2025-03-26**: Comprehensive stealth addressing system implemented
+- **2025-03-25**: Bulletproofs integration completed with range proof system
+- **2025-03-20**: Enhanced commitment verification system implemented
+- **2025-03-15**: Dual-curve Pedersen commitment system implemented
 
 For more information about Obscura's cryptography, please refer to the main [Cryptography](../cryptography.md) overview page. 
