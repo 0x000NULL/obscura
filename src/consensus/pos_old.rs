@@ -4,9 +4,9 @@
 // Import the PoS enhancements
 use crate::consensus::pos::*;
 
-use crate::consensus::sharding::{ShardManager, Shard, CrossShardCommittee};
+use crate::consensus::sharding::{CrossShardCommittee, Shard, ShardManager};
+use crate::crypto::jubjub::{JubjubPoint, JubjubPointExt, JubjubSignature};
 use bincode;
-use crate::crypto::jubjub::{JubjubPointExt, JubjubPoint, JubjubSignature};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -102,11 +102,8 @@ pub const SHARD_ROTATION_INTERVAL: u64 = 14 * 24 * 60 * 60; // Rotate validators
 pub const CROSS_SHARD_COMMITTEE_SIZE: usize = 5; // Number of validators in cross-shard committees
 
 // Constants for future PoS enhancements
-pub const MULTI_ASSET_MIN_STAKE: &[(&str, u64)] = &[
-    ("BTC", 100000),
-    ("ETH", 1000000),
-    ("OBSCURA", 10000000),
-];
+pub const MULTI_ASSET_MIN_STAKE: &[(&str, u64)] =
+    &[("BTC", 100000), ("ETH", 1000000), ("OBSCURA", 10000000)];
 pub const MARKETPLACE_FEE_PERCENTAGE: f64 = 0.005; // 0.5% fee for delegation marketplace
 pub const REPUTATION_ORACLE_UPDATE_INTERVAL: u64 = 24 * 60 * 60; // Update reputation oracle daily
 pub const AUTO_COMPOUND_INTERVAL: u64 = 7 * 24 * 60 * 60; // Auto-compound stakes weekly
@@ -164,18 +161,15 @@ pub const HARDWARE_SECURITY_LEVEL_DESCRIPTIONS: [&str; 4] = [
     "Basic software security",
     "Enhanced software security with HSM",
     "Dedicated hardware security module",
-    "Air-gapped signing with multi-party computation"
+    "Air-gapped signing with multi-party computation",
 ];
 pub const HARDWARE_SECURITY_BONUS: [f64; 4] = [0.0, 0.01, 0.02, 0.03]; // Bonuses for each level
 pub const HARDWARE_SECURITY_ATTESTATION_INTERVAL: u64 = 90 * 24 * 60 * 60; // Attest every 90 days
 pub const HARDWARE_SECURITY_AUDIT_PROBABILITY: f64 = 0.1; // 10% chance of random audit
 
 // Formal verification constants
-pub const FORMAL_VERIFICATION_METHODS: [&str; 3] = [
-    "Model checking",
-    "Theorem proving",
-    "Static analysis"
-];
+pub const FORMAL_VERIFICATION_METHODS: [&str; 3] =
+    ["Model checking", "Theorem proving", "Static analysis"];
 pub const FORMAL_VERIFICATION_COVERAGE_REQUIRED: f64 = 0.8; // 80% code coverage required
 pub const FORMAL_VERIFICATION_AUDIT_INTERVAL: u64 = 180 * 24 * 60 * 60; // Audit every 180 days
 pub const FORMAL_VERIFICATION_BONUS_PERCENTAGE: f64 = 0.01; // 1% bonus for verified contracts
@@ -185,7 +179,7 @@ pub const QUANTUM_RESISTANT_ALGORITHMS: [&str; 4] = [
     "Falcon-512",
     "Dilithium2",
     "SPHINCS+-128f",
-    "XMSS-SHA2_10_256"
+    "XMSS-SHA2_10_256",
 ];
 pub const QUANTUM_RESISTANCE_PHASE_IN_PERIOD: u64 = 365 * 24 * 60 * 60; // 1 year phase-in
 pub const QUANTUM_KEY_ROTATION_INTERVAL: u64 = 30 * 24 * 60 * 60; // Rotate keys monthly
@@ -269,53 +263,53 @@ pub struct StakingContract {
     pub blocks_expected: u64,
     // Pending insurance claims
     pub pending_insurance_claims: Vec<InsuranceClaim>,
-    
+
     // New fields for future PoS enhancements
     // Multi-asset staking support
     pub supported_assets: HashMap<String, AssetInfo>,
     pub multi_asset_stakes: HashMap<Vec<u8>, Vec<MultiAssetStake>>,
     pub asset_exchange_rates: HashMap<String, f64>,
     pub last_exchange_rate_update: u64,
-    
+
     // Stake delegation marketplace
     pub marketplace_listings: Vec<MarketplaceListing>,
     pub marketplace_offers: Vec<MarketplaceOffer>,
     pub marketplace_transactions: Vec<MarketplaceTransaction>,
     pub marketplace_disputes: Vec<MarketplaceDispute>,
     pub marketplace_escrow: u64,
-    
+
     // Validator reputation oracle
     pub reputation_oracle: ReputationOracle,
     pub reputation_scores: HashMap<Vec<u8>, ReputationScore>,
     pub last_reputation_update: u64,
-    
+
     // Stake compounding automation
     pub compounding_configs: HashMap<Vec<u8>, CompoundingConfig>,
     pub compounding_operations: Vec<CompoundingOperation>,
     pub last_auto_compound_time: u64,
-    
+
     // Validator set diversity metrics
     pub diversity_metrics: DiversityMetrics,
     pub entity_info: HashMap<String, EntityInfo>,
     pub client_implementations: HashMap<String, ClientImplementation>,
     pub last_diversity_assessment: u64,
-    
+
     // Geographic distribution incentives
     pub geo_regions: Vec<GeoRegion>,
     pub geo_distribution_reports: Vec<GeoDistributionReport>,
     pub validator_geo_info: HashMap<Vec<u8>, ValidatorGeoInfo>,
     pub last_geo_report: u64,
-    
+
     // Hardware security requirements
     pub hardware_security_info: HashMap<Vec<u8>, HardwareSecurityInfo>,
     pub security_attestations: Vec<SecurityAttestation>,
     pub next_security_audit: u64,
-    
+
     // Formal verification of staking contracts
     pub verified_contracts: HashMap<String, VerifiedContract>,
     pub formal_verifications: Vec<FormalVerification>,
     pub verification_bonus_total: u64,
-    
+
     // Quantum-resistant staking mechanisms
     pub quantum_keypairs: HashMap<Vec<u8>, QuantumKeyPair>,
     pub quantum_signatures: Vec<QuantumSignature>,
@@ -475,8 +469,8 @@ pub enum ProposalAction {
     ChangeParameter(String, Vec<u8>), // Parameter name, new value
     TreasuryAllocation(Vec<u8>, u64, String), // Recipient, amount, purpose
     ProtocolUpgrade(String, Vec<u8>), // Upgrade name, upgrade data
-    AddAsset(AssetInfo), // Add a new asset for staking
-    UpdateAssetWeight(String, f64), // Asset ID, new weight
+    AddAsset(AssetInfo),              // Add a new asset for staking
+    UpdateAssetWeight(String, f64),   // Asset ID, new weight
     UpdateAssetExchangeRate(String, f64), // Asset ID, new exchange rate
     Other(String, Vec<u8>),           // Action type, action data
 }
@@ -637,7 +631,7 @@ pub struct InsuranceClaim {
     pub validator: Vec<u8>,
     pub amount_requested: u64,
     pub amount_approved: u64, // Will be set during claim processing
-    pub amount: u64, // Add this field for backward compatibility
+    pub amount: u64,          // Add this field for backward compatibility
     pub timestamp: u64,
     pub evidence: Vec<u8>,
     pub status: InsuranceClaimStatus,
@@ -731,17 +725,17 @@ impl ProofOfStake {
     pub fn calculate_stake_reward(&self, stake_amount: u64, stake_age: u64) -> u64 {
         // Base reward rate (e.g., 5% annual)
         const BASE_REWARD_RATE: f64 = 0.05;
-        
+
         // Convert to per-day rate (assuming 365 days per year)
         const DAYS_PER_YEAR: f64 = 365.0;
         let per_day_rate = BASE_REWARD_RATE / DAYS_PER_YEAR;
-        
+
         // Calculate days from seconds
         let days = stake_age as f64 / (24.0 * 60.0 * 60.0);
-        
+
         // Calculate reward with simple interest for predictable test results
         let reward = stake_amount as f64 * per_day_rate * days;
-        
+
         reward as u64
     }
 
@@ -814,7 +808,10 @@ impl ProofOfStake {
             block_hash,
             round,
             validator: keypair.public.to_bytes().to_vec(),
-            signature: signature.expect("Failed to sign BFT message").to_bytes().to_vec(),
+            signature: signature
+                .expect("Failed to sign BFT message")
+                .to_bytes()
+                .to_vec(),
             timestamp: current_time,
         })
     }
@@ -898,58 +895,57 @@ impl StakingContract {
             highest_finalized_block: 0,
             blocks_expected: 0,
             pending_insurance_claims: Vec::new(),
-            
+
             // Initialize multi-asset staking fields
             supported_assets: HashMap::new(),
             multi_asset_stakes: HashMap::new(),
             asset_exchange_rates: HashMap::new(),
             last_exchange_rate_update: 0,
-            
+
             // Initialize delegation marketplace fields
             marketplace_listings: Vec::new(),
             marketplace_offers: Vec::new(),
             marketplace_transactions: Vec::new(),
             marketplace_disputes: Vec::new(),
             marketplace_escrow: 0,
-            
+
             // Initialize validator reputation oracle
             reputation_oracle: ReputationOracle::new(),
             reputation_scores: HashMap::new(),
             last_reputation_update: 0,
-            
+
             // Initialize stake compounding automation
             compounding_configs: HashMap::new(),
             compounding_operations: Vec::new(),
             last_auto_compound_time: 0,
-            
+
             // Initialize validator set diversity metrics
             diversity_metrics: DiversityMetrics::new(),
             entity_info: HashMap::new(),
             client_implementations: HashMap::new(),
             last_diversity_assessment: 0,
-            
+
             // Initialize geographic distribution incentives
             geo_regions: Vec::new(),
             geo_distribution_reports: Vec::new(),
             validator_geo_info: HashMap::new(),
             last_geo_report: 0,
-            
+
             // Initialize hardware security incentives
             hardware_security_info: HashMap::new(),
             security_attestations: Vec::new(),
             next_security_audit: 0,
-            
+
             // Initialize formal verification of staking contracts
             verified_contracts: HashMap::new(),
             formal_verifications: Vec::new(),
             verification_bonus_total: 0,
-            
+
             // Initialize quantum-resistant staking mechanisms
             quantum_keypairs: HashMap::new(),
             quantum_signatures: Vec::new(),
             hybrid_signatures: Vec::new(),
             quantum_resistance_enabled: false,
-            
             // ... existing code ...
         }
     }
@@ -1099,10 +1095,10 @@ impl StakingContract {
         };
 
         self.validators.insert(public_key.clone(), validator_info);
-        
+
         // Add to active validators set
         self.active_validators.insert(public_key);
-        
+
         Ok(())
     }
 
@@ -1245,13 +1241,24 @@ impl StakingContract {
 
         // Sort by reputation score (highest first)
         eligible_validator_keys.sort_by(|a, b| {
-            let score_a = self.validators.get(a).map(|v| v.reputation_score).unwrap_or(0.0);
-            let score_b = self.validators.get(b).map(|v| v.reputation_score).unwrap_or(0.0);
-            score_b.partial_cmp(&score_a).unwrap_or(std::cmp::Ordering::Equal)
+            let score_a = self
+                .validators
+                .get(a)
+                .map(|v| v.reputation_score)
+                .unwrap_or(0.0);
+            let score_b = self
+                .validators
+                .get(b)
+                .map(|v| v.reputation_score)
+                .unwrap_or(0.0);
+            score_b
+                .partial_cmp(&score_a)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         // Take top 10 validators
-        let eligible_validator_keys: Vec<_> = eligible_validator_keys.into_iter().take(10).collect();
+        let eligible_validator_keys: Vec<_> =
+            eligible_validator_keys.into_iter().take(10).collect();
 
         if eligible_validator_keys.is_empty() {
             return;
@@ -1278,10 +1285,10 @@ impl StakingContract {
                 // Perform the delegation
                 if let Some(stake) = self.stakes.get_mut(&staker_key) {
                     stake.delegated_to = Some(validator_key.clone());
-                    
+
                     // Get the stake amount before updating validator
                     let stake_amount = stake.amount;
-                    
+
                     // Now update the validator
                     if let Some(validator_info) = self.validators.get_mut(validator_key) {
                         validator_info.delegated_stake += stake_amount;
@@ -1346,7 +1353,11 @@ impl StakingContract {
         };
 
         // Verify weights sum to 1.0
-        debug_assert!((REPUTATION_WEIGHT_UPTIME + REPUTATION_WEIGHT_BLOCKS + REPUTATION_WEIGHT_AGE - 1.0).abs() < f64::EPSILON);
+        debug_assert!(
+            (REPUTATION_WEIGHT_UPTIME + REPUTATION_WEIGHT_BLOCKS + REPUTATION_WEIGHT_AGE - 1.0)
+                .abs()
+                < f64::EPSILON
+        );
 
         // Calculate weighted reputation score
         let reputation_score = uptime_score * REPUTATION_WEIGHT_UPTIME
@@ -1372,12 +1383,14 @@ impl StakingContract {
     // Optimized validator selection with caching
     pub fn select_validators(&mut self, count: usize) -> Vec<Vec<u8>> {
         let mut selected = Vec::new();
-        
+
         // Clear the active validators set
         self.active_validators.clear();
-        
+
         // Sort validators by stake and performance
-        let mut validators: Vec<_> = self.validators.iter()
+        let mut validators: Vec<_> = self
+            .validators
+            .iter()
             .filter(|(_, v)| {
                 // Filter out slashed validators and those requesting exit
                 // Also filter out validators with any offenses
@@ -1390,16 +1403,16 @@ impl StakingContract {
                 (k, v, score)
             })
             .collect();
-        
+
         // Sort by score (highest first)
         validators.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
-        
+
         // Select top validators by score
         for (key, _, _) in validators.iter().take(count) {
             selected.push((*key).clone());
             self.active_validators.insert((*key).clone());
         }
-        
+
         selected
     }
 
@@ -1408,13 +1421,13 @@ impl StakingContract {
         // We need to avoid borrowing self twice, so we'll extract the necessary data first
         let active_validators = self.active_validators.clone();
         let validators = self.validators.clone();
-        
+
         if let Some(shard_manager) = &mut self.shard_manager {
             // Create a simplified version of StakingContract with just what's needed
             let mut simplified_contract = StakingContract::new(self.epoch_duration);
             simplified_contract.active_validators = active_validators;
             simplified_contract.validators = validators;
-            
+
             shard_manager.rotate_shards(&simplified_contract)
         } else {
             Ok(())
@@ -1975,8 +1988,10 @@ impl StakingContract {
                     ProposalAction::AddAsset(asset_info) => {
                         // Add the new asset to supported assets
                         if !self.supported_assets.contains_key(&asset_info.asset_id) {
-                            self.supported_assets.insert(asset_info.asset_id.clone(), asset_info.clone());
-                            self.asset_exchange_rates.insert(asset_info.asset_id.clone(), asset_info.exchange_rate);
+                            self.supported_assets
+                                .insert(asset_info.asset_id.clone(), asset_info.clone());
+                            self.asset_exchange_rates
+                                .insert(asset_info.asset_id.clone(), asset_info.exchange_rate);
                             self.last_exchange_rate_update = current_time;
                         }
                     }
@@ -1990,16 +2005,18 @@ impl StakingContract {
                         // Update the exchange rate of an existing asset
                         if let Some(asset) = self.supported_assets.get_mut(asset_id) {
                             // Apply circuit breaker for extreme rate changes
-                            let max_change = asset.exchange_rate * (MAX_RATE_CHANGE_PERCENTAGE / 100.0);
+                            let max_change =
+                                asset.exchange_rate * (MAX_RATE_CHANGE_PERCENTAGE / 100.0);
                             let min_allowed = asset.exchange_rate - max_change;
                             let max_allowed = asset.exchange_rate + max_change;
-                            
+
                             // Clamp the new rate within allowed range
                             let clamped_rate = new_rate.max(min_allowed).min(max_allowed);
-                            
+
                             asset.exchange_rate = clamped_rate;
                             asset.last_rate_update = current_time;
-                            self.asset_exchange_rates.insert(asset_id.clone(), clamped_rate);
+                            self.asset_exchange_rates
+                                .insert(asset_id.clone(), clamped_rate);
                             self.last_exchange_rate_update = current_time;
                         }
                     }
@@ -2305,7 +2322,11 @@ impl StakingContract {
     }
 
     // Record block proposal latency for a validator
-    pub fn record_block_latency(&mut self, validator: &[u8], latency: u64) -> Result<(), &'static str> {
+    pub fn record_block_latency(
+        &mut self,
+        validator: &[u8],
+        latency: u64,
+    ) -> Result<(), &'static str> {
         // Check if validator exists
         if !self.validators.contains_key(validator) {
             return Err("Validator not found");
@@ -2323,7 +2344,11 @@ impl StakingContract {
     }
 
     // Record vote participation for a validator
-    pub fn record_vote_participation(&mut self, validator: &[u8], participated: bool) -> Result<(), &'static str> {
+    pub fn record_vote_participation(
+        &mut self,
+        validator: &[u8],
+        participated: bool,
+    ) -> Result<(), &'static str> {
         // Check if validator exists
         if !self.validators.contains_key(validator) {
             return Err("Validator not found");
@@ -2335,7 +2360,9 @@ impl StakingContract {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        validator_info.vote_participation.push((current_time, participated));
+        validator_info
+            .vote_participation
+            .push((current_time, participated));
 
         Ok(())
     }
@@ -2353,7 +2380,8 @@ impl StakingContract {
             .as_secs();
 
         // Skip if performance was assessed recently
-        if current_time - validator_info.last_performance_assessment < PERFORMANCE_ASSESSMENT_PERIOD {
+        if current_time - validator_info.last_performance_assessment < PERFORMANCE_ASSESSMENT_PERIOD
+        {
             return Ok(validator_info.performance_score);
         }
 
@@ -2362,7 +2390,8 @@ impl StakingContract {
 
         // Calculate blocks score (0-1)
         let blocks_expected = validator_info.blocks_expected.max(1);
-        let blocks_score = (validator_info.blocks_proposed as f64 / blocks_expected as f64).min(1.0);
+        let blocks_score =
+            (validator_info.blocks_proposed as f64 / blocks_expected as f64).min(1.0);
 
         // Calculate latency score (0-1)
         let latency_score = if validator_info.block_latency.is_empty() {
@@ -2371,7 +2400,7 @@ impl StakingContract {
             // Calculate average latency
             let total_latency: u64 = validator_info.block_latency.iter().map(|(_, l)| l).sum();
             let avg_latency = total_latency as f64 / validator_info.block_latency.len() as f64;
-            
+
             // Convert to score (lower latency is better)
             // 100ms -> 1.0, 1000ms -> 0.0, linear in between
             (1.0 - (avg_latency - 100.0).max(0.0) / 900.0).max(0.0)
@@ -2382,19 +2411,20 @@ impl StakingContract {
             0.5 // Neutral score if no data
         } else {
             // Count participated votes
-            let participated_count = validator_info.vote_participation.iter()
+            let participated_count = validator_info
+                .vote_participation
+                .iter()
                 .filter(|(_, participated)| *participated)
                 .count();
-            
+
             participated_count as f64 / validator_info.vote_participation.len() as f64
         };
 
         // Calculate weighted performance score
-        let performance_score = 
-            uptime_score * PERFORMANCE_METRIC_UPTIME_WEIGHT +
-            blocks_score * PERFORMANCE_METRIC_BLOCKS_WEIGHT +
-            latency_score * PERFORMANCE_METRIC_LATENCY_WEIGHT +
-            vote_score * PERFORMANCE_METRIC_VOTES_WEIGHT;
+        let performance_score = uptime_score * PERFORMANCE_METRIC_UPTIME_WEIGHT
+            + blocks_score * PERFORMANCE_METRIC_BLOCKS_WEIGHT
+            + latency_score * PERFORMANCE_METRIC_LATENCY_WEIGHT
+            + vote_score * PERFORMANCE_METRIC_VOTES_WEIGHT;
 
         Ok(performance_score)
     }
@@ -2405,7 +2435,9 @@ impl StakingContract {
         validator_key: &Vec<u8>,
         offense: SlashingOffense,
     ) -> Result<u64, &'static str> {
-        let validator = self.validators.get_mut(validator_key)
+        let validator = self
+            .validators
+            .get_mut(validator_key)
             .ok_or("Validator not found")?;
 
         let slash_percentage = match offense {
@@ -2445,11 +2477,12 @@ impl StakingContract {
         if let Some(validator_info) = self.validators.get(validator) {
             // Apply multiplier based on performance score
             let multiplier = validator_info.performance_score;
-            
+
             // Clamp multiplier between min and max values
-            let clamped_multiplier = multiplier.max(PERFORMANCE_REWARD_MULTIPLIER_MIN)
-                                              .min(PERFORMANCE_REWARD_MULTIPLIER_MAX);
-            
+            let clamped_multiplier = multiplier
+                .max(PERFORMANCE_REWARD_MULTIPLIER_MIN)
+                .min(PERFORMANCE_REWARD_MULTIPLIER_MAX);
+
             // Apply multiplier to base reward
             (base_reward as f64 * clamped_multiplier) as u64
         } else {
@@ -2461,17 +2494,17 @@ impl StakingContract {
     pub fn calculate_stake_reward(&self, stake_amount: u64, stake_age: u64) -> u64 {
         // Base reward rate (e.g., 5% annual)
         const BASE_REWARD_RATE: f64 = 0.05;
-        
+
         // Convert to per-day rate (assuming 365 days per year)
         const DAYS_PER_YEAR: f64 = 365.0;
         let per_day_rate = BASE_REWARD_RATE / DAYS_PER_YEAR;
-        
+
         // Calculate days from seconds
         let days = stake_age as f64 / (24.0 * 60.0 * 60.0);
-        
+
         // Calculate reward with simple interest for predictable test results
         let reward = stake_amount as f64 * per_day_rate * days;
-        
+
         reward as u64
     }
 
@@ -2503,7 +2536,8 @@ impl StakingContract {
                 let base_reward = self.calculate_stake_reward(stake.amount, stake_age);
 
                 // Apply performance-based multiplier
-                let adjusted_reward = self.apply_performance_reward_multiplier(validator_key, base_reward);
+                let adjusted_reward =
+                    self.apply_performance_reward_multiplier(validator_key, base_reward);
 
                 // Allocate portion to treasury
                 let treasury_amount = (adjusted_reward as f64 * TREASURY_ALLOCATION) as u64;
@@ -2524,10 +2558,12 @@ impl StakingContract {
                 if let Some(delegated_to) = &delegator_stake.delegated_to {
                     if delegated_to == validator_key {
                         let stake_age = current_time - delegator_stake.timestamp;
-                        let base_reward = self.calculate_stake_reward(delegator_stake.amount, stake_age);
+                        let base_reward =
+                            self.calculate_stake_reward(delegator_stake.amount, stake_age);
 
                         // Apply performance-based multiplier
-                        let adjusted_reward = self.apply_performance_reward_multiplier(validator_key, base_reward);
+                        let adjusted_reward =
+                            self.apply_performance_reward_multiplier(validator_key, base_reward);
 
                         // Allocate portion to treasury
                         let treasury_amount = (adjusted_reward as f64 * TREASURY_ALLOCATION) as u64;
@@ -2557,12 +2593,12 @@ impl StakingContract {
     }
 
     /// Files an insurance claim for a validator
-    /// 
+    ///
     /// # Arguments
     /// * `validator` - The public key of the validator
     /// * `claim_amount` - The amount being claimed
     /// * `evidence` - Evidence supporting the claim
-    /// 
+    ///
     /// # Returns
     /// * `Ok(())` if the claim was filed successfully
     /// * `Err(message)` if the claim could not be filed
@@ -2579,40 +2615,41 @@ impl StakingContract {
 
         // Get validator info
         let validator_info = self.validators.get(validator).unwrap();
-        
+
         // Calculate maximum coverage based on validator's stake
-        let insurance_coverage = (validator_info.total_stake as f64 * INSURANCE_COVERAGE_PERCENTAGE) as u64;
-        
+        let insurance_coverage =
+            (validator_info.total_stake as f64 * INSURANCE_COVERAGE_PERCENTAGE) as u64;
+
         // Check if claim amount exceeds coverage
         if claim_amount > insurance_coverage {
             return Err("Claim amount exceeds insurance coverage");
         }
-        
+
         // Check if there are sufficient funds in the insurance pool
         if claim_amount > self.insurance_pool.total_balance {
             return Err("Insufficient funds in insurance pool");
         }
-        
+
         let current_time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-            
+
         // Create insurance claim
         let claim = InsuranceClaim {
             validator: validator.clone(),
             amount_requested: claim_amount,
-            amount_approved: 0, // Will be set during claim processing
+            amount_approved: 0,   // Will be set during claim processing
             amount: claim_amount, // For backward compatibility
             timestamp: current_time,
             evidence,
             status: InsuranceClaimStatus::Pending,
             processed: false,
         };
-        
+
         // Add claim to insurance pool claims instead of pending_insurance_claims
         self.insurance_pool.claims.push(claim);
-        
+
         Ok(())
     }
 
@@ -2638,13 +2675,15 @@ impl StakingContract {
         // Higher stake = longer wait time
         let base_wait_time = EXIT_QUEUE_MIN_WAIT_TIME;
         let max_additional_wait = EXIT_QUEUE_MAX_WAIT_TIME - EXIT_QUEUE_MIN_WAIT_TIME;
-        
+
         // Get maximum stake among validators
-        let max_stake = self.validators.values()
+        let max_stake = self
+            .validators
+            .values()
             .map(|v| v.total_stake)
             .max()
             .unwrap_or(1);
-        
+
         // Calculate wait time as a proportion of max stake
         let stake_ratio = validator_info.total_stake as f64 / max_stake as f64;
         let additional_wait = (stake_ratio * max_additional_wait as f64) as u64;
@@ -2675,7 +2714,9 @@ impl StakingContract {
         });
 
         // Sort queue by stake amount (smaller stakes first)
-        self.exit_queue.queue.sort_by(|a, b| a.stake_amount.cmp(&b.stake_amount));
+        self.exit_queue
+            .queue
+            .sort_by(|a, b| a.stake_amount.cmp(&b.stake_amount));
 
         // Trim queue if it exceeds max size
         if self.exit_queue.queue.len() > self.exit_queue.max_size {
@@ -2713,25 +2754,27 @@ impl StakingContract {
                     let exit_request_time = validator_info.exit_request_time;
                     let base_wait_time = EXIT_QUEUE_MIN_WAIT_TIME;
                     let max_additional_wait = EXIT_QUEUE_MAX_WAIT_TIME - EXIT_QUEUE_MIN_WAIT_TIME;
-                    
+
                     // Get maximum stake among validators
-                    let max_stake = self.validators.values()
+                    let max_stake = self
+                        .validators
+                        .values()
                         .map(|v| v.total_stake)
                         .max()
                         .unwrap_or(1);
-                    
+
                     // Calculate wait time as a proportion of max stake
                     let stake_ratio = validator_info.total_stake as f64 / max_stake as f64;
                     let additional_wait = (stake_ratio * max_additional_wait as f64) as u64;
                     let wait_time = base_wait_time + additional_wait;
-                    
+
                     let completion_time = exit_request_time + wait_time;
                     let remaining_time = if current_time >= completion_time {
                         0
                     } else {
                         completion_time - current_time
                     };
-                    
+
                     return Ok((false, remaining_time));
                 }
             }
@@ -2755,7 +2798,9 @@ impl StakingContract {
         }
 
         // Remove from exit queue
-        self.exit_queue.queue.retain(|request| request.validator != validator);
+        self.exit_queue
+            .queue
+            .retain(|request| request.validator != validator);
 
         // Mark validator as not requesting exit
         if let Some(validator_info) = self.validators.get_mut(validator) {
@@ -2836,7 +2881,9 @@ impl StakingContract {
         self.validators.remove(validator);
 
         // Remove from exit queue
-        self.exit_queue.queue.retain(|request| request.validator != validator);
+        self.exit_queue
+            .queue
+            .retain(|request| request.validator != validator);
 
         Ok(())
     }
@@ -2874,17 +2921,29 @@ impl StakingContract {
 
         // If not enough validators to rotate, add more based on consecutive epochs
         let min_to_rotate = (self.active_validators.len() as f64 * ROTATION_PERCENTAGE) as usize;
-        let min_to_rotate = min_to_rotate.max(MIN_ROTATION_COUNT).min(self.active_validators.len());
+        let min_to_rotate = min_to_rotate
+            .max(MIN_ROTATION_COUNT)
+            .min(self.active_validators.len());
 
         if validators_to_rotate.len() < min_to_rotate {
             // Get remaining validators sorted by consecutive epochs (descending)
-            let mut remaining_validators: Vec<_> = self.active_validators.iter()
+            let mut remaining_validators: Vec<_> = self
+                .active_validators
+                .iter()
                 .filter(|k| !validators_to_rotate.contains(k))
                 .collect();
 
             remaining_validators.sort_by(|a, b| {
-                let epochs_a = self.validators.get(*a).map(|v| v.consecutive_epochs).unwrap_or(0);
-                let epochs_b = self.validators.get(*b).map(|v| v.consecutive_epochs).unwrap_or(0);
+                let epochs_a = self
+                    .validators
+                    .get(*a)
+                    .map(|v| v.consecutive_epochs)
+                    .unwrap_or(0);
+                let epochs_b = self
+                    .validators
+                    .get(*b)
+                    .map(|v| v.consecutive_epochs)
+                    .unwrap_or(0);
                 epochs_b.cmp(&epochs_a)
             });
 
@@ -2922,21 +2981,26 @@ impl StakingContract {
         // Get validator info
         let validator_info = self.validators.get(validator).unwrap();
         let contribution = (validator_info.total_stake as f64 * INSURANCE_POOL_FEE) as u64;
-        
+
         // Check if validator has enough stake
         if validator_info.total_stake <= contribution {
             return Err("Validator does not have enough stake to join insurance pool");
         }
-        
+
         // Check if validator is already in the pool
         if self.insurance_pool.participants.contains_key(validator) {
             return Err("Validator is already in the insurance pool");
         }
-        
+
         // Add validator to insurance pool
-        let coverage_limit = (contribution as f64 * (1.0 / INSURANCE_POOL_FEE) * INSURANCE_COVERAGE_PERCENTAGE) as u64;
-        let current_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
-        
+        let coverage_limit = (contribution as f64
+            * (1.0 / INSURANCE_POOL_FEE)
+            * INSURANCE_COVERAGE_PERCENTAGE) as u64;
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
         self.insurance_pool.participants.insert(
             validator.to_vec(),
             InsuranceParticipation {
@@ -2946,18 +3010,19 @@ impl StakingContract {
                 join_time: current_time,
             },
         );
-        
+
         // Update insurance pool balance
         self.insurance_pool.total_balance += contribution;
         self.insurance_pool.balance += contribution;
-        
+
         // Deduct contribution from validator's stake
         if let Some(validator_info) = self.validators.get_mut(validator) {
             validator_info.total_stake -= contribution;
             validator_info.insurance_coverage = coverage_limit;
-            validator_info.insurance_expiry = current_time + 365 * 24 * 60 * 60; // 1 year coverage
+            validator_info.insurance_expiry = current_time + 365 * 24 * 60 * 60;
+            // 1 year coverage
         }
-        
+
         Ok(())
     }
 }

@@ -4,8 +4,8 @@ use super::pos_old::{StakeProof, StakingContract};
 use super::randomx::{verify_difficulty, RandomXContext};
 use super::{pos_old::ProofOfStake, pow::ProofOfWork};
 use crate::blockchain::Block;
-use std::sync::{Arc, RwLock};
 use crate::consensus::hybrid_optimizations::HybridStateManager;
+use std::sync::{Arc, RwLock};
 
 pub struct HybridValidator {
     pow: ProofOfWork,
@@ -69,13 +69,19 @@ impl HybridValidator {
         println!("Passed base PoW check");
 
         // Update validator cache before validation
-        if let Err(e) = self.state_manager.update_validator_cache(stake_proof.public_key.clone()) {
+        if let Err(e) = self
+            .state_manager
+            .update_validator_cache(stake_proof.public_key.clone())
+        {
             println!("Failed to update validator cache: {}", e);
             return false;
         }
 
         // Validate using parallel processing
-        match self.state_manager.validate_block_parallel(block, &[stake_proof.clone()]) {
+        match self
+            .state_manager
+            .validate_block_parallel(block, &[stake_proof.clone()])
+        {
             Ok(is_valid) => {
                 if !is_valid {
                     println!("Failed parallel validation");
@@ -161,7 +167,7 @@ pub fn validate_block_hybrid(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consensus::pos_old::{StakingContract};
+    use crate::consensus::pos_old::StakingContract;
 
     #[test]
     fn test_hybrid_validation_with_staking() {

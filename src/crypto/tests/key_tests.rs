@@ -1,10 +1,10 @@
 use super::*;
-use crate::crypto::jubjub::{JubjubKeypair, generate_keypair};
+use crate::crypto::jubjub::{generate_keypair, JubjubKeypair};
 
 #[test]
 fn test_key_generation() {
     let keypair = generate_keypair();
-    
+
     let message = b"test message";
     let signature = keypair.sign(message).expect("Signing failed");
     assert!(keypair.public.verify(message, &signature));

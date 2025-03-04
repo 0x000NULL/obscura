@@ -1,5 +1,5 @@
-use crate::consensus::vrf::{Vrf};
-use crate::crypto::jubjub::{JubjubKeypair, generate_keypair};
+use crate::consensus::vrf::Vrf;
+use crate::crypto::jubjub::{generate_keypair, JubjubKeypair};
 use rand::{rngs::OsRng, RngCore};
 
 #[test]

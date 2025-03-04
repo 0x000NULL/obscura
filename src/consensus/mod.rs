@@ -1,6 +1,7 @@
 use std::sync::Arc;
 pub mod difficulty;
 pub mod hybrid;
+pub mod hybrid_optimizations;
 pub mod mining_reward;
 pub mod pos;
 pub mod pos_old;
@@ -9,7 +10,6 @@ pub mod randomx;
 pub mod sharding;
 pub mod threshold_sig;
 pub mod vrf;
-pub mod hybrid_optimizations;
 
 pub use pos_old::StakeProof;
 pub use randomx::{verify_difficulty, RandomXContext, RandomXError};
@@ -133,9 +133,9 @@ pub fn calculate_block_hash(
 #[cfg(test)]
 mod tests {
     mod mining_reward_tests;
+    mod multi_asset_staking_tests;
     mod pos_tests;
     mod randomx_tests;
     mod threshold_sig_tests;
     mod vrf_tests;
-    mod multi_asset_staking_tests;
 }

@@ -1,6 +1,6 @@
 use super::*;
-use crate::crypto::jubjub::generate_keypair;
 use crate::blockchain::{Transaction, TransactionOutput};
+use crate::crypto::jubjub::generate_keypair;
 use crate::crypto::jubjub::JubjubPointExt;
 
 #[allow(dead_code)]

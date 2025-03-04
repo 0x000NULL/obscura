@@ -1,15 +1,15 @@
+use chacha20poly1305::{
+    aead::{generic_array::GenericArray, Aead},
+    ChaCha20Poly1305, KeyInit,
+};
+use rand::RngCore;
+use rand::{seq::SliceRandom, thread_rng, Rng};
 use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
-use rand::{seq::SliceRandom, thread_rng, Rng};
-use rand::RngCore;
-use chacha20poly1305::{
-    aead::{Aead, generic_array::GenericArray},
-    ChaCha20Poly1305, KeyInit
-};
 
-use crate::networking::p2p::{PeerConnection, FeatureFlag, PrivacyFeatureFlag};
+use crate::networking::p2p::{FeatureFlag, PeerConnection, PrivacyFeatureFlag};
 
 // Constants for connection management
 const MAX_OUTBOUND_CONNECTIONS: usize = 8;
@@ -97,7 +97,8 @@ impl PeerScore {
     pub fn calculate_score(&self) -> f64 {
         // Get base metrics
         let success_ratio = if self.successful_connections + self.failed_connections > 0 {
-            self.successful_connections as f64 / (self.successful_connections + self.failed_connections) as f64
+            self.successful_connections as f64
+                / (self.successful_connections + self.failed_connections) as f64
         } else {
             0.5
         };
@@ -118,23 +119,28 @@ impl PeerScore {
         let diversity_noise = rng.gen_range(-noise_factor..=noise_factor);
 
         // Combine factors with weights and noise
-        let score = ((success_ratio + success_noise) * 0.4) + 
-                   ((latency_score + latency_noise) * 0.3) + 
-                   ((self.diversity_score + diversity_noise) * 0.3);
+        let score = ((success_ratio + success_noise) * 0.4)
+            + ((latency_score + latency_noise) * 0.3)
+            + ((self.diversity_score + diversity_noise) * 0.3);
 
         // Ensure score stays in valid range
         score.max(0.0).min(1.0)
     }
 
     // Update reputation with privacy preservation
-    pub fn update_reputation(&mut self, new_score: f64, peers: &[SocketAddr]) -> Result<(), &'static str> {
+    pub fn update_reputation(
+        &mut self,
+        new_score: f64,
+        peers: &[SocketAddr],
+    ) -> Result<(), &'static str> {
         let key = GenericArray::from_slice(&self.reputation_key);
         let cipher = ChaCha20Poly1305::new(key);
         let nonce = GenericArray::from_slice(&self.reputation_nonce);
 
         // Encrypt the new score
         let score_bytes = new_score.to_le_bytes();
-        let encrypted_score = cipher.encrypt(nonce, score_bytes.as_ref())
+        let encrypted_score = cipher
+            .encrypt(nonce, score_bytes.as_ref())
             .map_err(|_| "Encryption failed")?;
 
         // Generate reputation shares
@@ -147,7 +153,7 @@ impl PeerScore {
             for (i, peer) in peers.iter().enumerate() {
                 let mut share = vec![0u8; encrypted_score.len()];
                 rng.fill_bytes(&mut share);
-                
+
                 // XOR all shares except the last one
                 if i < peers.len() - 1 {
                     for (s, e) in share.iter_mut().zip(encrypted_score.iter()) {
@@ -213,7 +219,9 @@ impl PeerScore {
 }
 
 // Connection pool implementation
-pub struct ConnectionPool<T: std::io::Read + std::io::Write + Clone = crate::networking::p2p::CloneableTcpStream> {
+pub struct ConnectionPool<
+    T: std::io::Read + std::io::Write + Clone = crate::networking::p2p::CloneableTcpStream,
+> {
     // Active connections
     active_connections: Arc<RwLock<HashMap<SocketAddr, (PeerConnection<T>, ConnectionType)>>>,
     // Peer scores for connection management
@@ -248,21 +256,21 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
             max_connections_per_network: MAX_CONNECTIONS_PER_NETWORK,
         }
     }
-    
+
     // New method for testing - configure rotation interval
     #[cfg(test)]
     pub fn with_rotation_interval(mut self, interval: Duration) -> Self {
         self.rotation_interval = interval;
         self
     }
-    
+
     // New method for testing - configure max connections per network
     #[cfg(test)]
     pub fn with_max_connections_per_network(mut self, max: usize) -> Self {
         self.max_connections_per_network = max;
         self
     }
-    
+
     // New method for testing - set the last rotation time
     #[cfg(test)]
     pub fn set_last_rotation_time(&self, time_ago: Duration) {
@@ -272,47 +280,61 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
     }
 
     // Add a new connection to the pool
-    pub fn add_connection(&self, peer_conn: PeerConnection<T>, conn_type: ConnectionType) -> Result<(), ConnectionError> {
+    pub fn add_connection(
+        &self,
+        peer_conn: PeerConnection<T>,
+        conn_type: ConnectionType,
+    ) -> Result<(), ConnectionError> {
         let addr = peer_conn.addr;
-        
+
         // First check if peer is banned (single lock)
         if let Ok(banned) = self.banned_peers.read() {
             if banned.contains(&addr) {
                 return Err(ConnectionError::PeerBanned);
             }
         }
-        
+
         // Get all the information we need with a single read lock
-        let (inbound_count, outbound_count, feeler_count) = if let Ok(connections) = self.active_connections.read() {
-            (
-                connections.values().filter(|(_, ctype)| *ctype == ConnectionType::Inbound).count(),
-                connections.values().filter(|(_, ctype)| *ctype == ConnectionType::Outbound).count(),
-                connections.values().filter(|(_, ctype)| *ctype == ConnectionType::Feeler).count()
-            )
-        } else {
-            (0, 0, 0)
-        };
-        
+        let (inbound_count, outbound_count, feeler_count) =
+            if let Ok(connections) = self.active_connections.read() {
+                (
+                    connections
+                        .values()
+                        .filter(|(_, ctype)| *ctype == ConnectionType::Inbound)
+                        .count(),
+                    connections
+                        .values()
+                        .filter(|(_, ctype)| *ctype == ConnectionType::Outbound)
+                        .count(),
+                    connections
+                        .values()
+                        .filter(|(_, ctype)| *ctype == ConnectionType::Feeler)
+                        .count(),
+                )
+            } else {
+                (0, 0, 0)
+            };
+
         // Check connection limits based on type
         match conn_type {
             ConnectionType::Inbound if inbound_count >= MAX_INBOUND_CONNECTIONS => {
                 return Err(ConnectionError::TooManyConnections);
-            },
+            }
             ConnectionType::Outbound if outbound_count >= MAX_OUTBOUND_CONNECTIONS => {
                 return Err(ConnectionError::TooManyConnections);
-            },
+            }
             ConnectionType::Feeler if feeler_count >= MAX_FEELER_CONNECTIONS => {
                 return Err(ConnectionError::TooManyConnections);
-            },
+            }
             _ => {}
         }
-        
+
         // Check network diversity
         let network_type = match addr.ip() {
             IpAddr::V4(_) => NetworkType::IPv4,
             IpAddr::V6(_) => NetworkType::IPv6,
         };
-        
+
         // Update network counts (single write lock)
         if let Ok(mut network_counts) = self.network_counts.write() {
             let count = network_counts.entry(network_type).or_insert(0);
@@ -321,12 +343,12 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
             }
             *count += 1;
         }
-        
+
         // Add to active connections (single write lock)
         if let Ok(mut connections) = self.active_connections.write() {
             connections.insert(addr, (peer_conn.clone(), conn_type));
         }
-        
+
         // Calculate diversity scores first
         let diversity_scores = {
             let mut scores = HashMap::new();
@@ -340,7 +362,7 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
                     };
                     *network_counts.entry(network_type).or_insert(0) += 1;
                 }
-                
+
                 // Calculate total connections
                 let total_connections = connections.len() as f64;
                 if total_connections > 0.0 {
@@ -351,55 +373,55 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
                         };
                         let network_count = *network_counts.get(&network_type).unwrap_or(&0) as f64;
                         let network_ratio = network_count / total_connections;
-                        
+
                         // Higher score for underrepresented networks
                         let mut diversity_score = 1.0 - network_ratio;
-                        
+
                         // Ensure minimum diversity score
                         if diversity_score < MIN_PEER_DIVERSITY_SCORE {
                             diversity_score = MIN_PEER_DIVERSITY_SCORE;
                         }
-                        
+
                         scores.insert(*addr, diversity_score);
                     }
                 }
             }
             scores
         };
-        
+
         // Update peer scores (single write lock)
         if let Ok(mut scores) = self.peer_scores.write() {
             let score = scores.entry(addr).or_insert_with(|| {
                 PeerScore::new(addr, peer_conn.features, peer_conn.privacy_features)
             });
-            
+
             // Record successful connection with estimated latency
             score.record_successful_connection(Duration::from_millis(100)); // Default latency estimate
-            
+
             // Update diversity score if we calculated one
             if let Some(diversity_score) = diversity_scores.get(&addr) {
                 score.diversity_score = *diversity_score;
             }
         }
-        
+
         Ok(())
     }
-    
+
     // Remove a connection from the pool
     pub fn remove_connection(&self, addr: &SocketAddr) -> bool {
         let mut removed = false;
-        
+
         // Remove from active connections
         if let Ok(mut connections) = self.active_connections.write() {
             if let Some((_, _)) = connections.remove(addr) {
                 removed = true;
-                
+
                 // Update network diversity counts
                 let network_type = match addr.ip() {
                     IpAddr::V4(_) => NetworkType::IPv4,
                     IpAddr::V6(_) => NetworkType::IPv6,
                 };
-                
+
                 if let Ok(mut network_counts) = self.network_counts.write() {
                     if let Some(count) = network_counts.get_mut(&network_type) {
                         if *count > 0 {
@@ -409,10 +431,10 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
                 }
             }
         }
-        
+
         removed
     }
-    
+
     // Get a connection by address
     pub fn get_connection(&self, addr: &SocketAddr) -> Option<PeerConnection<T>> {
         if let Ok(connections) = self.active_connections.read() {
@@ -422,24 +444,24 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
         }
         None
     }
-    
+
     // Get all active connections
     pub fn get_all_connections(&self) -> Vec<(SocketAddr, PeerConnection<T>, ConnectionType)> {
         let mut result = Vec::new();
-        
+
         if let Ok(connections) = self.active_connections.read() {
             for (addr, (conn, conn_type)) in connections.iter() {
                 result.push((*addr, conn.clone(), *conn_type));
             }
         }
-        
+
         result
     }
-    
+
     // Get all outbound connections
     pub fn get_outbound_connections(&self) -> Vec<(SocketAddr, PeerConnection<T>)> {
         let mut result = Vec::new();
-        
+
         if let Ok(connections) = self.active_connections.read() {
             for (addr, (conn, conn_type)) in connections.iter() {
                 if *conn_type == ConnectionType::Outbound {
@@ -447,14 +469,14 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
                 }
             }
         }
-        
+
         result
     }
-    
+
     // Get all inbound connections
     pub fn get_inbound_connections(&self) -> Vec<(SocketAddr, PeerConnection<T>)> {
         let mut result = Vec::new();
-        
+
         if let Ok(connections) = self.active_connections.read() {
             for (addr, (conn, conn_type)) in connections.iter() {
                 if *conn_type == ConnectionType::Inbound {
@@ -462,22 +484,22 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
                 }
             }
         }
-        
+
         result
     }
-    
+
     // Ban a peer
     pub fn ban_peer(&self, addr: &SocketAddr, _duration: Duration) {
         if let Ok(mut banned) = self.banned_peers.write() {
             banned.insert(*addr);
         }
-        
+
         // Remove any active connections to this peer
         self.remove_connection(addr);
-        
+
         // TODO: Implement time-based banning with expiration
     }
-    
+
     // Check if a peer is banned
     pub fn is_banned(&self, addr: &SocketAddr) -> bool {
         if let Ok(banned) = self.banned_peers.read() {
@@ -485,21 +507,21 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
         }
         false
     }
-    
+
     // Check if it's time to rotate peers
     pub fn should_rotate_peers(&self) -> bool {
         // Get the current time
         let now = Instant::now();
-        
+
         // Check if enough time has passed since the last rotation
         if let Ok(last_rotation) = self.last_rotation.lock() {
             let elapsed = now.duration_since(*last_rotation);
             return elapsed >= self.rotation_interval;
         }
-        
+
         false
     }
-    
+
     // Rotate peers to maintain network health and privacy
     pub fn rotate_peers(&self) -> usize {
         // Update the last rotation time
@@ -509,41 +531,40 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
 
         // Get all outbound connections
         let outbound_connections = self.get_outbound_connections();
-        
+
         // If we have fewer than the minimum required connections, don't rotate
         if outbound_connections.len() < MAX_OUTBOUND_CONNECTIONS / 2 {
             return 0;
         }
-        
+
         // Calculate how many connections to rotate (up to 25% of outbound connections)
         let num_to_rotate = (outbound_connections.len() / 4).max(1);
-        
+
         // Select connections to rotate based on age and score
         let mut connections_to_rotate = Vec::new();
-        
+
         // Sort connections by score (lowest first) and then by age (oldest first)
-        let mut scored_connections: Vec<_> = outbound_connections.into_iter()
+        let mut scored_connections: Vec<_> = outbound_connections
+            .into_iter()
             .map(|(addr, conn)| {
                 let score = self.get_peer_score(addr);
                 let age = conn.get_age();
                 (addr, conn, score, age)
             })
             .collect();
-        
+
         // Sort by score (ascending) and then by age (descending)
-        scored_connections.sort_by(|a, b| {
-            a.2.cmp(&b.2).then_with(|| b.3.cmp(&a.3))
-        });
-        
+        scored_connections.sort_by(|a, b| a.2.cmp(&b.2).then_with(|| b.3.cmp(&a.3)));
+
         // Take the lowest scoring and oldest connections up to num_to_rotate
         for (addr, _, _, _) in scored_connections.into_iter().take(num_to_rotate) {
             connections_to_rotate.push(addr);
-            
+
             // Remove the connection
             if let Ok(mut connections) = self.active_connections.write() {
                 connections.remove(&addr);
             }
-            
+
             // Update network counts
             let network_type = match addr.ip() {
                 IpAddr::V4(_) => NetworkType::IPv4,
@@ -557,7 +578,7 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
                 }
             }
         }
-        
+
         // Calculate new diversity scores
         let diversity_scores = {
             let mut scores = HashMap::new();
@@ -571,7 +592,7 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
                     };
                     *network_counts.entry(network_type).or_insert(0) += 1;
                 }
-                
+
                 // Calculate total connections
                 let total_connections = connections.len() as f64;
                 if total_connections > 0.0 {
@@ -582,22 +603,22 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
                         };
                         let network_count = *network_counts.get(&network_type).unwrap_or(&0) as f64;
                         let network_ratio = network_count / total_connections;
-                        
+
                         // Higher score for underrepresented networks
                         let mut diversity_score = 1.0 - network_ratio;
-                        
+
                         // Ensure minimum diversity score
                         if diversity_score < MIN_PEER_DIVERSITY_SCORE {
                             diversity_score = MIN_PEER_DIVERSITY_SCORE;
                         }
-                        
+
                         scores.insert(*addr, diversity_score);
                     }
                 }
             }
             scores
         };
-        
+
         // Update peer scores with new diversity scores
         if let Ok(mut scores) = self.peer_scores.write() {
             for (addr, diversity_score) in diversity_scores {
@@ -606,11 +627,11 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
                 }
             }
         }
-        
+
         // Return the number of connections that were rotated
         connections_to_rotate.len()
     }
-    
+
     // Check if a feature is supported by a peer
     pub fn is_feature_supported(&self, addr: &SocketAddr, feature: FeatureFlag) -> bool {
         if let Some(conn) = self.get_connection(addr) {
@@ -619,12 +640,17 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
         }
         false
     }
-    
+
     // Check if a privacy feature is supported by a peer
-    pub fn is_privacy_feature_supported(&self, addr: &SocketAddr, feature: PrivacyFeatureFlag) -> bool {
+    pub fn is_privacy_feature_supported(
+        &self,
+        addr: &SocketAddr,
+        feature: PrivacyFeatureFlag,
+    ) -> bool {
         if let Some(conn) = self.get_connection(addr) {
             let feature_bit = feature as u32;
-            return (self.local_privacy_features & feature_bit != 0) && (conn.privacy_features & feature_bit != 0);
+            return (self.local_privacy_features & feature_bit != 0)
+                && (conn.privacy_features & feature_bit != 0);
         }
         false
     }
@@ -658,7 +684,7 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
     // Add method to get network diversity score
     pub fn get_network_diversity_score(&self) -> f64 {
         let mut score = 0.0;
-        
+
         if let Ok(network_counts) = self.network_counts.read() {
             let total_connections: usize = network_counts.values().sum();
             if total_connections > 0 {
@@ -676,27 +702,28 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
                 }
             }
         }
-        
+
         score
     }
 
     // Select a peer for outbound connection based on scoring
     pub fn select_outbound_peer(&self) -> Option<SocketAddr> {
         let mut candidates = Vec::new();
-        
+
         // Get connected and banned peers first
-        let connected_peers: HashSet<SocketAddr> = if let Ok(connections) = self.active_connections.read() {
-            connections.keys().cloned().collect()
-        } else {
-            HashSet::new()
-        };
-        
+        let connected_peers: HashSet<SocketAddr> =
+            if let Ok(connections) = self.active_connections.read() {
+                connections.keys().cloned().collect()
+            } else {
+                HashSet::new()
+            };
+
         let banned_peers: HashSet<SocketAddr> = if let Ok(banned) = self.banned_peers.read() {
             banned.clone()
         } else {
             HashSet::new()
         };
-        
+
         // Then process scores
         if let Ok(scores) = self.peer_scores.read() {
             // Filter out already connected and banned peers
@@ -706,12 +733,14 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
                 }
             }
         }
-        
+
         // Sort by score (higher is better)
         candidates.sort_by(|(_, score1), (_, score2)| {
-            score2.partial_cmp(score1).unwrap_or(std::cmp::Ordering::Equal)
+            score2
+                .partial_cmp(score1)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
-        
+
         // Select one of the top peers with some randomness
         let top_n = std::cmp::min(3, candidates.len());
         if top_n > 0 {
@@ -719,7 +748,7 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
             let idx = rng.gen_range(0..top_n);
             return Some(candidates[idx].0);
         }
-        
+
         None
     }
 
@@ -727,45 +756,49 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
     pub fn select_random_peers(&self, count: usize) -> Vec<SocketAddr> {
         let mut result = Vec::new();
         let mut rng = thread_rng();
-        
+
         if let Ok(connections) = self.active_connections.read() {
             let mut peers: Vec<_> = connections.keys().cloned().collect();
-            
+
             // Try to select peers from different networks
             let mut network_used = HashMap::new();
             peers.shuffle(&mut rng);
-            
+
             for peer in peers {
                 let network_type = match peer.ip() {
                     IpAddr::V4(_) => NetworkType::IPv4,
                     IpAddr::V6(_) => NetworkType::IPv6,
                 };
-                
+
                 let network_count = network_used.entry(network_type).or_insert(0);
                 if *network_count < self.max_connections_per_network {
                     result.push(peer);
                     *network_count += 1;
-                    
+
                     if result.len() >= count {
                         break;
                     }
                 }
             }
         }
-        
+
         result
     }
 
     // Update peer reputation with privacy preservation
-    pub fn update_peer_reputation(&self, addr: SocketAddr, new_score: f64) -> Result<(), &'static str> {
+    pub fn update_peer_reputation(
+        &self,
+        addr: SocketAddr,
+        new_score: f64,
+    ) -> Result<(), &'static str> {
         // Get a random subset of peers for sharing
         let share_peers = self.select_random_peers(5);
-        
+
         // Update the peer's reputation
         if let Ok(mut scores) = self.peer_scores.write() {
             if let Some(score) = scores.get_mut(&addr) {
                 score.update_reputation(new_score, &share_peers)?;
-                
+
                 // Distribute shares to selected peers
                 if let Ok(connections) = self.active_connections.read() {
                     for (peer_addr, share) in score.reputation_shares.iter() {
@@ -779,7 +812,7 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -794,14 +827,18 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
     }
 
     // Aggregate reputation shares from peers
-    pub fn aggregate_reputation_shares(&self, addr: SocketAddr, shares: Vec<Vec<u8>>) -> Result<(), &'static str> {
+    pub fn aggregate_reputation_shares(
+        &self,
+        addr: SocketAddr,
+        shares: Vec<Vec<u8>>,
+    ) -> Result<(), &'static str> {
         if let Ok(mut scores) = self.peer_scores.write() {
             if let Some(score) = scores.get_mut(&addr) {
                 // Combine shares using XOR
                 if !shares.is_empty() {
                     let share_len = shares[0].len();
                     let mut combined = vec![0u8; share_len];
-                    
+
                     for share in shares {
                         if share.len() == share_len {
                             for (c, s) in combined.iter_mut().zip(share.iter()) {
@@ -809,7 +846,7 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
                             }
                         }
                     }
-                    
+
                     score.encrypted_reputation = Some(combined);
                 }
             }
@@ -833,11 +870,13 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
             }
         }
 
-        let avg = if count > 0 { total_score / count as f64 } else { 0.0 };
+        let avg = if count > 0 {
+            total_score / count as f64
+        } else {
+            0.0
+        };
         let variance = if count > 0 {
-            scores.iter()
-                .map(|s| (s - avg).powi(2))
-                .sum::<f64>() / count as f64
+            scores.iter().map(|s| (s - avg).powi(2)).sum::<f64>() / count as f64
         } else {
             0.0
         };
@@ -865,7 +904,7 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
 
     pub fn get_network_type_counts(&self) -> HashMap<NetworkType, usize> {
         let mut counts = HashMap::new();
-        
+
         if let Ok(connections) = self.active_connections.read() {
             for (addr, _) in connections.iter() {
                 let network_type = self.get_network_type(addr);
@@ -878,7 +917,8 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
 
     pub fn get_peers_by_network_type(&self, network_type: NetworkType) -> Vec<SocketAddr> {
         if let Ok(connections) = self.active_connections.read() {
-            connections.iter()
+            connections
+                .iter()
                 .filter(|(addr, _)| self.get_network_type(addr) == network_type)
                 .map(|(addr, _)| *addr)
                 .collect()
@@ -897,8 +937,10 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
         }
     }
 
-    pub fn connect_to_peer(&self, peer_addr: SocketAddr) -> Result<(), ConnectionError> 
-        where T: From<crate::networking::p2p::CloneableTcpStream> {
+    pub fn connect_to_peer(&self, peer_addr: SocketAddr) -> Result<(), ConnectionError>
+    where
+        T: From<crate::networking::p2p::CloneableTcpStream>,
+    {
         // Check if already connected
         if self.is_connected(&peer_addr) {
             return Ok(());
@@ -934,8 +976,13 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
         let stream_t = T::from(cloneable_stream);
 
         // Create new peer connection
-        let peer_conn = PeerConnection::new(stream_t, peer_addr, self.local_features, self.local_privacy_features);
-        
+        let peer_conn = PeerConnection::new(
+            stream_t,
+            peer_addr,
+            self.local_features,
+            self.local_privacy_features,
+        );
+
         // Add to active connections
         self.add_connection(peer_conn, ConnectionType::Outbound)
     }
@@ -989,7 +1036,8 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
 
     pub fn get_outbound_count(&self) -> usize {
         if let Ok(connections) = self.active_connections.read() {
-            connections.values()
+            connections
+                .values()
                 .filter(|(_, conn_type)| *conn_type == ConnectionType::Outbound)
                 .count()
         } else {
@@ -999,7 +1047,8 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
 
     pub fn get_inbound_count(&self) -> usize {
         if let Ok(connections) = self.active_connections.read() {
-            connections.values()
+            connections
+                .values()
                 .filter(|(_, conn_type)| *conn_type == ConnectionType::Inbound)
                 .count()
         } else {
@@ -1009,7 +1058,8 @@ impl<T: std::io::Read + std::io::Write + Clone> ConnectionPool<T> {
 
     pub fn get_feeler_count(&self) -> usize {
         if let Ok(connections) = self.active_connections.read() {
-            connections.values()
+            connections
+                .values()
                 .filter(|(_, conn_type)| *conn_type == ConnectionType::Feeler)
                 .count()
         } else {
@@ -1050,4 +1100,4 @@ pub enum ConnectionError {
     PeerBanned,
     NetworkDiversityLimit,
     ConnectionFailed(String),
-} 
+}

@@ -5,16 +5,12 @@ pub use pos_structs::*;
 // Export staking enhancements
 pub mod enhancements;
 pub use enhancements::{
-    DelegationMarketplace,
-    ValidatorReputationManager,
-    StakeCompoundingManager,
-    ValidatorDiversityManager,
-    HardwareSecurityManager,
-    ContractVerificationManager,
+    ContractVerificationManager, DelegationMarketplace, HardwareSecurityManager,
+    StakeCompoundingManager, ValidatorDiversityManager, ValidatorReputationManager,
 };
 
-use std::collections::HashMap;
 use hex;
+use std::collections::HashMap;
 
 /// Main Proof of Stake implementation
 pub struct ProofOfStake {
@@ -57,10 +53,8 @@ impl ProofOfStake {
                 timestamp: current_time,
                 oracle_id: "system".to_string(),
             };
-            self.reputation_manager.update_reputation(
-                hex::encode(validator_id),
-                assessment
-            );
+            self.reputation_manager
+                .update_reputation(hex::encode(validator_id), assessment);
         }
 
         // Process pending compounding operations
@@ -77,41 +71,46 @@ impl ProofOfStake {
         // Update diversity metrics
         let mut metrics = DiversityMetrics::new();
         metrics.last_update = current_time;
-        
+
         // Calculate diversity scores based on validator distribution
         let mut entity_counts = HashMap::<String, u64>::new();
         let mut geo_counts = HashMap::<String, u64>::new();
         let client_counts = HashMap::<String, u64>::new();
-        
+
         for (validator_id, _) in &self.staking_contract.validators {
             let validator_hex = hex::encode(validator_id);
-            
+
             // Count entities based on security info
             if let Some(info) = self.security_manager.get_security_info(&validator_hex) {
-                *entity_counts.entry(info.tpm_version.clone()).or_insert(0u64) += 1;
+                *entity_counts
+                    .entry(info.tpm_version.clone())
+                    .or_insert(0u64) += 1;
             }
-            
+
             // Count geographic regions
             if let Some(geo_info) = self.diversity_manager.get_validator_geo(&validator_hex) {
                 let region_key = format!("{}-{}", geo_info.country_code, geo_info.region);
                 *geo_counts.entry(region_key).or_insert(0u64) += 1;
             }
-            
+
             // We could also add client diversity here when implemented
         }
-        
+
         let total_validators = self.staking_contract.validators.len() as f64;
         if total_validators > 0.0 {
-            metrics.entity_diversity = 1.0 - (*entity_counts.values().max().unwrap_or(&0) as f64 / total_validators);
-            metrics.geographic_diversity = 1.0 - (*geo_counts.values().max().unwrap_or(&0) as f64 / total_validators);
-            metrics.client_diversity = 1.0 - (*client_counts.values().max().unwrap_or(&0) as f64 / total_validators);
-            
+            metrics.entity_diversity =
+                1.0 - (*entity_counts.values().max().unwrap_or(&0) as f64 / total_validators);
+            metrics.geographic_diversity =
+                1.0 - (*geo_counts.values().max().unwrap_or(&0) as f64 / total_validators);
+            metrics.client_diversity =
+                1.0 - (*client_counts.values().max().unwrap_or(&0) as f64 / total_validators);
+
             // Ensure we have a minimum geographic diversity even with few validators
             if !geo_counts.is_empty() && metrics.geographic_diversity < 0.3 {
                 metrics.geographic_diversity = 0.3;
             }
         }
-        
+
         self.diversity_manager.update_metrics(metrics);
 
         Ok(())
@@ -121,7 +120,7 @@ impl ProofOfStake {
     pub fn validate_new_validator(&self, validator_id: &[u8]) -> Result<(), String> {
         let validator_hex = hex::encode(validator_id);
         println!("Validating validator: {}", validator_hex);
-        
+
         // Check reputation first
         match self.reputation_manager.get_reputation(&validator_hex) {
             Some(reputation) => {
@@ -139,7 +138,7 @@ impl ProofOfStake {
                 return Err("No reputation data found for validator".to_string());
             }
         }
-        
+
         // Check security level
         if !self.security_manager.verify_security_level(&validator_hex) {
             // Try to get the security info for more detailed error
@@ -163,17 +162,20 @@ impl ProofOfStake {
                 println!("Security level: {}", security_info.security_level);
             }
         }
-        
+
         // Check geographic diversity
         if let Some(geo_info) = self.diversity_manager.get_validator_geo(&validator_hex) {
-            println!("Geo info found: {}, {}", geo_info.country_code, geo_info.region);
-            
+            println!(
+                "Geo info found: {}, {}",
+                geo_info.country_code, geo_info.region
+            );
+
             // Get the current diversity metrics from the diversity manager
             let diversity_report = self.diversity_manager.get_distribution_report();
             let geographic_diversity = diversity_report.metrics.geographic_diversity;
-            
+
             println!("Geographic diversity: {}", geographic_diversity);
-            
+
             // Ensure geographic diversity meets the minimum threshold
             if geographic_diversity < 0.3 {
                 return Err(format!(
@@ -184,8 +186,8 @@ impl ProofOfStake {
         } else {
             return Err("No geographic information found for validator".to_string());
         }
-        
+
         // All checks passed
         Ok(())
     }
-} 
+}

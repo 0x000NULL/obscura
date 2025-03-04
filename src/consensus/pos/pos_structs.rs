@@ -1,9 +1,9 @@
-use std::collections::{HashMap, HashSet, VecDeque};
 use crate::consensus::pos_old::{
-    Treasury, Governance, CrossChainStake, InsurancePool, ExitQueue, BftConsensus,
-    Stake, ValidatorUpdate, LiquidStakingPool
+    BftConsensus, CrossChainStake, ExitQueue, Governance, InsurancePool, LiquidStakingPool, Stake,
+    Treasury, ValidatorUpdate,
 };
-use crate::consensus::sharding::{Shard, CrossShardCommittee, ShardManager};
+use crate::consensus::sharding::{CrossShardCommittee, Shard, ShardManager};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 // Multi-asset staking structures
 /// Represents information about a stakable asset in the system
@@ -195,7 +195,8 @@ impl ReputationScore {
         if self.update_count == 0 {
             self.total_score = assessment.score;
         } else {
-            self.total_score = (self.total_score * self.update_count as f64 + assessment.score) / (self.update_count + 1) as f64;
+            self.total_score = (self.total_score * self.update_count as f64 + assessment.score)
+                / (self.update_count + 1) as f64;
         }
         self.update_count += 1;
         self.last_update = assessment.timestamp;
@@ -536,7 +537,7 @@ pub struct StakingContract {
     pub recent_reorgs: VecDeque<u64>, // Timestamps of recent reorgs
     pub known_blocks: HashSet<[u8; 32]>, // Set of known block hashes
     pub highest_finalized_block: u64, // Height of highest finalized block
-    
+
     // Multi-asset staking fields
     pub supported_assets: HashMap<String, AssetInfo>,
     pub multi_asset_stakes: HashMap<Vec<u8>, Vec<MultiAssetStake>>,
@@ -552,4 +553,4 @@ pub struct ValidatorInfo {
     pub uptime: f64,
     pub performance: f64,
     pub last_update: u64,
-} 
+}

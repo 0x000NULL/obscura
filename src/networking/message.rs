@@ -1,7 +1,7 @@
+use rand::{thread_rng, Rng};
+use sha2::{Digest, Sha256};
 use std::io::{self, Read, Write};
 use std::time::{Duration, Instant};
-use rand::{Rng, thread_rng};
-use sha2::{Sha256, Digest};
 
 // Constants for message framing and padding
 const MAGIC_BYTES: [u8; 4] = [0x4f, 0x42, 0x58, 0x00]; // "OBX\0"
@@ -122,11 +122,11 @@ impl Message {
         let mut hasher = Sha256::new();
         hasher.update(data);
         let hash1 = hasher.finalize();
-        
+
         let mut hasher = Sha256::new();
         hasher.update(hash1);
         let hash2 = hasher.finalize();
-        
+
         let mut checksum = [0u8; CHECKSUM_SIZE];
         checksum.copy_from_slice(&hash2[0..CHECKSUM_SIZE]);
         checksum
@@ -135,7 +135,7 @@ impl Message {
     // Add random padding to the message to enhance privacy
     fn add_padding(data: &mut Vec<u8>) {
         let mut rng = thread_rng();
-        
+
         // Ensure minimum message size for privacy
         if data.len() < MIN_MESSAGE_SIZE {
             let padding_size = MIN_MESSAGE_SIZE - data.len();
@@ -152,33 +152,33 @@ impl Message {
     // Serialize the message with framing, checksum, and padding
     pub fn serialize(&self) -> Result<Vec<u8>, MessageError> {
         let mut buffer = Vec::new();
-        
+
         // Add magic bytes
         buffer.extend_from_slice(&MAGIC_BYTES);
-        
+
         // Add message type
         buffer.extend_from_slice(&(self.message_type as u32).to_le_bytes());
-        
+
         // Create a copy of the payload for checksum calculation
         let mut payload_with_padding = self.payload.clone();
-        
+
         // Add privacy-enhancing padding
         Self::add_padding(&mut payload_with_padding);
-        
+
         // Add payload length (including padding)
         let payload_length = payload_with_padding.len() as u32;
         if payload_length as usize > MAX_MESSAGE_SIZE {
             return Err(MessageError::MessageTooLarge);
         }
         buffer.extend_from_slice(&payload_length.to_le_bytes());
-        
+
         // Calculate checksum of the padded payload
         let checksum = Self::calculate_checksum(&payload_with_padding);
         buffer.extend_from_slice(&checksum);
-        
+
         // Add the padded payload
         buffer.extend_from_slice(&payload_with_padding);
-        
+
         Ok(buffer)
     }
 
@@ -186,57 +186,57 @@ impl Message {
     pub fn deserialize(data: &[u8]) -> Result<Self, MessageError> {
         // Timing attack protection - ensure minimum processing time
         let start_time = Instant::now();
-        
+
         // Check minimum header size
         if data.len() < HEADER_SIZE {
             return Err(MessageError::MessageTooSmall);
         }
-        
+
         // Verify magic bytes
         if data[0..4] != MAGIC_BYTES {
             return Err(MessageError::InvalidMagic);
         }
-        
+
         // Read message type
         let message_type_value = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
-        let message_type = MessageType::from_u32(message_type_value)
-            .ok_or(MessageError::InvalidMessageType)?;
-        
+        let message_type =
+            MessageType::from_u32(message_type_value).ok_or(MessageError::InvalidMessageType)?;
+
         // Read payload length
         let payload_length = u32::from_le_bytes([data[8], data[9], data[10], data[11]]) as usize;
-        
+
         // Validate payload length
         if payload_length > MAX_MESSAGE_SIZE {
             return Err(MessageError::MessageTooLarge);
         }
-        
+
         if data.len() < HEADER_SIZE + payload_length {
             return Err(MessageError::MessageTooSmall);
         }
-        
+
         // Read checksum
         let expected_checksum = [data[12], data[13], data[14], data[15]];
-        
+
         // Get payload
         let payload_with_padding = &data[HEADER_SIZE..HEADER_SIZE + payload_length];
-        
+
         // Verify checksum
         let actual_checksum = Self::calculate_checksum(payload_with_padding);
         if actual_checksum != expected_checksum {
             return Err(MessageError::InvalidChecksum);
         }
-        
+
         // Extract actual payload (without padding)
         // Note: In a real implementation, we would need a way to determine the actual payload size
         // For now, we'll just use the entire padded payload
         let payload = payload_with_padding.to_vec();
-        
+
         // Timing attack protection - ensure minimum processing time
         let elapsed = start_time.elapsed();
         if elapsed < Duration::from_millis(MIN_PROCESSING_TIME_MS) {
             std::thread::sleep(Duration::from_millis(MIN_PROCESSING_TIME_MS) - elapsed);
         }
-        
+
         Ok(Message {
             message_type,
             payload,
@@ -248,25 +248,26 @@ impl Message {
         // Read header first
         let mut header = [0u8; HEADER_SIZE];
         stream.read_exact(&mut header)?;
-        
+
         // Verify magic bytes
         if header[0..4] != MAGIC_BYTES {
             return Err(MessageError::InvalidMagic);
         }
-        
+
         // Read payload length
-        let payload_length = u32::from_le_bytes([header[8], header[9], header[10], header[11]]) as usize;
-        
+        let payload_length =
+            u32::from_le_bytes([header[8], header[9], header[10], header[11]]) as usize;
+
         // Validate payload length
         if payload_length > MAX_MESSAGE_SIZE {
             return Err(MessageError::MessageTooLarge);
         }
-        
+
         // Read the payload
         let mut buffer = vec![0u8; HEADER_SIZE + payload_length];
         buffer[0..HEADER_SIZE].copy_from_slice(&header);
         stream.read_exact(&mut buffer[HEADER_SIZE..])?;
-        
+
         // Deserialize the complete message
         Self::deserialize(&buffer)
     }
@@ -278,25 +279,36 @@ impl Message {
         stream.flush()?;
         Ok(())
     }
-    
+
     // Helper method to write a message to a stream wrapped in Arc<Mutex>
-    pub fn write_to_mutex_stream<T: Read + Write>(&self, stream: &std::sync::Arc<std::sync::Mutex<T>>) -> Result<(), MessageError> {
+    pub fn write_to_mutex_stream<T: Read + Write>(
+        &self,
+        stream: &std::sync::Arc<std::sync::Mutex<T>>,
+    ) -> Result<(), MessageError> {
         if let Ok(mut guard) = stream.lock() {
             let serialized = self.serialize()?;
             guard.write_all(&serialized)?;
             guard.flush()?;
             Ok(())
         } else {
-            Err(MessageError::IoError(io::Error::new(io::ErrorKind::Other, "Failed to lock stream")))
+            Err(MessageError::IoError(io::Error::new(
+                io::ErrorKind::Other,
+                "Failed to lock stream",
+            )))
         }
     }
-    
+
     // Helper method to read a message from a stream wrapped in Arc<Mutex>
-    pub fn read_from_mutex_stream<T: Read + Write>(stream: &std::sync::Arc<std::sync::Mutex<T>>) -> Result<Self, MessageError> {
+    pub fn read_from_mutex_stream<T: Read + Write>(
+        stream: &std::sync::Arc<std::sync::Mutex<T>>,
+    ) -> Result<Self, MessageError> {
         if let Ok(mut guard) = stream.lock() {
             Self::read_from_stream(&mut *guard)
         } else {
-            Err(MessageError::IoError(io::Error::new(io::ErrorKind::Other, "Failed to lock stream")))
+            Err(MessageError::IoError(io::Error::new(
+                io::ErrorKind::Other,
+                "Failed to lock stream",
+            )))
         }
     }
 }
@@ -309,13 +321,13 @@ mod tests {
     #[test]
     fn test_message_serialization_deserialization() {
         let message = Message::new(MessageType::Ping, vec![1, 2, 3, 4]);
-        
+
         // Serialize the message
         let serialized = message.serialize().unwrap();
-        
+
         // Deserialize the message
         let deserialized = Message::deserialize(&serialized).unwrap();
-        
+
         // Verify the deserialized message matches the original
         assert_eq!(deserialized.message_type, MessageType::Ping);
         // Note: The deserialized payload includes padding, so we can't directly compare
@@ -349,12 +361,12 @@ mod tests {
             MessageType::GetBlockTransactions,
             MessageType::BlockTransactions,
         ];
-        
+
         for message_type in &message_types {
             let message = Message::new(*message_type, vec![1, 2, 3, 4]);
             let serialized = message.serialize().unwrap();
             let deserialized = Message::deserialize(&serialized).unwrap();
-            
+
             assert_eq!(deserialized.message_type, *message_type);
         }
     }
@@ -363,12 +375,12 @@ mod tests {
     fn test_checksum_validation() {
         let payload = vec![1, 2, 3, 4, 5];
         let message = Message::new(MessageType::Ping, payload);
-        
+
         let mut serialized = message.serialize().unwrap();
-        
+
         // Corrupt the checksum
         serialized[12] = serialized[12].wrapping_add(1);
-        
+
         let result = Message::deserialize(&serialized);
         assert!(matches!(result, Err(MessageError::InvalidChecksum)));
     }
@@ -377,12 +389,12 @@ mod tests {
     fn test_magic_bytes_validation() {
         let payload = vec![1, 2, 3, 4, 5];
         let message = Message::new(MessageType::Ping, payload);
-        
+
         let mut serialized = message.serialize().unwrap();
-        
+
         // Corrupt the magic bytes
         serialized[0] = serialized[0].wrapping_add(1);
-        
+
         let result = Message::deserialize(&serialized);
         assert!(matches!(result, Err(MessageError::InvalidMagic)));
     }
@@ -391,10 +403,10 @@ mod tests {
     fn test_message_padding() {
         let small_payload = vec![1, 2, 3];
         let message = Message::new(MessageType::Ping, small_payload);
-        
+
         let serialized = message.serialize().unwrap();
-        
+
         // The serialized message should be at least MIN_MESSAGE_SIZE + HEADER_SIZE
         assert!(serialized.len() >= MIN_MESSAGE_SIZE + HEADER_SIZE);
     }
-} 
+}

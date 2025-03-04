@@ -240,12 +240,12 @@
       - [x] Create efficient verification mechanism
       - [x] Implement multi-output proofs
       - [x] Add batch verification optimization
-    - [ ] Design proper Diffie-Hellman key exchange for stealth addressing
-      - [ ] Implement appropriate key exchange for Jubjub curve
-      - [ ] Create secure ephemeral key generation
-      - [ ] Design shared secret derivation protocol
-      - [ ] Implement key blinding techniques
-      - [ ] Add forward secrecy mechanisms
+    - [x] Design proper Diffie-Hellman key exchange for stealth addressing
+      - [x] Implement appropriate key exchange for Jubjub curve
+      - [x] Create secure ephemeral key generation
+      - [x] Design shared secret derivation protocol
+      - [x] Implement key blinding techniques
+      - [x] Add forward secrecy mechanisms
     - [ ] Implement BLS12-381 specific functions
       - [ ] Create optimized BLS12-381 curve operations
       - [ ] Implement Jubjub curve for efficient in-circuit operations

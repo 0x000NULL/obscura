@@ -1,7 +1,7 @@
 use crate::consensus::threshold_sig::{
     ThresholdError, ThresholdSchemeShamir, ThresholdSignature, ValidatorAggregation,
 };
-use crate::crypto::jubjub::{JubjubKeypair, generate_keypair};
+use crate::crypto::jubjub::{generate_keypair, JubjubKeypair};
 use std::collections::HashMap;
 
 #[test]
@@ -80,7 +80,8 @@ fn test_threshold_signature_different_participants() {
     let message = b"test message for different participants".to_vec();
 
     // Create a 2-of-3 threshold signature scheme
-    let mut threshold_sig = ThresholdSignature::new(2, participants.clone(), message.clone()).unwrap();
+    let mut threshold_sig =
+        ThresholdSignature::new(2, participants.clone(), message.clone()).unwrap();
 
     // Test with participants 0 and 1
     let sig1 = keypair1.sign(&message).expect("Signing failed");

@@ -1,7 +1,7 @@
 fn main() {
     // Link to the RandomX library
     println!("cargo:rustc-link-lib=randomx");
-    
+
     // Platform-specific configurations
     if cfg!(target_os = "windows") {
         // On Windows, use the Microsoft Visual C++ Runtime
@@ -13,4 +13,4 @@ fn main() {
         println!("cargo:rustc-link-lib=stdc++");
         println!("cargo:rustc-link-search=native=/usr/local/lib");
     }
-} 
+}

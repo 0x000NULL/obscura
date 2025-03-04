@@ -169,11 +169,18 @@ pub fn prioritize_transactions(
     // Add all transactions to the mempool
     for tx in transactions {
         let added = mempool.add_transaction(tx.clone());
-        println!("Added transaction {} to mempool: {}", hex::encode(tx.hash()), added);
+        println!(
+            "Added transaction {} to mempool: {}",
+            hex::encode(tx.hash()),
+            added
+        );
     }
 
-    println!("Total transactions in mempool after adding: {}", mempool.size());
-    
+    println!(
+        "Total transactions in mempool after adding: {}",
+        mempool.size()
+    );
+
     // Get transactions ordered by fee rate
     let prioritized_txs = mempool.get_transactions_by_fee(transactions.len());
 

@@ -1,11 +1,11 @@
+use rand::{seq::SliceRandom, thread_rng};
 use std::collections::{HashMap, HashSet};
-use std::net::{SocketAddr, IpAddr};
+use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-use rand::{seq::SliceRandom, thread_rng};
 
-use crate::networking::p2p::PrivacyFeatureFlag;
 use crate::networking::connection_pool::{NetworkType, PeerScore};
+use crate::networking::p2p::PrivacyFeatureFlag;
 
 // Kademlia DHT constants
 const K_BUCKET_SIZE: usize = 20;
@@ -61,7 +61,11 @@ impl KBucket {
         }
 
         // Bucket full, try to remove stale entries
-        if let Some(index) = self.entries.iter().position(|e| e.last_seen.elapsed() > REFRESH_INTERVAL) {
+        if let Some(index) = self
+            .entries
+            .iter()
+            .position(|e| e.last_seen.elapsed() > REFRESH_INTERVAL)
+        {
             self.entries.remove(index);
             self.entries.push(entry);
             self.last_updated = Instant::now();
@@ -115,7 +119,7 @@ impl RoutingTable {
     fn bucket_index(&self, id: &NodeId) -> usize {
         let distance = Self::distance(&self.local_id, id);
         let mut index = 0;
-        
+
         for byte in distance.iter() {
             if *byte == 0 {
                 index += 8;
@@ -124,14 +128,22 @@ impl RoutingTable {
             index += byte.leading_zeros() as usize;
             break;
         }
-        
+
         index.min(ID_BITS - 1)
     }
 
     // Add a node to the routing table
-    pub fn add_node(&mut self, id: NodeId, addr: SocketAddr, features: u32, privacy_features: u32) -> bool {
+    pub fn add_node(
+        &mut self,
+        id: NodeId,
+        addr: SocketAddr,
+        features: u32,
+        privacy_features: u32,
+    ) -> bool {
         // Skip if we're in privacy mode and the node doesn't support required privacy features
-        if self.privacy_enabled && (privacy_features & PrivacyFeatureFlag::TransactionObfuscation as u32 == 0) {
+        if self.privacy_enabled
+            && (privacy_features & PrivacyFeatureFlag::TransactionObfuscation as u32 == 0)
+        {
             return false;
         }
 
@@ -151,11 +163,11 @@ impl RoutingTable {
 
         let bucket_idx = self.bucket_index(&id);
         let result = self.buckets[bucket_idx].add_node(entry);
-        
+
         if result {
             self.known_peers.insert(addr);
         }
-        
+
         result
     }
 
@@ -177,10 +189,7 @@ impl RoutingTable {
             }
 
             for entry in &self.buckets[bucket].entries {
-                closest.push((
-                    entry.id,
-                    entry.addr,
-                ));
+                closest.push((entry.id, entry.addr));
             }
         }
 
@@ -230,7 +239,13 @@ impl DiscoveryService {
     }
 
     // Add a node to the discovery service
-    pub fn add_node(&self, id: NodeId, addr: SocketAddr, features: u32, privacy_features: u32) -> bool {
+    pub fn add_node(
+        &self,
+        id: NodeId,
+        addr: SocketAddr,
+        features: u32,
+        privacy_features: u32,
+    ) -> bool {
         if let Ok(mut table) = self.routing_table.write() {
             table.add_node(id, addr, features, privacy_features)
         } else {
@@ -250,26 +265,26 @@ impl DiscoveryService {
     // Get high-scoring peers for connection
     pub fn get_connection_candidates(&self, count: usize) -> Vec<SocketAddr> {
         let mut candidates = Vec::new();
-        
+
         if let (Ok(table), Ok(scores)) = (self.routing_table.read(), self.peer_scores.read()) {
             let known_peers = table.get_known_peers();
-            
+
             // Filter and sort peers by score
             let mut scored_peers: Vec<_> = known_peers
                 .iter()
-                .filter_map(|addr| {
-                    scores.get(addr).map(|score| (*addr, score.diversity_score))
-                })
+                .filter_map(|addr| scores.get(addr).map(|score| (*addr, score.diversity_score)))
                 .collect();
-            
-            scored_peers.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
-            
-            candidates = scored_peers.into_iter()
+
+            scored_peers
+                .sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+
+            candidates = scored_peers
+                .into_iter()
                 .take(count)
                 .map(|(addr, _)| addr)
                 .collect();
         }
-        
+
         candidates
     }
 
@@ -293,10 +308,10 @@ impl DiscoveryService {
 
     pub fn get_peers_by_network_type(&self, network_type: NetworkType) -> Option<Vec<SocketAddr>> {
         let mut peers = Vec::new();
-        
+
         // Get all known peers
         let known_peers = self.get_all_known_peers();
-        
+
         // Filter by network type
         for peer in known_peers {
             match peer.ip() {
@@ -305,7 +320,7 @@ impl DiscoveryService {
                 _ => continue,
             }
         }
-        
+
         if peers.is_empty() {
             None
         } else {
@@ -315,23 +330,23 @@ impl DiscoveryService {
 
     fn get_all_known_peers(&self) -> Vec<SocketAddr> {
         let mut peers = Vec::new();
-        
+
         // Add known peers from routing table
         if let Ok(routing_table) = self.routing_table.read() {
             // Add bootstrap nodes
             peers.extend(&routing_table.bootstrap_nodes);
-            
+
             // Add discovered nodes from buckets
             for bucket in &routing_table.buckets {
                 for entry in &bucket.entries {
                     peers.push(entry.addr);
                 }
             }
-            
+
             // We could also use the known_peers HashSet if we just need addresses
             // peers.extend(routing_table.known_peers.iter());
         }
-        
+
         peers
     }
 }
@@ -348,10 +363,7 @@ mod tests {
     }
 
     fn create_test_addr(last_octet: u8) -> SocketAddr {
-        SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(127, 0, 0, last_octet)),
-            8333,
-        )
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, last_octet)), 8333)
     }
 
     #[test]
@@ -390,4 +402,4 @@ mod tests {
         let privacy_features = PrivacyFeatureFlag::TransactionObfuscation as u32;
         assert!(table.add_node(id2, addr2, 0, privacy_features));
     }
-} 
+}

@@ -2,25 +2,11 @@ use std::collections::{HashMap, VecDeque};
 
 // Re-export all the types we need
 pub use super::pos_structs::{
-    MarketplaceListing,
-    MarketplaceOffer,
-    MarketplaceTransaction,
-    MarketplaceDispute,
-    ReputationOracle,
-    ReputationScore,
-    ReputationAssessment,
-    CompoundingConfig,
-    CompoundingOperation,
-    CompoundingStatus,
-    DiversityMetrics,
-    GeoDistributionReport,
-    EntityInfo,
-    ClientImplementation,
-    ValidatorGeoInfo,
-    HardwareSecurityInfo,
-    SecurityAttestation,
+    ClientImplementation, CompoundingConfig, CompoundingOperation, CompoundingStatus,
+    DiversityMetrics, EntityInfo, GeoDistributionReport, HardwareSecurityInfo, MarketplaceDispute,
+    MarketplaceListing, MarketplaceOffer, MarketplaceTransaction, ReputationAssessment,
+    ReputationOracle, ReputationScore, SecurityAttestation, ValidatorGeoInfo, VerificationStatus,
     VerifiedContract,
-    VerificationStatus,
 };
 
 /// Manages the delegation marketplace functionality
@@ -63,11 +49,15 @@ impl DelegationMarketplace {
         Ok(())
     }
 
-    pub fn complete_transaction(&mut self, transaction: MarketplaceTransaction) -> Result<(), String> {
+    pub fn complete_transaction(
+        &mut self,
+        transaction: MarketplaceTransaction,
+    ) -> Result<(), String> {
         if !self.offers.contains_key(&transaction.offer_id) {
             return Err("Offer not found".to_string());
         }
-        self.transactions.insert(transaction.id.clone(), transaction);
+        self.transactions
+            .insert(transaction.id.clone(), transaction);
         Ok(())
     }
 }
@@ -91,18 +81,21 @@ impl ValidatorReputationManager {
     }
 
     pub fn update_reputation(&mut self, validator_id: String, assessment: ReputationAssessment) {
-        let score = self.reputation_scores.entry(validator_id).or_insert_with(|| {
-            // For new validators, initialize with the assessment's score directly
-            let mut initial_score = ReputationScore::default();
-            initial_score.total_score = assessment.score;
-            initial_score.update_count = 0; // Will be incremented to 1 in update_with_assessment
-            initial_score.last_update = assessment.timestamp;
-            initial_score
-        });
-        
+        let score = self
+            .reputation_scores
+            .entry(validator_id)
+            .or_insert_with(|| {
+                // For new validators, initialize with the assessment's score directly
+                let mut initial_score = ReputationScore::default();
+                initial_score.total_score = assessment.score;
+                initial_score.update_count = 0; // Will be incremented to 1 in update_with_assessment
+                initial_score.last_update = assessment.timestamp;
+                initial_score
+            });
+
         score.update_with_assessment(&assessment);
         self.assessment_history.push_back(assessment);
-        
+
         // Keep history bounded
         while self.assessment_history.len() > 1000 {
             self.assessment_history.pop_front();
@@ -148,12 +141,16 @@ impl StakeCompoundingManager {
         Ok(())
     }
 
-    pub fn update_status(&mut self, operation_id: &str, status: CompoundingStatus) -> Result<(), String> {
+    pub fn update_status(
+        &mut self,
+        operation_id: &str,
+        status: CompoundingStatus,
+    ) -> Result<(), String> {
         if !self.operations.contains_key(operation_id) {
             return Err("Operation not found".to_string());
         }
         self.history.push_back(status);
-        
+
         // Keep history bounded
         while self.history.len() > 1000 {
             self.history.pop_front();
@@ -233,7 +230,11 @@ impl HardwareSecurityManager {
         }
     }
 
-    pub fn add_security_info(&mut self, validator_id: String, info: HardwareSecurityInfo) -> Result<(), String> {
+    pub fn add_security_info(
+        &mut self,
+        validator_id: String,
+        info: HardwareSecurityInfo,
+    ) -> Result<(), String> {
         if info.security_level < self.required_level {
             return Err("Insufficient security level".to_string());
         }
@@ -242,7 +243,8 @@ impl HardwareSecurityManager {
     }
 
     pub fn add_attestation(&mut self, attestation: SecurityAttestation) {
-        self.attestations.insert(attestation.id.clone(), attestation);
+        self.attestations
+            .insert(attestation.id.clone(), attestation);
     }
 
     pub fn verify_security_level(&self, validator_id: &str) -> bool {
@@ -274,12 +276,13 @@ impl ContractVerificationManager {
     }
 
     pub fn add_verified_contract(&mut self, contract: VerifiedContract) {
-        self.verified_contracts.insert(contract.id.clone(), contract);
+        self.verified_contracts
+            .insert(contract.id.clone(), contract);
     }
 
     pub fn update_verification_status(&mut self, status: VerificationStatus) {
         self.verification_history.push_back(status);
-        
+
         // Keep history bounded
         while self.verification_history.len() > 1000 {
             self.verification_history.pop_front();
@@ -292,4 +295,4 @@ impl ContractVerificationManager {
             .map(|c| c.is_verified)
             .unwrap_or(false)
     }
-} 
+}

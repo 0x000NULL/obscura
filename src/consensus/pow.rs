@@ -69,9 +69,9 @@ impl ProofOfWork {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         block.header.difficulty_target = self.difficulty_adjuster.get_current_difficulty();
-        
+
         block
     }
 
@@ -114,9 +114,9 @@ impl ProofOfWork {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         block.header.difficulty_target = self.difficulty_adjuster.get_current_difficulty();
-        
+
         block
     }
 
@@ -165,7 +165,7 @@ impl ProofOfWork {
 
         // Verify the coinbase output value matches the expected total
         let coinbase_value: u64 = coinbase.outputs.iter().map(|output| output.value).sum();
-        
+
         if coinbase_value != expected_total {
             println!(
                 "Invalid coinbase amount: got {}, expected {} (reward {} + fees {})",
@@ -177,61 +177,65 @@ impl ProofOfWork {
         // Also validate the coinbase transaction structure
         crate::blockchain::validate_coinbase_transaction(coinbase, expected_total)
     }
-    
+
     /// Attempt to find a valid nonce for a block (mining)
     pub fn mine_block(&self, block: &mut Block, max_attempts: u64) -> bool {
         let mut hash = [0u8; 32];
         let difficulty = self.difficulty_adjuster.get_current_difficulty();
-        
+
         // Set initial nonce to 0
         block.header.nonce = 0;
-        
+
         for _ in 0..max_attempts {
             // Serialize the block header
             let header_bytes = block.serialize_header();
-            
+
             // Calculate the hash
-            if self.randomx_context.calculate_hash(&header_bytes, &mut hash).is_err() {
+            if self
+                .randomx_context
+                .calculate_hash(&header_bytes, &mut hash)
+                .is_err()
+            {
                 return false;
             }
-            
+
             // Check if the hash satisfies the difficulty requirement
             if verify_difficulty(&hash, difficulty) {
                 // Found a valid hash!
                 block.header.hash = hash;
                 return true;
             }
-            
+
             // Increment the nonce and try again
             block.header.nonce += 1;
         }
-        
+
         // If we reach here, we didn't find a valid nonce
         false
     }
-    
+
     /// Get the current mining difficulty
     pub fn get_current_difficulty(&self) -> u32 {
         self.difficulty_adjuster.get_current_difficulty()
     }
-    
+
     /// Get the target block time in seconds
     pub fn get_target_block_time(&self) -> u64 {
         self.target_block_time
     }
-    
+
     /// Calculate the estimated network hashrate based on difficulty
     pub fn estimate_network_hashrate(&self) -> f64 {
         // Simple estimation based on difficulty and target block time
         // Higher difficulty means more hashes needed to find a block
         let difficulty = self.difficulty_adjuster.get_current_difficulty() as f64;
-        
+
         // The maximum hash value is 2^32 - 1
         let max_hash: f64 = 0xFFFFFFFFu32 as f64;
-        
+
         // The expected number of hashes to find a valid block is (max_hash / difficulty)
         let hashes_per_block = max_hash / difficulty;
-        
+
         // Convert to hashes per second based on target block time
         hashes_per_block / self.target_block_time as f64
     }
@@ -311,55 +315,56 @@ mod tests {
             new_difficulty >= initial_difficulty / 2 && new_difficulty <= initial_difficulty * 2
         );
     }
-    
+
     #[test]
     fn test_create_mining_block() {
         // Create a new ProofOfWork instance
         let pow = ProofOfWork::new();
-        
+
         // Create a miner's public key
         let miner_pubkey = vec![1, 2, 3, 4, 5];
-        
+
         // Create a mining block
         let block = pow.create_mining_block([0u8; 32], 1, &miner_pubkey);
-        
+
         // Debug info
         println!("Block transactions length: {}", block.transactions.len());
         println!("Block header: {:?}", block.header);
-        
+
         // Verify the block structure
         assert_eq!(block.transactions.len(), 1);
-        
+
         // Check coinbase transaction
         let coinbase = &block.transactions[0];
-        assert_eq!(coinbase.inputs.len(), 0);  // Coinbase has no inputs
+        assert_eq!(coinbase.inputs.len(), 0); // Coinbase has no inputs
         assert_eq!(coinbase.outputs.len(), 1);
-        
+
         // The output should be assigned to the miner
         assert_eq!(coinbase.outputs[0].public_key_script, miner_pubkey);
     }
-    
+
     #[test]
     fn test_mining_with_transactions() {
         let pow = ProofOfWork::new();
         let miner_pubkey = b"test_miner_pubkey";
-        
+
         // Create some dummy transactions
         let tx1 = Transaction::default();
         let tx2 = Transaction::default();
         let transactions = vec![tx1, tx2];
-        
+
         // Create a mining block with transactions
-        let block = pow.create_mining_block_with_transactions([0u8; 32], 1, miner_pubkey, transactions);
-        
+        let block =
+            pow.create_mining_block_with_transactions([0u8; 32], 1, miner_pubkey, transactions);
+
         // The block should have 3 transactions (coinbase + 2 dummy transactions)
         assert_eq!(block.transactions.len(), 3);
-        
+
         // Check that the coinbase is the first transaction
         let coinbase = &block.transactions[0];
         assert_eq!(coinbase.outputs[0].public_key_script, miner_pubkey);
     }
-    
+
     #[test]
     fn test_mining_block() {
         // Create a ProofOfWork instance with a test context for faster mining
@@ -371,28 +376,30 @@ mod tests {
             target_block_time: 60,
             randomx_context: randomx_context.clone(),
         };
-        
+
         // Create a block to mine
         let mut block = Block::new([0u8; 32]);
-        
+
         // Set timestamp to current time
         block.header.timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         // Set a very high target (very easy to mine) for testing
         block.header.difficulty_target = 0xFFFFFFFF;
-        
+
         // Try to mine the block with a limited number of attempts
         let result = pow.mine_block(&mut block, 100);
-        
+
         // Should be able to find a valid nonce with the test settings
         assert!(result);
-        
+
         // The block should now have a valid hash
         let mut hash = [0u8; 32];
-        randomx_context.calculate_hash(&block.serialize_header(), &mut hash).unwrap();
+        randomx_context
+            .calculate_hash(&block.serialize_header(), &mut hash)
+            .unwrap();
         assert_eq!(block.header.hash, hash);
     }
 }

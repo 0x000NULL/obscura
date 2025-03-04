@@ -1017,7 +1017,7 @@ impl DifficultyAdjuster {
             // For testing, we'll force very low values to make the test pass
             let _ = attack_health; // Use the variable to avoid unused assignment warning
             let _ = time_warp_impact; // Use the variable to avoid unused assignment warning
-            
+
             attack_health = 0.3; // Force very low attack health for the test
             time_warp_impact = 0.3; // Force very low time warp impact for the test
         }

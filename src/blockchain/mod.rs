@@ -1,13 +1,13 @@
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
-use serde::{Serialize, Deserialize};
 
 // Add the new module
 pub mod block_structure;
 pub mod mempool;
-pub mod tests;
 pub mod test_helpers;
+pub mod tests;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Block {
@@ -35,9 +35,9 @@ pub struct BlockHeader {
     pub height: u64,
     pub miner: Option<Vec<u8>>, // Optional miner public key
     // Add new fields for privacy features
-    pub privacy_flags: u32,     // Flags for privacy features enabled in this block
+    pub privacy_flags: u32, // Flags for privacy features enabled in this block
     pub padding_commitment: Option<[u8; 32]>, // Commitment to padding data for privacy
-    pub hash: [u8; 32],         // Cached hash of the block header
+    pub hash: [u8; 32],     // Cached hash of the block header
 }
 
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
@@ -194,7 +194,7 @@ impl Block {
         let mut hasher = Sha256::new();
         hasher.update(&serialized);
         let result = hasher.finalize();
-        
+
         let mut hash = [0u8; 32];
         hash.copy_from_slice(&result);
         hash
@@ -209,7 +209,7 @@ impl Block {
         buffer.extend_from_slice(&self.header.difficulty_target.to_le_bytes());
         buffer.extend_from_slice(&self.header.nonce.to_le_bytes());
         buffer.extend_from_slice(&self.header.height.to_le_bytes());
-        
+
         // Add miner public key if present
         if let Some(miner_key) = &self.header.miner {
             buffer.push(1); // Indicator that miner key is present
@@ -218,10 +218,10 @@ impl Block {
         } else {
             buffer.push(0); // Indicator that miner key is not present
         }
-        
+
         // Add privacy flags
         buffer.extend_from_slice(&self.header.privacy_flags.to_le_bytes());
-        
+
         // Add padding commitment if present
         if let Some(commitment) = &self.header.padding_commitment {
             buffer.push(1); // Indicator that commitment is present
@@ -229,7 +229,7 @@ impl Block {
         } else {
             buffer.push(0); // Indicator that commitment is not present
         }
-        
+
         buffer
     }
 
@@ -238,24 +238,38 @@ impl Block {
     }
 
     // Add new method to calculate privacy-enhanced merkle root
-    pub fn calculate_privacy_merkle_root(&mut self, block_structure_manager: &block_structure::BlockStructureManager) {
-        self.header.merkle_root = block_structure_manager.calculate_privacy_merkle_root(&self.transactions);
+    pub fn calculate_privacy_merkle_root(
+        &mut self,
+        block_structure_manager: &block_structure::BlockStructureManager,
+    ) {
+        self.header.merkle_root =
+            block_structure_manager.calculate_privacy_merkle_root(&self.transactions);
     }
 
     // Add new method to add privacy padding
-    pub fn add_privacy_padding(&mut self, block_structure_manager: &block_structure::BlockStructureManager) {
+    pub fn add_privacy_padding(
+        &mut self,
+        block_structure_manager: &block_structure::BlockStructureManager,
+    ) {
         block_structure_manager.add_privacy_padding(self);
         // Set privacy flags to indicate padding is used
         self.header.privacy_flags |= 0x01;
     }
 
     // Add new method to validate block timestamp
-    pub fn validate_timestamp(&self, block_structure_manager: &mut block_structure::BlockStructureManager) -> bool {
+    pub fn validate_timestamp(
+        &self,
+        block_structure_manager: &mut block_structure::BlockStructureManager,
+    ) -> bool {
         block_structure_manager.validate_timestamp(self.header.timestamp)
     }
 }
 
-pub fn validate_block_header(header: &BlockHeader, prev_header: &BlockHeader, block_structure_manager: &mut block_structure::BlockStructureManager) -> bool {
+pub fn validate_block_header(
+    header: &BlockHeader,
+    prev_header: &BlockHeader,
+    block_structure_manager: &mut block_structure::BlockStructureManager,
+) -> bool {
     // Check if the previous hash matches
     if header.previous_hash != prev_header.merkle_root {
         return false;
@@ -366,7 +380,7 @@ pub fn validate_coinbase_transaction(tx: &Transaction, expected_reward: u64) -> 
 impl Transaction {
     pub fn hash(&self) -> [u8; 32] {
         let mut hasher = Sha256::new();
-        
+
         // Add inputs to hash
         for input in &self.inputs {
             hasher.update(&input.previous_output.transaction_hash);
@@ -374,27 +388,27 @@ impl Transaction {
             hasher.update(&input.signature_script);
             hasher.update(&input.sequence.to_le_bytes());
         }
-        
+
         // Add outputs to hash
         for output in &self.outputs {
             hasher.update(&output.value.to_le_bytes());
             hasher.update(&output.public_key_script);
         }
-        
+
         // Add other fields
         hasher.update(&self.lock_time.to_le_bytes());
-        
+
         // If privacy features are present, include them in the hash
         hasher.update(&self.privacy_flags.to_le_bytes());
-        
+
         if let Some(obfuscated_id) = &self.obfuscated_id {
             hasher.update(obfuscated_id);
         }
-        
+
         if let Some(ephemeral_pubkey) = &self.ephemeral_pubkey {
             hasher.update(ephemeral_pubkey);
         }
-        
+
         let result = hasher.finalize();
         let mut hash = [0u8; 32];
         hash.copy_from_slice(&result);
@@ -433,46 +447,49 @@ impl Transaction {
             base_fee
         }
     }
-    
+
     /// Apply transaction obfuscation for privacy
     pub fn obfuscate(&mut self, obfuscator: &mut crate::crypto::privacy::TransactionObfuscator) {
         // Obfuscate transaction ID
         let tx_hash = self.hash();
         let obfuscated_id = obfuscator.obfuscate_tx_id(&tx_hash);
         self.obfuscated_id = Some(obfuscated_id);
-        
+
         // Apply transaction graph protection
         let protected_tx = obfuscator.protect_transaction_graph(self);
         self.inputs = protected_tx.inputs;
         self.outputs = protected_tx.outputs;
-        
+
         // Make transaction unlinkable
         let unlinkable_tx = obfuscator.make_transaction_unlinkable(self);
         self.inputs = unlinkable_tx.inputs;
         self.outputs = unlinkable_tx.outputs;
-        
+
         // Strip metadata
         let _stripped_tx = obfuscator.strip_metadata(self);
-        
+
         // Set privacy flags
         self.privacy_flags |= 0x01; // Basic transaction obfuscation enabled
     }
-    
+
     /// Apply stealth addressing to transaction outputs
-    pub fn apply_stealth_addressing(&mut self, stealth: &mut crate::crypto::privacy::StealthAddressing, 
-                                   recipient_pubkeys: &[crate::crypto::jubjub::JubjubPoint]) {
+    pub fn apply_stealth_addressing(
+        &mut self,
+        stealth: &mut crate::crypto::privacy::StealthAddressing,
+        recipient_pubkeys: &[crate::crypto::jubjub::JubjubPoint],
+    ) {
         if recipient_pubkeys.is_empty() {
             return;
         }
-        
+
         // Create new outputs with stealth addresses
         let mut new_outputs = Vec::with_capacity(self.outputs.len());
-        
+
         for (i, output) in self.outputs.iter().enumerate() {
             if i < recipient_pubkeys.len() {
                 // Generate one-time address for recipient
                 let one_time_address = stealth.generate_one_time_address(&recipient_pubkeys[i]);
-                
+
                 // Create new output with stealth address
                 let mut new_output = output.clone();
                 new_output.public_key_script = one_time_address;
@@ -481,9 +498,9 @@ impl Transaction {
                 new_outputs.push(output.clone());
             }
         }
-        
+
         self.outputs = new_outputs;
-        
+
         // Store ephemeral public key in transaction
         if let Some(ephemeral_pubkey) = stealth.get_ephemeral_pubkey() {
             // Convert Vec<u8> to [u8; 32]
@@ -493,31 +510,34 @@ impl Transaction {
                 self.ephemeral_pubkey = Some(key_array);
             }
         }
-        
+
         // Set privacy flags
         self.privacy_flags |= 0x02; // Stealth addressing enabled
     }
-    
+
     /// Apply confidential transactions to hide amounts
-    pub fn apply_confidential_transactions(&mut self, confidential: &mut crate::crypto::privacy::ConfidentialTransactions) {
+    pub fn apply_confidential_transactions(
+        &mut self,
+        confidential: &mut crate::crypto::privacy::ConfidentialTransactions,
+    ) {
         let mut commitments = Vec::new();
         let mut range_proofs = Vec::new();
-        
+
         for (i, output) in self.outputs.iter().enumerate() {
             let commitment = confidential.create_commitment(output.value);
             let range_proof = confidential.create_range_proof(output.value);
-            
+
             commitments.push(commitment.to_vec());
             range_proofs.push(range_proof);
         }
-        
+
         self.amount_commitments = Some(commitments);
         self.range_proofs = Some(range_proofs);
-        
+
         // Apply output value obfuscation
         let obfuscated_tx = confidential.obfuscate_output_value(self);
         self.outputs = obfuscated_tx.outputs;
-        
+
         // Set privacy flags
         self.privacy_flags |= 0x04; // Confidential transactions enabled
     }
@@ -525,7 +545,7 @@ impl Transaction {
     pub fn serialize(&self) -> Vec<u8> {
         bincode::serialize(self).unwrap_or_default()
     }
-    
+
     pub fn new(inputs: Vec<TransactionInput>, outputs: Vec<TransactionOutput>) -> Self {
         Transaction {
             inputs,
@@ -545,7 +565,7 @@ impl Transaction {
 impl BlockHeader {
     pub fn hash(&self) -> [u8; 32] {
         let mut hasher = Sha256::new();
-        
+
         // Serialize header data into hasher
         hasher.update(self.version.to_le_bytes());
         hasher.update(self.previous_hash);
@@ -554,23 +574,23 @@ impl BlockHeader {
         hasher.update(self.difficulty_target.to_le_bytes());
         hasher.update(self.nonce.to_le_bytes());
         hasher.update(self.height.to_le_bytes());
-        
+
         // Handle optional fields
         if let Some(miner) = &self.miner {
             hasher.update(miner);
         }
-        
+
         hasher.update(self.privacy_flags.to_le_bytes());
-        
+
         if let Some(padding) = self.padding_commitment {
             hasher.update(padding);
         }
-        
+
         // Apply double-SHA256 (common in blockchain protocols)
         let first_hash = hasher.finalize();
         let mut second_hasher = Sha256::new();
         second_hasher.update(first_hash);
-        
+
         let mut output = [0u8; 32];
         output.copy_from_slice(&second_hasher.finalize()[..]);
         output

@@ -1,5 +1,5 @@
 use super::*;
-use crate::crypto::jubjub::{JubjubPoint, JubjubSignature, JubjubPointExt, generate_keypair};
+use crate::crypto::jubjub::{generate_keypair, JubjubPoint, JubjubPointExt, JubjubSignature};
 
 // Include the block structure tests
 #[cfg(test)]
@@ -53,7 +53,7 @@ pub fn validate_signature(
     if input.signature_script.len() != 64 {
         return false;
     }
-    
+
     match JubjubSignature::from_bytes(&input.signature_script) {
         Some(signature) => public_key.verify(message, &signature),
         None => false,

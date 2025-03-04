@@ -1,9 +1,9 @@
 use crate::consensus::pos_old::{
-    BftMessageType, ChainInfo, MAX_CONSECUTIVE_EPOCHS, ROTATION_INTERVAL,
-    ProposalAction, BlockInfo, BftMessage
+    BftMessage, BftMessageType, BlockInfo, ChainInfo, ProposalAction, MAX_CONSECUTIVE_EPOCHS,
+    ROTATION_INTERVAL,
 };
-use crate::consensus::pos_old::{ProofOfStake, StakeProof, StakingContract, SlashingOffense};
-use crate::crypto::jubjub::{JubjubKeypair, generate_keypair, JubjubPointExt};
+use crate::consensus::pos_old::{ProofOfStake, SlashingOffense, StakeProof, StakingContract};
+use crate::crypto::jubjub::{generate_keypair, JubjubKeypair, JubjubPointExt};
 use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -49,11 +49,17 @@ fn test_staking_contract_operations() {
 
     assert!(contract.create_stake(alice_key.clone(), 2000, true).is_ok());
     assert!(contract.create_stake(bob_key.clone(), 3000, true).is_ok());
-    assert!(contract.create_stake(charlie_key.clone(), 1500, true).is_ok());
+    assert!(contract
+        .create_stake(charlie_key.clone(), 1500, true)
+        .is_ok());
 
     // Register validators
-    assert!(contract.register_validator(alice_key.clone(), 0.1, None).is_ok());
-    assert!(contract.register_validator(bob_key.clone(), 0.05, None).is_ok());
+    assert!(contract
+        .register_validator(alice_key.clone(), 0.1, None)
+        .is_ok());
+    assert!(contract
+        .register_validator(bob_key.clone(), 0.05, None)
+        .is_ok());
 
     // Test delegation
     assert!(contract
@@ -352,22 +358,22 @@ fn test_advanced_staking_features() {
 #[test]
 fn test_bft_finality_and_fork_choice() {
     let mut staking_contract = StakingContract::new(24 * 60 * 60);
-    
+
     // Create test keypairs
     let keypair1 = generate_keypair();
     let keypair2 = generate_keypair();
     let keypair3 = generate_keypair();
-    
+
     // Initialize BFT consensus
     let mut bft = staking_contract.init_bft_consensus();
-    
+
     // Add validators to committee
     bft.committee = vec![
         keypair1.public.to_bytes().to_vec(),
         keypair2.public.to_bytes().to_vec(),
         keypair3.public.to_bytes().to_vec(),
     ];
-    
+
     // Create test chains
     let mut chain1 = ChainInfo {
         blocks: HashMap::new(),
@@ -375,74 +381,98 @@ fn test_bft_finality_and_fork_choice() {
         total_stake: 1000,
         total_validators: 5,
     };
-    
+
     let mut chain2 = ChainInfo {
         blocks: HashMap::new(),
         head: 0,
         total_stake: 800,
         total_validators: 4,
     };
-    
+
     // Create a test block
     let _block = create_mock_block(1, [0; 32], vec![1, 2, 3]);
-    
+
     // Add blocks to chains manually
     chain1.head = 1;
-    chain1.blocks.insert(chain1.head, BlockInfo {
-        hash: [1; 32],
-        parent_hash: [0; 32],
-        height: 1,
-        timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
-        proposer: vec![1, 2, 3],
-        validators: HashSet::new(),
-        total_stake: 1000,
-    });
-    
+    chain1.blocks.insert(
+        chain1.head,
+        BlockInfo {
+            hash: [1; 32],
+            parent_hash: [0; 32],
+            height: 1,
+            timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            proposer: vec![1, 2, 3],
+            validators: HashSet::new(),
+            total_stake: 1000,
+        },
+    );
+
     chain2.head = 1;
-    chain2.blocks.insert(chain2.head, BlockInfo {
-        hash: [2; 32],
-        parent_hash: [0; 32],
-        height: 1,
-        timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
-        proposer: vec![4, 5, 6],
-        validators: HashSet::new(),
-        total_stake: 800,
-    });
-    
+    chain2.blocks.insert(
+        chain2.head,
+        BlockInfo {
+            hash: [2; 32],
+            parent_hash: [0; 32],
+            height: 1,
+            timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            proposer: vec![4, 5, 6],
+            validators: HashSet::new(),
+            total_stake: 800,
+        },
+    );
+
     // Create BFT messages
     let block_hash = [1; 32];
-    
+
     let prepare1 = BftMessage {
         message_type: BftMessageType::Prepare,
         block_hash,
         round: 0,
         validator: keypair1.public.to_bytes().to_vec(),
-        signature: keypair1.sign(&block_hash).expect("Signing failed").to_bytes(),
-        timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+        signature: keypair1
+            .sign(&block_hash)
+            .expect("Signing failed")
+            .to_bytes(),
+        timestamp: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs(),
     };
-    
+
     let prepare2 = BftMessage {
         message_type: BftMessageType::Prepare,
         block_hash,
         round: 0,
         validator: keypair2.public.to_bytes().to_vec(),
-        signature: keypair2.sign(&block_hash).expect("Signing failed").to_bytes(),
-        timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+        signature: keypair2
+            .sign(&block_hash)
+            .expect("Signing failed")
+            .to_bytes(),
+        timestamp: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs(),
     };
-    
+
     // Process messages
     let result1 = staking_contract.process_bft_message(&mut bft, prepare1);
     assert!(result1.is_ok());
-    
+
     let result2 = staking_contract.process_bft_message(&mut bft, prepare2);
     assert!(result2.is_ok());
-    
+
     // Verify that messages were processed
     assert_eq!(bft.current_round.prepare_messages.len(), 2);
-    
+
     // Test chain comparison (chain1 has more stake)
     let _chains = vec![chain1.clone(), chain2.clone()];
-    
+
     // In a real implementation, we would use a method to choose the canonical chain
     // For this test, we'll just verify that chain1 has more stake
     assert!(chain1.total_stake > chain2.total_stake);
@@ -576,17 +606,26 @@ fn test_validator_exit_queue() {
     // Request exit for validator1
     let wait_time = contract.request_validator_exit(&validators[0].0).unwrap();
     assert!(wait_time > 0, "Wait time should be positive");
-    println!("After validator1 exit request: {} active validators", contract.active_validators.len());
+    println!(
+        "After validator1 exit request: {} active validators",
+        contract.active_validators.len()
+    );
 
     // Request exit for validator2 and validator3
     let _ = contract.request_validator_exit(&validators[1].0).unwrap();
     let _ = contract.request_validator_exit(&validators[2].0).unwrap();
-    println!("After validator2 and validator3 exit requests: {} active validators", contract.active_validators.len());
+    println!(
+        "After validator2 and validator3 exit requests: {} active validators",
+        contract.active_validators.len()
+    );
 
     // Cancel exit request for validator2
     let result = contract.cancel_exit_request(&validators[1].0);
     assert!(result.is_ok());
-    println!("After canceling validator2 exit request: {} active validators", contract.active_validators.len());
+    println!(
+        "After canceling validator2 exit request: {} active validators",
+        contract.active_validators.len()
+    );
 
     // Manually set last processed time to allow processing
     contract.exit_queue.last_processed = 0;
@@ -599,16 +638,25 @@ fn test_validator_exit_queue() {
     // Process exit queue
     let processed = contract.process_exit_queue();
     assert_eq!(processed.len(), 2, "Two validators should be processed");
-    println!("After processing exit queue: {} active validators", contract.active_validators.len());
+    println!(
+        "After processing exit queue: {} active validators",
+        contract.active_validators.len()
+    );
 
     // Try to deregister validator1
     let result = contract.deregister_validator(&validators[0].0);
     assert!(result.is_ok());
-    println!("After deregistering validator1: {} active validators", contract.active_validators.len());
+    println!(
+        "After deregistering validator1: {} active validators",
+        contract.active_validators.len()
+    );
 
     // Request exit for validator4
     let _ = contract.request_validator_exit(&validators[3].0).unwrap();
-    println!("After validator4 exit request: {} active validators", contract.active_validators.len());
+    println!(
+        "After validator4 exit request: {} active validators",
+        contract.active_validators.len()
+    );
 
     // Verify remaining active validators
     assert_eq!(contract.active_validators.len(), 2);
@@ -643,8 +691,8 @@ fn create_mock_block(
     miner: Vec<u8>,
 ) -> crate::blockchain::Block {
     use crate::blockchain::{Block, BlockHeader, Transaction};
-    use std::time::{SystemTime, UNIX_EPOCH};
     use sha2::{Digest, Sha256};
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)

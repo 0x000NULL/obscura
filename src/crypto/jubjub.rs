@@ -1,29 +1,27 @@
 // Stub implementation of Jubjub functionality
 // This placeholder will be replaced with a proper implementation later
 
-#[allow(dead_code)]
-
-use rand::rngs::OsRng;
-use rand_core::RngCore;  // Import RngCore trait for fill_bytes
-use sha2::{Sha256, Digest};
-use ark_ed_on_bls12_381::{EdwardsProjective, EdwardsAffine, Fr};
+use ark_ed_on_bls12_381::{EdwardsAffine, EdwardsProjective, Fr};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::UniformRand;
-use ark_serialize::{CanonicalSerialize, CanonicalDeserialize};
-use std::ops::Mul;  // Add Mul trait import
-// Remove duplicate imports from obscura crate since we're defining these here
-// use obscura::crypto::jubjub::JubjubPoint;
-// use obscura::crypto::jubjub::JubjubPointExt;
-// use obscura::crypto::jubjub::recover_stealth_private_key;
-// use obscura::crypto::jubjub::create_stealth_address;
-// use obscura::crypto::jubjub::create_stealth_address;
-// use obscura::crypto::jubjub::generate_keypair;
-// use obscura::crypto::generate_keypair;
-
+#[allow(dead_code)]
+use rand::rngs::OsRng;
+use rand_core::RngCore; // Import RngCore trait for fill_bytes
+use sha2::{Digest, Sha256};
+use std::ops::Mul; // Add Mul trait import
+                   // Remove duplicate imports from obscura crate since we're defining these here
+                   // use obscura::crypto::jubjub::JubjubPoint;
+                   // use obscura::crypto::jubjub::JubjubPointExt;
+                   // use obscura::crypto::jubjub::recover_stealth_private_key;
+                   // use obscura::crypto::jubjub::create_stealth_address;
+                   // use obscura::crypto::jubjub::create_stealth_address;
+                   // use obscura::crypto::jubjub::generate_keypair;
+                   // use obscura::crypto::generate_keypair;
 
 // Add derive traits for JubjubKeypair
-use std::fmt::{Debug};
-use ark_ff::{PrimeField, Zero, One};
 use ark_ec::Group;
+use ark_ff::{One, PrimeField, Zero};
+use std::fmt::Debug;
 
 /// Placeholder for Jubjub params
 #[derive(Clone, Debug)]
@@ -38,16 +36,26 @@ pub type JubjubPoint = EdwardsProjective;
 // Extension trait for JubjubScalar to provide additional functionality
 pub trait JubjubScalarExt {
     fn to_bytes(&self) -> [u8; 32];
-    fn from_bytes(bytes: &[u8]) -> Option<Self> where Self: Sized;
-    fn hash_to_scalar(data: &[u8]) -> Self where Self: Sized;
-    fn random<R: rand::Rng + ?Sized>(rng: &mut R) -> Self where Self: Sized;
+    fn from_bytes(bytes: &[u8]) -> Option<Self>
+    where
+        Self: Sized;
+    fn hash_to_scalar(data: &[u8]) -> Self
+    where
+        Self: Sized;
+    fn random<R: rand::Rng + ?Sized>(rng: &mut R) -> Self
+    where
+        Self: Sized;
 }
 
 // Extension trait for JubjubPoint to provide additional functionality
 pub trait JubjubPointExt {
     fn to_bytes(&self) -> [u8; 32];
-    fn from_bytes(bytes: &[u8]) -> Option<Self> where Self: Sized;
-    fn generator() -> Self where Self: Sized;
+    fn from_bytes(bytes: &[u8]) -> Option<Self>
+    where
+        Self: Sized;
+    fn generator() -> Self
+    where
+        Self: Sized;
     fn verify(&self, message: &[u8], signature: &JubjubSignature) -> bool;
 }
 
@@ -55,7 +63,8 @@ pub trait JubjubPointExt {
 impl JubjubScalarExt for JubjubScalar {
     fn to_bytes(&self) -> [u8; 32] {
         let mut bytes = [0u8; 32];
-        self.serialize_compressed(&mut bytes[..]).expect("Serialization failed");
+        self.serialize_compressed(&mut bytes[..])
+            .expect("Serialization failed");
         bytes
     }
 
@@ -70,19 +79,19 @@ impl JubjubScalarExt for JubjubScalar {
         let mut hasher = Sha256::new();
         hasher.update(data);
         let hash = hasher.finalize();
-        
+
         // Convert hash to scalar
         let mut scalar_bytes = [0u8; 32];
         scalar_bytes.copy_from_slice(&hash);
-        
+
         // Ensure the scalar is in the correct range for Fr
         let mut scalar = JubjubScalar::from_le_bytes_mod_order(&scalar_bytes);
-        
+
         // Ensure the scalar is not zero
         if scalar.is_zero() {
             scalar = JubjubScalar::one();
         }
-        
+
         scalar
     }
 
@@ -96,7 +105,9 @@ impl JubjubPointExt for JubjubPoint {
     fn to_bytes(&self) -> [u8; 32] {
         let mut bytes = [0u8; 32];
         let affine = EdwardsAffine::from(*self);
-        affine.serialize_compressed(&mut bytes[..]).expect("Serialization failed");
+        affine
+            .serialize_compressed(&mut bytes[..])
+            .expect("Serialization failed");
         bytes
     }
 
@@ -132,37 +143,39 @@ impl JubjubKeypair {
         let public = <JubjubPoint as JubjubPointExt>::generator() * secret;
         Self { secret, public }
     }
-    
+
     /// Convert this keypair to bytes
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(64); // 32 bytes for secret + 32 bytes for public
-        
+
         // Serialize the secret key (32 bytes)
         let mut secret_bytes = Vec::new();
-        self.secret.serialize_uncompressed(&mut secret_bytes).unwrap();
+        self.secret
+            .serialize_uncompressed(&mut secret_bytes)
+            .unwrap();
         bytes.extend_from_slice(&secret_bytes);
-        
+
         // Serialize the public key (32 bytes)
         bytes.extend_from_slice(&self.public.to_bytes());
-        
+
         bytes
     }
-    
+
     /// Create a keypair from bytes
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         if bytes.len() < 64 {
             return None;
         }
-        
+
         // Deserialize the secret key
         let secret = JubjubScalar::deserialize_uncompressed(&bytes[0..32]).ok()?;
-        
+
         // Deserialize the public key
         let public = JubjubPoint::from_bytes(&bytes[32..64])?;
-        
+
         Some(Self { secret, public })
     }
-    
+
     /// Sign a message using this keypair
     pub fn sign(&self, message: &[u8]) -> Result<JubjubSignature, &'static str> {
         // Instead of generating a random scalar, derive it deterministically from the message and secret key
@@ -171,29 +184,29 @@ impl JubjubKeypair {
         hasher.update(&self.secret.to_bytes()); // Include the secret key
         hasher.update(message); // Include the message
         let r_bytes = hasher.finalize();
-        
+
         // Convert hash to scalar
         let r = JubjubScalar::hash_to_scalar(&r_bytes);
-        
+
         // Compute R = r·G
         let r_point = <JubjubPoint as JubjubPointExt>::generator() * r;
-        
+
         // Compute the challenge e = H(R || P || m)
         let mut hasher = Sha256::new();
         hasher.update(&r_point.to_bytes());
         hasher.update(&self.public.to_bytes());
         hasher.update(message);
         let e_bytes = hasher.finalize();
-        
+
         // Convert hash to scalar
         let e = JubjubScalar::hash_to_scalar(&e_bytes);
-        
+
         // Compute s = r + e·sk
         let s = r + (e * self.secret);
-        
+
         Ok(JubjubSignature { e, s })
     }
-    
+
     /// Verify a signature against this keypair's public key
     pub fn verify(&self, message: &[u8], signature: &JubjubSignature) -> bool {
         signature.verify(&self.public, message)
@@ -213,197 +226,197 @@ impl JubjubSignature {
     /// Convert this signature to bytes
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(64); // 32 bytes for e + 32 bytes for s
-        
+
         // Serialize e (32 bytes)
         let mut e_bytes = Vec::new();
         self.e.serialize_uncompressed(&mut e_bytes).unwrap();
         bytes.extend_from_slice(&e_bytes);
-        
+
         // Serialize s (32 bytes)
         let mut s_bytes = Vec::new();
         self.s.serialize_uncompressed(&mut s_bytes).unwrap();
         bytes.extend_from_slice(&s_bytes);
-        
+
         bytes
     }
-    
+
     /// Create a signature from bytes
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         if bytes.len() != 64 {
             return None;
         }
-        
+
         // Deserialize e (first 32 bytes)
         let e = JubjubScalar::deserialize_uncompressed(&bytes[0..32]).ok()?;
-        
+
         // Deserialize s (next 32 bytes)
         let s = JubjubScalar::deserialize_uncompressed(&bytes[32..64]).ok()?;
-        
+
         Some(Self { e, s })
     }
-    
+
     /// Verify this signature against a public key and message
     pub fn verify(&self, public_key: &JubjubPoint, message: &[u8]) -> bool {
         // Compute R' = s·G - e·P
         let s_g = <JubjubPoint as JubjubPointExt>::generator() * self.s;
         let e_p = (*public_key) * self.e;
         let r_prime = s_g - e_p;
-        
+
         // Compute the challenge e' = H(R' || P || m)
         let mut hasher = Sha256::new();
         hasher.update(&r_prime.to_bytes());
         hasher.update(&public_key.to_bytes());
         hasher.update(message);
         let e_prime_bytes = hasher.finalize();
-        
+
         // Convert hash to scalar
         let e_prime = JubjubScalar::hash_to_scalar(&e_prime_bytes);
-        
+
         // Verify that e == e'
         self.e == e_prime
     }
 }
 
 /// Jubjub curve implementation for Obscura's cryptographic needs
-/// 
+///
 /// This module provides functionality for the secondary curve used in the Obscura blockchain,
 /// primarily for signatures, commitments, and other internal operations.
-/// 
+///
 /// # Cryptographic Primitives
-/// 
+///
 /// ## Stealth Addressing
-/// 
+///
 /// The module implements a secure stealth addressing system with the following components:
-/// 
+///
 /// 1. **Diffie-Hellman Key Exchange**
 ///    - Secure ephemeral key generation
 ///    - Proper key blinding
 ///    - Forward secrecy guarantees
 ///    - Protection against key recovery
-/// 
+///
 /// 2. **Shared Secret Derivation**
 ///    - Multiple rounds of key derivation
 ///    - Domain separation
 ///    - Additional entropy mixing
 ///    - Protection against key recovery
-/// 
+///
 /// 3. **Key Blinding**
 ///    - Multiple blinding factors
 ///    - Proper entropy mixing
 ///    - Protection against key recovery
 ///    - Forward secrecy guarantees
-/// 
+///
 /// 4. **Forward Secrecy**
 ///    - Ephemeral key rotation
 ///    - Time-based key derivation
 ///    - Protection against future key compromises
-/// 
+///
 /// # Security Properties
-/// 
+///
 /// The implementation ensures the following security properties:
-/// 
+///
 /// 1. **Privacy**
 ///    - Unlinkable transactions
 ///    - Amount privacy
 ///    - Sender/receiver privacy
-/// 
+///
 /// 2. **Security**
 ///    - Protection against key recovery
 ///    - Forward secrecy
 ///    - Protection against key reuse
 ///    - Proper key blinding
-/// 
+///
 /// 3. **Robustness**
 ///    - Fallback mechanisms for edge cases
 ///    - Proper error handling
 ///    - Constant-time operations
 ///    - Range checking
-/// 
+///
 /// # Usage Examples
-/// 
+///
 /// ```
 /// // Use the jubjub module from the crate
 /// use obscura::crypto::jubjub::*;
-/// 
+///
 /// // Generate a recipient keypair
 /// let recipient_keypair = generate_keypair();
-/// 
+///
 /// // Create a stealth address
 /// let (ephemeral_public, stealth_address) = create_stealth_address(&recipient_keypair.public);
-/// 
+///
 /// // Recover the stealth private key
 /// let stealth_private_key = recover_stealth_private_key(
 ///     &recipient_keypair.secret,
 ///     &ephemeral_public,
 ///     None // No timestamp for simplicity in this example
 /// );
-/// 
+///
 /// // Derive public key from private key for verification
 /// let derived_public = generator() * stealth_private_key;
-/// 
+///
 /// // We can now use the stealth address for receiving funds
 /// // and the stealth private key for spending them
 /// ```
-/// 
+///
 /// # Implementation Details
-/// 
+///
 /// The implementation uses the following cryptographic primitives:
-/// 
+///
 /// 1. **Curve Operations**
 ///    - Jubjub curve (Edwards form)
 ///    - Scalar multiplication
 ///    - Point addition
-/// 
+///
 /// 2. **Hash Functions**
 ///    - SHA-256 for key derivation
 ///    - Domain separation
 ///    - Proper entropy mixing
-/// 
+///
 /// 3. **Random Number Generation**
 ///    - System entropy (OsRng)
 ///    - Time-based entropy
 ///    - Additional entropy sources
-/// 
+///
 /// # Security Considerations
-/// 
+///
 /// When using these cryptographic primitives, consider the following:
-/// 
+///
 /// 1. **Key Management**
 ///    - Store private keys securely
 ///    - Use proper key derivation
 ///    - Implement key rotation
-/// 
+///
 /// 2. **Random Number Generation**
 ///    - Use cryptographically secure RNG
 ///    - Mix multiple entropy sources
 ///    - Validate generated values
-/// 
+///
 /// 3. **Implementation Security**
 ///    - Use constant-time operations
 ///    - Implement proper error handling
 ///    - Validate all inputs
-/// 
+///
 /// # Testing
-/// 
+///
 /// The implementation includes comprehensive tests for:
-/// 
+///
 /// 1. **Basic Functionality**
 ///    - Key generation
 ///    - Stealth address creation
 ///    - Key recovery
-/// 
+///
 /// 2. **Security Properties**
 ///    - Forward secrecy
 ///    - Key blinding
 ///    - Shared secret derivation
-/// 
+///
 /// 3. **Edge Cases**
 ///    - Zero/one values
 ///    - Invalid inputs
 ///    - Fallback mechanisms
-/// 
+///
 /// # References
-/// 
+///
 /// - [Jubjub Curve Specification](https://z.cash/technology/jubjub/)
 /// - [Stealth Addresses](https://www.weusecoins.com/stealth-addresses/)
 /// - [Forward Secrecy](https://en.wikipedia.org/wiki/Forward_secrecy)
@@ -424,63 +437,67 @@ pub fn generate_keypair() -> JubjubKeypair {
 /// Sign a message using a Jubjub-based signing scheme (Schnorr signature)
 pub fn sign(secret_key: &JubjubScalar, message: &[u8]) -> (JubjubScalar, JubjubScalar) {
     let mut rng = OsRng;
-    
+
     // Generate a random scalar for our nonce
     let k = JubjubScalar::random(&mut rng);
-    
+
     // R = k·G (the commitment)
     let r = <JubjubPoint as JubjubPointExt>::generator() * k;
-    
+
     // Convert the commitment to bytes
     let r_bytes = r.to_bytes();
-    
+
     // Create a challenge e = H(R || P || m)
     let mut hasher = Sha256::new();
     hasher.update(&r_bytes);
-    
+
     // Add the public key P = secret_key·G to the hash
     let public_key = <JubjubPoint as JubjubPointExt>::generator() * (*secret_key);
     let public_key_bytes = public_key.to_bytes();
     hasher.update(&public_key_bytes);
-    
+
     // Add the message to the hash
     hasher.update(message);
     let e_bytes = hasher.finalize();
-    
+
     // Convert hash to scalar e
     let e = JubjubScalar::hash_to_scalar(&e_bytes);
-    
+
     // Compute s = k + e·secret_key
     let s = k + e * (*secret_key);
-    
+
     (e, s)
 }
 
 /// Verify a signature using a Jubjub-based signing scheme
-pub fn verify(public_key: &JubjubPoint, message: &[u8], signature: &(JubjubScalar, JubjubScalar)) -> bool {
+pub fn verify(
+    public_key: &JubjubPoint,
+    message: &[u8],
+    signature: &(JubjubScalar, JubjubScalar),
+) -> bool {
     let (e, s) = signature;
-    
+
     // R' = s·G - e·P
     let r_prime = <JubjubPoint as JubjubPointExt>::generator() * (*s) - (*public_key) * (*e);
-    
+
     // Convert R' to bytes
     let r_prime_bytes = r_prime.to_bytes();
-    
+
     // Create a challenge e' = H(R' || P || m)
     let mut hasher = Sha256::new();
     hasher.update(&r_prime_bytes);
-    
+
     // Add the public key to the hash
     let public_key_bytes = public_key.to_bytes();
     hasher.update(&public_key_bytes);
-    
+
     // Add the message to the hash
     hasher.update(message);
     let e_prime_bytes = hasher.finalize();
-    
+
     // Convert hash to scalar e'
     let e_prime = JubjubScalar::hash_to_scalar(&e_prime_bytes);
-    
+
     // Verify that e == e'
     *e == e_prime
 }
@@ -496,66 +513,66 @@ pub fn generator() -> JubjubPoint {
 }
 
 /// Secure Diffie-Hellman key exchange for stealth addressing
-/// 
+///
 /// This function implements a secure Diffie-Hellman key exchange using the Jubjub curve,
 /// with additional security measures for stealth addressing.
-/// 
+///
 /// # Security Features
-/// 
+///
 /// 1. **Ephemeral Key Generation**
 ///    - Uses cryptographically secure random number generation
 ///    - Ensures unique keys for each transaction
 ///    - Prevents key reuse attacks
-/// 
+///
 /// 2. **Key Derivation**
 ///    - Uses HKDF for shared secret derivation
 ///    - Includes domain separation
 ///    - Mixes additional entropy
-/// 
+///
 /// 3. **Forward Secrecy**
 ///    - Each transaction uses unique ephemeral keys
 ///    - Past transactions remain secure even if future keys are compromised
-/// 
+///
 /// 4. **Key Blinding**
 ///    - Protects against key recovery attacks
 ///    - Maintains privacy of recipient's key
-/// 
+///
 /// # Parameters
-/// 
+///
 /// - `_private_key`: The sender's private key
 /// - `recipient_public_key`: The recipient's public key
-/// 
+///
 /// # Returns
-/// 
+///
 /// A tuple containing:
 /// - The derived shared secret
 /// - The ephemeral public key
-/// 
+///
 /// # Security Considerations
-/// 
+///
 /// - The private key must be kept secure
 /// - The ephemeral key must be unique for each transaction
 /// - The shared secret should be used only once
-/// 
+///
 /// # Example
-/// 
+///
 /// ```
 /// // Use the jubjub module from the crate
 /// use obscura::crypto::jubjub::*;
-/// 
+///
 /// // Generate keypairs for demonstration
 /// let sender_keypair = generate_keypair();
 /// let recipient_keypair = generate_keypair();
-/// 
+///
 /// // Perform Diffie-Hellman key exchange to get the shared point
 /// let (shared_secret_point, ephemeral_public) = stealth_diffie_hellman(
 ///     &sender_keypair.secret,
 ///     &recipient_keypair.public
 /// );
-/// 
+///
 /// // Get recipient's public key
 /// let recipient_public_key = recipient_keypair.public;
-/// 
+///
 /// // Now derive the shared secret
 /// let shared_secret = derive_shared_secret(
 ///     &shared_secret_point,
@@ -571,16 +588,16 @@ pub fn stealth_diffie_hellman(
     // Generate a secure random ephemeral key
     let mut rng = OsRng;
     let ephemeral_private = JubjubScalar::random(&mut rng);
-    
+
     // Compute ephemeral public key R = r·G
     let ephemeral_public = <JubjubPoint as JubjubPointExt>::generator() * ephemeral_private;
-    
+
     // Compute the shared secret point S = r·P where P is the recipient's public key
     let shared_secret_point = (*recipient_public_key) * ephemeral_private;
-    
+
     // Convert shared secret point to bytes for key derivation
     let shared_secret_bytes = shared_secret_point.to_bytes();
-    
+
     // Use HKDF to derive the final shared secret
     let mut hasher = Sha256::new();
     hasher.update(b"Obscura Stealth DH");
@@ -588,65 +605,65 @@ pub fn stealth_diffie_hellman(
     hasher.update(&ephemeral_public.to_bytes());
     hasher.update(&recipient_public_key.to_bytes());
     let hash = hasher.finalize();
-    
+
     // Convert hash to scalar for the final shared secret
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&hash);
     let shared_secret = JubjubScalar::from_le_bytes_mod_order(&scalar_bytes);
-    
+
     // Return both the ephemeral public key and the shared secret
     (ephemeral_public, shared_secret_point)
 }
 
 /// Generate a secure ephemeral key for stealth addressing
-/// 
+///
 /// This function implements secure ephemeral key generation with multiple security measures.
-/// 
+///
 /// # Security Features
-/// 
+///
 /// 1. **Multiple Entropy Sources**
 ///    - System entropy (OsRng)
 ///    - Time-based entropy
 ///    - Additional entropy mixing
-/// 
+///
 /// 2. **Key Validation**
 ///    - Ensures proper range
 ///    - Prevents weak key generation
 ///    - Validates public key
-/// 
+///
 /// 3. **Forward Secrecy**
 ///    - Each key is unique
 ///    - Time-based entropy ensures uniqueness
 ///    - Protection against key reuse
-/// 
+///
 /// # Returns
-/// 
+///
 /// A tuple containing:
 /// - The ephemeral private key
 /// - The ephemeral public key
-/// 
+///
 /// # Security Considerations
-/// 
+///
 /// - The ephemeral key must be kept secure
 /// - The key should be used only once
 /// - The public key should be validated
-/// 
+///
 /// # Example
-/// 
+///
 /// ```
 /// // Use the jubjub module from the crate
 /// use obscura::crypto::jubjub::*;
-/// 
+///
 /// let (ephemeral_private, ephemeral_public) = generate_secure_ephemeral_key();
 /// ```
 pub fn generate_secure_ephemeral_key() -> (JubjubScalar, JubjubPoint) {
     // Create multiple entropy sources
     let mut rng = OsRng;
     let mut entropy_bytes = [0u8; 64]; // Double size for extra entropy
-    
+
     // Fill with system entropy
     rng.fill_bytes(&mut entropy_bytes);
-    
+
     // Add additional entropy from current time
     let time_entropy = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -655,93 +672,93 @@ pub fn generate_secure_ephemeral_key() -> (JubjubScalar, JubjubPoint) {
         .to_le_bytes();
     // Only copy the first 8 bytes of the 16-byte time_entropy
     entropy_bytes[..8].copy_from_slice(&time_entropy[..8]);
-    
+
     // Hash the combined entropy
     let mut hasher = Sha256::new();
     hasher.update(b"Obscura Ephemeral Key");
     hasher.update(&entropy_bytes);
     let hash = hasher.finalize();
-    
+
     // Convert to scalar with proper range checking
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&hash);
     let mut scalar = JubjubScalar::from_le_bytes_mod_order(&scalar_bytes);
-    
+
     // Ensure the scalar is not zero or one
     if scalar.is_zero() || scalar == JubjubScalar::one() {
         // If we get a weak scalar, generate a new one
         return generate_secure_ephemeral_key();
     }
-    
+
     // Generate the ephemeral public key
     let ephemeral_public = <JubjubPoint as JubjubPointExt>::generator() * scalar;
-    
+
     // Additional validation: ensure the public key is not the identity
     if ephemeral_public.is_zero() {
         // If we get an invalid public key, generate a new one
         return generate_secure_ephemeral_key();
     }
-    
+
     (scalar, ephemeral_public)
 }
 
 /// Secure shared secret derivation protocol for stealth addressing
-/// 
+///
 /// This function implements a secure shared secret derivation protocol with multiple security measures.
-/// 
+///
 /// # Security Features
-/// 
+///
 /// 1. **Multiple Rounds**
 ///    - Multiple rounds of key derivation
 ///    - Domain separation
 ///    - Additional entropy mixing
-/// 
+///
 /// 2. **Protection**
 ///    - Protection against key recovery
 ///    - Forward secrecy guarantees
 ///    - Range checking
-/// 
+///
 /// 3. **Flexibility**
 ///    - Supports additional data
 ///    - Fallback mechanism
 ///    - Proper error handling
-/// 
+///
 /// # Parameters
-/// 
+///
 /// - `shared_secret_point`: The shared secret point from Diffie-Hellman
 /// - `ephemeral_public`: The ephemeral public key
 /// - `recipient_public_key`: The recipient's public key
 /// - `additional_data`: Optional additional data for key derivation
-/// 
+///
 /// # Returns
-/// 
+///
 /// The derived shared secret
-/// 
+///
 /// # Security Considerations
-/// 
+///
 /// - The shared secret should be used only once
 /// - Additional data should be validated
 /// - The fallback mechanism should be secure
-/// 
+///
 /// # Example
-/// 
+///
 /// ```
 /// // Use the jubjub module from the crate
 /// use obscura::crypto::jubjub::*;
-/// 
+///
 /// // Generate keypairs for demonstration
 /// let sender_keypair = generate_keypair();
 /// let recipient_keypair = generate_keypair();
-/// 
+///
 /// // Perform Diffie-Hellman key exchange to get the shared point
 /// let (shared_secret_point, ephemeral_public) = stealth_diffie_hellman(
 ///     &sender_keypair.secret,
 ///     &recipient_keypair.public
 /// );
-/// 
+///
 /// // Get recipient's public key
 /// let recipient_public_key = recipient_keypair.public;
-/// 
+///
 /// // Now derive the shared secret
 /// let shared_secret = derive_shared_secret(
 ///     &shared_secret_point,
@@ -758,26 +775,26 @@ pub fn derive_shared_secret(
 ) -> JubjubScalar {
     // Convert shared secret point to bytes
     let shared_secret_bytes = shared_secret_point.to_bytes();
-    
+
     // First round of key derivation
     let mut hasher = Sha256::new();
     hasher.update(b"Obscura Shared Secret v1");
     hasher.update(&shared_secret_bytes);
     hasher.update(&ephemeral_public.to_bytes());
     hasher.update(&recipient_public_key.to_bytes());
-    
+
     // Add additional data if provided
     if let Some(data) = additional_data {
         hasher.update(data);
     }
-    
+
     let first_hash = hasher.finalize();
-    
+
     // Second round of key derivation with additional entropy
     let mut hasher = Sha256::new();
     hasher.update(b"Obscura Shared Secret v2");
     hasher.update(&first_hash);
-    
+
     // Add time-based entropy
     let time_entropy = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -785,26 +802,26 @@ pub fn derive_shared_secret(
         .as_nanos()
         .to_le_bytes();
     hasher.update(&time_entropy);
-    
+
     // Add additional entropy from the shared secret point
     hasher.update(&shared_secret_bytes);
-    
+
     let second_hash = hasher.finalize();
-    
+
     // Final round of key derivation with domain separation
     let mut hasher = Sha256::new();
     hasher.update(b"Obscura Final Shared Secret");
     hasher.update(&second_hash);
     hasher.update(&ephemeral_public.to_bytes());
     hasher.update(&recipient_public_key.to_bytes());
-    
+
     let final_hash = hasher.finalize();
-    
+
     // Convert to scalar with proper range checking
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&final_hash);
     let scalar = JubjubScalar::from_le_bytes_mod_order(&scalar_bytes);
-    
+
     // Ensure the scalar is not zero or one
     if scalar.is_zero() || scalar == JubjubScalar::one() {
         // If we get a weak scalar, derive a new one with a different domain separator
@@ -815,7 +832,7 @@ pub fn derive_shared_secret(
             additional_data,
         );
     }
-    
+
     scalar
 }
 
@@ -832,11 +849,11 @@ fn derive_shared_secret_alternative(
     hasher.update(&shared_secret_point.to_bytes());
     hasher.update(&ephemeral_public.to_bytes());
     hasher.update(&recipient_public_key.to_bytes());
-    
+
     if let Some(data) = additional_data {
         hasher.update(data);
     }
-    
+
     // Add additional entropy
     let time_entropy = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -844,65 +861,65 @@ fn derive_shared_secret_alternative(
         .as_nanos()
         .to_le_bytes();
     hasher.update(&time_entropy);
-    
+
     let hash = hasher.finalize();
-    
+
     // Convert to scalar with proper range checking
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&hash);
     let scalar = JubjubScalar::from_le_bytes_mod_order(&scalar_bytes);
-    
+
     // If this also fails, we'll need to handle it at a higher level
     scalar
 }
 
 /// Secure key blinding for stealth addressing
-/// 
+///
 /// This function implements secure key blinding with multiple security measures.
-/// 
+///
 /// # Security Features
-/// 
+///
 /// 1. **Multiple Blinding Factors**
 ///    - Multiple rounds of blinding
 ///    - Proper entropy mixing
 ///    - Protection against key recovery
-/// 
+///
 /// 2. **Forward Secrecy**
 ///    - Each blinding is unique
 ///    - Time-based entropy
 ///    - Protection against key reuse
-/// 
+///
 /// 3. **Flexibility**
 ///    - Supports additional data
 ///    - Fallback mechanism
 ///    - Proper error handling
-/// 
+///
 /// # Parameters
-/// 
+///
 /// - `key`: The key to blind
 /// - `blinding_factor`: The blinding factor
 /// - `additional_data`: Optional additional data for blinding
-/// 
+///
 /// # Returns
-/// 
+///
 /// The blinded key
-/// 
+///
 /// # Security Considerations
-/// 
+///
 /// - The blinding factor should be secure
 /// - Additional data should be validated
 /// - The fallback mechanism should be secure
-/// 
+///
 /// # Example
-/// 
+///
 /// ```
 /// // Use the jubjub module from the crate
 /// use obscura::crypto::jubjub::*;
-/// 
+///
 /// // Create a key and blinding factor
 /// let key = JubjubScalar::random(&mut rand::thread_rng());
 /// let blinding_factor = JubjubScalar::random(&mut rand::thread_rng());
-/// 
+///
 /// // Blind the key
 /// let blinded_key = blind_key(
 ///     &key,
@@ -920,18 +937,18 @@ pub fn blind_key(
     hasher.update(b"Obscura Key Blinding v1");
     hasher.update(&key.to_bytes());
     hasher.update(&blinding_factor.to_bytes());
-    
+
     if let Some(data) = additional_data {
         hasher.update(data);
     }
-    
+
     let first_hash = hasher.finalize();
-    
+
     // Second round with additional entropy
     let mut hasher = Sha256::new();
     hasher.update(b"Obscura Key Blinding v2");
     hasher.update(&first_hash);
-    
+
     // Add time-based entropy
     let time_entropy = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -939,20 +956,20 @@ pub fn blind_key(
         .as_nanos()
         .to_le_bytes();
     hasher.update(&time_entropy);
-    
+
     let second_hash = hasher.finalize();
-    
+
     // Convert to scalar and ensure proper range
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&second_hash);
     let blinded_key = JubjubScalar::from_le_bytes_mod_order(&scalar_bytes);
-    
+
     // Ensure the blinded key is not zero or one
     if blinded_key.is_zero() || blinded_key == JubjubScalar::one() {
         // If we get a weak blinded key, try again with a different blinding factor
         return blind_key_alternative(key, blinding_factor, additional_data);
     }
-    
+
     blinded_key
 }
 
@@ -967,11 +984,11 @@ fn blind_key_alternative(
     hasher.update(b"Obscura Alternative Key Blinding");
     hasher.update(&key.to_bytes());
     hasher.update(&blinding_factor.to_bytes());
-    
+
     if let Some(data) = additional_data {
         hasher.update(data);
     }
-    
+
     // Add additional entropy
     let time_entropy = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -979,14 +996,14 @@ fn blind_key_alternative(
         .as_nanos()
         .to_le_bytes();
     hasher.update(&time_entropy);
-    
+
     let hash = hasher.finalize();
-    
+
     // Convert to scalar with proper range checking
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&hash);
     let blinded_key = JubjubScalar::from_le_bytes_mod_order(&scalar_bytes);
-    
+
     // If this also fails, we'll need to handle it at a higher level
     blinded_key
 }
@@ -996,10 +1013,10 @@ pub fn generate_blinding_factor() -> JubjubScalar {
     // Create multiple entropy sources
     let mut rng = OsRng;
     let mut entropy_bytes = [0u8; 64]; // Double size for extra entropy
-    
+
     // Fill with system entropy
     rng.fill_bytes(&mut entropy_bytes);
-    
+
     // Add additional entropy from current time
     let time_entropy = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1008,74 +1025,74 @@ pub fn generate_blinding_factor() -> JubjubScalar {
         .to_le_bytes();
     // Only copy the first 8 bytes of the 16-byte time_entropy
     entropy_bytes[..8].copy_from_slice(&time_entropy[..8]);
-    
+
     // Hash the combined entropy
     let mut hasher = Sha256::new();
     hasher.update(b"Obscura Blinding Factor");
     hasher.update(&entropy_bytes);
     let hash = hasher.finalize();
-    
+
     // Convert to scalar with proper range checking
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&hash);
     let blinding_factor = JubjubScalar::from_le_bytes_mod_order(&scalar_bytes);
-    
+
     // Ensure the blinding factor is not zero or one
     if blinding_factor.is_zero() || blinding_factor == JubjubScalar::one() {
         // If we get a weak blinding factor, generate a new one
         return generate_blinding_factor();
     }
-    
+
     blinding_factor
 }
 
 /// Forward secrecy mechanism for stealth addressing
-/// 
+///
 /// This function implements forward secrecy with multiple security measures.
-/// 
+///
 /// # Security Features
-/// 
+///
 /// 1. **Ephemeral Key Rotation**
 ///    - Each transaction uses unique keys
 ///    - Time-based key derivation
 ///    - Protection against key reuse
-/// 
+///
 /// 2. **Key Protection**
 ///    - Protection against key recovery
 ///    - Forward secrecy guarantees
 ///    - Range checking
-/// 
+///
 /// 3. **Flexibility**
 ///    - Supports additional data
 ///    - Fallback mechanism
 ///    - Proper error handling
-/// 
+///
 /// # Parameters
-/// 
+///
 /// - `key`: The key to protect
 /// - `timestamp`: The current timestamp
 /// - `additional_data`: Optional additional data
-/// 
+///
 /// # Returns
-/// 
+///
 /// The forward-secure key
-/// 
+///
 /// # Security Considerations
-/// 
+///
 /// - The timestamp should be accurate
 /// - Additional data should be validated
 /// - The fallback mechanism should be secure
-/// 
+///
 /// # Example
-/// 
+///
 /// ```
 /// // Use the jubjub module from the crate
 /// use obscura::crypto::jubjub::*;
-/// 
+///
 /// // Create a key and timestamp
 /// let key = JubjubScalar::random(&mut rand::thread_rng());
 /// let timestamp = 1698765432u64; // Unix timestamp
-/// 
+///
 /// // Apply forward secrecy
 /// let forward_secret = ensure_forward_secrecy(
 ///     &key,
@@ -1090,24 +1107,24 @@ pub fn ensure_forward_secrecy(
 ) -> JubjubScalar {
     // Convert timestamp to bytes
     let timestamp_bytes = timestamp.to_le_bytes();
-    
+
     // First round of forward secrecy derivation
     let mut hasher = Sha256::new();
     hasher.update(b"Obscura Forward Secrecy v1");
     hasher.update(&key.to_bytes());
     hasher.update(&timestamp_bytes);
-    
+
     if let Some(data) = additional_data {
         hasher.update(data);
     }
-    
+
     let first_hash = hasher.finalize();
-    
+
     // Second round with additional entropy
     let mut hasher = Sha256::new();
     hasher.update(b"Obscura Forward Secrecy v2");
     hasher.update(&first_hash);
-    
+
     // Add time-based entropy
     let time_entropy = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1115,20 +1132,20 @@ pub fn ensure_forward_secrecy(
         .as_nanos()
         .to_le_bytes();
     hasher.update(&time_entropy);
-    
+
     let second_hash = hasher.finalize();
-    
+
     // Convert to scalar and ensure proper range
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&second_hash);
     let forward_secret = JubjubScalar::from_le_bytes_mod_order(&scalar_bytes);
-    
+
     // Ensure the forward secret is not zero or one
     if forward_secret.is_zero() || forward_secret == JubjubScalar::one() {
         // If we get a weak forward secret, try again with a different timestamp
         return ensure_forward_secrecy_alternative(key, timestamp, additional_data);
     }
-    
+
     forward_secret
 }
 
@@ -1143,11 +1160,11 @@ fn ensure_forward_secrecy_alternative(
     hasher.update(b"Obscura Alternative Forward Secrecy");
     hasher.update(&key.to_bytes());
     hasher.update(&timestamp.to_le_bytes());
-    
+
     if let Some(data) = additional_data {
         hasher.update(data);
     }
-    
+
     // Add additional entropy
     let time_entropy = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1155,14 +1172,14 @@ fn ensure_forward_secrecy_alternative(
         .as_nanos()
         .to_le_bytes();
     hasher.update(&time_entropy);
-    
+
     let hash = hasher.finalize();
-    
+
     // Convert to scalar with proper range checking
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&hash);
     let forward_secret = JubjubScalar::from_le_bytes_mod_order(&scalar_bytes);
-    
+
     // If this also fails, we'll need to handle it at a higher level
     forward_secret
 }
@@ -1171,16 +1188,16 @@ fn ensure_forward_secrecy_alternative(
 pub fn create_stealth_address(recipient_public_key: &JubjubPoint) -> (JubjubPoint, JubjubPoint) {
     // Generate a secure ephemeral key
     let (ephemeral_private, ephemeral_public) = generate_secure_ephemeral_key();
-    
+
     // Get current timestamp for forward secrecy
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    
+
     // Compute the shared secret point S = r·P where P is the recipient's public key
     let shared_secret_point = (*recipient_public_key) * ephemeral_private;
-    
+
     // Derive the shared secret using our secure protocol
     let shared_secret = derive_shared_secret(
         &shared_secret_point,
@@ -1188,28 +1205,31 @@ pub fn create_stealth_address(recipient_public_key: &JubjubPoint) -> (JubjubPoin
         recipient_public_key,
         None,
     );
-    
+
     // Ensure forward secrecy
     let forward_secret = ensure_forward_secrecy(&shared_secret, timestamp, None);
-    
+
     // Derive the blinding factor deterministically from the shared secret
     let mut hasher = Sha256::new();
     hasher.update(b"Obscura Deterministic Blinding Factor");
     hasher.update(&shared_secret.to_bytes());
     hasher.update(&timestamp.to_le_bytes());
     let hash = hasher.finalize();
-    
+
     // Convert to scalar with proper range checking
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&hash);
     let blinding_factor = JubjubScalar::from_le_bytes_mod_order(&scalar_bytes);
-    
+
     // Blind the forward secret
     let blinded_secret = blind_key(&forward_secret, &blinding_factor, None);
-    
+
     // Compute the stealth address as S = blinded_secret·G + P
-    let stealth_address = scalar_mul(&<JubjubPoint as JubjubPointExt>::generator(), &blinded_secret) + (*recipient_public_key);
-    
+    let stealth_address = scalar_mul(
+        &<JubjubPoint as JubjubPointExt>::generator(),
+        &blinded_secret,
+    ) + (*recipient_public_key);
+
     // Return the ephemeral public key and the stealth address
     (ephemeral_public, stealth_address)
 }
@@ -1222,10 +1242,10 @@ pub fn recover_stealth_private_key(
 ) -> JubjubScalar {
     // Use timestamp if provided, otherwise default to 0
     let timestamp_value = timestamp.unwrap_or(0);
-    
+
     // Compute the shared secret point S = x·R where x is the recipient's private key
     let shared_secret_point = (*ephemeral_public) * (*private_key);
-    
+
     // Derive the shared secret using our secure protocol
     let shared_secret = derive_shared_secret(
         &shared_secret_point,
@@ -1233,10 +1253,10 @@ pub fn recover_stealth_private_key(
         &(<JubjubPoint as JubjubPointExt>::generator() * (*private_key)),
         None,
     );
-    
+
     // Ensure forward secrecy
     let forward_secret = ensure_forward_secrecy(&shared_secret, timestamp_value, None);
-    
+
     // Derive the blinding factor deterministically from the shared secret
     // instead of generating a new random one
     let mut hasher = Sha256::new();
@@ -1244,15 +1264,15 @@ pub fn recover_stealth_private_key(
     hasher.update(&shared_secret.to_bytes());
     hasher.update(&timestamp_value.to_le_bytes());
     let hash = hasher.finalize();
-    
+
     // Convert to scalar with proper range checking
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&hash);
     let blinding_factor = JubjubScalar::from_le_bytes_mod_order(&scalar_bytes);
-    
+
     // Blind the forward secret
     let blinded_secret = blind_key(&forward_secret, &blinding_factor, None);
-    
+
     // The stealth private key is the blinded secret
     blinded_secret
 }
@@ -1272,14 +1292,14 @@ fn scalar_mul(point: &JubjubPoint, scalar: &JubjubScalar) -> JubjubPoint {
 /// Create a stealth address with a provided private key (for testing)
 pub fn create_stealth_address_with_private(
     sender_private: &JubjubScalar,
-    recipient_public_key: &JubjubPoint
+    recipient_public_key: &JubjubPoint,
 ) -> (JubjubPoint, JubjubPoint) {
     // Generate ephemeral public key
     let ephemeral_public = <JubjubPoint as JubjubPointExt>::generator().mul(sender_private);
-    
+
     // Compute the shared secret point
     let shared_secret_point = recipient_public_key.mul(sender_private);
-    
+
     // Derive the shared secret
     let shared_secret = derive_shared_secret(
         &shared_secret_point,
@@ -1287,10 +1307,13 @@ pub fn create_stealth_address_with_private(
         recipient_public_key,
         None,
     );
-    
+
     // Compute the stealth address
-    let stealth_address = scalar_mul(&<JubjubPoint as JubjubPointExt>::generator(), &shared_secret) + (*recipient_public_key);
-    
+    let stealth_address = scalar_mul(
+        &<JubjubPoint as JubjubPointExt>::generator(),
+        &shared_secret,
+    ) + (*recipient_public_key);
+
     (ephemeral_public, stealth_address)
 }
 
@@ -1298,138 +1321,145 @@ pub fn create_stealth_address_with_private(
 mod tests {
     use super::*;
     use std::ops::Mul;
-    
+
     #[test]
     fn test_keypair_generation() {
         let keypair = generate_keypair();
         assert_ne!(keypair.public, JubjubPoint::default());
-        
+
         // Verify that the public key is correctly derived from the secret key
         let expected_public = <JubjubPoint as JubjubPointExt>::generator() * keypair.secret;
         assert_eq!(keypair.public, expected_public);
     }
-    
+
     #[test]
     fn test_sign_and_verify() {
         let keypair = generate_keypair();
         let message = b"test message";
-        
+
         let signature = sign(&keypair.secret, message);
         assert!(verify(&keypair.public, message, &signature));
-        
+
         // Test that verification fails with wrong message
         let wrong_message = b"wrong message";
         assert!(!verify(&keypair.public, wrong_message, &signature));
     }
-    
+
     #[test]
     fn test_stealth_diffie_hellman() {
         // Generate recipient keypair
         let recipient_keypair = generate_keypair();
-        
+
         // Create a stealth address
         // Generate a random sender key for this test
         let sender_private = JubjubScalar::random(&mut OsRng);
-        
-        let (shared_secret, ephemeral_public) = stealth_diffie_hellman(
-            &sender_private,
-            &recipient_keypair.public
-        );
-        
+
+        let (shared_secret, ephemeral_public) =
+            stealth_diffie_hellman(&sender_private, &recipient_keypair.public);
+
         // Recover the stealth private key
         let stealth_private_key = recover_stealth_private_key(
             &recipient_keypair.secret,
             &ephemeral_public,
-            Some(0) // Using Some(0) as a default value for the test
+            Some(0), // Using Some(0) as a default value for the test
         );
-        
+
         // Verify that the stealth private key can be used to derive a public key
-        let derived_public = scalar_mul(&<JubjubPoint as JubjubPointExt>::generator(), &stealth_private_key);
-        
+        let derived_public = scalar_mul(
+            &<JubjubPoint as JubjubPointExt>::generator(),
+            &stealth_private_key,
+        );
+
         // Instead of exact equality, verify that the derived public key can be used for verification
         let message = b"test message";
         let signature = sign(&stealth_private_key, message);
         assert!(verify(&derived_public, message, &signature));
     }
-    
+
     #[test]
     fn test_stealth_address_creation_and_recovery() {
         // Generate a recipient keypair
         let recipient_keypair = generate_keypair();
-        
+
         // Create a stealth address using the recipient's public key
         let (ephemeral_public, stealth_address) = create_stealth_address(&recipient_keypair.public);
-        
+
         // Recover the stealth private key using the recipient's secret and the ephemeral public key
         let stealth_private_key = recover_stealth_private_key(
             &recipient_keypair.secret,
             &ephemeral_public,
-            Some(0) // Using Some(0) as a default value for the test
+            Some(0), // Using Some(0) as a default value for the test
         );
-        
+
         // Derive the public key from the stealth private key
-        let derived_public = scalar_mul(&<JubjubPoint as JubjubPointExt>::generator(), &stealth_private_key);
-        
+        let derived_public = scalar_mul(
+            &<JubjubPoint as JubjubPointExt>::generator(),
+            &stealth_private_key,
+        );
+
         // Test message
         let message = b"test message";
-        
+
         // Sign the message with the stealth private key
         let signature = sign(&stealth_private_key, message);
-        
+
         // Verify the signature with the derived public key
         assert!(verify(&derived_public, message, &signature));
-        
+
         // Instead of checking for exact equality or signature verification with the stealth address,
         // we'll just ensure that the stealth private key can be used to sign messages that can be
         // verified with the derived public key.
-        
+
         // Ensure the stealth address is not zero
         assert!(!stealth_address.is_zero());
     }
-    
+
     #[test]
     fn test_keypair_methods() {
         let keypair = generate_keypair();
         let message = b"test signing with keypair methods";
-        
+
         // Test signature creation and verification using the keypair methods
-        let signature = keypair.sign(message).expect("Signature creation should succeed");
+        let signature = keypair
+            .sign(message)
+            .expect("Signature creation should succeed");
         assert!(keypair.verify(message, &signature));
-        
+
         // Test serialization and deserialization
         let keypair_bytes = keypair.to_bytes();
-        let restored_keypair = JubjubKeypair::from_bytes(&keypair_bytes).expect("Keypair restoration should succeed");
-        
+        let restored_keypair =
+            JubjubKeypair::from_bytes(&keypair_bytes).expect("Keypair restoration should succeed");
+
         assert_eq!(restored_keypair.public, keypair.public);
         assert_eq!(restored_keypair.secret, keypair.secret);
     }
-    
+
     #[test]
     fn test_diffie_hellman() {
         let alice_keypair = generate_keypair();
         let bob_keypair = generate_keypair();
-        
+
         let alice_shared = diffie_hellman(&alice_keypair.secret, &bob_keypair.public);
         let bob_shared = diffie_hellman(&bob_keypair.secret, &alice_keypair.public);
-        
+
         assert_eq!(alice_shared, bob_shared);
     }
-    
+
     #[test]
     fn test_stealth_address_with_forward_secrecy() {
         // Generate a recipient keypair
         let recipient_keypair = generate_keypair();
-        
+
         // Get current timestamp
         let timestamp = 12345u64;
-        
+
         // Create a stealth address
         // First, generate an ephemeral keypair
         let (ephemeral_private, ephemeral_public) = generate_secure_ephemeral_key();
-        
+
         // Compute the shared secret point
         let shared_secret_point = recipient_keypair.public * ephemeral_private;
-        
+
         // Derive the shared secret
         let shared_secret = derive_shared_secret(
             &shared_secret_point,
@@ -1437,77 +1467,86 @@ mod tests {
             &recipient_keypair.public,
             None,
         );
-        
+
         // Ensure forward secrecy
         let forward_secret = ensure_forward_secrecy(&shared_secret, timestamp, None);
-        
+
         // Generate a blinding factor
         let blinding_factor = generate_blinding_factor();
-        
+
         // Blind the forward secret
         let blinded_secret = blind_key(&forward_secret, &blinding_factor, None);
-        
+
         // Compute the stealth address
-        let stealth_address = scalar_mul(&<JubjubPoint as JubjubPointExt>::generator(), &blinded_secret) + recipient_keypair.public;
-        
+        let stealth_address = scalar_mul(
+            &<JubjubPoint as JubjubPointExt>::generator(),
+            &blinded_secret,
+        ) + recipient_keypair.public;
+
         // Recover the stealth private key using the recipient's secret and the ephemeral public key
         let stealth_private_key = recover_stealth_private_key(
             &recipient_keypair.secret,
             &ephemeral_public,
-            Some(timestamp)
+            Some(timestamp),
         );
-        
+
         // Derive the public key from the stealth private key
-        let derived_public = scalar_mul(&<JubjubPoint as JubjubPointExt>::generator(), &stealth_private_key);
-        
+        let derived_public = scalar_mul(
+            &<JubjubPoint as JubjubPointExt>::generator(),
+            &stealth_private_key,
+        );
+
         // Test message
         let message = b"test message";
-        
+
         // Sign the message with the stealth private key
         let signature = sign(&stealth_private_key, message);
-        
+
         // Verify the signature with the derived public key
         assert!(verify(&derived_public, message, &signature));
-        
+
         // Instead of checking for exact equality or signature verification with the stealth address,
         // we'll just ensure that the stealth private key can be used to sign messages that can be
         // verified with the derived public key.
-        
+
         // Ensure the stealth address is not zero
         assert!(!stealth_address.is_zero());
-        
+
         // Ensure the blinded secret is not zero or one
         assert!(!blinded_secret.is_zero());
         assert!(blinded_secret != JubjubScalar::one());
-        
+
         // Test multiple stealth addresses for the same recipient
         // Generate a new ephemeral keypair
         let (ephemeral_private2, ephemeral_public2) = generate_secure_ephemeral_key();
-        
+
         // Compute a new shared secret point
         let shared_secret_point2 = recipient_keypair.public * ephemeral_private2;
-        
+
         // Derive a new shared secret
         let shared_secret2 = derive_shared_secret(
             &shared_secret_point2,
             &ephemeral_public2,
             &recipient_keypair.public,
-            None
+            None,
         );
-        
+
         // Ensure forward secrecy with a different timestamp
         let forward_secret2 = ensure_forward_secrecy(&shared_secret2, timestamp + 1, None);
-        
+
         // Blind the forward secret
         let blinded_secret2 = blind_key(&forward_secret2, &blinding_factor, None);
-        
+
         // Compute a new stealth address
-        let stealth_address2 = scalar_mul(&<JubjubPoint as JubjubPointExt>::generator(), &blinded_secret2) + recipient_keypair.public;
-        
+        let stealth_address2 = scalar_mul(
+            &<JubjubPoint as JubjubPointExt>::generator(),
+            &blinded_secret2,
+        ) + recipient_keypair.public;
+
         // Ensure different stealth addresses are produced
         assert!(stealth_address.to_bytes() != stealth_address2.to_bytes());
     }
-    
+
     #[test]
     fn test_forward_secrecy_with_additional_data() {
         // Generate test key
@@ -1516,54 +1555,54 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         // Test forward secrecy with different additional data
         let forward_secret1 = ensure_forward_secrecy(&key, timestamp, None);
         let forward_secret2 = ensure_forward_secrecy(&key, timestamp, Some(b"test data"));
-        
+
         // Verify different additional data produces different secrets
         assert_ne!(forward_secret1, forward_secret2);
-        
+
         // Verify secrets are not zero or one
         assert!(!forward_secret1.is_zero());
         assert!(!forward_secret2.is_zero());
         assert_ne!(forward_secret1, JubjubScalar::one());
         assert_ne!(forward_secret2, JubjubScalar::one());
     }
-    
+
     #[test]
     fn test_secure_ephemeral_key_generation() {
         // Generate multiple ephemeral keys
         let (private1, public1) = generate_secure_ephemeral_key();
         let (private2, public2) = generate_secure_ephemeral_key();
-        
+
         // Verify keys are not zero
         assert!(!private1.is_zero());
         assert!(!private2.is_zero());
         assert!(!public1.is_zero());
         assert!(!public2.is_zero());
-        
+
         // Verify keys are different
         assert_ne!(private1, private2);
         assert_ne!(public1, public2);
-        
+
         // Verify public keys are correctly derived from private keys
         let derived_public1 = scalar_mul(&<JubjubPoint as JubjubPointExt>::generator(), &private1);
         let derived_public2 = scalar_mul(&<JubjubPoint as JubjubPointExt>::generator(), &private2);
-        
+
         // Instead of exact equality, verify that the keys can be used for signing and verification
         let message = b"test message";
-        
+
         let keypair1 = JubjubKeypair::new(private1);
         let signature1 = keypair1.sign(message).unwrap();
         assert!(derived_public1.verify(message, &signature1));
         assert!(public1.verify(message, &signature1));
-        
+
         let keypair2 = JubjubKeypair::new(private2);
         let signature2 = keypair2.sign(message).unwrap();
         assert!(derived_public2.verify(message, &signature2));
         assert!(public2.verify(message, &signature2));
-        
+
         // Verify keys are not one
         assert_ne!(private1, JubjubScalar::one());
         assert_ne!(private2, JubjubScalar::one());
@@ -1574,27 +1613,28 @@ mod tests {
         // Generate sender and recipient keypairs
         let sender_keypair = generate_keypair();
         let recipient_keypair = generate_keypair();
-        
+
         // Sender creates a stealth address for the recipient
         let sender_private = sender_keypair.secret;
-        let (ephemeral_public, _stealth_address) = create_stealth_address_with_private(
-            &sender_private,
-            &recipient_keypair.public
-        );
-        
+        let (ephemeral_public, _stealth_address) =
+            create_stealth_address_with_private(&sender_private, &recipient_keypair.public);
+
         // Recover the stealth private key
         let stealth_private_key = recover_stealth_private_key(
             &recipient_keypair.secret,
             &ephemeral_public,
-            Some(0) // Using Some(0) as a default value for the test
+            Some(0), // Using Some(0) as a default value for the test
         );
-        
+
         // Verify that the stealth private key can be used to derive a public key
-        let derived_public = scalar_mul(&<JubjubPoint as JubjubPointExt>::generator(), &stealth_private_key);
-        
+        let derived_public = scalar_mul(
+            &<JubjubPoint as JubjubPointExt>::generator(),
+            &stealth_private_key,
+        );
+
         // Instead of exact equality, verify that the derived public key can be used for verification
         let message = b"test message";
         let signature = sign(&stealth_private_key, message);
         assert!(verify(&derived_public, message, &signature));
     }
-} 
+}

@@ -1,7 +1,7 @@
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
-use std::time::{Duration, SystemTime, Instant};
-use serde::{Serialize, Deserialize};
+use std::time::{Duration, Instant, SystemTime};
 
 const K: usize = 20; // Maximum number of nodes per k-bucket
 const ALPHA: usize = 3; // Number of parallel lookups
@@ -84,7 +84,7 @@ impl KBucket {
         if self.nodes.is_empty() {
             return true;
         }
-        
+
         SystemTime::now()
             .duration_since(self.last_updated)
             .map(|d| d >= REFRESH_INTERVAL)
@@ -164,18 +164,23 @@ impl KademliaTable {
     pub fn start_lookup(&mut self, target_id: &NodeId) -> Vec<Node> {
         // First find the closest nodes without holding a mutable borrow
         let closest_nodes = self.find_closest_nodes(target_id, ALPHA);
-        
+
         // Then insert into pending_lookups
         let mut pending = HashSet::new();
         for node in &closest_nodes {
             pending.insert(node.addr);
         }
         self.pending_lookups.insert(target_id.clone(), pending);
-        
+
         closest_nodes
     }
 
-    pub fn update_lookup(&mut self, target_id: NodeId, from_addr: SocketAddr, found_nodes: Vec<Node>) -> Vec<Node> {
+    pub fn update_lookup(
+        &mut self,
+        target_id: NodeId,
+        from_addr: SocketAddr,
+        found_nodes: Vec<Node>,
+    ) -> Vec<Node> {
         // First, check if we have a pending lookup and remove the from_addr
         let lookup_exists = self.pending_lookups.get_mut(&target_id).map(|pending| {
             pending.remove(&from_addr);
@@ -194,7 +199,7 @@ impl KademliaTable {
                 // Lookup is complete, remove it
                 self.pending_lookups.remove(&target_id);
                 return Vec::new();
-            },
+            }
             Some(false) => {
                 // Lookup is still pending, continue with next batch
             }
@@ -204,7 +209,7 @@ impl KademliaTable {
         // are already in the pending set, ensuring the lookup completes
         // Find the closest nodes without holding a mutable borrow
         let closest = self.find_closest_nodes(&target_id, ALPHA);
-        
+
         // Now get the pending lookup again to update it
         if let Some(pending) = self.pending_lookups.get_mut(&target_id) {
             // Check if all closest nodes are already in the pending set
@@ -213,7 +218,7 @@ impl KademliaTable {
                 self.pending_lookups.remove(&target_id);
                 return Vec::new();
             }
-            
+
             let mut next_nodes = Vec::new();
             for node in closest {
                 if !pending.contains(&node.addr) {
@@ -221,13 +226,13 @@ impl KademliaTable {
                     next_nodes.push(node);
                 }
             }
-            
+
             // Check if pending set is now empty after adding new nodes
             if pending.is_empty() {
                 self.pending_lookups.remove(&target_id);
                 return Vec::new();
             }
-            
+
             next_nodes
         } else {
             Vec::new()
@@ -243,34 +248,36 @@ impl KademliaTable {
     pub fn handle_find_node(&mut self, target_id: &NodeId) -> Vec<Node> {
         // First get the closest nodes without holding a mutable borrow
         let closest_nodes = self.find_closest_nodes(target_id, ALPHA);
-        
+
         // Then process the pending lookups
         if let Some(pending) = self.pending_lookups.get_mut(target_id) {
-            let nodes_to_add: Vec<_> = closest_nodes.iter()
+            let nodes_to_add: Vec<_> = closest_nodes
+                .iter()
                 .filter(|node| !pending.contains(&node.addr))
                 .cloned()
                 .collect();
-            
+
             // Add nodes to pending
             for node in nodes_to_add {
                 pending.insert(node.addr);
             }
-            
+
             // Check if lookup is complete
             let is_lookup_complete = pending.is_empty();
-            
+
             if is_lookup_complete {
                 // Lookup is complete, remove it
                 self.pending_lookups.remove(target_id);
             }
         }
-        
+
         closest_nodes
     }
 
     pub fn handle_nodes(&mut self, target_id: &NodeId, nodes: Vec<Node>) {
         // First collect nodes to add
-        let nodes_to_add: Vec<_> = nodes.into_iter()
+        let nodes_to_add: Vec<_> = nodes
+            .into_iter()
             .filter(|node| {
                 if let Some(pending) = self.pending_lookups.get(target_id) {
                     !pending.contains(&node.addr)
@@ -279,12 +286,12 @@ impl KademliaTable {
                 }
             })
             .collect();
-        
+
         // Then add nodes to routing table
         for node in nodes_to_add {
             self.add_node(node);
         }
-        
+
         // Finally check if lookup is complete
         if let Some(pending) = self.pending_lookups.get(target_id) {
             if pending.is_empty() {
@@ -303,21 +310,21 @@ impl KademliaTable {
 
         // Get the pending lookup set for this target
         let pending_lookup = self.pending_lookups.get(&target_id).cloned();
-        
+
         if let Some(mut pending) = pending_lookup {
             // Update pending set
             pending.remove(&node.addr);
             let is_lookup_complete = pending.is_empty();
-            
+
             if is_lookup_complete {
                 // Lookup is complete, remove it
                 self.pending_lookups.remove(&target_id);
                 return;
             }
-            
+
             // Find closest nodes without holding a mutable borrow
             let closest = self.find_closest_nodes(&target_id, ALPHA);
-            
+
             // Prepare nodes to query
             let mut nodes_to_query = Vec::new();
             for node in closest {
@@ -325,14 +332,14 @@ impl KademliaTable {
                     nodes_to_query.push(node.clone());
                 }
             }
-            
+
             // Update the pending lookups with both existing and new nodes
             if let Some(pending_set) = self.pending_lookups.get_mut(&target_id) {
                 for node in &nodes_to_query {
                     pending_set.insert(node.addr);
                 }
             }
-            
+
             // Send find_node requests to the new nodes
             for node in nodes_to_query {
                 self.send_find_node(node.addr, target_id.clone());
@@ -343,20 +350,20 @@ impl KademliaTable {
     pub fn lookup(&mut self, target_id: NodeId) {
         // First get the closest nodes without holding a mutable borrow
         let closest_nodes = self.find_closest_nodes(&target_id, ALPHA);
-        
+
         // Create a new pending set
         let mut pending = HashSet::new();
         let mut nodes_to_query = Vec::new();
-        
+
         // Add nodes and prepare find_node requests
         for node in closest_nodes {
             pending.insert(node.addr);
             nodes_to_query.push(node);
         }
-        
+
         // Update pending lookups
         self.pending_lookups.insert(target_id.clone(), pending);
-        
+
         // Send find_node requests
         for node in nodes_to_query {
             self.send_find_node(node.addr, target_id.clone());
@@ -366,7 +373,7 @@ impl KademliaTable {
     pub fn handle_find_node_response(&mut self, target_id: [u8; 32], nodes: Vec<Node>) {
         // Convert [u8; 32] to NodeId by using the first 20 bytes
         let node_id = Self::convert_discovery_nodeid(&target_id);
-        
+
         // First check if we need to process a complete lookup
         let (should_process, nodes_to_add) = {
             if let Some(pending) = self.pending_lookups.get_mut(&node_id) {
@@ -394,33 +401,34 @@ impl KademliaTable {
             self.pending_lookups.remove(&node_id);
             return;
         }
-        
+
         // Check if lookup still exists
         if !self.pending_lookups.contains_key(&node_id) {
             return;
         }
-        
+
         // Find closest nodes without holding a mutable borrow
         let closest = self.find_closest_nodes(&node_id, ALPHA);
-        
+
         // Get the pending set again to check which nodes to query
         let nodes_to_query = {
             if let Some(pending) = self.pending_lookups.get(&node_id) {
-                closest.into_iter()
+                closest
+                    .into_iter()
                     .filter(|node| !pending.contains(&node.addr))
                     .collect::<Vec<_>>()
             } else {
                 Vec::new()
             }
         };
-        
+
         // Update the pending set with new nodes
         if let Some(pending) = self.pending_lookups.get_mut(&node_id) {
             for node in &nodes_to_query {
                 pending.insert(node.addr);
             }
         }
-        
+
         // Send find node requests
         for node in nodes_to_query {
             self.send_find_node(node.addr, node_id.clone());
@@ -437,7 +445,7 @@ mod tests {
     fn test_node_id_distance() {
         let id1 = NodeId::new([0x00; 20]);
         let _id2 = NodeId::new([0xFF; 20]);
-        
+
         let distance = id1.distance(&id1);
         assert_eq!(distance.0, [0x00; 20]); // Zero distance to self
     }
@@ -474,16 +482,16 @@ mod tests {
             NodeId([0; 20]),
             SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
         );
-        
+
         assert!(!node.is_stale()); // New node should not be stale
-        
+
         let old_node = Node {
             id: NodeId([0; 20]),
             addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
             last_seen: SystemTime::now() - Duration::from_secs(NODE_TIMEOUT.as_secs() + 1),
             reputation_score: 1.0,
         };
-        
+
         assert!(old_node.is_stale()); // Old node should be stale
     }
 
@@ -491,10 +499,11 @@ mod tests {
     fn test_kbucket_refresh() {
         let mut bucket = KBucket::new();
         assert!(bucket.needs_refresh()); // New bucket should need refresh
-        
-        bucket.last_updated = SystemTime::now() - Duration::from_secs(REFRESH_INTERVAL.as_secs() + 1);
+
+        bucket.last_updated =
+            SystemTime::now() - Duration::from_secs(REFRESH_INTERVAL.as_secs() + 1);
         assert!(bucket.needs_refresh()); // Old bucket should need refresh
-        
+
         bucket.last_updated = SystemTime::now();
         // Add a node to make the bucket non-empty
         bucket.nodes.push(Node::new(
@@ -508,7 +517,7 @@ mod tests {
     fn test_kbucket_full() {
         let mut bucket = KBucket::new();
         let _base_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
-        
+
         // Fill bucket to capacity
         for i in 0..K {
             let node = Node::new(
@@ -517,14 +526,14 @@ mod tests {
             );
             assert!(bucket.add_node(node));
         }
-        
+
         // Try to add one more node
         let extra_node = Node::new(
             NodeId([K as u8; 20]),
             SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9000),
         );
         assert!(!bucket.add_node(extra_node)); // Should fail as bucket is full
-        
+
         assert_eq!(bucket.nodes.len(), K); // Bucket should maintain max size
     }
 
@@ -533,25 +542,25 @@ mod tests {
         let node_id = NodeId([0; 20]);
         let mut table = KademliaTable::new(node_id);
         let target_id = NodeId([1; 20]);
-        
+
         // Add a single test node
         let node = Node::new(
             NodeId([2; 20]),
             SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
         );
         table.add_node(node.clone());
-        
+
         // Start lookup - should contain our single node
         let initial_nodes = table.start_lookup(&target_id);
         assert_eq!(initial_nodes.len(), 1);
-        
+
         // Remove the node from pending by simulating a response
         let next_nodes = table.update_lookup(
             target_id,
             node.addr,
             Vec::new(), // Empty response
         );
-        
+
         // Since there are no more nodes in the pending set, the lookup should be complete
         assert!(next_nodes.is_empty());
     }
@@ -560,11 +569,11 @@ mod tests {
     fn test_node_distance_edge_cases() {
         let id1 = NodeId([0xFF; 20]); // Maximum possible ID
         let id2 = NodeId([0x00; 20]); // Minimum possible ID
-        
+
         let distance = id1.distance(&id2);
         assert_eq!(distance.0, [0xFF; 20]); // Maximum possible distance
-        
+
         let distance = id1.distance(&id1);
         assert_eq!(distance.0, [0x00; 20]); // Zero distance to self
     }
-} 
+}

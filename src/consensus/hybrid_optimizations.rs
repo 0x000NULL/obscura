@@ -1,11 +1,11 @@
+use rayon::prelude::*;
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
-use rayon::prelude::*;
-use sha2::{Sha256, Digest};
 
 use super::pos_old::{StakeProof, StakingContract};
-use crate::blockchain::{Block, Transaction, OutPoint, TransactionInput, TransactionOutput};
+use crate::blockchain::{Block, OutPoint, Transaction, TransactionInput, TransactionOutput};
 
 /// Manages the state of the hybrid consensus system with optimizations
 pub struct HybridStateManager {
@@ -113,12 +113,12 @@ impl HybridStateManager {
         // Get the current state from staking contract
         let staking_contract = self.staking_contract.read().map_err(|e| e.to_string())?;
         let validator_cache = self.validator_cache.read().map_err(|e| e.to_string())?;
-        
+
         // Create validator states for snapshot
         let mut validator_states = HashMap::new();
         let mut total_stake = 0;
         let mut active_validators = HashSet::new();
-        
+
         // Collect active validators and their states
         for (validator_id, info) in &staking_contract.validators {
             // Use cached state if available, otherwise create from contract state
@@ -135,23 +135,23 @@ impl HybridStateManager {
                         .as_secs(),
                 }
             };
-            
+
             // Add to snapshot
             validator_states.insert(validator_id.clone(), validator_state);
             total_stake += info.total_stake;
-            
+
             // Check if validator is active
             if info.last_active_time > 0 && !info.exit_requested && !info.slashed {
                 active_validators.insert(validator_id.clone());
             }
         }
-        
+
         // Create the snapshot
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         let snapshot = StateSnapshot {
             block_height: height,
             timestamp,
@@ -159,13 +159,13 @@ impl HybridStateManager {
             total_stake,
             active_validators,
         };
-        
+
         // Add snapshot to the manager
         self.snapshot_manager.add_snapshot(height, snapshot);
-        
+
         // Prune old snapshots based on configuration
         self.snapshot_manager.prune_old_snapshots(height);
-        
+
         Ok(())
     }
 
@@ -175,30 +175,30 @@ impl HybridStateManager {
         let cutoff_height = if height > self.pruning_config.retention_period {
             height - self.pruning_config.retention_period
         } else {
-            return Ok(());  // Not enough blocks to prune yet
+            return Ok(()); // Not enough blocks to prune yet
         };
-        
+
         // Get the staking contract to modify (note: would need to implement pruning in StakingContract)
         let staking_contract = self.staking_contract.write().map_err(|e| e.to_string())?;
-        
+
         // In a real implementation, we would:
         // 1. Remove historical state (block data, validator history, etc.) older than cutoff_height
         // 2. Except for validators with stakes above the min_stake_threshold
         // 3. Ensure that total pruned data doesn't exceed max_storage_size
-        
+
         // For now, just print what we would do
         println!(
             "Pruning state before height {}, keeping validators with stake > {}",
             cutoff_height, self.pruning_config.min_stake_threshold
         );
-        
+
         // Instead of actual implementation, we'll just log what would happen
         let validator_count = staking_contract.validators.len();
         println!(
             "Would prune historical data for {} validators before height {}",
             validator_count, cutoff_height
         );
-        
+
         Ok(())
     }
 
@@ -254,7 +254,7 @@ impl SnapshotManager {
 
     pub fn add_snapshot(&mut self, block_height: u64, snapshot: StateSnapshot) {
         self.snapshots.insert(block_height, snapshot);
-        
+
         // Remove old snapshots if we exceed the maximum
         while self.snapshots.len() > self.max_snapshots {
             if let Some(oldest_height) = self.snapshots.keys().min().cloned() {
@@ -268,14 +268,14 @@ impl SnapshotManager {
             current_block - block_height <= self.snapshot_interval * self.max_snapshots as u64
         });
     }
-    
+
     /// Get a snapshot at or before the given height
     pub fn get_snapshot(&self, height: u64) -> Option<&StateSnapshot> {
         // If we have an exact match, return it
         if let Some(snapshot) = self.snapshots.get(&height) {
             return Some(snapshot);
         }
-        
+
         // Otherwise, get the closest snapshot at or before the requested height
         self.snapshots
             .iter()
@@ -283,7 +283,7 @@ impl SnapshotManager {
             .max_by_key(|(&h, _)| h)
             .map(|(_, snapshot)| snapshot)
     }
-    
+
     /// Get the latest snapshot
     pub fn get_latest_snapshot(&self) -> Option<&StateSnapshot> {
         self.snapshots
@@ -291,14 +291,18 @@ impl SnapshotManager {
             .max_by_key(|(&h, _)| h)
             .map(|(_, snapshot)| snapshot)
     }
-    
+
     /// Calculate state changes between two snapshots
-    pub fn calculate_state_diff(&self, from_height: u64, to_height: u64) -> Option<HashMap<Vec<u8>, ValidatorStateDiff>> {
+    pub fn calculate_state_diff(
+        &self,
+        from_height: u64,
+        to_height: u64,
+    ) -> Option<HashMap<Vec<u8>, ValidatorStateDiff>> {
         let from_snapshot = self.get_snapshot(from_height)?;
         let to_snapshot = self.get_snapshot(to_height)?;
-        
+
         let mut diffs = HashMap::new();
-        
+
         // Process validators in the newer snapshot
         for (validator_id, to_state) in &to_snapshot.validator_states {
             if let Some(from_state) = from_snapshot.validator_states.get(validator_id) {
@@ -309,7 +313,7 @@ impl SnapshotManager {
                     is_new: false,
                     is_removed: false,
                 };
-                
+
                 // Only add significant changes
                 if diff.stake_change != 0 || diff.performance_change.abs() > 0.001 {
                     diffs.insert(validator_id.clone(), diff);
@@ -327,7 +331,7 @@ impl SnapshotManager {
                 );
             }
         }
-        
+
         // Check for validators that were removed
         for (validator_id, from_state) in &from_snapshot.validator_states {
             if !to_snapshot.validator_states.contains_key(validator_id) {
@@ -343,7 +347,7 @@ impl SnapshotManager {
                 );
             }
         }
-        
+
         Some(diffs)
     }
 }
@@ -399,7 +403,7 @@ impl ValidationManager {
 
         Ok(validation_results.iter().all(|&x| x))
     }
-    
+
     /// Validate a single transaction
     fn validate_transaction(&self, tx: &crate::blockchain::Transaction) -> bool {
         // This is a placeholder implementation
@@ -408,25 +412,25 @@ impl ValidationManager {
         // 2. Transaction doesn't double-spend outputs
         // 3. Transaction amounts are valid (inputs >= outputs)
         // 4. Transaction adheres to consensus rules
-        
+
         // Basic validation checks
         if tx.inputs.is_empty() || tx.outputs.is_empty() {
             return false; // Transaction must have at least one input and output
         }
-        
+
         // Check if any output value is negative or zero
         for output in &tx.outputs {
             if output.value == 0 {
                 return false; // Output values must be positive
             }
         }
-        
+
         // Validate that input value >= output value would require UTXO access
         // We'll assume this is checked elsewhere
-        
+
         true
     }
-    
+
     /// Process transactions in parallel for mining a new block
     pub fn process_transactions_for_mining(
         &self,
@@ -434,9 +438,8 @@ impl ValidationManager {
         max_block_size: usize,
     ) -> Vec<crate::blockchain::Transaction> {
         // First validate all transactions in parallel
-        let validation_results: Vec<(bool, usize, &crate::blockchain::Transaction)> = self
-            .thread_pool
-            .install(|| {
+        let validation_results: Vec<(bool, usize, &crate::blockchain::Transaction)> =
+            self.thread_pool.install(|| {
                 transactions
                     .par_iter()
                     .map(|tx| {
@@ -447,25 +450,26 @@ impl ValidationManager {
                     })
                     .collect()
             });
-        
+
         // Filter out invalid transactions
-        let mut valid_transactions: Vec<(usize, &crate::blockchain::Transaction)> = validation_results
-            .into_iter()
-            .filter(|(valid, _, _)| *valid)
-            .map(|(_, size, tx)| (size, tx))
-            .collect();
-        
+        let mut valid_transactions: Vec<(usize, &crate::blockchain::Transaction)> =
+            validation_results
+                .into_iter()
+                .filter(|(valid, _, _)| *valid)
+                .map(|(_, size, tx)| (size, tx))
+                .collect();
+
         // Sort by fee per byte, highest first
         valid_transactions.sort_by(|(size_a, tx_a), (size_b, tx_b)| {
             let fee_per_byte_a = self.calculate_transaction_fee(tx_a) as f64 / *size_a as f64;
             let fee_per_byte_b = self.calculate_transaction_fee(tx_b) as f64 / *size_b as f64;
             fee_per_byte_b.partial_cmp(&fee_per_byte_a).unwrap()
         });
-        
+
         // Fill block up to max_block_size
         let mut result = Vec::new();
         let mut current_size = 0;
-        
+
         for (size, tx) in valid_transactions {
             if current_size + size <= max_block_size {
                 result.push(tx.clone());
@@ -477,10 +481,10 @@ impl ValidationManager {
                 break;
             }
         }
-        
+
         result
     }
-    
+
     /// Calculate transaction size in bytes (placeholder implementation)
     fn calculate_transaction_size(&self, tx: &crate::blockchain::Transaction) -> usize {
         // Basic estimate: 10 bytes per input + 10 bytes per output + 10 bytes overhead
@@ -488,7 +492,7 @@ impl ValidationManager {
         let output_size = tx.outputs.len() * 34;
         10 + input_size + output_size
     }
-    
+
     /// Calculate transaction fee (placeholder implementation)
     fn calculate_transaction_fee(&self, _tx: &crate::blockchain::Transaction) -> u64 {
         // In real implementation, this would calculate: sum(inputs) - sum(outputs)
@@ -509,122 +513,128 @@ pub struct ValidatorStateDiff {
 mod tests {
     use super::*;
     use crate::blockchain::Transaction;
-    
+
     // Create a mock StakingContract for testing
     fn create_mock_staking_contract() -> Arc<RwLock<StakingContract>> {
         let contract = StakingContract::new(3600); // Using 1 hour as epoch duration
         Arc::new(RwLock::new(contract))
     }
-    
+
     #[test]
     fn test_snapshot_manager() {
         let mut snapshot_manager = SnapshotManager::new(100, 3);
-        
+
         // Create and add three snapshots
         for i in 0..3 {
             let height = i * 100;
             let snapshot = StateSnapshot {
                 block_height: height,
-                timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+                timestamp: SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
                 validator_states: HashMap::new(),
                 total_stake: 1000 * (i + 1),
                 active_validators: HashSet::new(),
             };
-            
+
             snapshot_manager.add_snapshot(height, snapshot);
         }
-        
+
         // Check that we have 3 snapshots
         assert_eq!(snapshot_manager.snapshots.len(), 3);
-        
+
         // Add one more snapshot, which should cause pruning
         let snapshot = StateSnapshot {
             block_height: 300,
-            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+            timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
             validator_states: HashMap::new(),
             total_stake: 4000,
             active_validators: HashSet::new(),
         };
-        
+
         snapshot_manager.add_snapshot(300, snapshot);
-        
+
         // Check that we still have only 3 snapshots
         assert_eq!(snapshot_manager.snapshots.len(), 3);
-        
+
         // Check that the oldest snapshot (0) was pruned
         assert!(!snapshot_manager.snapshots.contains_key(&0));
-        
+
         // Test getting snapshot at specific height
         let latest = snapshot_manager.get_latest_snapshot();
         assert!(latest.is_some());
         assert_eq!(latest.unwrap().block_height, 300);
     }
-    
+
     #[test]
     fn test_validation_manager() {
         let validation_manager = ValidationManager::new(4);
-        
+
         // Create valid transactions instead of empty ones
         let mut tx1 = Transaction::default();
         let mut tx2 = Transaction::default();
-        
+
         // Add a dummy input to each transaction
         let mut hasher = Sha256::new();
         hasher.update(b"dummy_transaction_1");
         let mut tx_hash1 = [0u8; 32];
         tx_hash1.copy_from_slice(&hasher.finalize());
-        
+
         let outpoint1 = OutPoint {
             transaction_hash: tx_hash1,
             index: 0,
         };
-        
+
         let input1 = TransactionInput {
             previous_output: outpoint1,
             signature_script: vec![1, 2, 3], // dummy signature
             sequence: 0,
         };
-        
+
         hasher = Sha256::new();
         hasher.update(b"dummy_transaction_2");
         let mut tx_hash2 = [0u8; 32];
         tx_hash2.copy_from_slice(&hasher.finalize());
-        
+
         let outpoint2 = OutPoint {
             transaction_hash: tx_hash2,
             index: 0,
         };
-        
+
         let input2 = TransactionInput {
             previous_output: outpoint2,
             signature_script: vec![4, 5, 6], // dummy signature
             sequence: 0,
         };
-        
+
         // Add a dummy output to each transaction
         let output1 = TransactionOutput {
             value: 100,
             public_key_script: vec![7, 8, 9], // dummy public key
         };
-        
+
         let output2 = TransactionOutput {
             value: 200,
             public_key_script: vec![10, 11, 12], // dummy public key
         };
-        
+
         // Add inputs and outputs to transactions
         tx1.inputs.push(input1);
         tx1.outputs.push(output1);
-        
+
         tx2.inputs.push(input2);
         tx2.outputs.push(output2);
-        
+
         let transactions = vec![tx1, tx2];
-        
+
         // Test transaction processing for mining
         let processed = validation_manager.process_transactions_for_mining(&transactions, 10000);
-        
+
         // Both transactions should be included
         assert_eq!(processed.len(), 2);
     }
-} 
+}

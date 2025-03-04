@@ -1,13 +1,17 @@
-use crate::blockchain::{Block, Transaction, TransactionInput, TransactionOutput, OutPoint, UTXOSet};
+use crate::blockchain::{
+    Block, OutPoint, Transaction, TransactionInput, TransactionOutput, UTXOSet,
+};
 use crate::crypto;
-use crate::crypto::jubjub::{JubjubKeypair, JubjubPoint, JubjubScalar, JubjubPointExt, JubjubScalarExt};
-use crypto::jubjub;
-use sha2::{Sha256, Digest};
-use std::collections::{HashMap, HashSet};
-use rand::rngs::OsRng;
+use crate::crypto::jubjub::{
+    JubjubKeypair, JubjubPoint, JubjubPointExt, JubjubScalar, JubjubScalarExt,
+};
 use crate::utils::{current_time, format_time_diff};
-use std::sync::{Arc, Mutex};
 use chrono::Utc;
+use crypto::jubjub;
+use rand::rngs::OsRng;
+use sha2::{Digest, Sha256};
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone)]
 pub struct Wallet {
@@ -44,11 +48,11 @@ impl Wallet {
     pub fn new() -> Self {
         Wallet::default()
     }
-    
+
     pub fn new_with_keypair() -> Self {
         let mut rng = OsRng;
         let keypair = JubjubKeypair::new(JubjubScalar::random(&mut rng));
-        
+
         Wallet {
             balance: 0,
             transactions: Vec::new(),
@@ -60,54 +64,68 @@ impl Wallet {
             pending_spent_outpoints: Arc::new(Mutex::new(HashSet::new())),
         }
     }
-    
+
     pub fn set_keypair(&mut self, keypair: JubjubKeypair) {
         self.keypair = Some(keypair);
     }
-    
+
     pub fn get_public_key(&self) -> Option<JubjubPoint> {
         self.keypair.as_ref().map(|kp| kp.public)
     }
-    
+
     pub fn enable_privacy(&mut self) {
         self.privacy_enabled = true;
     }
-    
+
     pub fn disable_privacy(&mut self) {
         self.privacy_enabled = false;
     }
-    
+
     pub fn is_privacy_enabled(&self) -> bool {
         self.privacy_enabled
     }
-    
+
     /// Select UTXOs to use for a transaction
-    fn select_utxos(&self, amount: u64, fee_per_kb: u64) -> Option<(Vec<(OutPoint, TransactionOutput)>, u64)> {
+    fn select_utxos(
+        &self,
+        amount: u64,
+        fee_per_kb: u64,
+    ) -> Option<(Vec<(OutPoint, TransactionOutput)>, u64)> {
         #[cfg(test)]
-        println!("select_utxos called with amount: {}, fee_per_kb: {}", amount, fee_per_kb);
-        
+        println!(
+            "select_utxos called with amount: {}, fee_per_kb: {}",
+            amount, fee_per_kb
+        );
+
         if self.utxos.is_empty() {
             #[cfg(test)]
             println!("UTXO set is empty");
             return None;
         }
-        
+
         // Get available UTXOs (not pending spent)
-        let available_utxos: Vec<(OutPoint, TransactionOutput)> = self.utxos
+        let available_utxos: Vec<(OutPoint, TransactionOutput)> = self
+            .utxos
             .iter()
-            .filter(|(outpoint, _)| !self.pending_spent_outpoints.lock().unwrap().contains(outpoint))
+            .filter(|(outpoint, _)| {
+                !self
+                    .pending_spent_outpoints
+                    .lock()
+                    .unwrap()
+                    .contains(outpoint)
+            })
             .map(|(outpoint, output)| (*outpoint, output.clone()))
             .collect();
-        
+
         #[cfg(test)]
         println!("Available UTXOs: {}", available_utxos.len());
-        
+
         if available_utxos.is_empty() {
             #[cfg(test)]
             println!("No available UTXOs (all might be pending)");
             return None;
         }
-        
+
         // Try to find an exact match first (optimization)
         for (outpoint, output) in &available_utxos {
             if output.value == amount {
@@ -117,66 +135,72 @@ impl Wallet {
                 return Some((vec![(*outpoint, output.clone())], 0));
             }
         }
-        
+
         // Sort UTXOs by value (largest first) for simplicity
         // In a real implementation, we would use a more sophisticated coin selection algorithm
         let mut sorted_utxos = available_utxos.clone();
         sorted_utxos.sort_by(|(_, a), (_, b)| b.value.cmp(&a.value));
-        
+
         #[cfg(test)]
         if !sorted_utxos.is_empty() {
-            println!("Sorted UTXOs: first value = {}, last value = {}", 
+            println!(
+                "Sorted UTXOs: first value = {}, last value = {}",
                 sorted_utxos.first().unwrap().1.value,
-                sorted_utxos.last().unwrap().1.value);
+                sorted_utxos.last().unwrap().1.value
+            );
         }
-        
+
         // Try to find a combination of UTXOs that covers the amount
         let mut selected_utxos = Vec::new();
         let mut total_value = 0;
-        
+
         for (outpoint, output) in sorted_utxos {
             #[cfg(test)]
             println!("Considering UTXO with value: {}", output.value);
-            
+
             selected_utxos.push((outpoint, output.clone()));
             total_value += output.value;
-            
+
             // Estimate the fee based on the size of the transaction
             let estimated_tx_size = self.estimate_tx_size(selected_utxos.len(), 2); // Assume 2 outputs (payment + change)
             let estimated_fee = (estimated_tx_size as u64 * fee_per_kb) / 1000;
-            
+
             #[cfg(test)]
-            println!("Selected {} UTXOs with total value: {}, estimated fee: {}", 
-                selected_utxos.len(), total_value, estimated_fee);
-            
+            println!(
+                "Selected {} UTXOs with total value: {}, estimated fee: {}",
+                selected_utxos.len(),
+                total_value,
+                estimated_fee
+            );
+
             if total_value >= amount + estimated_fee {
                 let change = total_value - amount - estimated_fee;
-                
+
                 // Check if change is "dust" - too small to be worth creating an output for
                 // If it would cost more in fees to spend this change later than its value,
                 // just include it as part of the fee
                 let min_change_threshold = 1000; // Minimum change value to create a change output
-                
+
                 #[cfg(test)]
                 println!("Found sufficient UTXOs with change: {}", change);
-                
+
                 if change < min_change_threshold {
                     #[cfg(test)]
                     println!("Change is too small (dust), including it in fee");
                     return Some((selected_utxos, 0)); // No change output, include in fee
                 }
-                
+
                 return Some((selected_utxos, change));
             }
         }
-        
+
         #[cfg(test)]
         println!("Could not find sufficient UTXOs to cover amount + fee");
-        
+
         // Couldn't find enough funds
         None
     }
-    
+
     /// Estimate the size of a transaction in bytes
     fn estimate_tx_size(&self, input_count: usize, output_count: usize) -> usize {
         // Update the constant values to be more realistic and smaller
@@ -184,20 +208,25 @@ impl Wallet {
         // Each input = ~41 bytes (outpoint, script length, sequence)
         // Each output = ~31 bytes (value, script length, script)
         // Signature per input = ~65 bytes (more compact signatures)
-        
+
         let tx_overhead = 8;
         let input_size = 41;
         let output_size = 31;
         let signature_size = 65;
-        
+
         tx_overhead + (input_count * (input_size + signature_size)) + (output_count * output_size)
     }
-    
+
     /// Calculate appropriate fee for a transaction
-    pub fn calculate_recommended_fee(&self, input_count: usize, output_count: usize, priority: &str) -> u64 {
+    pub fn calculate_recommended_fee(
+        &self,
+        input_count: usize,
+        output_count: usize,
+        priority: &str,
+    ) -> u64 {
         // Base fee rate for normal priority (satoshis per KB)
         let base_fee_rate = 1000; // 1000 satoshis per KB
-        
+
         // Adjust fee rate based on priority
         let fee_rate = match priority {
             "low" => base_fee_rate / 2,
@@ -206,58 +235,66 @@ impl Wallet {
             "urgent" => base_fee_rate * 5,
             _ => base_fee_rate,
         };
-        
+
         // Calculate size and fee
         let size = self.estimate_tx_size(input_count, output_count);
         (size as u64 * fee_rate) / 1000
     }
-    
+
     /// Create a transaction using proper UTXO selection
-    pub fn create_transaction_with_fee(&mut self, recipient: &JubjubPoint, amount: u64, fee_per_kb: u64) -> Option<Transaction> {
+    pub fn create_transaction_with_fee(
+        &mut self,
+        recipient: &JubjubPoint,
+        amount: u64,
+        fee_per_kb: u64,
+    ) -> Option<Transaction> {
         if self.keypair.is_none() {
             return None; // Can't sign without a keypair
         }
-        
+
         // Select UTXOs to cover the amount + fees
         let utxos_result = self.select_utxos(amount, fee_per_kb);
         if utxos_result.is_none() {
             return None; // Not enough funds
         }
-        
+
         let (selected_utxos, change) = utxos_result.unwrap();
-        let total_input = selected_utxos.iter().map(|(_, output)| output.value).sum::<u64>();
-        
+        let total_input = selected_utxos
+            .iter()
+            .map(|(_, output)| output.value)
+            .sum::<u64>();
+
         // Create a new transaction
         let mut tx = Transaction::default();
-        
+
         // Add inputs
         for (outpoint, _) in &selected_utxos {
             // Create a signature for the input using our keypair
             let keypair = self.keypair.as_ref().unwrap();
-            
+
             // In a real implementation, we would sign the transaction hash
             let message = b"Authorize transaction";
             let signature = keypair.sign(message);
             let signature_bytes = signature.expect("Failed to sign transaction").to_bytes();
-            
+
             let input = TransactionInput {
                 previous_output: outpoint.clone(),
                 signature_script: signature_bytes,
                 sequence: 0,
             };
-            
+
             tx.inputs.push(input);
         }
-        
+
         // Add recipient output
         let recipient_bytes = jubjub_point_to_bytes(recipient);
         let payment_output = TransactionOutput {
             value: amount,
             public_key_script: recipient_bytes,
         };
-        
+
         tx.outputs.push(payment_output);
-        
+
         // Add change output if needed
         if change > 0 {
             let keypair = self.keypair.as_ref().unwrap();
@@ -265,20 +302,20 @@ impl Wallet {
                 value: change,
                 public_key_script: jubjub_point_to_bytes(&keypair.public),
             };
-            
+
             tx.outputs.push(change_output);
         }
-        
+
         // Apply privacy features if enabled
         if self.privacy_enabled {
             tx = self.apply_privacy_features(tx);
         }
-        
+
         // Calculate the net change to wallet balance by comparing inputs and outputs
         // The difference is the transaction fee plus the payment amount minus any change returned
         let total_output: u64 = tx.outputs.iter().map(|output| output.value).sum();
         let spent_amount = total_input - total_output; // This is fee + payment - change
-        
+
         // Update wallet balance more safely
         if self.balance >= spent_amount {
             self.balance -= spent_amount;
@@ -289,143 +326,152 @@ impl Wallet {
             #[cfg(test)]
             println!("Warning: Balance underflow prevented");
         }
-        
+
         // Store the transaction
         self.transactions.push(tx.clone());
-        
+
         // Add timestamp for this transaction
-        self.transaction_timestamps.insert(tx.hash(), current_time());
-        
+        self.transaction_timestamps
+            .insert(tx.hash(), current_time());
+
         // Mark UTXOs as pending spent
         for (outpoint, _) in selected_utxos {
-            self.pending_spent_outpoints.lock().unwrap().insert(outpoint);
+            self.pending_spent_outpoints
+                .lock()
+                .unwrap()
+                .insert(outpoint);
         }
-        
+
         Some(tx)
     }
-    
+
     /// Original simplified transaction creation (kept for backward compatibility)
-    pub fn create_transaction(&mut self, recipient: &JubjubPoint, amount: u64) -> Option<Transaction> {
+    pub fn create_transaction(
+        &mut self,
+        recipient: &JubjubPoint,
+        amount: u64,
+    ) -> Option<Transaction> {
         if self.keypair.is_none() {
             return None; // Can't sign without a keypair
         }
-        
+
         if self.balance < amount {
             return None; // Insufficient funds
         }
-        
+
         // This is a simplified implementation
         // In a real wallet, we would select UTXOs for inputs
-        
+
         // Create a new transaction
         let mut tx = Transaction::default();
-        
+
         // Add a dummy input (in real implementation, this would be a UTXO)
         let mut hasher = Sha256::new();
         hasher.update(b"dummy_transaction");
         let mut tx_hash = [0u8; 32];
         tx_hash.copy_from_slice(&hasher.finalize());
-        
+
         let outpoint = OutPoint {
             transaction_hash: tx_hash,
             index: 0,
         };
-        
+
         // Create a signature for the input using our keypair
         let keypair = self.keypair.as_ref().unwrap();
-        
+
         // In a real implementation, we would sign the transaction hash
         let message = b"Authorize transaction";
         let signature = keypair.sign(message);
         let signature_bytes = signature.expect("Failed to sign transaction").to_bytes();
-        
+
         let input = TransactionInput {
             previous_output: outpoint,
             signature_script: signature_bytes,
             sequence: 0,
         };
-        
+
         tx.inputs.push(input);
-        
+
         // Add recipient output
         let recipient_bytes = jubjub_point_to_bytes(recipient);
         let payment_output = TransactionOutput {
             value: amount,
             public_key_script: recipient_bytes,
         };
-        
+
         tx.outputs.push(payment_output);
-        
+
         // Add change output if needed
         if self.balance > amount {
             let change_output = TransactionOutput {
                 value: self.balance - amount,
                 public_key_script: jubjub_point_to_bytes(&keypair.public),
             };
-            
+
             tx.outputs.push(change_output);
         }
-        
+
         // Apply privacy features if enabled
         if self.privacy_enabled {
             tx = self.apply_privacy_features(tx);
         }
-        
+
         // Update wallet balance
         self.balance -= amount;
-        
+
         // Store the transaction
         self.transactions.push(tx.clone());
-        
+
         // Add timestamp for this transaction
-        self.transaction_timestamps.insert(tx.hash(), current_time());
-        
+        self.transaction_timestamps
+            .insert(tx.hash(), current_time());
+
         Some(tx)
     }
-    
+
     fn apply_privacy_features(&self, mut tx: Transaction) -> Transaction {
         // Set privacy flags in the transaction
         tx.privacy_flags |= 0x01; // Basic privacy
 
         // Obfuscate the transaction ID with unique data for each transaction
         let mut hasher = Sha256::new();
-        
+
         // Include the transaction's inputs in the hash
         for input in &tx.inputs {
             hasher.update(&input.previous_output.transaction_hash);
             hasher.update(&input.previous_output.index.to_le_bytes());
         }
-        
+
         // Include the transaction's outputs in the hash
         for output in &tx.outputs {
             hasher.update(&output.value.to_le_bytes());
             hasher.update(&output.public_key_script);
         }
-        
+
         // Add random nonce for extra uniqueness
         let mut rng = OsRng;
         let random_nonce = JubjubScalar::random(&mut rng);
         hasher.update(&random_nonce.to_bytes());
-        
+
         let mut tx_id = [0u8; 32];
         tx_id.copy_from_slice(&hasher.finalize());
         tx.obfuscated_id = Some(tx_id);
-        
+
         // If we have a keypair, apply stealth addressing
         if let Some(keypair) = &self.keypair {
             // Use the keypair to enhance privacy with stealth addressing
             // Create a new ephemeral key for this transaction
             let ephemeral_keypair = jubjub::generate_keypair();
             let ephemeral_scalar = ephemeral_keypair.secret;
-            
+
             let ephemeral_point = <JubjubPoint as JubjubPointExt>::generator() * ephemeral_scalar;
             let ephemeral_bytes = jubjub_point_to_bytes(&ephemeral_point);
-            
+
             // Add the ephemeral key to the transaction
             let mut key_bytes = [0u8; 32];
             key_bytes.copy_from_slice(&ephemeral_bytes[0..32]);
             tx.ephemeral_pubkey = Some(key_bytes);
-            
+
             // Use diffie-hellman to create a shared secret for transaction privacy
             // For any outputs that aren't change outputs, convert them to stealth addresses
             for i in 0..tx.outputs.len() {
@@ -433,112 +479,125 @@ impl Wallet {
                 if i == tx.outputs.len() - 1 && self.balance > tx.outputs[0].value {
                     continue;
                 }
-                
+
                 // Try to parse the recipient's public key
-                if let Some(recipient_point) = bytes_to_jubjub_point(&tx.outputs[i].public_key_script) {
+                if let Some(recipient_point) =
+                    bytes_to_jubjub_point(&tx.outputs[i].public_key_script)
+                {
                     // Create a stealth address for the recipient
                     let shared_secret = jubjub::diffie_hellman(&ephemeral_scalar, &recipient_point);
                     let hash_scalar = hash_to_jubjub_scalar(&jubjub_point_to_bytes(&shared_secret));
-                    let stealth_point = recipient_point + (<JubjubPoint as JubjubPointExt>::generator() * hash_scalar);
-                    
+                    let stealth_point = recipient_point
+                        + (<JubjubPoint as JubjubPointExt>::generator() * hash_scalar);
+
                     // Replace the original output with the stealth address
                     tx.outputs[i].public_key_script = jubjub_point_to_bytes(&stealth_point);
                 }
             }
         }
-        
+
         // Apply confidential transactions features
         // Create amount commitments and range proofs
         let mut amount_commitments = Vec::new();
         let mut range_proofs = Vec::new();
-        
+
         // Generate a random blinding factor for commitments
         let blinding_factor = rand::random::<u64>();
-        
+
         for output in &tx.outputs {
             // Create a commitment to the amount
             let mut commitment_hasher = Sha256::new();
             commitment_hasher.update(output.value.to_le_bytes());
             commitment_hasher.update(blinding_factor.to_le_bytes());
             let commitment = commitment_hasher.finalize();
-            
+
             // Store the commitment
             amount_commitments.push(commitment.to_vec());
-            
+
             // Create a simple range proof (in a real implementation, this would be a zero-knowledge proof)
             let mut range_proof_hasher = Sha256::new();
             range_proof_hasher.update(commitment);
             range_proof_hasher.update(b"range_proof");
-            
+
             let range_proof = range_proof_hasher.finalize().to_vec();
             range_proofs.push(range_proof);
         }
-        
+
         // Add the commitments and proofs to the transaction
         tx.amount_commitments = Some(amount_commitments);
         tx.range_proofs = Some(range_proofs);
-        
+
         // Set confidential transactions flag
         tx.privacy_flags |= 0x04;
-        
+
         tx
     }
-    
-    /// Submit a transaction to the network 
+
+    /// Submit a transaction to the network
     /// Note: This marks the inputs as pending until they appear in a confirmed block
     pub fn submit_transaction(&mut self, tx: &Transaction) {
         // Mark UTXOs as pending spent
         for input in &tx.inputs {
-            self.pending_spent_outpoints.lock().unwrap().insert(input.previous_output.clone());
+            self.pending_spent_outpoints
+                .lock()
+                .unwrap()
+                .insert(input.previous_output.clone());
         }
-        
+
         // In a real implementation, this would broadcast the transaction to the network
-        println!("Transaction {} submitted to network", hex::encode(tx.hash()));
-        
+        println!(
+            "Transaction {} submitted to network",
+            hex::encode(tx.hash())
+        );
+
         // Add the transaction to our history
         self.transactions.push(tx.clone());
-        
+
         // Add a timestamp for this transaction
-        self.transaction_timestamps.insert(tx.hash(), current_time());
+        self.transaction_timestamps
+            .insert(tx.hash(), current_time());
     }
-    
+
     /// Clear pending transactions (e.g., if they fail to confirm)
     pub fn clear_pending_transactions(&mut self) {
         self.pending_spent_outpoints.lock().unwrap().clear();
-        
+
         // Update the balance to match available UTXOs
         let available = self.get_available_balance();
         self.balance = available;
     }
-    
+
     pub fn process_block(&mut self, block: &Block, utxo_set: &UTXOSet) {
         for tx in &block.transactions {
             self.process_transaction(tx, utxo_set);
         }
-        
+
         // After processing the block, verify and update the utxo set state
         self.verify_utxo_consistency(utxo_set);
-        
+
         // Clear any pending spent outpoints that were in this block
         for tx in &block.transactions {
             for input in &tx.inputs {
-                self.pending_spent_outpoints.lock().unwrap().remove(&input.previous_output);
+                self.pending_spent_outpoints
+                    .lock()
+                    .unwrap()
+                    .remove(&input.previous_output);
             }
         }
-        
+
         // Update the last sync time
         self.last_sync_time = current_time();
     }
-    
+
     pub fn process_transaction(&mut self, tx: &Transaction, utxo_set: &UTXOSet) {
         // Skip if we don't have a keypair
         if self.keypair.is_none() {
             return;
         }
-        
+
         let keypair = self.keypair.as_ref().unwrap();
         let our_pubkey_bytes = jubjub_point_to_bytes(&keypair.public);
-        
+
         // Check if any outputs are for us
         let mut received = 0;
         for (i, output) in tx.outputs.iter().enumerate() {
@@ -546,17 +605,17 @@ impl Wallet {
             // In reality, we'd check if we can spend using our keypair
             if output.public_key_script == our_pubkey_bytes {
                 received += output.value;
-                
+
                 // Add the UTXO to our records
                 let outpoint = OutPoint {
                     transaction_hash: tx.hash(),
                     index: i as u32,
                 };
-                
+
                 self.utxos.insert(outpoint, output.clone());
             }
         }
-        
+
         // Check if any inputs are from us (i.e., spending)
         let mut spent = 0;
         for input in &tx.inputs {
@@ -564,27 +623,28 @@ impl Wallet {
             if self.utxos.contains_key(&input.previous_output) {
                 if let Some(prev_output) = self.utxos.get(&input.previous_output) {
                     spent += prev_output.value;
-                    
+
                     // Remove this UTXO as it's now spent
                     self.utxos.remove(&input.previous_output);
                 }
             }
         }
-        
+
         // Update our balance
         self.balance = self.balance + received - spent;
-        
+
         // Store the transaction for history
         self.transactions.push(tx.clone());
-        
+
         // Add a timestamp for this transaction
-        self.transaction_timestamps.insert(tx.hash(), current_time());
-        
+        self.transaction_timestamps
+            .insert(tx.hash(), current_time());
+
         // Also check for stealth transactions
         if tx.ephemeral_pubkey.is_some() {
             self.scan_for_stealth_transactions(tx);
         }
-        
+
         // Verify transaction against the utxo_set
         if !self.verify_transaction(tx, utxo_set) {
             // If verification fails, log or handle appropriately
@@ -592,18 +652,18 @@ impl Wallet {
             println!("Transaction verification failed: {:?}", tx.hash());
         }
     }
-    
+
     // Verify a transaction against the UTXO set to ensure it's valid
     pub fn verify_transaction(&self, tx: &Transaction, utxo_set: &UTXOSet) -> bool {
         // Basic validation steps:
-        
+
         // 1. Check that all inputs reference valid UTXOs
         for input in &tx.inputs {
             if !utxo_set.contains(&input.previous_output) {
                 return false;
             }
         }
-        
+
         // 2. Verify signatures (simplified version)
         for input in &tx.inputs {
             // Get the UTXO that this input is spending
@@ -615,7 +675,7 @@ impl Wallet {
                     // 1. Create the message being signed (tx hash + other data)
                     // 2. Parse the signature from the input script
                     // 3. Use the JubjubKeypair verify function
-                    
+
                     // Dummy verification for now
                     if input.signature_script.is_empty() {
                         return false;
@@ -625,7 +685,7 @@ impl Wallet {
                 return false; // Input references a non-existent UTXO
             }
         }
-        
+
         // 3. Check that the transaction does not create or destroy value
         let mut input_value = 0;
         for input in &tx.inputs {
@@ -635,26 +695,27 @@ impl Wallet {
                 return false;
             }
         }
-        
+
         let output_value: u64 = tx.outputs.iter().map(|o| o.value).sum();
-        
+
         // The sum of outputs must be less than or equal to inputs
         // (difference is the transaction fee)
         if output_value > input_value {
             return false;
         }
-        
+
         true
     }
-    
+
     // Verify that our local UTXO set is consistent with the global UTXO set
     pub fn verify_utxo_consistency(&self, utxo_set: &UTXOSet) -> bool {
         for (outpoint, our_utxo) in &self.utxos {
             // Check that each of our UTXOs exists in the global set
             if let Some(global_utxo) = utxo_set.get(outpoint) {
                 // And that they match in value and public key script
-                if our_utxo.value != global_utxo.value || 
-                   our_utxo.public_key_script != global_utxo.public_key_script {
+                if our_utxo.value != global_utxo.value
+                    || our_utxo.public_key_script != global_utxo.public_key_script
+                {
                     return false;
                 }
             } else {
@@ -662,18 +723,18 @@ impl Wallet {
                 return false;
             }
         }
-        
+
         true
     }
-    
+
     // If this transaction used a stealth address to pay us, find it
     pub fn scan_for_stealth_transactions(&mut self, tx: &Transaction) -> bool {
         if self.keypair.is_none() || tx.ephemeral_pubkey.is_none() {
             return false;
         }
-        
+
         let keypair = self.keypair.as_ref().unwrap();
-        
+
         // Check if this transaction includes a stealth payment
         if let Some(ephemeral_pubkey_bytes) = &tx.ephemeral_pubkey {
             // Convert bytes to a JubjubPoint
@@ -681,145 +742,153 @@ impl Wallet {
                 Some(pk) => pk,
                 None => return false,
             };
-            
+
             // For each output, check if it's a stealth payment to us
             for (i, output) in tx.outputs.iter().enumerate() {
                 // Derive the stealth address using the ephemeral key and our private key
                 let derived_address = self.derive_stealth_address(&ephemeral_pubkey);
-                
+
                 // Check if the output's script matches our derived address
                 if output.public_key_script == derived_address {
                     // Found a payment to us!
                     self.balance += output.value;
-                    
+
                     // Add the UTXO to our records
                     let outpoint = OutPoint {
                         transaction_hash: tx.hash(),
                         index: i as u32,
                     };
-                    
+
                     self.utxos.insert(outpoint, output.clone());
                     return true;
                 }
             }
         }
-        
+
         false
     }
-    
+
     // Helper function to derive a stealth address
     fn derive_stealth_address(&self, ephemeral_pubkey: &JubjubPoint) -> Vec<u8> {
         let keypair = self.keypair.as_ref().unwrap();
-        
+
         // Compute shared secret using Diffie-Hellman
         let shared_secret = jubjub::diffie_hellman(&keypair.secret, ephemeral_pubkey);
-        
+
         // Derive the stealth address using the shared secret
         let mut hasher = Sha256::new();
         hasher.update(&jubjub_point_to_bytes(&shared_secret));
         let hash = hasher.finalize();
-        
+
         // Generate stealth address
         let hash_scalar = JubjubScalar::hash_to_scalar(&hash);
-        let stealth_point = (<JubjubPoint as JubjubPointExt>::generator() * hash_scalar) + keypair.public;
-        
+        let stealth_point =
+            (<JubjubPoint as JubjubPointExt>::generator() * hash_scalar) + keypair.public;
+
         // Return as bytes
         jubjub_point_to_bytes(&stealth_point)
     }
-    
+
     // Create and broadcast a stake transaction
     pub fn create_stake(&mut self, amount: u64) -> Option<Transaction> {
         // Use the proper UTXO selection and fee calculation
         let stake_recipient = <JubjubPoint as JubjubPointExt>::generator(); // Use a standard address for staking
-        
+
         // Default fee rate for staking (lower priority)
         let fee_per_kb = 500; // 0.5 satoshis per byte
-        
+
         // Create transaction with proper UTXO selection
         let mut tx = self.create_transaction_with_fee(&stake_recipient, amount, fee_per_kb)?;
-        
+
         // Set a flag or data to indicate this is a stake
         tx.privacy_flags |= 0x02; // Example flag for stake
-        
+
         // Mark inputs as pending spent
         for input in &tx.inputs {
-            self.pending_spent_outpoints.lock().unwrap().insert(input.previous_output.clone());
+            self.pending_spent_outpoints
+                .lock()
+                .unwrap()
+                .insert(input.previous_output.clone());
         }
-        
+
         // Update our balance immediately (in real wallet, we'd wait for confirmation)
         self.balance -= amount;
-        
+
         Some(tx)
     }
-    
+
     // Unstake funds (withdraw from staking)
     pub fn unstake(&mut self, stake_id: &[u8; 32], amount: u64) -> Option<Transaction> {
         // This would require integration with the staking contract
         // For now, this is a simplified implementation
-        
+
         if self.keypair.is_none() {
             return None;
         }
-        
+
         // Create a transaction that claims the stake
         let mut tx = Transaction::default();
-        
+
         // Add the stake as input
         let stake_outpoint = OutPoint {
             transaction_hash: *stake_id,
             index: 0, // Assuming the stake output is at index 0
         };
-        
+
         // Sign the input
         let keypair = self.keypair.as_ref().unwrap();
         let message = b"Unstake transaction";
         let signature = keypair.sign(message);
         let signature_bytes = signature.expect("Failed to sign transaction").to_bytes();
-        
+
         let input = TransactionInput {
             previous_output: stake_outpoint,
             signature_script: signature_bytes,
             sequence: 0,
         };
-        
+
         tx.inputs.push(input);
-        
+
         // Add output back to our own wallet
         let output = TransactionOutput {
             value: amount,
             public_key_script: jubjub_point_to_bytes(&keypair.public),
         };
-        
+
         tx.outputs.push(output);
-        
+
         // Set the unstake flag
         tx.privacy_flags |= 0x04; // Example flag for unstake
-        
+
         Some(tx)
     }
-    
+
     // Get all available UTXOs
     pub fn get_utxos(&self) -> &HashMap<OutPoint, TransactionOutput> {
         &self.utxos
     }
-    
+
     // Get transaction history
     pub fn get_transaction_history(&self) -> &[Transaction] {
         &self.transactions
     }
-    
+
     // Get pending (unconfirmed) transactions
     pub fn get_pending_transactions(&self) -> Vec<&Transaction> {
         // Find transactions that spend our pending outpoints
-        self.transactions.iter()
+        self.transactions
+            .iter()
             .filter(|tx| {
                 tx.inputs.iter().any(|input| {
-                    self.pending_spent_outpoints.lock().unwrap().contains(&input.previous_output)
+                    self.pending_spent_outpoints
+                        .lock()
+                        .unwrap()
+                        .contains(&input.previous_output)
                 })
             })
             .collect()
     }
-    
+
     // Generate a wallet activity report
     pub fn generate_activity_report(&self) -> WalletActivityReport {
         let mut sent_count = 0;
@@ -827,13 +896,14 @@ impl Wallet {
         let mut total_sent = 0;
         let mut total_received = 0;
         let mut recent_transactions = Vec::new();
-        
+
         // Process transactions to gather statistics
         for tx in &self.transactions {
-            let is_outgoing = tx.inputs.iter().any(|input| 
-                self.utxos.contains_key(&input.previous_output)
-            );
-            
+            let is_outgoing = tx
+                .inputs
+                .iter()
+                .any(|input| self.utxos.contains_key(&input.previous_output));
+
             if is_outgoing {
                 sent_count += 1;
                 // Sum output values as the sent amount
@@ -847,13 +917,13 @@ impl Wallet {
                         transaction_hash: tx.hash(),
                         index: i as u32,
                     };
-                    
+
                     if self.utxos.contains_key(&outpoint) {
                         total_received += output.value;
                     }
                 }
             }
-            
+
             // Add to recent transactions if we have a timestamp
             if let Some(timestamp) = self.transaction_timestamps.get(&tx.hash()) {
                 let tx_info = TransactionInfo {
@@ -862,33 +932,35 @@ impl Wallet {
                     amount: if is_outgoing {
                         tx.outputs.iter().map(|out| out.value).sum()
                     } else {
-                        tx.outputs.iter().enumerate()
-                           .filter(|(i, _)| {
-                               let outpoint = OutPoint {
-                                   transaction_hash: tx.hash(),
-                                   index: *i as u32,
-                               };
-                               self.utxos.contains_key(&outpoint)
-                           })
-                           .map(|(_, out)| out.value)
-                           .sum()
+                        tx.outputs
+                            .iter()
+                            .enumerate()
+                            .filter(|(i, _)| {
+                                let outpoint = OutPoint {
+                                    transaction_hash: tx.hash(),
+                                    index: *i as u32,
+                                };
+                                self.utxos.contains_key(&outpoint)
+                            })
+                            .map(|(_, out)| out.value)
+                            .sum()
                     },
                     timestamp: *timestamp,
                     time_ago: format_time_diff(*timestamp, false),
                 };
-                
+
                 recent_transactions.push(tx_info);
             }
         }
-        
+
         // Sort recent transactions by timestamp (newest first)
         recent_transactions.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
-        
+
         // Limit to the 10 most recent transactions
         if recent_transactions.len() > 10 {
             recent_transactions.truncate(10);
         }
-        
+
         WalletActivityReport {
             balance: self.balance,
             sent_count,
@@ -901,11 +973,11 @@ impl Wallet {
             last_sync_time_ago: format_time_diff(self.last_sync_time, false),
         }
     }
-    
+
     // Export wallet data in a format suitable for backup
     pub fn export_wallet_data(&self) -> WalletBackupData {
         let mut utxo_data = Vec::new();
-        
+
         for (outpoint, output) in &self.utxos {
             utxo_data.push(UTXOData {
                 tx_hash: outpoint.transaction_hash,
@@ -914,7 +986,7 @@ impl Wallet {
                 script: output.public_key_script.clone(),
             });
         }
-        
+
         let keypair_data = self.keypair.as_ref().map(|kp| {
             KeypairData {
                 public_key: jubjub_point_to_bytes(&kp.public),
@@ -922,7 +994,7 @@ impl Wallet {
                 private_key: kp.secret.to_bytes().to_vec(),
             }
         });
-        
+
         WalletBackupData {
             balance: self.balance,
             privacy_enabled: self.privacy_enabled,
@@ -931,12 +1003,12 @@ impl Wallet {
             timestamp: current_time(),
         }
     }
-    
+
     // Import wallet data from a backup
     pub fn import_wallet_data(&mut self, backup: WalletBackupData) -> Result<(), String> {
         self.balance = backup.balance;
         self.privacy_enabled = backup.privacy_enabled;
-        
+
         // Clear existing UTXOs and import from backup
         self.utxos.clear();
         for utxo in backup.utxos {
@@ -944,28 +1016,29 @@ impl Wallet {
                 transaction_hash: utxo.tx_hash,
                 index: utxo.index,
             };
-            
+
             let output = TransactionOutput {
                 value: utxo.value,
                 public_key_script: utxo.script,
             };
-            
+
             self.utxos.insert(outpoint, output);
         }
-        
+
         // Import keypair if present
         if let Some(kp_data) = backup.keypair {
             if kp_data.private_key.len() == 32 {
                 let mut scalar_bytes = [0u8; 32];
                 scalar_bytes.copy_from_slice(&kp_data.private_key);
-                
+
                 let secret = JubjubScalar::from_bytes(&scalar_bytes)
                     .ok_or("Invalid private key in backup")?;
-                
+
                 self.keypair = Some(JubjubKeypair::new(secret));
-                
+
                 // Verify that the restored public key matches the backup
-                let public_key_bytes = jubjub_point_to_bytes(&self.keypair.as_ref().unwrap().public);
+                let public_key_bytes =
+                    jubjub_point_to_bytes(&self.keypair.as_ref().unwrap().public);
                 if public_key_bytes != kp_data.public_key {
                     return Err("Public key mismatch in restored keypair".to_string());
                 }
@@ -975,37 +1048,42 @@ impl Wallet {
         } else {
             self.keypair = None;
         }
-        
+
         self.last_sync_time = current_time();
-        
+
         Ok(())
     }
-    
+
     // Get the available (spendable) balance
     pub fn get_available_balance(&self) -> u64 {
         let mut available = 0;
-        
+
         // Sum all UTXOs that aren't pending spent
         for (outpoint, output) in &self.utxos {
-            if !self.pending_spent_outpoints.lock().unwrap().contains(outpoint) {
+            if !self
+                .pending_spent_outpoints
+                .lock()
+                .unwrap()
+                .contains(outpoint)
+            {
                 available += output.value;
             }
         }
-        
+
         available
     }
-    
+
     // Calculate the pending balance (waiting for confirmation)
     pub fn get_pending_balance(&self) -> u64 {
         let mut pending = 0;
-        
+
         // Sum all UTXOs that are pending spent
         for outpoint in self.pending_spent_outpoints.lock().unwrap().iter() {
             if let Some(output) = self.utxos.get(outpoint) {
                 pending += output.value;
             }
         }
-        
+
         pending
     }
 }
@@ -1085,22 +1163,25 @@ impl Wallet {
     pub fn set_utxos_for_testing(&mut self, utxos: HashMap<OutPoint, TransactionOutput>) {
         self.utxos = utxos;
     }
-    
+
     /// Test helper: Set the wallet's balance directly (for testing only)
     pub fn set_balance_for_testing(&mut self, balance: u64) {
         self.balance = balance;
     }
-    
+
     /// Test helper: Get the wallet's UTXOs directly (for testing only)
     pub fn get_utxos_for_testing(&self) -> &HashMap<OutPoint, TransactionOutput> {
         &self.utxos
     }
-    
+
     /// Test helper: Add a pending spent outpoint (for testing only)
     pub fn add_pending_outpoint_for_testing(&self, outpoint: OutPoint) {
-        self.pending_spent_outpoints.lock().unwrap().insert(outpoint);
+        self.pending_spent_outpoints
+            .lock()
+            .unwrap()
+            .insert(outpoint);
     }
-    
+
     /// Test helper: Set the transaction timestamps (for testing only)
     pub fn set_transaction_timestamps_for_testing(&mut self, timestamps: HashMap<[u8; 32], u64>) {
         self.transaction_timestamps = timestamps;

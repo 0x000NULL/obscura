@@ -1,4 +1,4 @@
-use crate::crypto::jubjub::{JubjubKeypair, JubjubPoint, JubjubSignature, JubjubPointExt};
+use crate::crypto::jubjub::{JubjubKeypair, JubjubPoint, JubjubPointExt, JubjubSignature};
 use sha2::{Digest, Sha256};
 
 /// VRF (Verifiable Random Function) implementation for validator selection
@@ -87,7 +87,7 @@ impl<'a> Vrf<'a> {
         for i in 0..8 {
             value = (value << 8) | (output[i] as u64);
         }
-        
+
         // Map to range [0, max)
         value % max
     }
@@ -96,8 +96,8 @@ impl<'a> Vrf<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::rngs::OsRng;
     use crate::crypto::jubjub::generate_keypair;
+    use rand::rngs::OsRng;
 
     #[test]
     fn test_vrf_proof_verification() {

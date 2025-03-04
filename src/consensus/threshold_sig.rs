@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::crypto::jubjub::{JubjubPoint, JubjubSignature, JubjubPointExt};
+use crate::crypto::jubjub::{JubjubPoint, JubjubPointExt, JubjubSignature};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 

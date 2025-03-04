@@ -1,19 +1,18 @@
 // use super::*;
 use crate::blockchain::{
-    Mempool, OutPoint, Transaction, TransactionInput, TransactionOutput, UTXOSet, 
-    Block, BlockHeader
+    Block, BlockHeader, Mempool, OutPoint, Transaction, TransactionInput, TransactionOutput,
+    UTXOSet,
 };
-use crate::consensus::pow::ProofOfWork;
 use crate::consensus::mining_reward::{
     calculate_block_reward, calculate_block_reward_by_time, calculate_min_fee_rate,
-    calculate_transaction_fees, create_coinbase_transaction, 
-    estimate_transaction_size, prioritize_transactions,
-    validate_block_size, validate_coinbase_maturity
+    calculate_transaction_fees, create_coinbase_transaction, estimate_transaction_size,
+    prioritize_transactions, validate_block_size, validate_coinbase_maturity,
 };
 use crate::consensus::mining_reward::{
-    COINBASE_MATURITY, GENESIS_TIMESTAMP, HALVING_INTERVAL, INITIAL_BLOCK_REWARD,
-    MAX_FEE_RATE, MIN_FEE_RATE, TARGET_BLOCK_SIZE
+    COINBASE_MATURITY, GENESIS_TIMESTAMP, HALVING_INTERVAL, INITIAL_BLOCK_REWARD, MAX_FEE_RATE,
+    MIN_FEE_RATE, TARGET_BLOCK_SIZE,
 };
+use crate::consensus::pow::ProofOfWork;
 use std::collections::HashMap;
 
 #[test]
@@ -475,17 +474,17 @@ fn create_test_transaction_with_fee(index: u8, output_value: u64) -> Transaction
 fn test_transaction_prioritization() {
     // Test the prioritize_transactions function
     let test_utxo_set = UTXOSet::new();
-    
+
     // Create some test transactions
     let tx1 = create_test_transaction_with_fee(1, 900);
     let tx2 = create_test_transaction_with_fee(2, 1800);
     let tx3 = create_test_transaction_with_fee(3, 2700);
-    
+
     let all_txs = vec![tx1.clone(), tx2.clone(), tx3.clone()];
-    
+
     // Run the prioritization function directly
     let prioritized = prioritize_transactions(&all_txs, &test_utxo_set, 1_000_000);
-    
+
     // ... existing code ...
 }
 
@@ -631,10 +630,10 @@ fn test_cpfp_transaction_prioritization() {
             public_key_script: vec![19, 20, 21],
         },
     );
-    
+
     // Create a separate UTXO set for later testing
     let mut test_utxo_set = UTXOSet::new();
-    
+
     // Add the same UTXOs to the test UTXO set
     test_utxo_set.add_utxo(
         OutPoint {
@@ -646,7 +645,7 @@ fn test_cpfp_transaction_prioritization() {
             public_key_script: vec![1, 2, 3],
         },
     );
-    
+
     test_utxo_set.add_utxo(
         OutPoint {
             transaction_hash: [1; 32],
@@ -657,7 +656,7 @@ fn test_cpfp_transaction_prioritization() {
             public_key_script: vec![13, 14, 15],
         },
     );
-    
+
     test_utxo_set.add_utxo(
         OutPoint {
             transaction_hash: [2; 32],
@@ -775,19 +774,19 @@ fn test_cpfp_transaction_prioritization() {
     // Set the UTXO set in the mempool for transaction validation
     let utxo_set_arc = std::sync::Arc::new(test_utxo_set);
     mempool.set_utxo_set(utxo_set_arc);
-    
+
     let _parent_added = mempool.add_transaction(parent_tx.clone());
     let _child_added = mempool.add_transaction(child_tx.clone());
     let _tx1_added = mempool.add_transaction(tx1.clone());
     let _tx2_added = mempool.add_transaction(tx2.clone());
-    
+
     // Debug: Print if transactions were added successfully
     println!("Transaction addition to mempool:");
     println!("Parent added: {}", _parent_added);
     println!("Child added: {}", _child_added);
     println!("TX1 added: {}", _tx1_added);
     println!("TX2 added: {}", _tx2_added);
-    
+
     // Debug: Print transactions in mempool
     println!("Number of transactions in mempool: {}", mempool.size());
 
@@ -795,13 +794,16 @@ fn test_cpfp_transaction_prioritization() {
     let prioritized_txs = mempool.get_transactions_by_fee(10);
 
     // Debug: Print the transaction hashes in prioritized_txs
-    println!("Number of prioritized transactions: {}", prioritized_txs.len());
+    println!(
+        "Number of prioritized transactions: {}",
+        prioritized_txs.len()
+    );
     println!("Expected transactions:");
     println!("Parent hash: {:?}", parent_tx.hash());
     println!("Child hash: {:?}", child_tx.hash());
     println!("TX1 hash: {:?}", tx1.hash());
     println!("TX2 hash: {:?}", tx2.hash());
-    
+
     println!("Actual transactions in prioritized_txs:");
     for (i, tx) in prioritized_txs.iter().enumerate() {
         println!("TX {}: {:?}", i, tx.hash());
@@ -813,16 +815,19 @@ fn test_cpfp_transaction_prioritization() {
         let parent_index = prioritized_txs
             .iter()
             .position(|tx| tx.hash() == parent_tx.hash());
-        
+
         let tx1_index = prioritized_txs
             .iter()
             .position(|tx| tx.hash() == tx1.hash());
-            
+
         // Only unwrap and assert if both transactions are found
         if let (Some(parent_idx), Some(tx1_idx)) = (parent_index, tx1_index) {
             // Assert that the parent transaction should be prioritized higher than tx1
             // This means parent_idx should be lower than tx1_idx in the prioritized list
-            assert!(parent_idx < tx1_idx, "Parent should be prioritized higher than TX1");
+            assert!(
+                parent_idx < tx1_idx,
+                "Parent should be prioritized higher than TX1"
+            );
         }
     } else {
         println!("Test skipped because no transactions were added to mempool");
