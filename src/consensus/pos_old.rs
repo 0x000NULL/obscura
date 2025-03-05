@@ -5,11 +5,14 @@
 use crate::consensus::pos::*;
 
 use crate::consensus::sharding::{CrossShardCommittee, Shard, ShardManager};
-use crate::crypto::jubjub::{JubjubPoint, JubjubPointExt, JubjubSignature};
+use crate::crypto::jubjub::{JubjubPoint, JubjubPointExt, JubjubSignature, JubjubKeypair};
 use bincode;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{SystemTime, UNIX_EPOCH};
+use crate::consensus::vrf::Vrf;
+use ark_ed_on_bls12_381::Fr;
+use ark_ff::Zero;
 
 // Constants for PoS mechanism
 pub const MINIMUM_STAKE: u64 = 1000;
@@ -754,8 +757,8 @@ impl ProofOfStake {
     }
 
     // Protect against stake grinding attacks by requiring VRF-based selection
-    pub fn validate_vrf_proof(&self, vrf_proof: &super::vrf::VrfProof) -> bool {
-        super::vrf::Vrf::verify(vrf_proof).is_ok()
+    pub fn validate_vrf_proof(&self, vrf_proof: &[u8; 64], message: &[u8], public_key: &[u8]) -> bool {
+        verify_vrf_proof(vrf_proof, message, public_key)
     }
 
     pub fn calculate_dynamic_reward_rate(&self, total_staked: u64, total_supply: u64) -> f64 {
@@ -3024,4 +3027,12 @@ impl StakingContract {
 
         Ok(())
     }
+}
+
+fn verify_vrf_proof(vrf_proof: &[u8; 64], message: &[u8], public_key: &[u8]) -> bool {
+    // Create a VRF instance with a dummy keypair that has the correct public key
+    let vrf = Vrf::new_from_public(public_key);
+    
+    // Verify the proof
+    vrf.verify(message, vrf_proof)
 }

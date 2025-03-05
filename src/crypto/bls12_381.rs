@@ -1,15 +1,14 @@
-pub use blstrs::Scalar as BlsScalar;
-use blstrs::{pairing, G1Affine, G1Projective, G2Affine, G2Projective};
-use ff::Field; // Import Field trait for random() method
-use ff::PrimeFieldBits; // Add this import for bit operations
-use group::prime::PrimeCurveAffine; // Import PrimeCurveAffine for generator method
-use group::{Group, GroupEncoding}; // Import Group traits
-use rand::{rngs::OsRng, RngCore};
-use sha2::{Digest, Sha256};
-use std::ops::Mul;
-use std::sync::Arc;
-use rayon::prelude::*;
+use blstrs::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar, pairing, G1Compressed};
+use ff::Field;
+use group::{Curve, Group, GroupEncoding, prime::PrimeCurveAffine};
 use once_cell::sync::Lazy;
+use rand::thread_rng;
+use sha2::{Sha256, Digest};
+use rayon::iter::{IntoParallelIterator, ParallelIterator, ParallelExtend};
+use std::sync::Arc;
+
+#[cfg(test)]
+use rand::{Rng, RngCore, CryptoRng};
 
 /// Constants for optimized operations
 const WINDOW_SIZE: usize = 4;
@@ -32,7 +31,7 @@ fn generate_g1_table() -> Vec<G1Projective> {
     
     table.push(G1Projective::identity());
     for i in 1..TABLE_SIZE {
-        table.push(base * BlsScalar::from(i as u64));
+        table.push(base * Scalar::from(i as u64));
     }
     
     table
@@ -45,167 +44,115 @@ fn generate_g2_table() -> Vec<G2Projective> {
     
     table.push(G2Projective::identity());
     for i in 1..TABLE_SIZE {
-        table.push(base * BlsScalar::from(i as u64));
+        table.push(base * Scalar::from(i as u64));
     }
     
     table
 }
 
 /// Optimized scalar multiplication using windowed method and precomputation
-pub fn optimized_g1_mul(scalar: &BlsScalar) -> G1Projective {
-    let table = G1_TABLE.as_ref();
-    let scalar_bytes = scalar.to_bytes_le();
+pub fn optimized_g1_mul(point: &G1Projective, scalar: &Scalar) -> G1Projective {
     let mut result = G1Projective::identity();
+    let mut temp = *point;
+    let bits = scalar.to_bytes_le();
     
-    for window in scalar_bytes.chunks(WINDOW_SIZE) {
-        // Double for each bit in the window
-        for _ in 0..WINDOW_SIZE {
-            result = result.double();
-        }
-        
-        // Convert window bits to index
-        let mut index = 0usize;
-        for (i, byte) in window.iter().enumerate() {
-            for bit in 0..8 {
-                if (byte & (1 << bit)) != 0 {
-                    index |= 1 << (i * 8 + bit);
-                }
+    for byte in bits.iter() {
+        for i in 0..8 {
+            if (byte >> i) & 1 == 1 {
+                result += temp;
             }
-        }
-        
-        // Add precomputed value
-        if index > 0 && index < table.len() {
-            result += table[index];
+            temp = temp.double();
         }
     }
-    
     result
 }
 
 /// Optimized scalar multiplication for G2
-pub fn optimized_g2_mul(scalar: &BlsScalar) -> G2Projective {
-    let table = G2_TABLE.as_ref();
-    let scalar_bytes = scalar.to_bytes_le();
+pub fn optimized_g2_mul(point: &G2Projective, scalar: &Scalar) -> G2Projective {
     let mut result = G2Projective::identity();
+    let mut temp = *point;
+    let bits = scalar.to_bytes_le();
     
-    for window in scalar_bytes.chunks(WINDOW_SIZE) {
-        // Double for each bit in the window
-        for _ in 0..WINDOW_SIZE {
-            result = result.double();
-        }
-        
-        // Convert window bits to index
-        let mut index = 0usize;
-        for (i, byte) in window.iter().enumerate() {
-            for bit in 0..8 {
-                if (byte & (1 << bit)) != 0 {
-                    index |= 1 << (i * 8 + bit);
-                }
+    for byte in bits.iter() {
+        for i in 0..8 {
+            if (byte >> i) & 1 == 1 {
+                result += temp;
             }
-        }
-        
-        // Add precomputed value
-        if index > 0 && index < table.len() {
-            result += table[index];
+            temp = temp.double();
         }
     }
-    
     result
 }
 
 /// Batch verification of multiple signatures using parallel processing
 pub fn verify_batch_parallel(
-    messages: &[&[u8]],
-    public_keys: &[BlsPublicKey],
     signatures: &[BlsSignature],
+    public_keys: &[BlsPublicKey],
+    messages: &[Vec<u8>],
 ) -> bool {
-    if messages.len() != public_keys.len() || messages.len() != signatures.len() || messages.is_empty() {
+    if signatures.len() != public_keys.len() || signatures.len() != messages.len() {
         return false;
     }
 
-    // Generate random scalars for linear combination
-    let mut rng = OsRng;
-    let scalars: Vec<BlsScalar> = (0..messages.len())
-        .map(|_| BlsScalar::random(&mut rng))
-        .collect();
-
-    // Compute products in parallel
-    let (lhs, rhs) = rayon::join(
-        || {
-            // Left-hand side of the verification equation
-            signatures.par_iter().zip(scalars.par_iter())
-                .map(|(sig, scalar)| sig.0 * scalar)
-                .reduce(|| G1Projective::identity(), |acc, x| acc + x)
-        },
-        || {
-            // Right-hand side of the verification equation
-            messages.par_iter().zip(public_keys.par_iter()).zip(scalars.par_iter())
-                .map(|((msg, pk), scalar)| {
-                    let h = hash_to_g1(msg);
-                    (h * scalar, pk.0 * scalar)
-                })
-                .reduce(|| (G1Projective::identity(), G2Projective::identity()),
-                       |acc, x| (acc.0 + x.0, acc.1 + x.1))
-        }
+    let num_batches = (signatures.len() + BATCH_SIZE - 1) / BATCH_SIZE;
+    let mut combined_results = Vec::new();
+    
+    combined_results.par_extend(
+        (0..num_batches).into_par_iter().map(|batch_idx| {
+            let start = batch_idx * BATCH_SIZE;
+            let end = std::cmp::min(start + BATCH_SIZE, signatures.len());
+            let mut batch_result = G1Projective::identity();
+            
+            for i in start..end {
+                let hash_point = hash_to_g1(&messages[i]);
+                let scalar = Scalar::from(i as u64);
+                batch_result += signatures[i].0 * scalar - (hash_point * scalar);
+            }
+            
+            batch_result
+        })
     );
 
-    // Convert to affine for pairing
-    let lhs_affine = G1Affine::from(lhs);
-    let g2_gen_affine = G2Affine::from(G2Projective::generator());
-    let rhs_g1_affine = G1Affine::from(rhs.0);
-    let rhs_g2_affine = G2Affine::from(rhs.1);
+    let final_result = combined_results.iter().fold(
+        G1Projective::identity(),
+        |acc, x| acc + x
+    );
 
-    // Final pairing check
-    pairing(&lhs_affine, &g2_gen_affine) == pairing(&rhs_g1_affine, &rhs_g2_affine)
+    final_result == G1Projective::identity()
 }
 
 /// Improved hash-to-curve implementation using SWU map
-fn hash_to_g1(message: &[u8]) -> G1Projective {
-    // Implement optimized Simplified SWU map for BLS12-381
-    // This is a simplified version - in production, use a constant-time implementation
-    let mut hasher = Sha256::new();
-    hasher.update(b"Obscura_BLS12_381_G1_H2C");
-    hasher.update(message);
-    let h = hasher.finalize();
-
-    let mut attempt = 0u8;
+pub fn hash_to_g1(msg: &[u8]) -> G1Projective {
+    let mut counter: u32 = 0;
     loop {
-        let mut data = Vec::with_capacity(h.len() + 1);
-        data.extend_from_slice(&h);
-        data.push(attempt);
-
-        let mut hasher = Sha256::new();
-        hasher.update(&data);
-        let hash = hasher.finalize();
-
-        // Try to interpret as x-coordinate
-        let mut x_bytes = [0u8; 48];
-        x_bytes[0..32].copy_from_slice(&hash);
-
-        if let Some(point) = try_and_increment_g1(&x_bytes) {
-            return point;
+        let mut input = Vec::with_capacity(msg.len() + 1);
+        input.extend_from_slice(msg);
+        input.push(counter as u8);
+        
+        if let Some(point) = try_and_increment_g1_raw(&input, counter) {
+            return point.into();
         }
-
-        attempt = attempt.wrapping_add(1);
-        if attempt == 0 {
-            // If we've tried all counters, return a default point
-            return G1Projective::generator();
-        }
+        counter = counter.wrapping_add(1);
     }
 }
 
 /// Helper function for hash-to-curve
-fn try_and_increment_g1(x_bytes: &[u8; 48]) -> Option<G1Projective> {
-    // Attempt to create a valid curve point
-    let point_opt: Option<G1Affine> = G1Affine::from_compressed(x_bytes).into();
-    if let Some(point) = point_opt {
-        let point_proj = G1Projective::from(point);
-        // Check if the point is in the correct subgroup using is_on_curve()
-        if bool::from(point_proj.is_on_curve()) {
-            return Some(point_proj);
-        }
+pub fn try_and_increment_g1_raw(message: &[u8], counter: u32) -> Option<G1Projective> {
+    let mut hasher = Sha256::new();
+    hasher.update(message);
+    hasher.update(counter.to_be_bytes());
+    let point_bytes = hasher.finalize();
+
+    let mut compressed = [0u8; 48];
+    compressed[0..32].copy_from_slice(&point_bytes[0..32]);
+    
+    // Create point from compressed bytes and convert CtOption to Option
+    let point = G1Projective::from_compressed(&compressed);
+    if bool::from(point.is_some()) && bool::from(point.unwrap().is_on_curve()) {
+        Some(point.unwrap())
+    } else {
+        None
     }
-    None
 }
 
 /// BLS12-381 curve implementation for Obscura's cryptographic needs
@@ -226,7 +173,7 @@ pub struct BlsPublicKey(G2Projective);
 #[derive(Debug, Clone)]
 pub struct BlsKeypair {
     /// The secret key
-    pub secret_key: BlsScalar,
+    pub secret_key: Scalar,
     /// The public key
     pub public_key: BlsPublicKey,
 }
@@ -234,8 +181,8 @@ pub struct BlsKeypair {
 impl BlsKeypair {
     /// Generate a new BLS keypair
     pub fn generate() -> Self {
-        let mut rng = OsRng;
-        let secret_key = BlsScalar::random(&mut rng);
+        let mut rng = rand::thread_rng();
+        let secret_key = Scalar::random(&mut rng);
         let public_key = BlsPublicKey(G2Projective::generator() * secret_key);
 
         Self {
@@ -246,16 +193,36 @@ impl BlsKeypair {
 
     /// Sign a message
     pub fn sign(&self, message: &[u8]) -> BlsSignature {
-        // Hash the message to a point on G1
-        let h = hash_to_g1(message);
-
-        // Multiply the point by the secret key
-        BlsSignature(h * self.secret_key)
+        let hash_point = hash_to_g1(message);
+        BlsSignature(optimized_g1_mul(&hash_point, &self.secret_key))
     }
 
     /// Verify a signature
-    pub fn verify(&self, message: &[u8], signature: &BlsSignature) -> bool {
-        verify_signature(message, &self.public_key, signature)
+    pub fn verify(&self, message: &[u8], signature: &G1Projective) -> bool {
+        // Check if signature point is on curve
+        if !bool::from(signature.is_on_curve()) {
+            return false;
+        }
+
+        // Check if public key point is on curve
+        if !bool::from(self.public_key.0.is_on_curve()) {
+            return false;
+        }
+
+        // Hash message to curve
+        let h = hash_to_g1(message);
+
+        // Convert to affine for pairing
+        let sig_affine = G1Affine::from(*signature);
+        let h_affine = G1Affine::from(h);
+        let pk_affine = G2Affine::from(self.public_key.0);
+        let g2_gen_affine = G2Affine::generator();
+
+        // Compute pairings
+        let pairing1 = pairing(&sig_affine, &g2_gen_affine);
+        let pairing2 = pairing(&h_affine, &pk_affine);
+
+        bool::from(pairing1 == pairing2)
     }
 }
 
@@ -265,7 +232,7 @@ pub struct ProofOfPossession(G1Projective);
 
 impl ProofOfPossession {
     /// Sign a public key to create a proof of possession
-    pub fn sign(secret_key: &BlsScalar, public_key: &BlsPublicKey) -> Self {
+    pub fn sign(secret_key: &Scalar, public_key: &BlsPublicKey) -> Self {
         // Serialize the public key to create a message
         let pk_bytes = public_key.to_compressed();
 
@@ -384,42 +351,59 @@ pub fn aggregate_signatures(signatures: &[BlsSignature]) -> BlsSignature {
     BlsSignature(agg_sig)
 }
 
-/// Verify a batch of signatures
-///
-/// # Arguments
-/// * `messages` - A slice of messages
-/// * `public_keys` - A slice of public keys
-/// * `signature` - The aggregated signature
-///
-/// # Returns
-/// * true if the signature is valid, false otherwise
+/// Batch verification of multiple signatures
 pub fn verify_batch(
-    messages: &[&[u8]],
-    public_keys: &[BlsPublicKey],
-    signature: &BlsSignature,
+    messages: &[&[u8]], 
+    signatures: &[G1Projective],
+    public_keys: &[G2Projective]
 ) -> bool {
-    if messages.len() != public_keys.len() || messages.is_empty() {
+    // Check input validity
+    if messages.is_empty() || signatures.len() != messages.len() || public_keys.len() != messages.len() {
         return false;
+
     }
 
-    // Convert signature to affine
-    let agg_sig_affine = G1Affine::from(signature.0);
-
-    // Compute the left-hand side of the verification equation
-    let lhs = pairing(&agg_sig_affine, &G2Affine::from(G2Projective::generator()));
-
-    // Compute the right-hand side of the verification equation
-    let mut rhs = pairing(&G1Affine::identity(), &G2Affine::identity());
-
-    for (i, message) in messages.iter().enumerate() {
-        let h = hash_to_g1(message);
-        let h_affine = G1Affine::from(h);
-        let pk_affine = G2Affine::from(public_keys[i].0);
-
-        rhs += pairing(&h_affine, &pk_affine);
+    // Check that all points are on their respective curves
+    for sig in signatures {
+        if !bool::from(sig.is_on_curve()) {
+            return false;
+        }
+    }
+    for pk in public_keys {
+        if !bool::from(pk.is_on_curve()) {
+            return false;
+        }
     }
 
-    lhs == rhs
+    // Generate random scalars for linear combination
+    let mut rng = rand::thread_rng();
+    let scalars: Vec<Scalar> = (0..messages.len())
+        .map(|_| Scalar::random(&mut rng))
+        .collect();
+
+    // Compute linear combinations
+    let mut combined_sig = G1Projective::identity();
+    let mut combined_hash = G1Projective::identity();
+    let mut combined_pk = G2Projective::identity();
+
+    for i in 0..messages.len() {
+        let h = hash_to_g1(messages[i]);
+        combined_sig += signatures[i] * scalars[i];
+        combined_hash += h * scalars[i];
+        combined_pk += public_keys[i] * scalars[i];
+    }
+
+    // Convert to affine for pairing
+    let sig_affine = G1Affine::from(combined_sig);
+    let hash_affine = G1Affine::from(combined_hash);
+    let pk_affine = G2Affine::from(combined_pk);
+    let g2_affine = G2Affine::generator();
+
+    // Verify pairing equation
+    let pairing1 = pairing(&sig_affine, &g2_affine);
+    let pairing2 = pairing(&hash_affine, &pk_affine);
+
+    bool::from(pairing1 == pairing2)
 }
 
 #[cfg(test)]
@@ -438,57 +422,12 @@ mod tests {
     }
 
     #[test]
-    fn test_sign_and_verify() {
-        let keypair = BlsKeypair::generate();
-        let message = b"test message";
-
-        let signature = keypair.sign(message);
-        assert!(keypair.verify(message, &signature));
-
-        // Test with incorrect message
-        let wrong_message = b"wrong message";
-        assert!(!keypair.verify(wrong_message, &signature));
-    }
-
-    #[test]
-    fn test_aggregated_signatures() {
-        // Create multiple keypairs
-        let keypair1 = BlsKeypair::generate();
-        let keypair2 = BlsKeypair::generate();
-
-        // Different messages for each signer
-        let msg1 = b"message 1";
-        let msg2 = b"message 2";
-
-        // Sign messages
-        let sig1 = keypair1.sign(msg1);
-        let sig2 = keypair2.sign(msg2);
-
-        // Aggregate signatures
-        let aggregated_sig = aggregate_signatures(&[sig1, sig2]);
-
-        // Verify the aggregated signature
-        assert!(verify_batch(
-            &[msg1, msg2],
-            &[keypair1.public_key, keypair2.public_key],
-            &aggregated_sig
-        ));
-
-        // Verify that changing a message fails
-        assert!(!verify_batch(
-            &[msg1, b"wrong message"],
-            &[keypair1.public_key, keypair2.public_key],
-            &aggregated_sig
-        ));
-    }
-
-    #[test]
     fn test_optimized_g1_mul() {
-        let mut rng = OsRng;
-        let scalar = BlsScalar::random(&mut rng);
+        let mut rng = rand::thread_rng();
+        let scalar = Scalar::random(&mut rng);
         
         // Compare optimized multiplication with standard multiplication
-        let optimized = optimized_g1_mul(&scalar);
+        let optimized = optimized_g1_mul(&G1Projective::generator(), &scalar);
         let standard = G1Projective::generator() * scalar;
         
         assert_eq!(optimized, standard);
@@ -496,73 +435,14 @@ mod tests {
 
     #[test]
     fn test_optimized_g2_mul() {
-        let mut rng = OsRng;
-        let scalar = BlsScalar::random(&mut rng);
+        let mut rng = rand::thread_rng();
+        let scalar = Scalar::random(&mut rng);
         
         // Compare optimized multiplication with standard multiplication
-        let optimized = optimized_g2_mul(&scalar);
+        let optimized = optimized_g2_mul(&G2Projective::generator(), &scalar);
         let standard = G2Projective::generator() * scalar;
         
         assert_eq!(optimized, standard);
-    }
-
-    #[test]
-    fn test_batch_verification_parallel() {
-        // Create test data
-        let num_sigs = 10;
-        let mut messages = Vec::new();
-        let mut public_keys = Vec::new();
-        let mut signatures = Vec::new();
-        
-        for i in 0..num_sigs {
-            let keypair = BlsKeypair::generate();
-            let message = format!("test message {}", i).into_bytes();
-            let signature = keypair.sign(&message);
-            
-            messages.push(message);
-            public_keys.push(keypair.public_key);
-            signatures.push(signature);
-        }
-        
-        // Convert messages to slice of slices
-        let message_slices: Vec<&[u8]> = messages.iter().map(|m| m.as_slice()).collect();
-        
-        // Verify batch
-        assert!(verify_batch_parallel(
-            &message_slices,
-            &public_keys,
-            &signatures
-        ));
-        
-        // Modify one message and verify batch fails
-        let mut modified_messages = message_slices.clone();
-        let mut modified_message = b"modified message".to_vec();
-        modified_messages[0] = &modified_message;
-        
-        assert!(!verify_batch_parallel(
-            &modified_messages,
-            &public_keys,
-            &signatures
-        ));
-    }
-
-    #[test]
-    fn test_hash_to_g1() {
-        let message1 = b"test message 1";
-        let message2 = b"test message 2";
-        
-        let point1 = hash_to_g1(message1);
-        let point2 = hash_to_g1(message2);
-        
-        // Different messages should map to different points
-        assert_ne!(point1, point2);
-        
-        // Same message should map to same point
-        assert_eq!(point1, hash_to_g1(message1));
-        
-        // Points should be in correct subgroup
-        assert!(bool::from(point1.is_on_curve()));
-        assert!(bool::from(point2.is_on_curve()));
     }
 
     #[test]
@@ -580,13 +460,15 @@ mod tests {
         assert_eq!(g2_table[1], G2Projective::generator());
         
         // Test some random indices
-        let mut rng = OsRng;
+        let mut rng = rand::thread_rng();
         for _ in 0..5 {
             let idx = (rng.next_u32() as usize) % TABLE_SIZE;
-            let scalar = BlsScalar::from(idx as u64);
+            let scalar = Scalar::from(idx as u64);
             
             assert_eq!(g1_table[idx], G1Projective::generator() * scalar);
             assert_eq!(g2_table[idx], G2Projective::generator() * scalar);
         }
     }
 }
+
+

@@ -11,15 +11,7 @@ use sha2::{Digest, Sha256};
 use std::ops::Mul; // Add Mul trait import
 use ark_ec::{Group, CurveGroup, AffineRepr}; // Add AffineRepr trait import
 use ark_ff::{One, PrimeField, Zero, BigInteger}; // Remove PrimeFieldBits from ark_ff
-use ff::PrimeFieldBits; // Add the correct import for PrimeFieldBits
-                   // Remove duplicate imports from obscura crate since we're defining these here
-                   // use obscura::crypto::jubjub::JubjubPoint;
-                   // use obscura::crypto::jubjub::JubjubPointExt;
-                   // use obscura::crypto::jubjub::recover_stealth_private_key;
-                   // use obscura::crypto::jubjub::create_stealth_address;
-                   // use obscura::crypto::jubjub::create_stealth_address;
-                   // use obscura::crypto::jubjub::generate_keypair;
-                   // use obscura::crypto::generate_keypair;
+use ff::PrimeFieldBits;
 
 // Add derive traits for JubjubKeypair
 use std::fmt::Debug;
@@ -1335,6 +1327,9 @@ pub fn create_stealth_address_with_private(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ark_ed_on_bls12_381::{Fr, EdwardsAffine, EdwardsProjective};
+    use ark_std::UniformRand;
+    use rand::{rngs::OsRng, thread_rng};
     use std::ops::Mul;
 
     #[test]
@@ -1556,8 +1551,9 @@ mod tests {
 
     #[test]
     fn test_forward_secrecy_with_additional_data() {
-        // Generate test key
-        let key = Fr::rand(&mut OsRng);
+        // Generate test key using OsRng
+        let mut rng = OsRng;
+        let key = Fr::rand(&mut rng);
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -1597,18 +1593,24 @@ mod tests {
         let derived_public1 = scalar_mul(&<EdwardsProjective as ark_ec::Group>::generator(), &private1);
         let derived_public2 = scalar_mul(&<EdwardsProjective as ark_ec::Group>::generator(), &private2);
 
-        // Instead of exact equality, verify that the keys can be used for signing and verification
+        // Verify that derived public keys match the generated public keys
+        assert_eq!(derived_public1, public1);
+        assert_eq!(derived_public2, public2);
+
+        // Test signing and verification with the ephemeral keys
         let message = b"test message";
+        
+        // Create signatures using the private keys
+        let signature1 = sign(&private1, message);
+        let signature2 = sign(&private2, message);
 
-        let keypair1 = JubjubKeypair::generate();
-        let signature1 = keypair1.sign(message);
-        assert!(derived_public1.verify(message, &signature1));
-        assert!(public1.verify(message, &signature1));
+        // Verify signatures with the corresponding public keys
+        assert!(verify(&public1, message, &signature1));
+        assert!(verify(&public2, message, &signature2));
 
-        let keypair2 = JubjubKeypair::generate();
-        let signature2 = keypair2.sign(message);
-        assert!(derived_public2.verify(message, &signature2));
-        assert!(public2.verify(message, &signature2));
+        // Cross verification should fail
+        assert!(!verify(&public1, message, &signature2));
+        assert!(!verify(&public2, message, &signature1));
 
         // Verify keys are not one
         assert_ne!(private1, Fr::one());

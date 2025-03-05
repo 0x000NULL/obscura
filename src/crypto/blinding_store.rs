@@ -14,9 +14,9 @@ use ring::pbkdf2;
 use ring::rand::{SecureRandom, SystemRandom};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use blstrs::Scalar;
 
 use crate::blockchain::Transaction;
-use crate::crypto::bls12_381::BlsScalar;
 use crate::crypto::jubjub::JubjubScalar;
 use crate::utils::current_time;
 
@@ -27,7 +27,7 @@ type TxId = [u8; 32];
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BlindingFactor {
     Jubjub(Vec<u8>), // Serialized JubjubScalar
-    Bls(Vec<u8>),    // Serialized BlsScalar
+    Bls(Vec<u8>),    // Serialized Scalar
 }
 
 // Metadata for each blinding factor
@@ -361,12 +361,12 @@ impl BlindingStore {
         Ok(())
     }
 
-    // Store a BlsScalar blinding factor
+    // Store a Scalar blinding factor
     pub fn store_bls_blinding_factor(
         &self,
         tx_id: TxId,
         output_index: u32,
-        blinding_factor: &BlsScalar,
+        blinding_factor: &Scalar,
     ) -> Result<(), String> {
         // Check if the blinding store is initialized
         if self.encryption_key.lock().unwrap().is_none() {
@@ -430,12 +430,12 @@ impl BlindingStore {
         Ok(scalar)
     }
 
-    // Retrieve a BlsScalar blinding factor
+    // Retrieve a Scalar blinding factor
     pub fn get_bls_blinding_factor(
         &self,
         tx_id: &TxId,
         output_index: u32,
-    ) -> Result<BlsScalar, String> {
+    ) -> Result<Scalar, String> {
         let store = self.store.read().unwrap();
 
         // Find the blinding factor
@@ -449,11 +449,11 @@ impl BlindingStore {
         // Get the serialized data
         let serialized = match factor {
             BlindingFactor::Bls(data) => data,
-            _ => return Err("Expected BlsScalar blinding factor".to_string()),
+            _ => return Err("Expected Scalar blinding factor".to_string()),
         };
 
         // Deserialize the blinding factor using bincode
-        let scalar = bincode::deserialize::<BlsScalar>(serialized)
+        let scalar = bincode::deserialize::<Scalar>(serialized)
             .map_err(|e| format!("Failed to deserialize blinding factor: {}", e))?;
 
         Ok(scalar)
