@@ -271,11 +271,15 @@ impl BlockStructureManager {
 
     /// Group transactions into batches for privacy
     pub fn batch_transactions(&self, transactions: Vec<Transaction>) -> Vec<Vec<Transaction>> {
+        if transactions.is_empty() {
+            return Vec::new();
+        }
+
         if transactions.len() <= TX_BATCH_MIN_SIZE {
             return vec![transactions];
         }
 
-        let batch_count = transactions.len() / TX_BATCH_MIN_SIZE;
+        let batch_count = (transactions.len() + TX_BATCH_MIN_SIZE - 1) / TX_BATCH_MIN_SIZE;
         let mut batches = Vec::with_capacity(batch_count);
 
         for chunk in transactions.chunks(TX_BATCH_MIN_SIZE) {
@@ -468,6 +472,149 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_new_block_structure_manager() {
+        let manager = BlockStructureManager::new();
+        
+        // Check initial values
+        assert_eq!(manager.time_samples.len(), TIME_SAMPLE_SIZE);
+        assert_eq!(manager.network_time_offset, 0);
+        assert_eq!(manager.current_max_block_size, INITIAL_BLOCK_SIZE);
+        assert_eq!(manager.merkle_salt.len(), MERKLE_SALT_SIZE);
+    }
+
+    #[test]
+    fn test_update_network_time() {
+        let mut manager = BlockStructureManager::new();
+        
+        // Test empty peer times
+        manager.update_network_time(&[]);
+        assert_eq!(manager.network_time_offset, 0);
+
+        // Test with peer times
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let peer_times = vec![
+            current_time - 5,
+            current_time + 15,
+            current_time + 10,
+            current_time - 10,
+            current_time + 5,
+        ];
+        manager.update_network_time(&peer_times);
+        
+        // The median offset should be 5 (current_time + 5 is the median)
+        assert!(manager.network_time_offset.abs() <= 15); // Allow some timing variance
+    }
+
+    #[test]
+    fn test_timestamp_jitter() {
+        let manager = BlockStructureManager::new();
+        let timestamp = 1000000;
+        
+        let jittered = manager.add_timestamp_jitter(timestamp);
+        let jitter_range = (TARGET_BLOCK_TIME as f64 * TIME_JITTER_FACTOR) as u64;
+        
+        // Check if jitter is within expected range
+        assert!(jittered >= timestamp.saturating_sub(jitter_range));
+        assert!(jittered <= timestamp.saturating_add(jitter_range));
+    }
+
+    #[test]
+    fn test_batch_transactions() {
+        let manager = BlockStructureManager::new();
+        
+        // Test empty transactions
+        let empty: Vec<Transaction> = vec![];
+        assert_eq!(manager.batch_transactions(empty).len(), 0);
+
+        // Test transactions less than minimum batch size
+        let small_batch: Vec<Transaction> = (0..TX_BATCH_MIN_SIZE-1)
+            .map(|i| Transaction {
+                lock_time: i as u32,
+                inputs: vec![],
+                outputs: vec![],
+                fee_adjustments: None,
+                privacy_flags: 0,
+                obfuscated_id: None,
+                ephemeral_pubkey: None,
+                amount_commitments: None,
+                range_proofs: None,
+            })
+            .collect();
+        assert_eq!(manager.batch_transactions(small_batch).len(), 1);
+
+        // Test transactions that need multiple batches
+        let large_batch: Vec<Transaction> = (0..TX_BATCH_MIN_SIZE*3)
+            .map(|i| Transaction {
+                lock_time: i as u32,
+                inputs: vec![],
+                outputs: vec![],
+                fee_adjustments: None,
+                privacy_flags: 0,
+                obfuscated_id: None,
+                ephemeral_pubkey: None,
+                amount_commitments: None,
+                range_proofs: None,
+            })
+            .collect();
+        assert_eq!(manager.batch_transactions(large_batch).len(), 3);
+    }
+
+    #[test]
+    fn test_privacy_padding() {
+        let mut manager = BlockStructureManager::new();
+        let mut block = Block {
+            header: Default::default(),
+            transactions: vec![],
+        };
+        
+        manager.add_privacy_padding(&mut block);
+        // Since the function currently only logs, we just verify it doesn't panic
+    }
+
+    #[test]
+    fn test_detect_time_correlation() {
+        let mut manager = BlockStructureManager::new();
+        
+        // Not enough samples
+        assert!(!manager.detect_time_correlation());
+
+        // Regular intervals (should detect correlation)
+        for i in 0..TIME_CORRELATION_WINDOW {
+            manager.time_correlation_samples.push_back(1000 + (i as u64 * 60));
+        }
+        assert!(manager.detect_time_correlation());
+
+        // Random intervals (should not detect correlation)
+        manager.time_correlation_samples.clear();
+        let mut time = 1000u64;
+        for _ in 0..TIME_CORRELATION_WINDOW {
+            time += 30 + (time % 90); // Add irregular intervals
+            manager.time_correlation_samples.push_back(time);
+        }
+        assert!(!manager.detect_time_correlation());
+    }
+
+    #[test]
+    fn test_create_zk_commitment() {
+        let manager = BlockStructureManager::new();
+        let data = b"test data";
+        
+        let commitment = manager.create_zk_commitment(data);
+        assert_eq!(commitment.len(), 32);
+        
+        // Same data should produce same commitment
+        let commitment2 = manager.create_zk_commitment(data);
+        assert_eq!(commitment, commitment2);
+        
+        // Different data should produce different commitment
+        let different_commitment = manager.create_zk_commitment(b"different data");
+        assert_ne!(commitment, different_commitment);
+    }
+
+    #[test]
     fn test_timestamp_validation() {
         let mut manager = BlockStructureManager::new();
         let current_time = SystemTime::now()
@@ -551,5 +698,114 @@ mod tests {
             invalid_proof[0][0] ^= 1; // Flip a bit
             assert!(!manager.verify_merkle_proof(tx_hash, merkle_root, &invalid_proof, tx_index));
         }
+    }
+
+    #[test]
+    fn test_timestamp_validation_edge_cases() {
+        let mut manager = BlockStructureManager::new();
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        // Test timestamp exactly at MAX_FUTURE_TIME
+        assert!(manager.validate_timestamp(current_time + MAX_FUTURE_TIME));
+
+        // Test timestamp exactly at MAX_FUTURE_TIME + 1
+        assert!(!manager.validate_timestamp(current_time + MAX_FUTURE_TIME + 1));
+
+        // Test timestamp equal to median time past
+        let median_time = manager.calculate_median_time_past();
+        assert!(!manager.validate_timestamp(median_time));
+
+        // Test timestamp one second after median time past
+        assert!(manager.validate_timestamp(median_time + 1));
+    }
+
+    #[test]
+    fn test_block_size_adjustment_edge_cases() {
+        let mut manager = BlockStructureManager::new();
+
+        // Test minimum block size limit
+        for _ in 0..BLOCK_SIZE_WINDOW {
+            manager.update_block_size_limit(1); // Try to force size below minimum
+        }
+        assert!(manager.get_max_block_size() >= MIN_BLOCK_SIZE);
+
+        // Test maximum block size limit
+        for _ in 0..BLOCK_SIZE_WINDOW {
+            manager.update_block_size_limit(MAX_BLOCK_SIZE * 2); // Try to force size above maximum
+        }
+        assert!(manager.get_max_block_size() <= MAX_BLOCK_SIZE);
+
+        // Test gradual growth limit
+        let initial_size = manager.get_max_block_size();
+        manager.update_block_size_limit(initial_size * 2);
+        assert!(manager.get_max_block_size() <= (initial_size as f64 * BLOCK_GROWTH_LIMIT) as usize);
+    }
+
+    #[test]
+    fn test_merkle_proof_edge_cases() {
+        let manager = BlockStructureManager::new();
+
+        // Test empty transaction list
+        let empty_txs: Vec<Transaction> = vec![];
+        assert!(manager.create_merkle_proof(&empty_txs, 0).is_empty());
+
+        // Test invalid transaction index
+        let tx = Transaction {
+            inputs: vec![],
+            outputs: vec![],
+            lock_time: 0,
+            fee_adjustments: None,
+            privacy_flags: 0,
+            obfuscated_id: None,
+            ephemeral_pubkey: None,
+            amount_commitments: None,
+            range_proofs: None,
+        };
+        let txs = vec![tx];
+        assert!(manager.create_merkle_proof(&txs, 1).is_empty()); // Index out of bounds
+
+        // Test single transaction merkle tree
+        let proof = manager.create_merkle_proof(&txs, 0);
+        let tx_hash = {
+            let mut hasher = Sha256::new();
+            hasher.update(&txs[0].lock_time.to_le_bytes());
+            hasher.update(&manager.merkle_salt);
+            let result = hasher.finalize();
+            let mut hash = [0u8; 32];
+            hash.copy_from_slice(&result);
+            hash
+        };
+        let merkle_root = manager.calculate_privacy_merkle_root(&txs);
+        assert!(manager.verify_merkle_proof(tx_hash, merkle_root, &proof, 0));
+    }
+
+    #[test]
+    fn test_calculate_median_time_past() {
+        let mut manager = BlockStructureManager::new();
+        let base_time = 1000000u64;
+
+        // Clear existing samples and fill with our test values
+        manager.time_samples.clear();
+        
+        // Fill with increasing timestamps
+        for i in 0..TIME_SAMPLE_SIZE {
+            manager.time_samples.push_back(base_time + i as u64);
+        }
+
+        // Median should be middle value
+        assert_eq!(
+            manager.calculate_median_time_past(),
+            base_time + (TIME_SAMPLE_SIZE / 2) as u64
+        );
+
+        // Test with duplicate values
+        manager.time_samples.clear();
+        for _ in 0..TIME_SAMPLE_SIZE {
+            manager.time_samples.push_back(base_time);
+        }
+        assert_eq!(manager.calculate_median_time_past(), base_time);
     }
 }
