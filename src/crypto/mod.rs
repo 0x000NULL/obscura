@@ -9,6 +9,7 @@ pub mod blinding_store;
 pub mod bulletproofs;
 pub mod commitment_verification;
 pub mod pedersen;
+pub mod atomic_swap;
 
 // Add curve modules
 pub mod bls12_381;
@@ -22,6 +23,12 @@ pub use blinding_store::BlindingStore;
 // Re-export CommitmentVerifier for easier access
 pub use commitment_verification::CommitmentVerifier;
 pub use commitment_verification::{VerificationContext, VerificationError, VerificationResult};
+
+// Re-export commonly used types
+pub use atomic_swap::{CrossCurveSwap, SwapState};
+pub use bls12_381::{BlsKeypair, BlsPublicKey, BlsSignature};
+pub use jubjub::{JubjubPoint, JubjubScalar};
+pub use pedersen::{DualCurveCommitment, PedersenCommitment, BlsPedersenCommitment};
 
 // Key management functions
 // These functions are intended for use in the wallet implementation
@@ -66,8 +73,13 @@ pub fn encrypt_keypair(
     keypair: &(jubjub::JubjubScalar, jubjub::JubjubPoint),
     password: &str,
 ) -> Vec<u8> {
-    // Simplified version - just demonstrates the concept
-    // A real implementation would use a proper encryption scheme
+    // WARNING: This is a simplified implementation for development/testing only.
+    // DO NOT USE IN PRODUCTION.
+    // TODO: Replace with proper authenticated encryption using:
+    // - Proper key derivation (e.g., Argon2, PBKDF2)
+    // - Authenticated encryption (e.g., AES-GCM, ChaCha20-Poly1305)
+    // - Proper salt handling and nonce generation
+    
     let serialized = serialize_keypair(keypair);
 
     // Derive an encryption key from the password
@@ -76,7 +88,6 @@ pub fn encrypt_keypair(
     let key = hasher.finalize();
 
     // XOR the serialized keypair with the key (oversimplified!)
-    // In a real implementation, use proper authenticated encryption
     let mut encrypted = serialized.clone();
     for i in 0..encrypted.len() {
         encrypted[i] ^= key[i % 32];

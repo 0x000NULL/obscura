@@ -1,6 +1,48 @@
 # Changelog
 
-All notable changes to the Obscura project will be documented in this file.
+## [0.7.01] - 2025-03-28
+
+### Added
+- **Cross-Curve Atomic Swap Implementation**
+  - Implemented complete cross-curve atomic swap functionality
+  - Created dual-curve commitment integration for swaps
+  - Added comprehensive swap lifecycle management
+  - Implemented secure timeout mechanism
+  - Created completion proof generation
+  - Added comprehensive test suite
+  - Implemented BLS signature verification for swaps
+  - Created secure hash lock mechanism
+  - Added state transition validation
+  - Implemented refund functionality
+
+### Security
+- **Enhanced Cross-Chain Security**
+  - Added dual-curve commitment verification
+  - Implemented secure timeout handling
+  - Created cryptographic proof system
+  - Added comprehensive state validation
+  - Implemented secure secret revelation
+  - Created participant signature verification
+
+### Documentation
+- **Atomic Swap Documentation**
+  - Added comprehensive atomic swap documentation
+  - Created integration guidelines
+  - Added security considerations
+  - Created usage examples
+  - Added error handling documentation
+  - Implemented test coverage documentation
+
+### Testing
+- **Atomic Swap Test Suite**
+  - Added complete swap lifecycle tests
+  - Created timeout handling tests
+  - Implemented invalid secret tests
+  - Added commitment verification tests
+  - Created state transition tests
+  - Implemented signature verification tests
+
+# Previous Releases
 
 ## [0.5.7] - 2025-03-27
 

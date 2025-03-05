@@ -285,6 +285,11 @@ impl BlsPublicKey {
             .map(|point| BlsPublicKey(G2Projective::from(point)))
             .into()
     }
+
+    /// Check if the public key is valid (point is on the curve)
+    pub fn is_valid(&self) -> bool {
+        bool::from(self.0.is_on_curve())
+    }
 }
 
 impl BlsSignature {

@@ -1,6 +1,150 @@
 # Release Notes
 
-This document contains the release notes for each version of the Obscura blockchain.
+## [0.7.01] - 2025-03-28
+
+### Cross-Curve Atomic Swap Implementation
+
+This release implements a comprehensive cross-curve atomic swap system, enabling secure cross-chain transactions using both BLS12-381 and Jubjub curves. The implementation provides a complete solution for atomic swaps with strong security guarantees and privacy features.
+
+#### Core Implementation
+
+- **CrossCurveSwap Structure**
+  - Implemented complete swap lifecycle management
+  - Created secure state transition system
+  - Added timeout mechanism with configurable parameters
+  - Implemented dual-curve commitment integration
+  - Created comprehensive error handling system
+  - Added completion proof generation
+
+- **Dual-Curve Commitment Integration**
+  - Leveraged existing DualCurveCommitment system
+  - Implemented commitment verification on both curves
+  - Created secure blinding factor management
+  - Added homomorphic property verification
+  - Implemented commitment consistency checks
+
+- **Security Features**
+  - Added hash lock mechanism with SHA-256
+  - Implemented BLS signature verification
+  - Created secure timeout handling
+  - Added state transition validation
+  - Implemented refund mechanism
+  - Created completion proof system
+
+#### Implementation Details
+
+The implementation provides a comprehensive API for atomic swaps:
+
+```rust
+// Initialize a new atomic swap
+pub fn initialize(
+    amount: u64,
+    secret: &[u8; HASH_SIZE],
+    initiator_keypair: &BlsKeypair,
+) -> Result<Self, &'static str>
+
+// Participant commitment
+pub fn participant_commit(
+    &mut self,
+    participant_keypair: &BlsKeypair,
+) -> Result<BlsSignature, &'static str>
+
+// Secret revelation
+pub fn reveal_secret(
+    &mut self,
+    secret: &[u8; HASH_SIZE],
+    participant_signature: &BlsSignature,
+) -> Result<(), &'static str>
+
+// Swap completion
+pub fn complete_swap(&mut self) -> Result<(), &'static str>
+
+// Refund mechanism
+pub fn refund(&mut self) -> Result<(), &'static str>
+
+// Commitment verification
+pub fn verify_commitments(&self) -> bool
+
+// Generate completion proof
+pub fn generate_completion_proof(&self) -> Result<Vec<u8>, &'static str>
+```
+
+#### Security Considerations
+
+1. **Timeout Security**
+   - Default 1-hour timeout period
+   - Configurable through `SWAP_TIMEOUT_SECONDS`
+   - Prevents indefinite fund locking
+   - Secure refund mechanism after timeout
+
+2. **Cryptographic Security**
+   - Dual-curve commitment verification
+   - BLS signature validation
+   - Secure hash lock mechanism
+   - State transition validation
+   - Completion proof generation
+
+3. **Cross-Chain Security**
+   - Compatible timeout periods
+   - Verified commitment schemes
+   - Secure signature verification
+   - Network-specific handling
+
+#### Documentation
+
+- **Comprehensive Documentation**
+  - Added detailed implementation guide
+  - Created API documentation
+  - Added security considerations
+  - Created integration guidelines
+  - Added usage examples
+  - Updated cryptographic documentation
+
+- **Integration Guides**
+  - Added cross-chain integration examples
+  - Created timeout configuration guide
+  - Added error handling documentation
+  - Created troubleshooting guide
+  - Added security best practices
+
+#### Testing
+
+- **Comprehensive Test Suite**
+  - Complete swap lifecycle tests
+  - Timeout handling verification
+  - Invalid secret testing
+  - Commitment verification tests
+  - State transition validation
+  - Signature verification tests
+
+#### Performance Considerations
+
+1. **Commitment Operations**
+   - Efficient dual-curve operations
+   - Optimized verification paths
+   - Minimal memory footprint
+   - Efficient proof generation
+
+2. **Network Interaction**
+   - Minimal round trips required
+   - Efficient state transitions
+   - Quick timeout verification
+   - Fast commitment validation
+
+#### Future Enhancements
+
+1. Multi-party atomic swaps
+2. Batch swap operations
+3. Privacy-preserving protocols
+4. Extended timeout mechanisms
+5. Additional curve support
+6. Enhanced proof systems
+
+### Remarks
+
+The cross-curve atomic swap implementation marks a significant milestone in Obscura's cross-chain interoperability capabilities. The system provides a secure and efficient way to perform atomic swaps while maintaining the privacy features inherent to the Obscura blockchain.
+
+## Previous Releases
 
 ## [0.5.7] - 2025-03-27
 
