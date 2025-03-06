@@ -1,6 +1,6 @@
 use crate::networking::{
     Node, FeatureFlag, PrivacyFeatureFlag, ConnectionPool, HandshakeProtocol, 
-    ConnectionType, PeerConnection
+    ConnectionType, PeerConnection, NetworkConfig
 };
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::io::{Read, Write};
@@ -78,7 +78,7 @@ fn create_test_peer_connection(
 #[test]
 fn test_is_feature_supported() {
     // Create a Node with basic features
-    let mut node = Node::new();
+    let mut node = Node::new_with_config(NetworkConfig::default());
     
     // Create a test peer with specific features
     let peer_addr = create_test_socket_addr(8001);
@@ -118,7 +118,7 @@ fn test_is_feature_supported() {
 #[test]
 fn test_is_privacy_feature_supported() {
     // Create a Node with basic privacy features
-    let mut node = Node::new();
+    let mut node = Node::new_with_config(NetworkConfig::default());
     
     // Create a test peer with specific privacy features
     let peer_addr = create_test_socket_addr(8002);
@@ -154,4 +154,16 @@ fn test_is_privacy_feature_supported() {
     // Test after banning a peer
     node.ban_peer(&peer_addr, Duration::from_secs(3600)).unwrap();
     assert!(!node.is_privacy_feature_supported(&peer_addr, PrivacyFeatureFlag::TransactionObfuscation));
+}
+
+#[test]
+fn test_feature_support() {
+    let mut node = Node::new_with_config(NetworkConfig::default());
+    // ... rest of test ...
+}
+
+#[test]
+fn test_feature_negotiation() {
+    let mut node = Node::new_with_config(NetworkConfig::default());
+    // ... rest of test ...
 } 

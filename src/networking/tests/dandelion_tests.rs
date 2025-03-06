@@ -1,6 +1,6 @@
 use crate::blockchain::tests::create_test_transaction;
 use crate::networking::dandelion::{DandelionManager, PrivacyRoutingMode, PropagationState};
-use crate::networking::Node;
+use crate::networking::{Node, NetworkConfig};
 use hex;
 use std::net::SocketAddr;
 use std::net::{IpAddr, Ipv4Addr};
@@ -77,7 +77,7 @@ fn test_dandelion_manager() {
 
 #[test]
 fn test_stem_phase() {
-    let node = Node::new();
+    let node = Node::new_with_config(NetworkConfig::default());
     let tx = create_test_transaction();
     let tx_hash = tx.hash();
 
@@ -90,7 +90,7 @@ fn test_stem_phase() {
 
 #[test]
 fn test_fluff_phase_transition() {
-    let mut node = Node::new();
+    let mut node = Node::new_with_config(NetworkConfig::default());
     let tx = create_test_transaction();
     let tx_hash = tx.hash();
 
@@ -130,7 +130,7 @@ fn test_fluff_phase_transition() {
 
 #[test]
 fn test_receive_transaction() {
-    let mut node = Node::new();
+    let mut node = Node::new_with_config(NetworkConfig::default());
     let tx = create_test_transaction();
     let tx_hash = tx.hash();
 
@@ -184,7 +184,7 @@ fn test_receive_transaction() {
 
 #[test]
 fn test_maintain_dandelion() {
-    let mut node = Node::new();
+    let mut node = Node::new_with_config(NetworkConfig::default());
 
     // Add a transaction
     let tx = create_test_transaction();
@@ -1368,7 +1368,7 @@ fn test_stem_phase_failure_recovery() {
 
 #[test]
 fn test_adversarial_transaction_handling() {
-    let mut node = Node::new();
+    let mut node = Node::new_with_config(NetworkConfig::default());
     let tx = create_test_transaction();
 
     // Add the transaction to the node

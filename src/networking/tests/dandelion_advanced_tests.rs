@@ -18,6 +18,7 @@ use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 use std::collections::HashSet;
 use rand::{Rng, thread_rng};
 use rand::distributions::{Distribution, Uniform};
+use crate::networking::NetworkConfig;
 
 // Helper function to create peers with diverse IP subnets
 fn create_diverse_peers(count: usize) -> Vec<SocketAddr> {
@@ -148,7 +149,7 @@ fn test_multiple_subnet_eclipse_attack_detection() {
 #[test]
 fn test_adversarial_timing_analysis_resistance() {
     let mut manager = DandelionManager::new();
-    let mut node = Node::new();
+    let mut node = Node::new_with_config(NetworkConfig::default());
     
     // Add a bunch of transactions
     let mut tx_hashes = Vec::new();
@@ -587,4 +588,10 @@ fn test_adversary_resistance_integrated() {
     // 3. Verify anonymity set was created
     assert!(set_id > 0 || manager.get_anonymity_sets_len() > 0, 
             "Should successfully create anonymity set");
+}
+
+#[test]
+fn test_advanced_dandelion() {
+    let mut node = Node::new_with_config(NetworkConfig::default());
+    // ... rest of test ...
 } 

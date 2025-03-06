@@ -1,7 +1,7 @@
 use crate::blockchain::{Block, Transaction};
 use crate::consensus::StakeProof;
 use crate::crypto::jubjub::{JubjubPointExt, JubjubScalarExt};
-use crate::networking::{dandelion::PrivacyRoutingMode, Node};
+use crate::networking::{dandelion::PrivacyRoutingMode, Node, NetworkConfig};
 use crate::tests::common::{create_test_block, create_test_stake_proof};
 use crate::wallet::Wallet;
 use hex;
@@ -22,9 +22,9 @@ struct TestNode {
 }
 
 impl TestNode {
-    fn new() -> Self {
+    pub fn new() -> Self {
         TestNode {
-            node: Node::new(),
+            node: Node::new_with_config(NetworkConfig::default()),
             test_transactions: Vec::new(),
             test_blocks: Vec::new(),
             test_connections: HashMap::new(),

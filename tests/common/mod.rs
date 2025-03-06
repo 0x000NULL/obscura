@@ -2,7 +2,7 @@ use obscura::blockchain::{Block, OutPoint, Transaction, TransactionInput, Transa
 use obscura::consensus::randomx::RandomXContext;
 use obscura::consensus::StakeProof;
 use obscura::crypto::jubjub::{generate_keypair, JubjubKeypair, JubjubSignature};
-use obscura::networking::Node;
+use obscura::networking::{Node, NetworkConfig};
 use rand::rngs::OsRng;
 use rand::thread_rng;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -65,13 +65,13 @@ impl TestNetwork {
     pub fn new(node_count: usize) -> Self {
         let mut nodes = Vec::with_capacity(node_count);
         for _ in 0..node_count {
-            nodes.push(Node::new());
+            nodes.push(Node::new_with_config(NetworkConfig::default()));
         }
         TestNetwork { nodes }
     }
 
     pub fn add_mining_node(&mut self) -> &mut Node {
-        let mut node = Node::new();
+        let mut node = Node::new_with_config(NetworkConfig::default());
         node.enable_mining();
         self.nodes.push(node);
         self.nodes.last_mut().unwrap()

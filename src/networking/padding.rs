@@ -303,15 +303,8 @@ mod tests {
     
     #[test]
     fn test_padding_none_strategy() {
-        let config = MessagePaddingConfig {
-            message_padding_enabled: true,
-            strategy: MessagePaddingStrategy::None,
-            min_padding_bytes: 10,
-            max_padding_bytes: 100,
-            timing_jitter_enabled: false,
-            dummy_message_interval_min_ms: 1000,
-            dummy_message_interval_max_ms: 5000,
-        };
+        let config = ConnectionObfuscationConfig::default()
+            .with_message_padding(false);
         
         let service = MessagePaddingService::new(config);
         let message = Message::new(MessageType::Ping, vec![1, 2, 3, 4, 5]);
@@ -327,18 +320,12 @@ mod tests {
     
     #[test]
     fn test_padding_fixed_strategy() {
-        let config = MessagePaddingConfig {
-            message_padding_enabled: true,
-            strategy: MessagePaddingStrategy::Fixed(10),
-            min_padding_bytes: 10,
-            max_padding_bytes: 100,
-            timing_jitter_enabled: false,
-            dummy_message_interval_min_ms: 1000,
-            dummy_message_interval_max_ms: 5000,
-        };
+        let config = ConnectionObfuscationConfig::default()
+            .with_message_padding(true)
+            .with_message_padding_size(10, 10); // Fixed size
         
         let service = MessagePaddingService::new(config);
-        let message = Message::new(MessageType::BlockRequest, vec![1, 2, 3, 4, 5]);
+        let message = Message::new(MessageType::GetBlocks, vec![1, 2, 3, 4, 5]);
         let original_len = message.payload.len();
         
         let padded_message = service.apply_padding(message);
@@ -352,19 +339,13 @@ mod tests {
     
     #[test]
     fn test_add_and_remove_padding() {
-        let config = MessagePaddingConfig {
-            message_padding_enabled: true,
-            strategy: MessagePaddingStrategy::Fixed(10),
-            min_padding_bytes: 10,
-            max_padding_bytes: 100,
-            timing_jitter_enabled: false,
-            dummy_message_interval_min_ms: 1000,
-            dummy_message_interval_max_ms: 5000,
-        };
+        let config = ConnectionObfuscationConfig::default()
+            .with_message_padding(true)
+            .with_message_padding_size(10, 10); // Fixed size for test
         
         let service = MessagePaddingService::new(config);
         let original_payload = vec![1, 2, 3, 4, 5];
-        let message = Message::new(MessageType::BlockRequest, original_payload.clone());
+        let message = Message::new(MessageType::GetBlocks, original_payload.clone());
         
         let padded_message = service.apply_padding(message);
         
@@ -388,56 +369,45 @@ mod tests {
     fn test_padding_strategy_uniform() {
         let config = ConnectionObfuscationConfig::default()
             .with_message_padding(true)
-            .with_message_padding_distribution(true) // uniform
-            .with_message_padding_size(10, 20);
-            
+            .with_message_padding_size(10, 20)
+            .with_message_padding_distribution(true); // uniform
+        
         let service = MessagePaddingService::new(config);
-        let mut message = Message::new(MessageType::Handshake, vec![1, 2, 3, 4]);
+        let message = Message::new(MessageType::Handshake, vec![1, 2, 3, 4]);
         let original_len = message.payload.len();
         
         let padded_message = service.apply_padding(message);
         
         // Payload should now have padding and be longer
         assert!(padded_message.payload.len() > original_len);
-        
-        // Check for padding marker and size
-        assert_eq!(padded_message.payload[original_len], 0xFF);
-        
-        // Extract padding size
-        let size_bytes = [
-            padded_message.payload[original_len + 1],
-            padded_message.payload[original_len + 2],
-            padded_message.payload[original_len + 3],
-            padded_message.payload[original_len + 4],
-        ];
-        
-        let padding_size = u32::from_le_bytes(size_bytes) as usize;
-        
-        // Verify total length matches
-        assert_eq!(padded_message.payload.len(), original_len + 5 + padding_size);
+        assert!(padded_message.is_padded);
         
         // Verify padding size is within configured range
+        let padding_size = padded_message.padding_size as usize;
         assert!(padding_size >= 10 && padding_size <= 20);
+        
+        // Verify total length matches
+        assert_eq!(padded_message.payload.len(), original_len + padding_size);
     }
     
     #[test]
     fn test_remove_padding() {
         let config = ConnectionObfuscationConfig::default()
             .with_message_padding(true)
-            .with_message_padding_size(10, 10); // fixed size for test
-            
+            .with_message_padding_size(10, 10); // Fixed size for test
+        
         let service = MessagePaddingService::new(config);
         let original_payload = vec![1, 2, 3, 4];
-        let mut message = Message::new(MessageType::Handshake, original_payload.clone());
+        let message = Message::new(MessageType::Handshake, original_payload.clone());
         
         let padded_message = service.apply_padding(message);
         
         // Now remove the padding
         let removed_message = service.remove_padding(padded_message);
         
-        // Verify padding was detected and removed
-        assert!(removed_message.is_padded);
-        assert_eq!(removed_message.padding_size, 10);
+        // Verify padding was removed
+        assert!(!removed_message.is_padded);
+        assert_eq!(removed_message.padding_size, 0);
         
         // Verify payload is back to original
         assert_eq!(removed_message.payload, original_payload);

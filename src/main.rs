@@ -58,7 +58,7 @@ fn init_consensus() -> HybridConsensus {
 fn init_networking() -> Node {
     info!("Initializing networking components...");
     let config = networking::NetworkConfig::default();
-    Node::new(config)
+    Node::new_with_config(config)
 }
 
 // Start network services

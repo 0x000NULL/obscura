@@ -530,7 +530,8 @@ impl FingerprintingProtectionService {
         // Adjust based on network types available
         if network_types.contains(&NetworkType::Tor) || network_types.contains(&NetworkType::I2P) {
             // If we have anonymous connections, we can reduce the number of clearnet connections
-            min_connections = min_connections.saturating_sub(2);
+            // But ensure we don't go below 2 connections
+            min_connections = min_connections.saturating_sub(2).max(2);
         }
         
         // Randomize within the range a bit
