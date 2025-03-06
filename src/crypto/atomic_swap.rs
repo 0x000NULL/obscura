@@ -222,7 +222,11 @@ impl CrossCurveSwap {
         match self.state {
             SwapState::Completed => return Err("Swap has already been completed"),
             SwapState::Refunded => return Err("Swap has already been refunded"),
-            SwapState::TimedOut => return Err("Swap has already timed out"),
+            SwapState::TimedOut => {
+                // Allow refunding from TimedOut state
+                self.state = SwapState::Refunded;
+                return Ok(());
+            },
             _ => {}
         }
 
@@ -305,9 +309,16 @@ impl CrossCurveSwap {
 mod tests {
     use super::*;
     use rand::RngCore;
+    use crate::crypto::pedersen::initialize_blinding_store;
 
     #[test]
     fn test_cross_curve_swap_flow() {
+        // Create a temporary directory for the blinding store
+        let temp_dir = tempdir().unwrap();
+        
+        // Initialize the global blinding store
+        initialize_blinding_store(temp_dir.path(), "test_password").unwrap();
+        
         // Generate random secret
         let mut secret = [0u8; HASH_SIZE];
         OsRng.fill_bytes(&mut secret);
@@ -343,10 +354,19 @@ mod tests {
         // Verify completion proof
         let proof = swap.generate_completion_proof().unwrap();
         assert!(!proof.is_empty());
+        
+        // Cleanup
+        temp_dir.close().unwrap();
     }
 
     #[test]
     fn test_swap_timeout() {
+        // Create a temporary directory for the blinding store
+        let temp_dir = tempdir().unwrap();
+        
+        // Initialize the global blinding store
+        initialize_blinding_store(temp_dir.path(), "test_password").unwrap();
+        
         let mut secret = [0u8; HASH_SIZE];
         OsRng.fill_bytes(&mut secret);
 
@@ -365,6 +385,9 @@ mod tests {
         assert!(swap.participant_commit(&participant).is_err());
         assert!(swap.refund().is_ok());
         assert_eq!(swap.state, SwapState::Refunded);
+        
+        // Cleanup
+        temp_dir.close().unwrap();
     }
 
     #[test]

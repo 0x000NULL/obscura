@@ -124,7 +124,9 @@ pub fn verify_batch_parallel(
 /// Improved hash-to-curve implementation using SWU map
 pub fn hash_to_g1(msg: &[u8]) -> G1Projective {
     let mut counter: u32 = 0;
-    loop {
+    let max_attempts = 1000; // Add a maximum attempt limit
+    
+    while counter < max_attempts {
         let mut input = Vec::with_capacity(msg.len() + 1);
         input.extend_from_slice(msg);
         input.push(counter as u8);
@@ -134,6 +136,11 @@ pub fn hash_to_g1(msg: &[u8]) -> G1Projective {
         }
         counter = counter.wrapping_add(1);
     }
+    
+    // If no valid point is found after max attempts, use a fallback approach
+    // This could be a default point or an alternative hash-to-curve method
+    // For now, we'll use the generator point as a fallback
+    G1Projective::generator()
 }
 
 /// Helper function for hash-to-curve

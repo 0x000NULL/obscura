@@ -249,9 +249,9 @@
     - [ ] Implement BLS12-381 specific functions
       - [x] Create optimized BLS12-381 curve operations
       - [x] Implement Jubjub curve for efficient in-circuit operations
-      - [ ] Develop cross-curve operations for atomic swaps
-      - [ ] Create test vectors for curve operations
-      - [ ] Add benchmarking for cryptographic performance
+      - [x] Develop cross-curve operations for atomic swaps
+      - [x] Create test vectors for curve operations
+      - [x] Add benchmarking for cryptographic performance
 - [x] Network Privacy Protections
     - [x] Create transaction propagation phases
     - [x] Add transaction stem phase routing
