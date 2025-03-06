@@ -77,6 +77,11 @@ A fixed-length string of characters generated from an input of any length using 
 ### Hybrid Consensus
 A consensus mechanism that combines multiple approaches. Obscura uses a hybrid of Proof of Work and Proof of Stake.
 
+## I
+
+### I2P
+**Invisible Internet Project** - A network layer that supports anonymous and private communication. Obscura integrates I2P as an alternative to Tor, providing garlic routing for enhanced network privacy and resistance to traffic analysis attacks.
+
 ## M
 
 ### Mempool
@@ -94,7 +99,7 @@ A feature in Obscura that allows validators to stake multiple types of assets, n
 ## N
 
 ### Network Privacy
-Features and mechanisms designed to enhance privacy in the Obscura network, including connection obfuscation and peer rotation.
+Features and mechanisms designed to enhance privacy in the Obscura network, including connection obfuscation, peer rotation, Tor onion routing, and I2P garlic routing.
 
 ### Node
 A computer that participates in the Obscura network by validating and relaying transactions and blocks.
@@ -153,6 +158,9 @@ Cryptocurrency that is locked up as collateral by validators in a Proof of Stake
 
 ### Threshold Signature
 A cryptographic signature scheme where a group of participants can collectively sign a message, with only a subset (the threshold) required to create a valid signature.
+
+### Tor
+**The Onion Router** - An anonymity network that enables anonymous communication by directing internet traffic through a worldwide network of relays to conceal a user's location and usage. Obscura integrates Tor to enhance network privacy by allowing connections through onion routing.
 
 ### Transaction
 A record of a transfer of value from one address to another on the blockchain.

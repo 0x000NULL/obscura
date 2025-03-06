@@ -30,6 +30,23 @@ The following feature flags control which cryptographic curves and implementatio
 - `test-utils`: Enables test utilities and mock implementations
 - `benchmarking`: Activates benchmarking code for performance testing
 
+### Network Privacy Flags
+
+- `use-tor`: Enables Tor onion routing support
+  - Activates the `src/networking/tor_proxy.rs` module
+  - Enables connections through Tor for enhanced privacy
+  - Provides onion routing capabilities for network traffic
+
+- `use-i2p`: Enables I2P garlic routing support
+  - Activates the `src/networking/i2p_proxy.rs` module
+  - Enables connections through I2P for enhanced privacy
+  - Provides garlic routing capabilities as an alternative to Tor
+
+- `traffic-obfuscation`: Enables traffic pattern obfuscation features
+  - Activates message padding, dummy traffic, and timing jitter
+  - Helps prevent traffic analysis attacks
+  - Works in conjunction with anonymous routing options
+
 ## Usage Examples
 
 ### Using Only New Curves
@@ -64,6 +81,22 @@ To benchmark the performance of the cryptographic operations:
 cargo bench --features "use-bls12-381 use-jubjub benchmarking"
 ```
 
+### Enabling Network Privacy Features
+
+To build or run Obscura with enhanced network privacy features:
+
+```bash
+cargo build --features "use-tor use-i2p traffic-obfuscation"
+```
+
+### Complete Privacy-Enhanced Build
+
+For a complete build with all privacy features and new cryptographic curves:
+
+```bash
+cargo build --features "use-bls12-381 use-jubjub use-tor use-i2p traffic-obfuscation"
+```
+
 ## How Feature Flags Affect the Code
 
 Features are implemented using Rust's conditional compilation with `#[cfg(feature = "...")]` attributes. 
@@ -92,6 +125,40 @@ pub fn generate_keypair() -> Option<Keypair> {
     {
         // New implementation will eventually replace this
         None
+    }
+}
+```
+
+Similarly, in `src/networking/mod.rs`:
+
+```rust
+// I2P support is enabled when the use-i2p feature is active
+#[cfg(feature = "use-i2p")]
+pub mod i2p_proxy;
+
+// Tor support is enabled when the use-tor feature is active
+#[cfg(feature = "use-tor")]
+pub mod tor_proxy;
+
+// Traffic obfuscation features are enabled with the traffic-obfuscation flag
+#[cfg(feature = "traffic-obfuscation")]
+pub mod traffic_obfuscation;
+
+// Node connection method behaves differently based on active features
+impl Node {
+    pub fn connect_to_peer(&self, address: &str) -> Result<Connection, Error> {
+        #[cfg(feature = "use-i2p")]
+        if address.ends_with(".i2p") {
+            return self.i2p_proxy.connect(address);
+        }
+        
+        #[cfg(feature = "use-tor")]
+        if address.ends_with(".onion") {
+            return self.tor_proxy.connect(address);
+        }
+        
+        // Default direct connection
+        self.direct_connect(address)
     }
 }
 ```

@@ -207,6 +207,64 @@ impl KeyManager {
 }
 ```
 
+### Advanced Cryptographic Curves
+
+Obscura implements state-of-the-art elliptic curves to provide a strong foundation for privacy and security features:
+
+#### BLS12-381 Curve
+
+```rust
+pub struct BLS12_381Point {
+    x: Fp,
+    y: Fp,
+    z: Fp,
+}
+
+impl BLS12_381Point {
+    pub fn pairing(&self, other: &G2Point) -> Gt {
+        // Optimal Ate pairing implementation
+        // Returns a value in the target group Gt
+    }
+    
+    pub fn multi_exp(points: &[Self], scalars: &[Fr]) -> Self {
+        // Optimized multi-exponentiation using Pippenger's algorithm
+    }
+}
+```
+
+The BLS12-381 curve provides:
+- Efficient pairing operations for zero-knowledge proofs
+- 128-bit security level
+- Support for threshold signatures and aggregated signatures
+- Optimized implementation for performance-critical operations
+
+#### Jubjub Curve
+
+```rust
+pub struct JubjubPoint {
+    x: Fr,
+    y: Fr,
+}
+
+impl JubjubPoint {
+    pub fn pedersen_commit(value: &Fr, blinding: &Fr) -> Self {
+        // Pedersen commitment using Jubjub curve
+    }
+    
+    pub fn scalar_mul(&self, scalar: &Fr) -> Self {
+        // Constant-time scalar multiplication
+    }
+}
+```
+
+The Jubjub curve enables:
+- Efficient in-circuit verification for zero-knowledge proofs
+- Pedersen commitments for confidential transactions
+- Constant-time implementations to prevent timing attacks
+- Compatibility with BLS12-381 for cross-curve operations
+
+For detailed documentation on curve implementations, see [Advanced Cryptographic Curves](../cryptography/curves.md).
+
 ### Secure Communication
 
 ```rust
@@ -239,6 +297,84 @@ impl SecureChannel {
     }
 }
 ```
+
+## Privacy-Enhancing Security
+
+### Network Privacy Features
+
+```rust
+pub struct NetworkPrivacy {
+    dandelion: DandelionProtocol,
+    fingerprinting_protection: ClientFingerprintingProtection,
+    protocol_morphing: ProtocolMorphing,
+    dns_over_https: DnsOverHttps,
+}
+
+impl NetworkPrivacy {
+    pub fn new() -> Self {
+        Self {
+            dandelion: DandelionProtocol::new(),
+            fingerprinting_protection: ClientFingerprintingProtection::new(),
+            protocol_morphing: ProtocolMorphing::new(),
+            dns_over_https: DnsOverHttps::new(),
+        }
+    }
+    
+    pub fn protect_connection(&self, connection: &mut Connection) -> Result<(), PrivacyError> {
+        // Apply layered privacy protections
+        self.fingerprinting_protection.randomize_behavior(connection)?;
+        self.protocol_morphing.apply_morphing(connection)?;
+        
+        Ok(())
+    }
+    
+    pub fn protect_transaction(&self, transaction: &mut Transaction) -> Result<(), PrivacyError> {
+        // Apply Dandelion++ transaction propagation
+        self.dandelion.process_transaction(transaction)?;
+        
+        Ok(())
+    }
+}
+```
+
+### Transaction Privacy
+
+```rust
+pub struct TransactionPrivacy {
+    stealth_addressing: StealthAddressing,
+    confidential_transactions: ConfidentialTransactions,
+    bulletproofs: Bulletproofs,
+}
+
+impl TransactionPrivacy {
+    pub fn new() -> Self {
+        Self {
+            stealth_addressing: StealthAddressing::new(),
+            confidential_transactions: ConfidentialTransactions::new(),
+            bulletproofs: Bulletproofs::new(),
+        }
+    }
+    
+    pub fn create_private_transaction(&self, 
+                                     sender: &PrivateKey,
+                                     recipient: &PublicKey,
+                                     amount: u64) -> Result<Transaction, PrivacyError> {
+        // 1. Generate stealth address
+        let stealth_address = self.stealth_addressing.generate_address(recipient)?;
+        
+        // 2. Create confidential transaction
+        let mut tx = self.confidential_transactions.create_transaction(sender, &stealth_address, amount)?;
+        
+        // 3. Generate range proof
+        let range_proof = self.bulletproofs.generate_proof(amount)?;
+        tx.add_range_proof(range_proof);
+        
+        Ok(tx)
+    }
+}
+```
+
+For comprehensive documentation on privacy features, refer to the [Privacy Features Overview](../privacy_features.md) and [Privacy Components Reference](../privacy/index.md).
 
 ## Audit Logging
 

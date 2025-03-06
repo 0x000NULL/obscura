@@ -96,8 +96,22 @@ Connection management includes several privacy-enhancing features:
 
 1. **Connection Obfuscation**: Techniques to hide the nature of the connection.
 2. **IP Address Protection**: Methods to prevent IP address leakage.
-3. **Traffic Pattern Obfuscation**: Techniques to hide traffic patterns.
+   - **Tor Support**: Routes traffic through the Tor network to anonymize connections.
+   - **I2P Support**: Routes traffic through the I2P network using garlic routing.
+     - Creates I2P destinations for inbound connections
+     - Maps I2P destinations to internal socket addresses
+     - Negotiates I2P support during handshake
+     - Provides transparent routing through I2P proxies
+3. **Traffic Pattern Obfuscation**: Techniques to hide traffic patterns:
+   - **Message Padding**: Applies random padding to messages to conceal their true size.
+   - **Dummy Traffic Generation**: Injects fake messages to mask actual communication patterns.
+   - **Burst Mode**: Sends multiple messages in rapid succession to disguise timing patterns.
+   - **Timing Jitter**: Introduces random delays between messages to prevent timing analysis.
+   - **Traffic Morphing**: Alters packet sizes and timing to resemble other protocols.
+   - **Chaff Traffic**: Periodically sends meaningless traffic to maintain continuous communication.
 4. **Connection Rotation**: Periodically rotating connections to prevent tracking.
+
+The traffic pattern obfuscation is implemented in the `TrafficObfuscationService` which works alongside the `MessagePaddingService` to provide comprehensive protection against traffic analysis attacks. The `I2PProxyService` handles integration with the I2P network, offering an alternative to Tor for anonymous network routing.
 
 ## Implementation Details
 
@@ -134,6 +148,12 @@ Connection management can be configured through several parameters:
 - `inactivity_timeout`: Timeout for inactive connections.
 - `reconnect_interval`: Interval for reconnection attempts.
 - `privacy_level`: Level of privacy enhancements to apply.
+- `traffic_obfuscation_enabled`: Enable or disable traffic pattern obfuscation.
+- `traffic_burst_mode_enabled`: Enable or disable burst mode for traffic obfuscation.
+- `traffic_burst_min_messages`: Minimum number of messages in a burst.
+- `traffic_burst_max_messages`: Maximum number of messages in a burst.
+- `traffic_chaff_interval_ms`: Time interval for sending chaff traffic.
+- `traffic_morphing_enabled`: Enable or disable traffic morphing techniques.
 
 ## Best Practices
 

@@ -179,7 +179,14 @@ Connection obfuscation enhances privacy by making it difficult for observers to 
 
 4. **Lightweight Encryption**: Applies basic encryption to the connection to prevent simple packet inspection.
 
-5. **Traffic Pattern Obfuscation**: Modifies traffic patterns to resemble other protocols, making identification more difficult.
+5. **Traffic Pattern Obfuscation**: Modifies traffic patterns to resemble other protocols, making identification more difficult:
+   - **Dummy Message Generation**: Creates and sends fake messages that are indistinguishable from real ones.
+   - **Burst Mode**: Sends multiple messages in bursts with randomized timing to disguise regular patterns.
+   - **Chaff Traffic**: Maintains a baseline of meaningless traffic to prevent correlation of real communication.
+   - **Traffic Morphing**: Dynamically alters packet characteristics to mimic other protocols.
+   - **Timing Jitter**: Applies variable delays between messages to thwart timing analysis.
+
+These features are negotiated during the handshake process and applied based on the privacy feature flags. The implementation details can be found in the `TrafficObfuscationService` and `MessagePaddingService` classes.
 
 ## Error Handling
 

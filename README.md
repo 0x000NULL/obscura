@@ -12,6 +12,8 @@ Obscura is a privacy-focused cryptocurrency that combines cutting-edge cryptogra
 - **Zero-Knowledge Proofs**: Prove transaction validity without revealing transaction details
 - **Dual-Curve Cryptography**: Using BLS12-381 and Jubjub curves for advanced privacy features
 - **Bulletproofs**: Efficient range proofs without trusted setup
+- **Network Privacy**: Tor onion routing and I2P garlic routing support for anonymous connections
+- **Traffic Obfuscation**: Message padding and protocol morphing to prevent traffic analysis
 
 ## Cryptographic Migration
 
@@ -110,6 +112,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Peer discovery and management
 - Block propagation with privacy enhancements
 - Transaction relay with timing variation
+- Tor onion routing support for enhanced network privacy
+- I2P garlic routing support as an alternative anonymous routing option
+- Traffic pattern obfuscation with message padding and protocol morphing
 
 ## Usage
 
