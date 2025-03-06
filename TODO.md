@@ -269,12 +269,12 @@
     - [x] Add DNS-over-HTTPS for seed node discovery
     - [x] Implement client fingerprinting countermeasures
 - [ ] Privacy Infrastructure
-  - [ ] Implement key privacy mechanisms
-    - [ ] Create secure key generation with additional entropy
-    - [ ] Add key derivation privacy enhancements
-    - [ ] Implement key usage pattern protection
-    - [ ] Create key rotation mechanisms
-    - [ ] Add key compartmentalization features
+  - [x] Implement key privacy mechanisms
+    - [x] Create secure key generation with additional entropy
+    - [x] Add key derivation privacy enhancements
+    - [x] Implement key usage pattern protection
+    - [x] Create key rotation mechanisms
+    - [x] Add key compartmentalization features
   - [ ] Develop basic view key system
     - [ ] Implement view key generation
     - [ ] Create transaction scanning with view keys

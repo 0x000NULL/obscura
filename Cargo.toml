@@ -1,6 +1,6 @@
 [package]
 name = "obscura"
-version = "0.7.2"
+version = "0.7.3"
 authors = ["Obscura Team <ethan@obscura.org>"]
 description = "A privacy-focused cryptocurrency with stealth addresses and confidential transactions"
 repository = "https://github.com/obscura-org/obscura"
@@ -89,6 +89,9 @@ criterion = "0.4"
 
 # Development tooling
 rand_distr = "0.4.3"
+
+# New dependency
+sys-info = "0.9"
 
 [dev-dependencies]
 tempfile = "3.5"

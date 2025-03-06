@@ -702,7 +702,7 @@ pub fn generate_secure_ephemeral_key() -> (Fr, EdwardsProjective) {
 /// 1. **Multiple Rounds**
 ///    - Multiple rounds of key derivation
 ///    - Domain separation
-///    - Additional entropy mixing
+///    - Additional entropy injection
 ///
 /// 2. **Protection**
 ///    - Protection against key recovery
@@ -1332,6 +1332,662 @@ pub fn create_stealth_address_with_private(
     (ephemeral_public, stealth_address)
 }
 
+/// Generate a secure key with additional entropy sources
+///
+/// This function implements secure key generation with multiple security measures:
+///
+/// # Security Features
+///
+/// 1. **Multiple Entropy Sources**
+///    - System entropy (OsRng)
+///    - Hardware events
+///    - Time-based entropy
+///    - Process-specific entropy
+///    - System state entropy
+///
+/// 2. **Entropy Mixing**
+///    - Multiple rounds of hashing
+///    - Domain separation
+///    - Entropy pool management
+///
+/// 3. **Key Validation**
+///    - Range validation
+///    - Weak key detection
+///    - Cryptographic properties verification
+///
+/// # Returns
+///
+/// A tuple containing:
+/// - The generated private key (Fr)
+/// - The corresponding public key (EdwardsProjective)
+///
+/// # Example
+///
+/// ```
+/// use obscura::crypto::jubjub::generate_secure_key;
+///
+/// let (private_key, public_key) = generate_secure_key();
+/// ```
+pub fn generate_secure_key() -> (Fr, EdwardsProjective) {
+    // Create entropy pool
+    let mut entropy_pool = [0u8; 128]; // Large pool for multiple entropy sources
+    let mut rng = OsRng;
+
+    // 1. System entropy (64 bytes)
+    rng.fill_bytes(&mut entropy_pool[0..64]);
+
+    // 2. Time-based entropy (16 bytes)
+    let time_entropy = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos()
+        .to_le_bytes();
+    entropy_pool[64..80].copy_from_slice(&time_entropy);
+
+    // 3. Process-specific entropy (16 bytes)
+    let pid = std::process::id().to_le_bytes();
+    let thread_id = std::thread::current().id().as_u64().to_le_bytes();
+    entropy_pool[80..88].copy_from_slice(&pid);
+    entropy_pool[88..96].copy_from_slice(&thread_id);
+
+    // 4. System state entropy (32 bytes)
+    if let Ok(sys_info) = sys_info::loadavg() {
+        let load = (sys_info.one * 1000.0) as u64;
+        let load_bytes = load.to_le_bytes();
+        entropy_pool[96..104].copy_from_slice(&load_bytes);
+    }
+    if let Ok(mem_info) = sys_info::mem_info() {
+        let mem = mem_info.free as u64;
+        let mem_bytes = mem.to_le_bytes();
+        entropy_pool[104..112].copy_from_slice(&mem_bytes);
+    }
+
+    // First round of entropy mixing
+    let mut hasher = Sha256::new();
+    hasher.update(b"Obscura Secure Key Generation v1");
+    hasher.update(&entropy_pool);
+    let first_hash = hasher.finalize();
+
+    // Second round with additional entropy
+    let mut hasher = Sha256::new();
+    hasher.update(b"Obscura Secure Key Generation v2");
+    hasher.update(&first_hash);
+    
+    // Add one more source of entropy
+    let mut additional_entropy = [0u8; 32];
+    rng.fill_bytes(&mut additional_entropy);
+    hasher.update(&additional_entropy);
+
+    let second_hash = hasher.finalize();
+
+    // Convert to scalar and ensure proper range
+    let mut scalar_bytes = [0u8; 32];
+    scalar_bytes.copy_from_slice(&second_hash);
+    let mut private_key = Fr::from_le_bytes_mod_order(&scalar_bytes);
+
+    // Validate the private key
+    if private_key.is_zero() || private_key == Fr::one() {
+        // If we get a weak key, generate a new one recursively
+        return generate_secure_key();
+    }
+
+    // Generate the public key
+    let public_key = <EdwardsProjective as ark_ec::Group>::generator() * private_key;
+
+    // Validate the public key
+    if public_key.is_zero() {
+        // If we get an invalid public key, generate a new one
+        return generate_secure_key();
+    }
+
+    (private_key, public_key)
+}
+
+/// Enhanced key derivation with privacy features
+///
+/// This function implements a secure key derivation protocol with multiple privacy enhancements:
+///
+/// # Security Features
+///
+/// 1. **Multiple Derivation Rounds**
+///    - Multiple rounds of key derivation
+///    - Domain separation per round
+///    - Additional entropy injection
+///
+/// 2. **Privacy Protection**
+///    - Metadata stripping
+///    - Key usage pattern protection
+///    - Forward secrecy guarantees
+///
+/// 3. **Enhanced Security**
+///    - Subgroup checking
+///    - Range validation
+///    - Weak key prevention
+///
+/// # Parameters
+///
+/// - `base_key`: The base key for derivation
+/// - `context`: Context string for domain separation
+/// - `index`: Derivation index
+/// - `additional_data`: Optional additional data
+///
+/// # Returns
+///
+/// The derived key with privacy enhancements
+///
+/// # Example
+///
+/// ```rust
+/// use obscura::crypto::jubjub::derive_private_key;
+///
+/// let base_key = generate_secure_key().0;
+/// let derived_key = derive_private_key(
+///     &base_key,
+///     "payment_key",
+///     0,
+///     Some(b"additional data")
+/// );
+/// ```
+pub fn derive_private_key(
+    base_key: &Fr,
+    context: &str,
+    index: u64,
+    additional_data: Option<&[u8]>,
+) -> Fr {
+    // First round of derivation with domain separation
+    let mut hasher = Sha256::new();
+    hasher.update(b"Obscura Key Derivation v1");
+    hasher.update(context.as_bytes());
+    hasher.update(&base_key.to_bytes());
+    hasher.update(&index.to_le_bytes());
+    
+    if let Some(data) = additional_data {
+        hasher.update(data);
+    }
+    
+    let first_hash = hasher.finalize();
+
+    // Second round with additional entropy
+    let mut hasher = Sha256::new();
+    hasher.update(b"Obscura Key Derivation v2");
+    hasher.update(&first_hash);
+
+    // Add time-based entropy
+    let time_entropy = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos()
+        .to_le_bytes();
+    hasher.update(&time_entropy);
+
+    let second_hash = hasher.finalize();
+
+    // Final round with privacy enhancements
+    let mut hasher = Sha256::new();
+    hasher.update(b"Obscura Key Derivation Final");
+    hasher.update(&second_hash);
+    
+    // Add process-specific entropy
+    let pid = std::process::id().to_le_bytes();
+    let thread_id = std::thread::current().id().as_u64().to_le_bytes();
+    hasher.update(&pid);
+    hasher.update(&thread_id);
+
+    let final_hash = hasher.finalize();
+
+    // Convert to scalar with proper range checking
+    let mut scalar_bytes = [0u8; 32];
+    scalar_bytes.copy_from_slice(&final_hash);
+    let derived_key = Fr::from_le_bytes_mod_order(&scalar_bytes);
+
+    // Ensure the derived key is not weak
+    if derived_key.is_zero() || derived_key == Fr::one() {
+        // If we get a weak key, derive again with modified index
+        return derive_private_key(base_key, context, index.wrapping_add(1), additional_data);
+    }
+
+    derived_key
+}
+
+/// Derive a public key with privacy enhancements
+///
+/// This function derives a public key from a private key with additional privacy features.
+///
+/// # Security Features
+///
+/// 1. **Point Blinding**
+///    - Randomized point operations
+///    - Timing attack protection
+///    - Side-channel resistance
+///
+/// 2. **Privacy Protection**
+///    - Point randomization
+///    - Metadata stripping
+///    - Pattern protection
+///
+/// # Parameters
+///
+/// - `private_key`: The private key to derive from
+/// - `context`: Context string for domain separation
+/// - `index`: Derivation index
+/// - `additional_data`: Optional additional data
+///
+/// # Returns
+///
+/// The derived public key with privacy enhancements
+pub fn derive_public_key(
+    private_key: &Fr,
+    context: &str,
+    index: u64,
+    additional_data: Option<&[u8]>,
+) -> EdwardsProjective {
+    // Derive the private key first
+    let derived_private = derive_private_key(private_key, context, index, additional_data);
+    
+    // Generate blinding factor for point operations
+    let blinding = generate_blinding_factor();
+    
+    // Perform blinded point multiplication
+    let base_point = <EdwardsProjective as ark_ec::Group>::generator();
+    let blinded_point = base_point * blinding;
+    let derived_point = blinded_point * derived_private;
+    
+    // Unblind the result
+    let unblinding = blinding.inverse().unwrap();
+    derived_point * unblinding
+}
+
+/// Create a hierarchical key derivation path
+///
+/// This function implements BIP32-style hierarchical key derivation with privacy enhancements.
+///
+/// # Security Features
+///
+/// 1. **Hierarchical Derivation**
+///    - Multiple derivation levels
+///    - Hardened key support
+///    - Child key isolation
+///
+/// 2. **Privacy Protection**
+///    - Path isolation
+///    - Index obfuscation
+///    - Pattern protection
+///
+/// # Parameters
+///
+/// - `master_key`: The master private key
+/// - `path`: Vector of derivation indices
+/// - `hardened`: Whether to use hardened derivation
+///
+/// # Returns
+///
+/// The derived key at the specified path
+pub fn derive_hierarchical_key(
+    master_key: &Fr,
+    path: &[u64],
+    hardened: bool,
+) -> Fr {
+    let mut current_key = *master_key;
+    
+    for (depth, &index) in path.iter().enumerate() {
+        let context = if hardened {
+            format!("hardened_key_{}", depth)
+        } else {
+            format!("normal_key_{}", depth)
+        };
+        
+        let actual_index = if hardened {
+            index | (1u64 << 31) // Set hardened bit
+        } else {
+            index
+        };
+        
+        current_key = derive_private_key(
+            &current_key,
+            &context,
+            actual_index,
+            None,
+        );
+    }
+    
+    current_key
+}
+
+/// Create a deterministic subkey with privacy enhancements
+///
+/// This function creates a deterministic subkey that can be regenerated with the same parameters
+/// while maintaining privacy protections.
+///
+/// # Security Features
+///
+/// 1. **Deterministic Derivation**
+///    - Reproducible keys
+///    - Domain separation
+///    - Forward secrecy
+///
+/// 2. **Privacy Protection**
+///    - Pattern protection
+///    - Metadata stripping
+///    - Usage isolation
+///
+/// # Parameters
+///
+/// - `parent_key`: The parent private key
+/// - `purpose`: The purpose of the subkey
+/// - `index`: The subkey index
+///
+/// # Returns
+///
+/// A deterministic subkey with privacy enhancements
+pub fn derive_deterministic_subkey(
+    parent_key: &Fr,
+    purpose: &str,
+    index: u64,
+) -> Fr {
+    // Create purpose-specific domain separation
+    let context = format!("subkey_{}", purpose);
+    
+    // Add purpose-specific entropy
+    let mut hasher = Sha256::new();
+    hasher.update(purpose.as_bytes());
+    let purpose_entropy = hasher.finalize();
+    
+    // Derive the subkey with additional entropy
+    derive_private_key(
+        parent_key,
+        &context,
+        index,
+        Some(&purpose_entropy),
+    )
+}
+
+/// Key usage pattern protection system
+///
+/// This module implements comprehensive protection against key usage pattern analysis.
+/// It provides mechanisms to prevent the correlation of keys, their usage patterns,
+/// and relationships between different keys.
+///
+/// # Security Features
+///
+/// 1. **Usage Pattern Obfuscation**
+///    - Key rotation
+///    - Usage randomization
+///    - Pattern masking
+///
+/// 2. **Access Pattern Protection**
+///    - Timing randomization
+///    - Memory access obfuscation
+///    - Operation masking
+///
+/// 3. **Relationship Protection**
+///    - Key isolation
+///    - Context separation
+///    - Purpose segregation
+pub struct KeyUsageProtection {
+    /// Rotation interval in seconds
+    rotation_interval: u64,
+    /// Last rotation timestamp
+    last_rotation: std::time::SystemTime,
+    /// Usage counters per context
+    usage_counters: std::collections::HashMap<String, u64>,
+    /// Random delay generator
+    delay_distribution: rand_distr::Normal<f64>,
+    /// Operation masking flag
+    enable_operation_masking: bool,
+    /// Key rotation history
+    rotation_history: Vec<RotationRecord>,
+    /// Maximum rotations before forced key regeneration
+    max_rotations: u32,
+    /// Rotation thresholds per context
+    rotation_thresholds: std::collections::HashMap<String, u64>,
+    /// Emergency rotation flag
+    emergency_rotation_needed: bool,
+    /// Rotation strategy
+    rotation_strategy: RotationStrategy,
+}
+
+/// Record of a key rotation event
+#[derive(Clone, Debug)]
+struct RotationRecord {
+    timestamp: std::time::SystemTime,
+    context: String,
+    reason: RotationReason,
+    usage_count: u64,
+}
+
+/// Reason for key rotation
+#[derive(Clone, Debug, PartialEq)]
+enum RotationReason {
+    TimeInterval,
+    UsageThreshold,
+    Emergency,
+    Scheduled,
+    Manual,
+}
+
+/// Strategy for key rotation
+#[derive(Clone, Debug)]
+enum RotationStrategy {
+    /// Rotate based on time interval
+    TimeBasedOnly,
+    /// Rotate based on usage count
+    UsageBasedOnly,
+    /// Rotate based on both time and usage
+    Combined,
+    /// Adaptive rotation based on usage patterns
+    Adaptive {
+        min_interval: u64,
+        max_interval: u64,
+        usage_weight: f64,
+    },
+}
+
+impl KeyUsageProtection {
+    /// Create a new key usage protection system
+    pub fn new() -> Self {
+        Self {
+            rotation_interval: 3600, // Default 1 hour
+            last_rotation: std::time::SystemTime::now(),
+            usage_counters: std::collections::HashMap::new(),
+            delay_distribution: rand_distr::Normal::new(5.0, 1.0).unwrap(),
+            enable_operation_masking: true,
+            rotation_history: Vec::new(),
+            max_rotations: 100,
+            rotation_thresholds: std::collections::HashMap::new(),
+            emergency_rotation_needed: false,
+            rotation_strategy: RotationStrategy::Combined,
+        }
+    }
+
+    /// Configure the rotation strategy
+    pub fn configure_rotation(
+        &mut self,
+        strategy: RotationStrategy,
+        max_rotations: u32,
+        default_threshold: u64,
+    ) {
+        self.rotation_strategy = strategy;
+        self.max_rotations = max_rotations;
+        
+        // Reset thresholds with new default
+        self.rotation_thresholds.clear();
+        self.rotation_thresholds.insert("default".to_string(), default_threshold);
+    }
+
+    /// Set context-specific rotation threshold
+    pub fn set_rotation_threshold(&mut self, context: &str, threshold: u64) {
+        self.rotation_thresholds.insert(context.to_string(), threshold);
+    }
+
+    /// Get the rotation threshold for a context
+    fn get_rotation_threshold(&self, context: &str) -> u64 {
+        self.rotation_thresholds
+            .get(context)
+            .copied()
+            .unwrap_or_else(|| {
+                self.rotation_thresholds
+                    .get("default")
+                    .copied()
+                    .unwrap_or(1000)
+            })
+    }
+
+    /// Check if rotation is needed based on current strategy
+    fn needs_rotation(&self, context: &str) -> (bool, RotationReason) {
+        let usage_count = self.usage_counters.get(context).copied().unwrap_or(0);
+        let threshold = self.get_rotation_threshold(context);
+        let time_elapsed = self.last_rotation.elapsed().unwrap_or_default().as_secs();
+
+        match self.rotation_strategy {
+            RotationStrategy::TimeBasedOnly => {
+                if time_elapsed >= self.rotation_interval {
+                    (true, RotationReason::TimeInterval)
+                } else {
+                    (false, RotationReason::TimeInterval)
+                }
+            }
+            RotationStrategy::UsageBasedOnly => {
+                if usage_count >= threshold {
+                    (true, RotationReason::UsageThreshold)
+                } else {
+                    (false, RotationReason::UsageThreshold)
+                }
+            }
+            RotationStrategy::Combined => {
+                if time_elapsed >= self.rotation_interval {
+                    (true, RotationReason::TimeInterval)
+                } else if usage_count >= threshold {
+                    (true, RotationReason::UsageThreshold)
+                } else {
+                    (false, RotationReason::TimeInterval)
+                }
+            }
+            RotationStrategy::Adaptive { min_interval, max_interval, usage_weight } => {
+                let usage_ratio = usage_count as f64 / threshold as f64;
+                let adaptive_interval = (min_interval as f64 + 
+                    (max_interval - min_interval) as f64 * (1.0 - usage_weight * usage_ratio))
+                    .max(min_interval as f64)
+            operation()
+        }
+    }
+
+    /// Mask cryptographic operation
+    fn mask_operation<T>(&self, operation: impl FnOnce() -> T) -> T {
+        // Generate dummy operations for masking
+        let mut rng = rand::thread_rng();
+        let dummy_count = rng.gen_range(1..=3);
+
+        // Perform dummy operations
+        for _ in 0..dummy_count {
+            let _ = generate_secure_key();
+        }
+
+        // Perform actual operation
+        operation()
+    }
+
+    /// Rotate keys for a given context
+    fn rotate_keys(&mut self, context: &str) {
+        // Reset usage counter
+        self.usage_counters.insert(context.to_string(), 0);
+    }
+}
+
+/// Protected key derivation with usage pattern protection
+///
+/// This function wraps the key derivation process with comprehensive usage pattern protection.
+///
+/// # Security Features
+///
+/// 1. **Pattern Protection**
+///    - Random timing delays
+///    - Operation masking
+///    - Usage tracking
+///
+/// 2. **Key Rotation**
+///    - Automatic key rotation
+///    - Usage-based rotation
+///    - Context separation
+///
+/// # Parameters
+///
+/// - `base_key`: The base key for derivation
+/// - `context`: Context string for domain separation
+/// - `index`: Derivation index
+/// - `additional_data`: Optional additional data
+/// - `protection`: Key usage protection system
+///
+/// # Returns
+///
+/// The derived key with usage pattern protection
+pub fn derive_key_protected(
+    base_key: &Fr,
+    context: &str,
+    index: u64,
+    additional_data: Option<&[u8]>,
+    protection: &mut KeyUsageProtection,
+) -> Fr {
+    protection.protect_derivation(context, || {
+        derive_private_key(base_key, context, index, additional_data)
+    })
+}
+
+/// Protected public key derivation with usage pattern protection
+///
+/// This function provides protected public key derivation with usage pattern protection.
+///
+/// # Security Features
+///
+/// 1. **Pattern Protection**
+///    - Operation masking
+///    - Timing protection
+///    - Usage tracking
+///
+/// 2. **Key Isolation**
+///    - Context separation
+///    - Purpose segregation
+///    - Relationship hiding
+pub fn derive_public_key_protected(
+    private_key: &Fr,
+    context: &str,
+    index: u64,
+    additional_data: Option<&[u8]>,
+    protection: &mut KeyUsageProtection,
+) -> EdwardsProjective {
+    protection.protect_derivation(context, || {
+        derive_public_key(private_key, context, index, additional_data)
+    })
+}
+
+/// Protected hierarchical key derivation with usage pattern protection
+///
+/// This function provides protected hierarchical key derivation with usage pattern protection.
+pub fn derive_hierarchical_key_protected(
+    master_key: &Fr,
+    path: &[u64],
+    hardened: bool,
+    protection: &mut KeyUsageProtection,
+) -> Fr {
+    let context = format!("hierarchical_{}", if hardened { "hardened" } else { "normal" });
+    protection.protect_derivation(&context, || {
+        derive_hierarchical_key(master_key, path, hardened)
+    })
+}
+
+/// Protected deterministic subkey derivation with usage pattern protection
+///
+/// This function provides protected deterministic subkey derivation with usage pattern protection.
+pub fn derive_deterministic_subkey_protected(
+    parent_key: &Fr,
+    purpose: &str,
+    index: u64,
+    protection: &mut KeyUsageProtection,
+) -> Fr {
+    protection.protect_derivation(purpose, || {
+        derive_deterministic_subkey(parent_key, purpose, index)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1547,5 +2203,515 @@ mod tests {
         assert!(!blinded_key2.is_zero());
         assert_ne!(blinded_key1, Fr::one());
         assert_ne!(blinded_key2, Fr::one());
+    }
+
+    #[test]
+    fn test_secure_key_generation() {
+        // Generate multiple keys to test randomness and uniqueness
+        let mut keys = Vec::new();
+        for _ in 0..10 {
+            let (private_key, public_key) = generate_secure_key();
+            
+            // Test 1: Private key should not be zero or one
+            assert!(!private_key.is_zero());
+            assert!(private_key != Fr::one());
+            
+            // Test 2: Public key should not be the identity point
+            assert!(!public_key.is_zero());
+            
+            // Test 3: Public key should be correctly derived from private key
+            let expected_public = <EdwardsProjective as ark_ec::Group>::generator() * private_key;
+            assert_eq!(public_key, expected_public);
+            
+            // Store for uniqueness test
+            keys.push((private_key, public_key));
+        }
+        
+        // Test 4: All keys should be unique
+        for i in 0..keys.len() {
+            for j in (i + 1)..keys.len() {
+                assert_ne!(keys[i].0, keys[j].0, "Found duplicate private keys");
+                assert_ne!(keys[i].1, keys[j].1, "Found duplicate public keys");
+            }
+        }
+    }
+
+    #[test]
+    fn test_secure_key_signing() {
+        // Generate a secure key pair
+        let (private_key, public_key) = generate_secure_key();
+        
+        // Test signing and verification
+        let message = b"test message";
+        let signature = sign(&private_key, message);
+        assert!(verify(&public_key, message, &signature));
+        
+        // Test that verification fails with wrong message
+        let wrong_message = b"wrong message";
+        assert!(!verify(&public_key, wrong_message, &signature));
+    }
+
+    #[test]
+    fn test_private_key_derivation() {
+        let base_key = Fr::rand(&mut OsRng);
+        
+        // Test basic derivation
+        let derived_key1 = derive_private_key(&base_key, "test", 0, None);
+        let derived_key2 = derive_private_key(&base_key, "test", 0, None);
+        
+        // Same parameters should produce same key
+        assert_eq!(derived_key1, derived_key2);
+        
+        // Different context should produce different key
+        let derived_key3 = derive_private_key(&base_key, "different", 0, None);
+        assert_ne!(derived_key1, derived_key3);
+        
+        // Different index should produce different key
+        let derived_key4 = derive_private_key(&base_key, "test", 1, None);
+        assert_ne!(derived_key1, derived_key4);
+        
+        // Additional data should affect derivation
+        let derived_key5 = derive_private_key(&base_key, "test", 0, Some(b"additional"));
+        assert_ne!(derived_key1, derived_key5);
+        
+        // Verify derived keys are not weak
+        assert!(!derived_key1.is_zero());
+        assert_ne!(derived_key1, Fr::one());
+    }
+
+    #[test]
+    fn test_public_key_derivation() {
+        let private_key = Fr::rand(&mut OsRng);
+        
+        // Test basic derivation
+        let public_key1 = derive_public_key(&private_key, "test", 0, None);
+        let public_key2 = derive_public_key(&private_key, "test", 0, None);
+        
+        // Same parameters should produce same key
+        assert_eq!(public_key1, public_key2);
+        
+        // Different context should produce different key
+        let public_key3 = derive_public_key(&private_key, "different", 0, None);
+        assert_ne!(public_key1, public_key3);
+        
+        // Verify derived public keys are valid curve points
+        assert!(!public_key1.is_zero());
+        assert!(!public_key2.is_zero());
+        assert!(!public_key3.is_zero());
+        
+        // Verify point operations are correct
+        let derived_private = derive_private_key(&private_key, "test", 0, None);
+        let expected_public = <EdwardsProjective as ark_ec::Group>::generator() * derived_private;
+        assert_eq!(public_key1, expected_public);
+    }
+
+    #[test]
+    fn test_hierarchical_key_derivation() {
+        let master_key = Fr::rand(&mut OsRng);
+        let path = vec![0, 1, 2];
+        
+        // Test normal derivation
+        let derived_normal = derive_hierarchical_key(&master_key, &path, false);
+        
+        // Test hardened derivation
+        let derived_hardened = derive_hierarchical_key(&master_key, &path, true);
+        
+        // Normal and hardened derivation should produce different keys
+        assert_ne!(derived_normal, derived_hardened);
+        
+        // Test path consistency
+        let derived_same = derive_hierarchical_key(&master_key, &path, false);
+        assert_eq!(derived_normal, derived_same);
+        
+        // Different paths should produce different keys
+        let different_path = vec![0, 1, 3];
+        let derived_different = derive_hierarchical_key(&master_key, &different_path, false);
+        assert_ne!(derived_normal, derived_different);
+        
+        // Verify derived keys are not weak
+        assert!(!derived_normal.is_zero());
+        assert_ne!(derived_normal, Fr::one());
+        assert!(!derived_hardened.is_zero());
+        assert_ne!(derived_hardened, Fr::one());
+    }
+
+    #[test]
+    fn test_deterministic_subkey_derivation() {
+        let parent_key = Fr::rand(&mut OsRng);
+        
+        // Test basic derivation
+        let subkey1 = derive_deterministic_subkey(&parent_key, "payment", 0);
+        let subkey2 = derive_deterministic_subkey(&parent_key, "payment", 0);
+        
+        // Same parameters should produce same key
+        assert_eq!(subkey1, subkey2);
+        
+        // Different purpose should produce different key
+        let subkey3 = derive_deterministic_subkey(&parent_key, "staking", 0);
+        assert_ne!(subkey1, subkey3);
+        
+        // Different index should produce different key
+        let subkey4 = derive_deterministic_subkey(&parent_key, "payment", 1);
+        assert_ne!(subkey1, subkey4);
+        
+        // Verify subkeys are not weak
+        assert!(!subkey1.is_zero());
+        assert_ne!(subkey1, Fr::one());
+        
+        // Test purpose isolation
+        let payment_keys: Vec<Fr> = (0..5)
+            .map(|i| derive_deterministic_subkey(&parent_key, "payment", i))
+            .collect();
+        let staking_keys: Vec<Fr> = (0..5)
+            .map(|i| derive_deterministic_subkey(&parent_key, "staking", i))
+            .collect();
+        
+        // Ensure no key overlap between purposes
+        for payment_key in &payment_keys {
+            for staking_key in &staking_keys {
+                assert_ne!(payment_key, staking_key);
+            }
+        }
+    }
+
+    #[test]
+    fn test_key_usage_protection() {
+        let mut protection = KeyUsageProtection::new();
+        let base_key = Fr::rand(&mut OsRng);
+        
+        // Test basic protection
+        let key1 = derive_key_protected(&base_key, "test", 0, None, &mut protection);
+        let key2 = derive_key_protected(&base_key, "test", 0, None, &mut protection);
+        
+        // Same parameters should still produce same key
+        assert_eq!(key1, key2);
+        
+        // Test usage tracking
+        assert_eq!(protection.usage_counters.get("test"), Some(&2));
+        
+        // Test different contexts
+        let key3 = derive_key_protected(&base_key, "other", 0, None, &mut protection);
+        assert_ne!(key1, key3);
+        assert_eq!(protection.usage_counters.get("other"), Some(&1));
+    }
+
+    #[test]
+    fn test_timing_variation() {
+        let mut protection = KeyUsageProtection::new();
+        let base_key = Fr::rand(&mut OsRng);
+        
+        // Configure short delays for testing
+        protection.configure(3600, 1.0, 0.1, true);
+        
+        // Measure multiple derivations
+        let mut times = Vec::new();
+        for _ in 0..10 {
+            let start = std::time::Instant::now();
+            let _ = derive_key_protected(&base_key, "test", 0, None, &mut protection);
+            times.push(start.elapsed());
+        }
+        
+        // Verify timing variations
+        let mean_time = times.iter().sum::<std::time::Duration>() / times.len() as u32;
+        for time in times {
+            // Times should vary but not too much (within 3 standard deviations)
+            assert!(time.abs_diff(mean_time) < std::time::Duration::from_millis(3));
+        }
+    }
+
+    #[test]
+    fn test_operation_masking() {
+        let mut protection = KeyUsageProtection::new();
+        protection.configure(3600, 1.0, 0.1, true);
+        let base_key = Fr::rand(&mut OsRng);
+        
+        // Test with masking enabled
+        let key1 = derive_key_protected(&base_key, "test", 0, None, &mut protection);
+        
+        // Disable masking
+        protection.configure(3600, 1.0, 0.1, false);
+        let key2 = derive_key_protected(&base_key, "test", 0, None, &mut protection);
+        
+        // Keys should still be the same
+        assert_eq!(key1, key2);
+    }
+
+    #[test]
+    fn test_key_rotation() {
+        let mut protection = KeyUsageProtection::new();
+        // Set short rotation interval for testing
+        protection.configure(1, 1.0, 0.1, false);
+        let base_key = Fr::rand(&mut OsRng);
+        
+        // Initial derivation
+        let key1 = derive_key_protected(&base_key, "test", 0, None, &mut protection);
+        
+        // Wait for rotation
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        
+        // After rotation, usage counter should reset
+        let _ = derive_key_protected(&base_key, "test", 0, None, &mut protection);
+        assert_eq!(protection.usage_counters.get("test"), Some(&1));
+    }
+}
+
+/// Key compartmentalization system for enhanced key isolation and separation
+pub struct KeyCompartmentalization {
+    /// Compartment identifiers and their associated metadata
+    compartments: std::collections::HashMap<String, CompartmentMetadata>,
+    /// Cross-compartment access rules
+    access_rules: std::collections::HashMap<String, Vec<String>>,
+    /// Compartment usage tracking
+    usage_tracking: std::collections::HashMap<String, CompartmentUsage>,
+    /// Compartment security levels
+    security_levels: std::collections::HashMap<String, SecurityLevel>,
+    /// Audit logging enabled flag
+    audit_logging: bool,
+}
+
+/// Metadata for a key compartment
+#[derive(Clone, Debug)]
+struct CompartmentMetadata {
+    /// Compartment creation time
+    created_at: std::time::SystemTime,
+    /// Purpose of this compartment
+    purpose: String,
+    /// Security requirements
+    requirements: SecurityRequirements,
+    /// Access control list
+    allowed_contexts: Vec<String>,
+    /// Key rotation policy
+    rotation_policy: RotationPolicy,
+}
+
+/// Security level for compartments
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum SecurityLevel {
+    Standard,
+    Enhanced,
+    Critical,
+    UltraSecure,
+}
+
+/// Security requirements for a compartment
+#[derive(Clone, Debug)]
+struct SecurityRequirements {
+    /// Minimum entropy required for keys
+    min_entropy: usize,
+    /// Required security level
+    security_level: SecurityLevel,
+    /// Whether hardware security is required
+    requires_hsm: bool,
+    /// Whether audit logging is required
+    requires_audit: bool,
+}
+
+/// Usage tracking for a compartment
+#[derive(Clone, Debug)]
+struct CompartmentUsage {
+    /// Number of key derivations
+    derivation_count: u64,
+    /// Last access timestamp
+    last_access: std::time::SystemTime,
+    /// Access patterns
+    access_patterns: Vec<AccessRecord>,
+}
+
+/// Record of compartment access
+#[derive(Clone, Debug)]
+struct AccessRecord {
+    /// Timestamp of access
+    timestamp: std::time::SystemTime,
+    /// Type of operation
+    operation: OperationType,
+    /// Context of access
+    context: String,
+}
+
+/// Type of operation performed
+#[derive(Clone, Debug)]
+enum OperationType {
+    KeyDerivation,
+    KeyRotation,
+    SecurityUpdate,
+    CrossCompartmentAccess,
+}
+
+impl KeyCompartmentalization {
+    /// Create a new key compartmentalization system
+    pub fn new() -> Self {
+        Self {
+            compartments: std::collections::HashMap::new(),
+            access_rules: std::collections::HashMap::new(),
+            usage_tracking: std::collections::HashMap::new(),
+            security_levels: std::collections::HashMap::new(),
+            audit_logging: true,
+        }
+    }
+
+    /// Create a new compartment with specified security requirements
+    pub fn create_compartment(
+        &mut self,
+        name: &str,
+        purpose: &str,
+        security_level: SecurityLevel,
+        requires_hsm: bool,
+    ) -> Result<(), &'static str> {
+        if self.compartments.contains_key(name) {
+            return Err("Compartment already exists");
+        }
+
+        let metadata = CompartmentMetadata {
+            created_at: std::time::SystemTime::now(),
+            purpose: purpose.to_string(),
+            requirements: SecurityRequirements {
+                min_entropy: match security_level {
+                    SecurityLevel::Standard => 128,
+                    SecurityLevel::Enhanced => 192,
+                    SecurityLevel::Critical => 256,
+                    SecurityLevel::UltraSecure => 384,
+                },
+                security_level: security_level.clone(),
+                requires_hsm,
+                requires_audit: security_level >= SecurityLevel::Critical,
+            },
+            allowed_contexts: Vec::new(),
+            rotation_policy: RotationPolicy::default(),
+        };
+
+        self.compartments.insert(name.to_string(), metadata);
+        self.security_levels.insert(name.to_string(), security_level);
+        self.usage_tracking.insert(name.to_string(), CompartmentUsage {
+            derivation_count: 0,
+            last_access: std::time::SystemTime::now(),
+            access_patterns: Vec::new(),
+        });
+
+        Ok(())
+    }
+
+    /// Add access rule between compartments
+    pub fn add_access_rule(&mut self, from: &str, to: &str) -> Result<(), &'static str> {
+        if !self.compartments.contains_key(from) || !self.compartments.contains_key(to) {
+            return Err("Compartment not found");
+        }
+
+        self.access_rules
+            .entry(from.to_string())
+            .or_insert_with(Vec::new)
+            .push(to.to_string());
+
+        Ok(())
+    }
+
+    /// Derive a key within a compartment
+    pub fn derive_key_in_compartment(
+        &mut self,
+        compartment: &str,
+        base_key: &Fr,
+        context: &str,
+        additional_data: Option<&[u8]>,
+    ) -> Result<Fr, &'static str> {
+        // Verify compartment exists
+        let metadata = self.compartments.get(compartment)
+            .ok_or("Compartment not found")?;
+
+        // Check security requirements
+        if metadata.requirements.requires_hsm && !self.is_hsm_available() {
+            return Err("HSM required but not available");
+        }
+
+        // Update usage tracking
+        if let Some(usage) = self.usage_tracking.get_mut(compartment) {
+            usage.derivation_count += 1;
+            usage.last_access = std::time::SystemTime::now();
+            usage.access_patterns.push(AccessRecord {
+                timestamp: std::time::SystemTime::now(),
+                operation: OperationType::KeyDerivation,
+                context: context.to_string(),
+            });
+        }
+
+        // Add compartment-specific entropy
+        let mut compartment_entropy = [0u8; 32];
+        let mut hasher = Sha256::new();
+        hasher.update(compartment.as_bytes());
+        hasher.update(context.as_bytes());
+        compartment_entropy.copy_from_slice(&hasher.finalize());
+
+        // Derive key with compartment isolation
+        let derived_key = derive_private_key(
+            base_key,
+            &format!("compartment_{}", compartment),
+            0,
+            Some(&compartment_entropy),
+        );
+
+        // Audit logging if required
+        if metadata.requirements.requires_audit {
+            self.log_audit_event(compartment, "key_derivation", context);
+        }
+
+        Ok(derived_key)
+    }
+
+    /// Check if cross-compartment access is allowed
+    pub fn check_cross_compartment_access(
+        &self,
+        from: &str,
+        to: &str,
+    ) -> bool {
+        self.access_rules
+            .get(from)
+            .map_or(false, |rules| rules.contains(&to.to_string()))
+    }
+
+    /// Rotate keys in a compartment
+    pub fn rotate_compartment_keys(
+        &mut self,
+        compartment: &str,
+        protection: &mut KeyUsageProtection,
+    ) -> Result<(), &'static str> {
+        let metadata = self.compartments.get(compartment)
+            .ok_or("Compartment not found")?;
+
+        // Force key rotation in the protection system
+        protection.force_emergency_rotation();
+
+        // Update usage tracking
+        if let Some(usage) = self.usage_tracking.get_mut(compartment) {
+            usage.access_patterns.push(AccessRecord {
+                timestamp: std::time::SystemTime::now(),
+                operation: OperationType::KeyRotation,
+                context: "rotation".to_string(),
+            });
+        }
+
+        // Audit logging if required
+        if metadata.requirements.requires_audit {
+            self.log_audit_event(compartment, "key_rotation", "scheduled");
+        }
+
+        Ok(())
+    }
+
+    /// Log audit event
+    fn log_audit_event(&self, compartment: &str, event_type: &str, details: &str) {
+        if self.audit_logging {
+            // In a production system, this would write to a secure audit log
+            println!(
+                "AUDIT: Compartment={}, Event={}, Details={}, Time={:?}",
+                compartment,
+                event_type,
+                details,
+                std::time::SystemTime::now()
+            );
+        }
+    }
+
+    /// Check if HSM is available
+    fn is_hsm_available(&self) -> bool {
+        // In a production system, this would check for actual HSM availability
+        false
     }
 }

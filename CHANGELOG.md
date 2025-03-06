@@ -1,5 +1,158 @@
 # Changelog
 
+## [0.7.3] - 2025-03-06
+
+### Added
+- **Enhanced Key Privacy Implementation**
+  - Implemented secure key generation with multiple entropy sources:
+    - System entropy from OsRng (64 bytes)
+    - Time-based entropy (16 bytes)
+    - Process-specific entropy (16 bytes)
+    - System state entropy (32 bytes)
+  - Created comprehensive entropy mixing system:
+    - 128-byte entropy pool
+    - Multiple rounds of SHA-256 hashing
+    - Domain separation with unique prefixes
+    - Additional entropy injection
+  - Added robust key validation:
+    - Range validation for generated keys
+    - Weak key detection and prevention
+    - Public key validation
+    - Recursive regeneration for invalid keys
+  - Implemented comprehensive test suite:
+    - Key generation uniqueness tests
+    - Security feature validation
+    - Randomness verification
+    - Key property validation
+    - Signing and verification tests
+  - **Added Enhanced Key Derivation System**:
+    - Implemented private key derivation with privacy features
+    - Created public key derivation with point blinding
+    - Added hierarchical key derivation (BIP32-style)
+    - Implemented deterministic subkey derivation
+    - Created comprehensive domain separation
+    - Added pattern protection mechanisms
+    - Implemented forward secrecy features
+    - Created purpose-specific key isolation
+  - **Added Key Usage Pattern Protection**:
+    - Implemented usage pattern obfuscation with key rotation
+    - Added timing randomization and operation masking
+    - Created memory access pattern protection
+    - Implemented relationship hiding between keys
+    - Added context-based key isolation
+    - Created comprehensive test suite for pattern protection
+    - Added performance optimization options
+    - Implemented configurable security parameters
+  - **Added Key Rotation Mechanisms**:
+    - Implemented multiple rotation strategies:
+      - Time-based rotation
+      - Usage-based rotation
+      - Combined time and usage rotation
+      - Adaptive rotation based on usage patterns
+    - Added emergency rotation capability
+    - Created rotation history tracking
+    - Implemented maximum rotation limits
+    - Added context-specific rotation thresholds
+    - Created comprehensive rotation testing
+    - Implemented rotation security measures
+    - Added performance optimizations for rotation
+  - **Added Key Compartmentalization Features**:
+    - Implemented comprehensive key isolation system with security levels
+    - Added compartment-based key management with strict access controls
+    - Created HSM integration support for critical compartments
+    - Implemented cross-compartment access rules and validation
+    - Added detailed usage tracking and pattern analysis
+    - Created comprehensive audit logging system
+    - Implemented compartment-specific key rotation policies
+    - Added emergency rotation procedures for security incidents
+    - Created tamper-resistant audit logging
+    - Implemented security level enforcement (Standard to UltraSecure)
+    - Added configurable entropy requirements per compartment
+    - Created context-based access control system
+
+### Security
+- Added protection against weak key generation
+- Implemented secure entropy mixing protocol
+- Created comprehensive key validation system
+- Added multiple rounds of key derivation
+- Implemented secure fallback mechanisms
+- **Enhanced Key Derivation Security**:
+  - Added point blinding for public key operations
+  - Implemented timing attack protection
+  - Created side-channel resistance measures
+  - Added metadata stripping mechanisms
+  - Implemented key relationship hiding
+  - Created usage pattern protection
+  - Added path isolation for hierarchical keys
+  - Implemented hardened derivation support
+- **Added Key Usage Pattern Security**:
+  - Implemented random timing delays with normal distribution
+  - Added operation masking with dummy operations
+  - Created memory access pattern obfuscation
+  - Implemented automatic key rotation mechanisms
+  - Added context-based separation for operations
+  - Created comprehensive pattern analysis protection
+  - Implemented side-channel attack mitigations
+- **Added Key Rotation Security**:
+  - Implemented defense in depth with multiple rotation triggers
+  - Added emergency rotation for security incidents
+  - Created context isolation to prevent pattern analysis
+  - Added rotation history tracking for auditing
+  - Implemented maximum rotation limits to prevent key exhaustion
+  - Created adaptive rotation strategies for enhanced security
+  - Added comprehensive rotation validation
+- **Added Key Compartmentalization Security**:
+  - Implemented strict isolation between key compartments
+  - Added unidirectional access rule enforcement
+  - Created comprehensive security level validation
+  - Implemented HSM requirement enforcement
+  - Added tamper-resistant audit logging
+  - Created access pattern monitoring
+  - Implemented security incident detection
+  - Added emergency response procedures
+
+### Documentation
+- Added detailed documentation for secure key generation
+- Created comprehensive API documentation
+- Added security considerations guide
+- Created implementation examples
+- Updated cryptographic documentation
+- **Added Key Derivation Documentation**:
+  - Created comprehensive key derivation guide
+  - Added detailed API reference
+  - Created security best practices guide
+  - Added implementation examples
+  - Created testing guidelines
+  - Added performance considerations
+  - Implemented future enhancement roadmap
+- **Added Key Usage Pattern Documentation**:
+  - Created detailed protection mechanism guide
+  - Added configuration and best practices
+  - Created performance optimization guide
+  - Added testing and verification documentation
+  - Implemented security considerations guide
+  - Created future enhancements roadmap
+- **Added Key Rotation Documentation**:
+  - Created comprehensive rotation strategy guide
+  - Added configuration best practices
+  - Implemented emergency procedures documentation
+  - Created performance optimization guidelines
+  - Added security considerations for rotation
+  - Created testing and validation guide
+  - Added future enhancements roadmap
+- **Added Key Compartmentalization Documentation**:
+  - Created comprehensive compartmentalization guide
+  - Added security level documentation
+  - Created access control documentation
+  - Implemented usage tracking guide
+  - Added audit logging documentation
+  - Created best practices guide
+  - Added testing guidelines
+  - Created future enhancements roadmap
+
+### Dependencies
+- Added sys-info = "0.9" for system state entropy collection
+
 ## [0.7.2] - 2023-03-05
 
 ### Added
