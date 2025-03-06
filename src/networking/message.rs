@@ -107,6 +107,12 @@ impl From<io::Error> for MessageError {
 pub struct Message {
     pub message_type: MessageType,
     pub payload: Vec<u8>,
+    // Padding fields
+    pub is_padded: bool,
+    pub padding_size: u32,
+    // Protocol morphing fields
+    pub is_morphed: bool,
+    pub morph_type: Option<u8>, // Protocol type (1=HTTP, 2=DNS, 3=HTTPS/TLS, 4=SSH)
 }
 
 impl Message {
@@ -114,11 +120,15 @@ impl Message {
         Message {
             message_type,
             payload,
+            is_padded: false,
+            padding_size: 0,
+            is_morphed: false,
+            morph_type: None,
         }
     }
 
     // Calculate checksum (first 4 bytes of double SHA-256 hash)
-    fn calculate_checksum(data: &[u8]) -> [u8; CHECKSUM_SIZE] {
+    pub fn calculate_checksum(data: &[u8]) -> [u8; CHECKSUM_SIZE] {
         let mut hasher = Sha256::new();
         hasher.update(data);
         let hash1 = hasher.finalize();
@@ -132,8 +142,9 @@ impl Message {
         checksum
     }
 
-    // Add random padding to the message to enhance privacy
-    fn add_padding(data: &mut Vec<u8>) {
+    // Legacy padding method (kept for compatibility)
+    // This will be replaced by more sophisticated padding in the MessagePaddingService
+    fn add_legacy_padding(data: &mut Vec<u8>) {
         let mut rng = thread_rng();
 
         // Ensure minimum message size for privacy
@@ -149,7 +160,7 @@ impl Message {
         }
     }
 
-    // Serialize the message with framing, checksum, and padding
+    // Serialize the message with framing, checksum, and legacy padding
     pub fn serialize(&self) -> Result<Vec<u8>, MessageError> {
         let mut buffer = Vec::new();
 
@@ -162,8 +173,10 @@ impl Message {
         // Create a copy of the payload for checksum calculation
         let mut payload_with_padding = self.payload.clone();
 
-        // Add privacy-enhancing padding
-        Self::add_padding(&mut payload_with_padding);
+        // If padding has not been applied by the padding service, use legacy padding
+        if !self.is_padded {
+            Self::add_legacy_padding(&mut payload_with_padding);
+        }
 
         // Add payload length (including padding)
         let payload_length = payload_with_padding.len() as u32;
@@ -240,6 +253,10 @@ impl Message {
         Ok(Message {
             message_type,
             payload,
+            is_padded: false,
+            padding_size: 0,
+            is_morphed: false,
+            morph_type: None,
         })
     }
 
@@ -310,6 +327,16 @@ impl Message {
                 "Failed to lock stream",
             )))
         }
+    }
+
+    // Setter for padding_applied flag
+    pub fn set_padding_applied(&mut self, applied: bool) {
+        self.is_padded = applied;
+    }
+    
+    // Getter for padding_applied flag
+    pub fn is_padding_applied(&self) -> bool {
+        self.is_padded
     }
 }
 

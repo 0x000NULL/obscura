@@ -28,10 +28,12 @@ Welcome to the official documentation for the Obscura blockchain project. This d
 
 ### Privacy
 
-- [Transaction Privacy](./privacy_features.md) - Documentation on transaction privacy features
+- [Privacy Features Overview](./privacy_features.md) - Comprehensive documentation on privacy features
+- [Privacy Reference](./privacy/index.md) - Detailed reference for all privacy components
 - [Confidential Transactions](./crypto/confidential_transactions.md) - How confidential transactions work
 - [Stealth Addressing](./crypto/stealth_addressing.md) - Implementation of stealth addresses
 - [Zero-Knowledge Proofs](./crypto/zero_knowledge_proofs.md) - How ZKPs are used in Obscura
+- [Advanced Cryptography](./cryptography/curves.md) - BLS12-381 and Jubjub curve implementations
 
 ### Transaction Processing
 
@@ -47,6 +49,18 @@ Welcome to the official documentation for the Obscura blockchain project. This d
 - [Block Propagation](./network/block_propagation.md) - How blocks are propagated
 - [Transaction Relay](./network/transaction_relay.md) - How transactions are relayed
 - [Privacy-Enhanced Networking](./peer_reputation_privacy.md) - Privacy enhancements for networking
+- [Networking Index](./networking/index.md) - Complete reference for all networking components
+- [Client Fingerprinting Protection](./networking/fingerprinting_protection.md) - How client fingerprinting is prevented
+- [Protocol Morphing](./networking/protocol_morphing.md) - How network traffic is disguised as other protocols
+- [I2P Network Support](./networking/i2p_proxy.md) - Integration with I2P for enhanced anonymity
+- [DNS-over-HTTPS](./networking/dns_over_https.md) - Privacy-preserving peer discovery
+
+### Security
+
+- [Security Documentation Index](./security/index.md) - Comprehensive guide to all security documentation
+- [Security Implementation](./security/security_implementation.md) - Detailed implementation of security features
+- [Cryptographic Security](./cryptography/curves.md) - Advanced cryptographic primitives
+- [Privacy-Enhanced Security](./privacy/index.md) - Privacy features that enhance security
 
 ## Development
 

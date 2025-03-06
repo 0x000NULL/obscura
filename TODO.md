@@ -249,21 +249,25 @@
     - [ ] Implement BLS12-381 specific functions
       - [x] Create optimized BLS12-381 curve operations
       - [x] Implement Jubjub curve for efficient in-circuit operations
-      - [ ] Develop cross-curve operations for atomic swaps
-      - [ ] Create test vectors for curve operations
-      - [ ] Add benchmarking for cryptographic performance
+      - [x] Develop cross-curve operations for atomic swaps
+      - [x] Create test vectors for curve operations
+      - [x] Add benchmarking for cryptographic performance
 - [x] Network Privacy Protections
     - [x] Create transaction propagation phases
     - [x] Add transaction stem phase routing
     - [x] Implement fluff phase broadcasting
     - [x] Create transaction propagation delay
     - [x] Add node selection for transaction relay
-  - [ ] Add IP address protection
-    - [ ] Implement basic connection obfuscation
-    - [ ] Create connection padding mechanism
-    - [ ] Add traffic pattern obfuscation
-    - [ ] Implement connection timing randomization
-    - [ ] Create peer connection privacy features
+  - [x] Implement IP Address Protection
+    - [x] Implement Tor support
+    - [x] Create connection obfuscation configuration
+    - [x] Implement basic connection obfuscation
+    - [x] Create connection padding mechanism
+    - [x] Add traffic pattern obfuscation
+    - [x] Add protocol morphing
+    - [x] Implement I2P support
+    - [x] Add DNS-over-HTTPS for seed node discovery
+    - [x] Implement client fingerprinting countermeasures
 - [ ] Privacy Infrastructure
   - [ ] Implement key privacy mechanisms
     - [ ] Create secure key generation with additional entropy

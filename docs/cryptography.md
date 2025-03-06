@@ -8,6 +8,9 @@ Obscura uses advanced cryptographic primitives to provide strong privacy guarant
 
 Obscura is transitioning from using Curve25519/ED25519 to a dual-curve system using BLS12-381 and Jubjub.
 
+For comprehensive documentation on our curve implementations, please see:
+- [BLS12-381 and Jubjub Curve Implementations](cryptography/curves.md)
+
 ### BLS12-381
 
 BLS12-381 is our primary curve, used for pairing-based cryptography, particularly zk-SNARKs.

@@ -1,6 +1,137 @@
 # Changelog
 
-## [0.7.01] - 2025-03-28
+## [0.7.2] - 2023-03-05
+
+### Added
+- **IP Address Protection: Connection Obfuscation**
+  - Implemented basic connection obfuscation mechanism
+  - Created configurable `ConnectionObfuscationConfig` for flexible settings
+  - Added randomized TCP socket parameters for anti-fingerprinting
+  - Implemented randomized read/write timeouts to prevent timing analysis
+  - Created configurable TCP buffer sizes with jitter
+  - Added randomized TCP keepalive settings
+  - Implemented IP TOS (Type of Service) randomization
+  - Created comprehensive test suite for obfuscation features
+- **Connection Padding Mechanism**
+  - Implemented sophisticated message padding system
+  - Created `MessagePaddingService` for advanced traffic obfuscation
+  - Added multiple padding strategies (uniform, normal distribution)
+  - Implemented dummy message generation to obfuscate traffic patterns
+  - Created configurable padding size ranges and timing parameters
+  - Added message timing jitter to prevent traffic analysis
+  - Implemented padding removal mechanism for receivers
+  - Created comprehensive test suite for padding features
+- **Traffic Pattern Obfuscation**
+  - Implemented `TrafficObfuscationService` for advanced traffic pattern obfuscation
+  - Added "chaff" traffic generation (meaningless traffic to obscure patterns)
+  - Implemented "burst mode" for randomized message batching
+  - Created configurable timing intervals for obfuscation features
+  - Added traffic pattern normalization capabilities
+  - Implemented obfuscation message detection and filtering
+  - Created seamless integration with existing networking components
+  - Added comprehensive test suite for all traffic obfuscation features
+- **Protocol Morphing**
+  - Implemented `ProtocolMorphingService` for disguising network traffic
+  - Added support for multiple protocol mimicry (HTTP, DNS, HTTPS/TLS, SSH)
+  - Implemented protocol rotation to periodically change morphing strategy
+  - Added configuration options for protocol selection and customization
+  - Enhanced privacy against protocol-based filtering and censorship
+- **I2P Network Support**
+  - Implemented `I2PProxyService` for routing traffic through the I2P network
+  - Added I2P destination address handling and mapping to internal socket addresses
+  - Created I2P connection management with automatic protocol negotiation
+  - Implemented I2P listener for accepting inbound connections
+  - Added feature flags for I2P support in peer connections
+  - Created comprehensive error handling for I2P-specific connection issues
+  - Integrated I2P with existing connection pool and peer management
+  - Enhanced privacy and censorship resistance through I2P network routing
+- **DNS-over-HTTPS for Seed Node Discovery**
+  - Implemented `DoHService` for secure and private DNS resolution
+  - Added support for multiple DoH providers (Cloudflare, Google, Quad9, custom)
+  - Created provider rotation and randomization mechanisms for enhanced privacy
+  - Implemented result verification to detect DNS manipulation
+  - Added efficient caching with configurable TTL parameters
+  - Created robust error handling with fallback mechanisms
+  - Enhanced bootstrap node discovery with encrypted DNS queries
+  - Integrated DoH with peer discovery for seamless bootstrapping
+  - Added protection against DNS hijacking, monitoring, and censorship
+  - Implemented periodic seed node refresh using secure DNS resolution
+- **Client Fingerprinting Countermeasures**
+  - Implemented `FingerprintingProtectionService` to prevent network observers from identifying nodes
+  - Added user agent rotation with configurable intervals
+  - Created random protocol version bits that don't affect compatibility
+  - Implemented randomized TCP parameters to prevent socket fingerprinting
+  - Added connection pattern randomization to resist identification
+  - Created message size normalization to prevent packet size analysis
+  - Implemented message timing randomization to defeat timing analysis
+  - Added client implementation simulation to blend in with different client types
+  - Created handshake nonce entropy to prevent connection correlation
+  - Implemented configurable connection establishment jitter
+  - Added comprehensive test suite for all fingerprinting countermeasures
+- **Enhanced Feature Support System**
+  - Improved peer feature negotiation and detection
+  - Added robust error handling for disconnected peers
+  - Implemented support for privacy feature flags
+  - Created advanced logging for feature negotiation
+  - **IP Address Protection**: Enhanced privacy for node connections with automatic Tor routing
+  - **Connection Obfuscation**: Improved resistance against deep packet inspection and traffic analysis
+  - **Connection Padding Mechanism**: Implemented variable message padding to normalize packet sizes
+  - **Traffic Pattern Obfuscation**: Added techniques to alter timing and patterns of network communications
+- **BLS12-381 and Jubjub Curve Implementations**
+  - Created optimized BLS12-381 curve operations for cryptographic primitives
+  - Implemented Jubjub curve for efficient in-circuit operations
+  - Developed cross-curve operations to support atomic swaps
+  - Created comprehensive test vectors for curve operations
+  - Added benchmarking for cryptographic performance optimization
+  - Enhanced privacy features with advanced elliptic curve cryptography
+
+### Changed
+  - Updated peer connection management to incorporate new privacy features
+  - Improved handshake protocol with enhanced metadata validation
+
+### Security
+- **Enhanced Network Privacy**
+  - Added protection against network traffic analysis
+  - Implemented prevention of connection fingerprinting
+  - Created resistance to timing correlation attacks
+  - Added TCP-level privacy enhancements
+  - Implemented obfuscation of connection characteristics
+  - Added message size obfuscation to prevent packet size analysis
+  - Created traffic pattern obfuscation via dummy messages
+  - Implemented inter-message timing randomization
+  - Added traffic shape obfuscation through chaff and burst traffic
+  - Created advanced timing defense mechanisms against statistical analysis
+- **Improved Feature Negotiation**
+  - Added secure feature negotiation between peers
+  - Implemented privacy feature support detection
+  - Created banned peer filtering for enhanced security
+  - Added comprehensive error handling for feature negotiation
+  - Strengthened resistance against network traffic analysis attacks
+  - Added protection against protocol-based filtering and DPI systems
+  - Enhanced feature negotiation to prevent fingerprinting of node capabilities
+  - Improved defense against correlation attacks through traffic obfuscation
+
+### Testing
+- **Connection Obfuscation Test Suite**
+  - Added tests for obfuscation configuration
+  - Created connection obfuscation application tests
+  - Implemented socket option validation tests
+  - Added cross-platform functionality tests
+  - Created obfuscation effectiveness verification
+- **Padding Mechanism Test Suite**
+  - Implemented tests for message padding configuration
+  - Added padding application and removal tests
+  - Created dummy message generation and detection tests
+  - Implemented timing jitter verification
+  - Added multi-strategy padding tests
+- **Feature Support Test Suite**
+  - Created comprehensive tests for feature negotiation
+  - Implemented privacy feature support validation
+  - Added tests for handling disconnected peers
+  - Created tests for banned peer scenarios
+  - Implemented mock network infrastructure for testing
+
+## [0.7.01] - 2023-03-4
 
 ### Added
 - **Cross-Curve Atomic Swap Implementation**
@@ -44,7 +175,7 @@
 
 # Previous Releases
 
-## [0.5.7] - 2025-03-27
+## [0.5.7] - 2025-03-4
 
 ### Added
 - **Optimized BLS12-381 and Jubjub Curve Operations**
@@ -111,7 +242,7 @@
   - Implemented forward secrecy validation tests
   - Added key blinding verification tests
 
-## [0.5.6] - 2025-03-26
+## [0.5.6] - 2025-03-3
 
 ### Added
 - **Comprehensive Stealth Addressing Implementation**
@@ -152,7 +283,7 @@
   - Created performance benchmarks for critical operations
   - Implemented security validation tests
 
-## [0.5.5] - 2025-03-25
+## [0.5.5] - 2025-03-3
 
 ### Added
 - **Bulletproofs Integration Completion**
@@ -200,7 +331,7 @@
   - Created tests for generator properties and serialization
   - Implemented comprehensive test coverage for all public functions
 
-## [0.5.4] - 2025-03-20
+## [0.5.4] - 2025-03-2
 
 ### Added
 - **Enhanced Commitment Verification System**
@@ -252,7 +383,7 @@
 - Addressed inconsistencies in verification context initialization
 - Fixed resource leaks in verification error handling
 
-## [0.5.3] - 2025-03-15
+## [0.5.3] - 2025-03-2
 
 ### Added
 - **Pedersen Commitment System Enhancement**
@@ -301,7 +432,7 @@
 - Corrected type declarations in BlsScalar handling
 - Resolved CtOption handling with proper error reporting
 
-## [0.5.2] - 2025-03-10
+## [0.5.2] - 2025-03-1
 
 ### Added
 - **Enhanced Wallet Implementation**
@@ -351,7 +482,7 @@
   - Fixed mock UTXOSet implementation in tests
   - Enhanced test organization and structure
 
-## [0.5.1] - 2025-03-02
+## [0.5.1] - 2025-03-1
 
 ### Fixed
 - **Codebase Cleanup and Testing Improvements**
@@ -381,7 +512,7 @@
   - Updated README with installation and testing instructions
   - Enhanced inline code documentation for better developer experience
 
-## [0.5.0] - 2025-03-15
+## [0.5.0] - 2025-03-1
 
 ### Added
 - **Enhanced Dandelion Protocol Implementation**
@@ -1180,8 +1311,6 @@ This update implements comprehensive connection pool management and enhances the
   - Hash generation and consistency tests
   - Difficulty verification tests
   - Program generation validation
-  - Error handling and edge cases
-  - Context lifecycle management
 - Added unit tests for:
   - Arithmetic operations
   - Memory access patterns

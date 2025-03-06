@@ -1,5 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use obscura::consensus::{ProofOfWork, RandomXContext};
+use obscura::blockchain::Block;
 
 pub fn benchmark_randomx_hash(c: &mut Criterion) {
     let context = RandomXContext::new(b"benchmark_key").unwrap();
@@ -24,6 +25,16 @@ pub fn benchmark_block_validation(c: &mut Criterion) {
             pow.validate_block(black_box(&block));
         })
     });
+}
+
+// Helper function to create a test block for benchmarking
+fn create_test_block() -> Block {
+    let mut block = Block::new([0u8; 32]);
+    block.header.nonce = 12345; // Arbitrary nonce
+    block.header.difficulty_target = 0xFFFFFFFF; // Easiest possible target for testing
+    block.header.timestamp = 1234567890; // Fixed timestamp for benchmarking
+    block.calculate_merkle_root(); // Calculate merkle root for empty transaction list
+    block
 }
 
 criterion_group!(benches, benchmark_randomx_hash, benchmark_block_validation);

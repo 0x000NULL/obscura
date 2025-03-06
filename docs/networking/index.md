@@ -1,26 +1,49 @@
-# Networking in Obscura
+# Networking
 
-This document serves as an index for all documentation related to networking in Obscura.
+This directory contains documentation about the networking layer of Obscura.
 
-## Networking Overview
+## Overview
 
-- [Network Architecture](architecture.md): Overview of Obscura's network architecture.
+Obscura's networking layer is designed to be robust, efficient, and privacy-preserving. It includes features like:
+
+- Peer-to-peer communication
+- Privacy-focused network routing (Tor and I2P)
+- DNS-over-HTTPS for enhanced privacy
+- Message encryption
+- Network anonymity
+
+## Protocols
+
+- [P2P Protocol](p2p_protocol.md): Overview of the peer-to-peer protocol
+- [Handshake Protocol](handshake_protocol.md): How peers establish connections
+- [Block Announcement Protocol](block_announcement_protocol.md): How new blocks are announced
+- [Anonymous Routing](anonymous_routing.md): How Tor and I2P integration works
+- [Protocol Morphing](protocol_morphing.md): How network traffic is disguised as other protocols
+
+## Components
+
+- [Connection Management](connection_management.md): How connections are managed
+- [Block Propagation](block_propagation.md): How blocks are efficiently propagated
+- [Anonymous Routing](anonymous_routing.md): Features for Tor and I2P support
+- [DNS-over-HTTPS](dns_over_https.md): Encrypted seed node discovery
+- [I2P Proxy](i2p_proxy.md): Integration with the I2P network
+- [Fingerprinting Protection](fingerprinting_protection.md): Countermeasures against client fingerprinting
+
+## Advanced Topics
+
+- [Traffic Pattern Obfuscation](traffic_pattern_obfuscation.md): How traffic patterns are obfuscated
+- [Protocol Morphing](protocol_morphing.md): How traffic is disguised as other protocols
+- [Connection Fingerprinting Protection](fingerprinting_protection.md): How client fingerprinting is prevented
+- [Protocol Message Padding](message_padding.md): How messages are padded for privacy
+
+## References
+
+- [RFC-0001](../reference/RFC-0001.md): P2P Protocol Standards
+
+## Network Features
+
 - [Network Features](features.md): Information about Obscura's network features.
 - [Network Security](security.md): Information about network security in Obscura.
-
-## Network Protocols
-
-- [P2P Protocol](p2p_protocol.md): Information about Obscura's peer-to-peer protocol.
-- [Block Propagation](block_propagation.md): Information about block propagation in Obscura.
-- [Transaction Propagation](transaction_propagation.md): Information about transaction propagation in Obscura.
-- [Peer Discovery](peer_discovery.md): Information about peer discovery in Obscura.
-
-## Network Components
-
-- [Node Types](node_types.md): Information about different types of nodes in Obscura.
-- [Peer Management](peer_management.md): Information about peer management in Obscura.
-- [Connection Management](connection_management.md): Information about connection management in Obscura.
-- [Message Handling](message_handling.md): Information about message handling in Obscura.
 
 ## Network Messages
 

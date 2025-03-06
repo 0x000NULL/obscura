@@ -71,7 +71,22 @@ The connection pool manages network connections between nodes, implementing peer
 Feature negotiation is a protocol that allows nodes to communicate and agree on supported features during connection establishment. This enables smooth network upgrades and backward compatibility.
 
 ### How does network privacy work?
-Network privacy is enhanced through various mechanisms including connection obfuscation, peer rotation, and privacy-preserving message propagation. These features make it harder to track and analyze network activity.
+Network privacy is enhanced through various mechanisms including connection obfuscation, peer rotation, and privacy-preserving message propagation. These features make it harder to track and analyze network activity. Obscura also supports routing connections through anonymous networks like Tor (onion routing) and I2P (garlic routing), providing additional layers of privacy protection for users concerned about network-level surveillance.
+
+Obscura implements several advanced privacy techniques:
+
+1. **Client Fingerprinting Countermeasures**: The network prevents identification based on behavioral patterns by randomizing TCP parameters, connection patterns, message timing, and user agent strings.
+
+2. **Protocol Morphing**: Network traffic can be disguised as common protocols like HTTP, DNS, HTTPS/TLS, and SSH to bypass protocol-based filtering and deep packet inspection.
+
+3. **DNS-over-HTTPS**: Seed node discovery uses encrypted DNS queries to prevent DNS hijacking and monitoring, with automatic provider rotation and result verification.
+
+4. **Traffic Pattern Obfuscation**: Message padding, timing randomization, and connection jitter prevent analysis based on traffic patterns.
+
+5. **Feature Negotiation Privacy**: During handshakes, privacy-enhancing features are negotiated with minimal fingerprinting risk.
+
+### What is I2P support and how does it enhance privacy?
+I2P (Invisible Internet Project) is a network layer that provides anonymous and private communication through garlic routing. Obscura integrates I2P as an alternative to Tor, allowing users to route their connections through the I2P network. This enhances privacy by making it difficult to determine the origin of transactions and blocks, protecting users from traffic analysis attacks. I2P support includes destination handling, transparent routing, and feature negotiation during peer handshakes.
 
 ## Transactions
 

@@ -3,6 +3,7 @@
 pub mod blockchain;
 pub mod consensus;
 pub mod crypto;
+pub mod errors;
 pub mod networking;
 pub mod utils;
 pub mod wallet;
@@ -12,6 +13,7 @@ pub use blockchain::block_structure::BlockStructureManager;
 pub use blockchain::{Block, BlockHeader, Transaction};
 pub use consensus::randomx::RandomXContext;
 pub use consensus::{ConsensusEngine, HybridConsensus, StakeProof};
+pub use errors::NetworkError;
 pub use networking::{Node, NodeError};
 // Re-export privacy features
 pub use crypto::privacy::{ConfidentialTransactions, StealthAddressing, TransactionObfuscator};
