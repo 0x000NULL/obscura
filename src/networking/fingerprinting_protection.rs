@@ -748,7 +748,15 @@ mod tests {
     
     #[test]
     fn test_connection_target() {
-        let service = FingerprintingProtectionService::new();
+        // Create a config with randomization disabled
+        let mut config = FingerprintingProtectionConfig::default();
+        config.simulate_different_clients = false;
+        config.randomize_connection_patterns = false;
+        
+        // Store the min_privacy_connections value before moving config
+        let min_privacy_connections = config.min_privacy_connections;
+        
+        let service = FingerprintingProtectionService::with_config(config);
         
         // Test with different network types
         let ipv4_only = vec![NetworkType::IPv4];
@@ -757,7 +765,13 @@ mod tests {
         let target1 = service.get_connection_target(&ipv4_only);
         let target2 = service.get_connection_target(&ipv4_and_tor);
         
-        // Target with Tor should be less than or equal to target without Tor
+        // With randomization disabled, target1 should be min_privacy_connections
+        assert_eq!(target1, min_privacy_connections);
+        
+        // Target2 should be min_privacy_connections - 2 (but not less than 2)
+        assert_eq!(target2, min_privacy_connections.saturating_sub(2).max(2));
+        
+        // Therefore target2 should be <= target1
         assert!(target2 <= target1);
     }
 } 

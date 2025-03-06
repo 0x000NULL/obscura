@@ -94,17 +94,19 @@ fn test_fluff_phase_transition() {
     let tx = create_test_transaction();
     let tx_hash = tx.hash();
 
-    // Add to stem phase
-    node.add_transaction(tx.clone());
-
-    // Force transition to fluff phase
-    let mut dandelion_manager = node.dandelion_manager.lock().unwrap();
-    if let Some(metadata) = dandelion_manager.transactions.get_mut(&tx_hash) {
-        // Force immediate transition
-        metadata.transition_time = std::time::Instant::now();
-        metadata.state = PropagationState::Stem; // Ensure it's in stem phase
+    // Add to stem phase with explicit state
+    {
+        let mut dandelion_manager = node.dandelion_manager.lock().unwrap();
+        let state = dandelion_manager.add_transaction(tx_hash, None);
+        if let Some(metadata) = dandelion_manager.transactions.get_mut(&tx_hash) {
+            metadata.state = PropagationState::Stem; // Ensure it's in stem phase
+            metadata.transition_time = std::time::Instant::now(); // Set immediate transition
+        }
+        drop(dandelion_manager);
+        
+        // Add to stem transactions collection
+        node.stem_transactions.push(tx.clone());
     }
-    drop(dandelion_manager);
 
     // Small sleep to ensure transition time is passed
     std::thread::sleep(Duration::from_millis(10));
@@ -117,13 +119,17 @@ fn test_fluff_phase_transition() {
     let dandelion_manager = node.dandelion_manager.lock().unwrap();
     let metadata = dandelion_manager.transactions.get(&tx_hash);
 
-    // The transaction should either be in fluff phase or removed during maintenance
+    // The transaction should be in fluff phase
     if let Some(metadata) = metadata {
         assert_eq!(metadata.state, PropagationState::Fluff);
     }
+    drop(dandelion_manager);
+
+    // Verify transaction moved to fluff queue
+    assert!(node.stem_transactions.is_empty(), "Transaction should be removed from stem phase");
+    assert!(!node.fluff_queue.lock().unwrap().is_empty(), "Transaction should be in fluff queue");
 
     // Process the fluff queue
-    drop(dandelion_manager);
     let result = node.process_fluff_queue();
     assert!(result.is_ok());
 }
