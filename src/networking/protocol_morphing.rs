@@ -115,17 +115,18 @@ impl ProtocolMorphingService {
     /// Create a new protocol morphing service with the specified configuration
     pub fn new(config: ProtocolMorphingConfig) -> Self {
         let mut rng = thread_rng();
-        let current_morph_type = if config.morph_type == ProtocolMorphType::Random {
+        let current_morph_type = if config.random_protocol_selection {
             Self::select_random_protocol(&mut rng)
         } else {
-            config.morph_type
+            ProtocolMorphType::None // Will be set based on allowed_protocols if available
         };
         
         let now = Instant::now();
-        let rotation_interval = if config.rotation_enabled {
-            Duration::from_millis(rng.gen_range(
-                config.min_rotation_interval_ms..=config.max_rotation_interval_ms
-            ))
+        let rotation_interval = if config.protocol_morphing_enabled && config.protocol_rotation_interval_sec > 0 {
+            // Convert seconds to milliseconds and add some randomness
+            let base_interval_ms = config.protocol_rotation_interval_sec * 1000;
+            let jitter = rng.gen_range(0..=base_interval_ms / 10); // Add up to 10% jitter
+            Duration::from_millis(base_interval_ms + jitter)
         } else {
             Duration::from_secs(u64::MAX) // Effectively no rotation
         };
@@ -136,6 +137,7 @@ impl ProtocolMorphingService {
             rng,
             last_rotation_time: now,
             next_rotation_time: now + rotation_interval,
+            active_protocol: Arc::new(Mutex::new(MorphProtocol::HTTP)), // Default protocol
         }
     }
     
@@ -153,7 +155,7 @@ impl ProtocolMorphingService {
     
     /// Check if it's time to rotate the protocol and do so if needed
     fn check_and_rotate_protocol(&mut self) {
-        if !self.config.rotation_enabled {
+        if !self.config.protocol_morphing_enabled || self.config.protocol_rotation_interval_sec == 0 {
             return;
         }
         
@@ -162,22 +164,31 @@ impl ProtocolMorphingService {
             
             // Select a new protocol type different from the current one
             let mut new_type;
-            if self.config.morph_type == ProtocolMorphType::Random {
+            if self.config.random_protocol_selection {
                 new_type = Self::select_random_protocol(&mut self.rng);
                 while new_type == old_type && new_type != ProtocolMorphType::None {
                     new_type = Self::select_random_protocol(&mut self.rng);
                 }
+            } else if !self.config.allowed_protocols.is_empty() {
+                // Pick from allowed protocols
+                let protocol = &self.config.allowed_protocols[self.rng.gen_range(0..self.config.allowed_protocols.len())];
+                new_type = match protocol {
+                    MorphProtocol::HTTP => ProtocolMorphType::Http,
+                    MorphProtocol::DNS => ProtocolMorphType::Dns,
+                    MorphProtocol::TLS => ProtocolMorphType::Https,
+                    MorphProtocol::SSH => ProtocolMorphType::Ssh,
+                };
             } else {
-                new_type = self.config.morph_type;
+                new_type = ProtocolMorphType::None;
             }
             
             self.current_morph_type = new_type;
             self.last_rotation_time = Instant::now();
             
             // Calculate next rotation time
-            let rotation_interval = Duration::from_millis(self.rng.gen_range(
-                self.config.min_rotation_interval_ms..=self.config.max_rotation_interval_ms
-            ));
+            let base_interval_ms = self.config.protocol_rotation_interval_sec * 1000;
+            let jitter = self.rng.gen_range(0..=base_interval_ms / 10);
+            let rotation_interval = Duration::from_millis(base_interval_ms + jitter);
             self.next_rotation_time = self.last_rotation_time + rotation_interval;
             
             debug!("Protocol morphing rotated from {:?} to {:?}", old_type, new_type);
@@ -186,7 +197,7 @@ impl ProtocolMorphingService {
     
     /// Apply protocol morphing to a message
     pub fn apply_morphing(&mut self, mut message: Message) -> Message {
-        if !self.config.enabled || self.current_morph_type == ProtocolMorphType::None {
+        if !self.config.protocol_morphing_enabled || self.current_morph_type == ProtocolMorphType::None {
             return message;
         }
         
@@ -218,7 +229,7 @@ impl ProtocolMorphingService {
     
     /// Remove protocol morphing from a message
     pub fn remove_morphing(&self, mut message: Message) -> Message {
-        if !self.config.enabled || !message.is_morphed {
+        if !self.config.protocol_morphing_enabled || !message.is_morphed {
             return message;
         }
         
@@ -233,7 +244,7 @@ impl ProtocolMorphingService {
     
     /// Morph a message to look like HTTP traffic
     fn morph_to_http(&mut self, mut message: Message) -> Message {
-        if !self.config.http_headers_enabled {
+        if !self.config.protocol_morphing_enabled {
             return message;
         }
         
@@ -308,7 +319,7 @@ impl ProtocolMorphingService {
     
     /// Morph a message to look like DNS traffic
     fn morph_to_dns(&mut self, mut message: Message) -> Message {
-        if !self.config.dns_query_format_enabled {
+        if !self.config.protocol_morphing_enabled {
             return message;
         }
         
@@ -432,7 +443,7 @@ impl ProtocolMorphingService {
     
     /// Morph a message to look like HTTPS/TLS traffic
     fn morph_to_https(&mut self, mut message: Message) -> Message {
-        if !self.config.tls_handshake_enabled {
+        if !self.config.protocol_morphing_enabled {
             return message;
         }
         
@@ -510,7 +521,7 @@ impl ProtocolMorphingService {
     
     /// Morph a message to look like SSH traffic
     fn morph_to_ssh(&mut self, mut message: Message) -> Message {
-        if !self.config.ssh_banner_enabled {
+        if !self.config.protocol_morphing_enabled {
             return message;
         }
         
@@ -617,10 +628,11 @@ impl ProtocolMorphingService {
         // Reset rotation timing
         self.last_rotation_time = Instant::now();
         
-        let rotation_interval = if self.config.rotation_enabled {
-            Duration::from_millis(self.rng.gen_range(
-                self.config.min_rotation_interval_ms..=self.config.max_rotation_interval_ms
-            ))
+        let rotation_interval = if self.config.protocol_morphing_enabled && self.config.protocol_rotation_interval_sec > 0 {
+            // Convert seconds to milliseconds and add some randomness to avoid predictable patterns
+            let base_interval_ms = self.config.protocol_rotation_interval_sec * 1000;
+            let jitter = self.rng.gen_range(0..=base_interval_ms / 10); // Add up to 10% jitter
+            Duration::from_millis(base_interval_ms + jitter)
         } else {
             Duration::from_secs(u64::MAX) // Effectively no rotation
         };
@@ -641,8 +653,9 @@ mod tests {
     #[test]
     fn test_protocol_morphing_http() {
         let config = ProtocolMorphingConfig {
-            enabled: true,
-            morph_type: ProtocolMorphType::Http,
+            protocol_morphing_enabled: true,
+            random_protocol_selection: false,
+            allowed_protocols: vec![MorphProtocol::HTTP],
             ..Default::default()
         };
         
@@ -682,8 +695,9 @@ mod tests {
     #[test]
     fn test_protocol_morphing_dns() {
         let config = ProtocolMorphingConfig {
-            enabled: true,
-            morph_type: ProtocolMorphType::Dns,
+            protocol_morphing_enabled: true,
+            random_protocol_selection: false,
+            allowed_protocols: vec![MorphProtocol::DNS],
             ..Default::default()
         };
         
@@ -717,11 +731,9 @@ mod tests {
     #[test]
     fn test_protocol_rotation() {
         let config = ProtocolMorphingConfig {
-            enabled: true,
-            morph_type: ProtocolMorphType::Random,
-            rotation_enabled: true,
-            min_rotation_interval_ms: 1,
-            max_rotation_interval_ms: 2,
+            protocol_morphing_enabled: true,
+            random_protocol_selection: true,
+            protocol_rotation_interval_sec: 1,
             ..Default::default()
         };
         
@@ -762,8 +774,9 @@ mod tests {
     #[test]
     fn test_disabled_morphing() {
         let config = ProtocolMorphingConfig {
-            enabled: false,
-            morph_type: ProtocolMorphType::Http,
+            protocol_morphing_enabled: false,
+            random_protocol_selection: false,
+            allowed_protocols: vec![MorphProtocol::HTTP],
             ..Default::default()
         };
         

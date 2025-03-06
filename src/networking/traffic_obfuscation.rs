@@ -3,10 +3,57 @@ use std::net::TcpStream;
 use std::io::{self, Read, Write};
 use std::time::{Duration, Instant};
 use rand::{Rng, thread_rng};
-use log::{debug, trace, warn};
+use log::{debug, trace, warn, error};
 
 use crate::networking::p2p::ConnectionObfuscationConfig;
 use crate::networking::message::{Message, MessageType};
+
+/// Configuration for traffic obfuscation techniques
+#[derive(Debug, Clone)]
+pub struct TrafficObfuscationConfig {
+    /// Whether traffic obfuscation is enabled
+    pub enabled: bool,
+    
+    /// Burst-related settings
+    pub burst_mode_enabled: bool,
+    pub burst_min_messages: usize,
+    pub burst_max_messages: usize,
+    pub burst_interval_min_ms: u64,
+    pub burst_interval_max_ms: u64,
+    
+    /// Chaff-related settings
+    pub chaff_enabled: bool,
+    pub chaff_min_size_bytes: usize,
+    pub chaff_max_size_bytes: usize,
+    pub chaff_interval_min_ms: u64,
+    pub chaff_interval_max_ms: u64,
+    
+    /// Other obfuscation techniques
+    pub morphing_enabled: bool,
+    pub constant_rate_enabled: bool,
+    pub constant_rate_bytes_per_sec: usize,
+}
+
+impl Default for TrafficObfuscationConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            burst_mode_enabled: true,
+            burst_min_messages: 2,
+            burst_max_messages: 8,
+            burst_interval_min_ms: 5000,
+            burst_interval_max_ms: 60000,
+            chaff_enabled: true,
+            chaff_min_size_bytes: 32,
+            chaff_max_size_bytes: 512,
+            chaff_interval_min_ms: 15000,
+            chaff_interval_max_ms: 120000,
+            morphing_enabled: true,
+            constant_rate_enabled: false,
+            constant_rate_bytes_per_sec: 1024,
+        }
+    }
+}
 
 /// Responsible for implementing traffic pattern obfuscation techniques to
 /// hide the actual network patterns of the Obscura node.
@@ -24,11 +71,12 @@ pub struct TrafficObfuscationService {
 impl TrafficObfuscationService {
     /// Creates a new traffic obfuscation service with the specified configuration
     pub fn new(config: ConnectionObfuscationConfig) -> Self {
+        let is_enabled = config.traffic_obfuscation_enabled;
         Self {
             config,
             last_chaff_time: Instant::now(),
             last_burst_time: Instant::now(),
-            active: config.traffic_obfuscation_enabled,
+            active: is_enabled,
         }
     }
 
@@ -44,8 +92,9 @@ impl TrafficObfuscationService {
 
     /// Updates the configuration for the traffic obfuscation service
     pub fn update_config(&mut self, config: ConnectionObfuscationConfig) {
+        let is_enabled = config.traffic_obfuscation_enabled;
         self.config = config;
-        self.active = config.traffic_obfuscation_enabled;
+        self.active = is_enabled;
     }
     
     /// Generates a random delay for chaff traffic
@@ -90,15 +139,12 @@ impl TrafficObfuscationService {
         let mut chaff_data = vec![0u8; size];
         thread_rng().fill(&mut chaff_data[..]);
         
-        // Create a special message type for chaff
-        let mut message = Message::new(MessageType::Custom(0xF1)); // Using 0xF1 as a custom type for chaff
-        message.set_payload(chaff_data);
+        // Put a marker byte (0xF1) at the beginning to identify chaff
+        chaff_data.insert(0, 0xF1);
         
-        // Mark as a chaff message for internal tracking
-        message.set_custom_flag(0x01, true);
-        
+        // Create a message using an existing type but with special payload marker
         debug!("Created chaff message of {} bytes", size);
-        message
+        Message::new(MessageType::Inv, chaff_data)
     }
     
     /// Sends chaff traffic to the given stream if it's time to do so
@@ -108,7 +154,13 @@ impl TrafficObfuscationService {
         }
         
         let chaff_message = self.create_chaff_message();
-        let serialized = chaff_message.serialize();
+        let serialized = match chaff_message.serialize() {
+            Ok(data) => data,
+            Err(e) => {
+                error!("Failed to serialize chaff message: {:?}", e);
+                return Ok(false);
+            }
+        };
         
         stream.write_all(&serialized)?;
         trace!("Sent chaff message of {} bytes", serialized.len());
@@ -118,8 +170,8 @@ impl TrafficObfuscationService {
     
     /// Checks if a message is a chaff message
     pub fn is_chaff_message(message: &Message) -> bool {
-        // Check if it's our special chaff message type and has the chaff flag set
-        message.message_type() == MessageType::Custom(0xF1) && message.has_custom_flag(0x01)
+        // Check if it's our special chaff message type (using Inv with special marker)
+        matches!(message.message_type, MessageType::Inv) && message.payload.first() == Some(&0xF1)
     }
 
     /// Checks if it's time to send a traffic burst
@@ -147,11 +199,19 @@ impl TrafficObfuscationService {
             let mut data = vec![0u8; self.get_chaff_size()]; // Reuse chaff size for burst messages
             thread_rng().fill(&mut data[..]);
             
-            let mut message = Message::new(MessageType::Custom(0xF2)); // Using 0xF2 as burst message type
-            message.set_payload(data);
-            message.set_custom_flag(0x02, true); // Set burst flag
+            // Add marker byte for burst message
+            data.insert(0, 0xF2); 
             
-            let serialized = message.serialize();
+            // Create message with regular type but special payload marker
+            let message = Message::new(MessageType::Inv, data);
+            
+            let serialized = match message.serialize() {
+                Ok(data) => data,
+                Err(e) => {
+                    error!("Failed to serialize burst message: {:?}", e);
+                    continue;
+                }
+            };
             stream.write_all(&serialized)?;
             sent_count += 1;
             
@@ -167,7 +227,8 @@ impl TrafficObfuscationService {
     
     /// Checks if a message is a burst message
     pub fn is_burst_message(message: &Message) -> bool {
-        message.message_type() == MessageType::Custom(0xF2) && message.has_custom_flag(0x02)
+        // Check for message type 0xF2 which is used for burst messages
+        matches!(message.message_type, MessageType::Inv) && message.payload.first() == Some(&0xF2)
     }
     
     /// Checks if a message is an obfuscation message (either chaff or burst)

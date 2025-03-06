@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, TcpListener};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, TcpListener, ToSocketAddrs};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 #[macro_use]
@@ -164,9 +164,12 @@ impl I2PProxyService {
             Arc::new(Mutex::new(false))
         };
 
+        // Extract local_destination before moving config
+        let local_destination = config.local_destination.clone();
+
         Self {
             config,
-            local_destination: config.local_destination.clone(),
+            local_destination,
             is_connected,
         }
     }

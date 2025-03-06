@@ -8,6 +8,45 @@ use std::thread;
 use std::time::Duration;
 use log::{debug, trace};
 
+/// Configuration for message padding
+#[derive(Debug, Clone)]
+pub struct MessagePaddingConfig {
+    /// Whether message padding is enabled
+    pub enabled: bool,
+    /// Minimum number of padding bytes
+    pub min_padding_bytes: usize,
+    /// Maximum number of padding bytes
+    pub max_padding_bytes: usize,
+    /// Whether to use uniform distribution for padding (vs normal)
+    pub distribution_uniform: bool,
+    /// Minimum interval for padding timing (ms)
+    pub interval_min_ms: u64,
+    /// Maximum interval for padding timing (ms)
+    pub interval_max_ms: u64,
+    /// Whether to send dummy messages
+    pub send_dummy_enabled: bool,
+    /// Minimum interval for dummy messages (ms)
+    pub dummy_interval_min_ms: u64,
+    /// Maximum interval for dummy messages (ms)
+    pub dummy_interval_max_ms: u64,
+}
+
+impl Default for MessagePaddingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            min_padding_bytes: 64,
+            max_padding_bytes: 512,
+            distribution_uniform: true,
+            interval_min_ms: 5000,
+            interval_max_ms: 30000,
+            send_dummy_enabled: true,
+            dummy_interval_min_ms: 5000,
+            dummy_interval_max_ms: 30000,
+        }
+    }
+}
+
 /// MessagePaddingStrategy defines the padding algorithms available
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MessagePaddingStrategy {

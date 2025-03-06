@@ -39,7 +39,7 @@ pub enum DoHError {
 }
 
 /// DNS-over-HTTPS record types
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RecordType {
     A,     // IPv4 address
     AAAA,  // IPv6 address
@@ -274,7 +274,7 @@ impl DoHService {
         let resolver = if self.config.randomize_resolver {
             DoHProvider::random()
         } else {
-            *self.current_resolver.lock().map_err(|e| 
+            self.current_resolver.lock().map_err(|e| 
                 DoHError::InternalError(format!("Failed to acquire resolver lock: {}", e)))?.clone()
         };
         
@@ -308,7 +308,7 @@ impl DoHService {
                     }
                 }
                 Err(e) => {
-                    warn!("Failed to verify DNS resolution for {}: {}", hostname, e);
+                    warn!("Failed to verify DNS resolution for {}: {:?}", hostname, e);
                 }
             }
         }
@@ -440,8 +440,11 @@ impl DoHService {
             
             // Remove oldest 10% of entries
             let to_remove = (self.config.max_cache_size / 10).max(1);
-            for (key, _) in entries.iter().take(to_remove) {
-                cache_write.remove(*key);
+            
+            // Collect keys to remove first, then remove them afterwards to avoid borrowing issues
+            let keys_to_remove: Vec<_> = entries.iter().take(to_remove).map(|(k, _)| (*k).clone()).collect();
+            for key in keys_to_remove {
+                cache_write.remove(&key);
             }
         }
         
@@ -451,7 +454,7 @@ impl DoHService {
     }
     
     /// Resolve a hostname using DNS wire format
-    async fn resolve_wire(&self, hostname: &str, record_type: RecordType, resolver_url: &str) 
+    async fn resolve_wire(&self, _hostname: &str, _record_type: RecordType, _resolver_url: &str) 
         -> Result<Vec<IpAddr>, DoHError> {
         // Implementation for DNS wire format (RFC 8484)
         // This is more complex and would require DNS packet construction
@@ -471,7 +474,7 @@ impl DoHService {
                 }
             }
             Err(e) => {
-                debug!("Failed to resolve IPv4 addresses for {}: {}", hostname, e);
+                debug!("Failed to resolve IPv4 addresses for {}: {:?}", hostname, e);
                 // Continue to IPv6, don't return error yet
             }
         }
@@ -590,7 +593,7 @@ impl DoHService {
                     resolved_addresses.extend(addresses);
                 }
                 Err(e) => {
-                    warn!("Failed to resolve seed node {}: {}", hostname, e);
+                    warn!("Failed to resolve seed node {}: {:?}", hostname, e);
                 }
             }
         }
@@ -608,7 +611,7 @@ impl DoHService {
         match self.resolve("example.com", RecordType::A).await {
             Ok(_) => true,
             Err(e) => {
-                warn!("DNS-over-HTTPS service check failed: {}", e);
+                warn!("DNS-over-HTTPS service check failed: {:?}", e);
                 false
             }
         }

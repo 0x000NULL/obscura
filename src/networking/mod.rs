@@ -13,8 +13,10 @@ use std::collections::{HashMap, HashSet};
 use std::io;
 use std::net::IpAddr;
 use std::net::SocketAddr;
+use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use socket2;
 
 // Constants for Dandelion
 const MIN_BROADCAST_PEERS: usize = 3;
@@ -54,10 +56,6 @@ pub mod peer_manager;
 pub mod protocol_morphing;
 // Add the node module
 pub mod node;
-// Add the peer module
-pub mod peer;
-// Add the rpc module
-pub mod rpc;
 // Add the i2p_proxy module
 pub mod i2p_proxy;
 // Add the dns_over_https module
@@ -75,10 +73,10 @@ pub use p2p::{
 pub use message::{Message, MessageError, MessageType};
 
 // Re-export key types from padding module
-pub use padding::{MessagePaddingService, MessagePaddingStrategy};
+pub use padding::{MessagePaddingService, MessagePaddingStrategy, MessagePaddingConfig};
 
 // Re-export key types from traffic_obfuscation module
-pub use traffic_obfuscation::{TrafficObfuscationService, TrafficObfuscationConfig};
+pub use traffic_obfuscation::{TrafficObfuscationService, TrafficObfuscationStrategy, TrafficObfuscationConfig};
 
 // Re-export key types from connection_pool module
 pub use connection_pool::{ConnectionError, ConnectionPool, ConnectionType, NetworkType};
@@ -95,12 +93,7 @@ pub use i2p_proxy::{I2PProxyService, I2PProxyConfig, I2PDestination, I2PAddressM
 // Re-export key types from dns_over_https module
 pub use dns_over_https::{DoHService, DoHConfig, DoHError, RecordType, DoHProvider, DoHFormat};
 
-// Re-export key components
-pub use connection_pool::{ConnectionPool, NetworkType};
-pub use i2p_proxy::{I2PProxyService, I2PProxyConfig};
-pub use padding::{MessagePaddingService, MessagePaddingConfig};
-pub use protocol_morphing::{ProtocolMorphingService, ProtocolMorphingConfig, MorphProtocol};
-pub use traffic_obfuscation::{TrafficObfuscationService, TrafficObfuscationConfig};
+// Re-export key types from fingerprinting_protection module
 pub use fingerprinting_protection::{FingerprintingProtectionService, FingerprintingProtectionConfig};
 
 // Structure representing configuration options for the node
@@ -141,7 +134,7 @@ impl Node {
         // ... existing code ...
         
         // Initialize the DNS-over-HTTPS service if enabled
-        let doh_service = config.doh_config.map(|cfg| DoHService::new(cfg));
+        let doh_service = config.doh_config.map(|cfg| DoHService::with_config(cfg));
         
         // Initialize the fingerprinting protection service if enabled
         let fingerprinting_protection = config.fingerprinting_protection_config
@@ -195,12 +188,24 @@ impl Node {
             socket.set_read_timeout(Some(Duration::from_secs(params.timeout_secs)))?;
             socket.set_write_timeout(Some(Duration::from_secs(params.timeout_secs)))?;
             
-            // Set buffer sizes
-            socket.set_recv_buffer_size(params.buffer_size)?;
-            socket.set_send_buffer_size(params.buffer_size)?;
+            // Convert TcpStream to Socket2 Socket for advanced options
+            let socket2 = socket2::Socket::from(socket.try_clone()?);
             
-            // Set keepalive
-            socket.set_keepalive(Some(Duration::from_secs(params.keepalive_time_secs)))?;
+            // Set TCP nodelay option
+            socket.set_nodelay(true)?;
+            
+            // Set buffer sizes
+            socket2.set_recv_buffer_size(params.buffer_size)?;
+            socket2.set_send_buffer_size(params.buffer_size)?;
+            
+            // Set keepalive (socket2 takes a boolean, not a Duration)
+            socket2.set_keepalive(true)?;
+            
+            // Unfortunately socket2 doesn't expose a way to set the keepalive timeout directly
+            // on Windows in a cross-platform way. On Unix systems, we could use platform-specific 
+            // socket options, but for now we'll just enable it.
+            log::debug!("Set keepalive for peer {}, ideally with timeout {}s", 
+                peer_addr, params.keepalive_time_secs);
         }
         
         Ok(())
