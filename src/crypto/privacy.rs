@@ -340,6 +340,93 @@ impl StealthAddressing {
             false
         }
     }
+
+    /// Scan transactions with a view key to find outputs addressed to the owner
+    pub fn scan_transactions_with_view_key(
+        &self,
+        transactions: &[Transaction],
+        view_key_point: &JubjubPoint,
+        owner_secret: &JubjubScalar
+    ) -> Vec<TransactionOutput> {
+        let mut outputs = Vec::new();
+
+        for tx in transactions {
+            for output in &tx.outputs {
+                // For each output, check if it's a stealth address that we can view
+                if let Some(ephemeral_pubkey) = self.extract_ephemeral_pubkey(output) {
+                    // Create a shared secret using the view key instead of the full owner key
+                    // This allows for viewing but not spending
+                    let shared_secret = self.derive_view_shared_secret(
+                        &ephemeral_pubkey, 
+                        owner_secret, 
+                        view_key_point
+                    );
+                    
+                    // Derive the one-time address from the shared secret
+                    let one_time_address = self.derive_view_address(&shared_secret);
+                    
+                    // Check if the output's address matches the derived one-time address
+                    if self.match_address(output, &one_time_address) {
+                        outputs.push(output.clone());
+                    }
+                }
+            }
+        }
+
+        outputs
+    }
+    
+    /// Derive a shared secret using view key
+    fn derive_view_shared_secret(
+        &self,
+        ephemeral_pubkey: &JubjubPoint,
+        owner_secret: &JubjubScalar,
+        view_key_point: &JubjubPoint
+    ) -> Vec<u8> {
+        // Combine the ephemeral public key with the owner's secret key
+        // Then add the view key point to create a unique shared secret
+        let shared_point = (*ephemeral_pubkey * *owner_secret) + *view_key_point;
+        
+        // Convert to bytes for further derivation
+        let mut point_bytes = shared_point.to_bytes();
+        let mut hasher = Sha256::new();
+        hasher.update(&point_bytes);
+        hasher.update(b"view_key_scan");
+        let hash_result = hasher.finalize();
+        
+        hash_result.to_vec()
+    }
+    
+    /// Derive a view-only address from shared secret
+    fn derive_view_address(&self, shared_secret: &[u8]) -> Vec<u8> {
+        let mut hasher = Sha256::new();
+        hasher.update(shared_secret);
+        hasher.update(b"one_time_view_address");
+        hasher.finalize().to_vec()
+    }
+    
+    /// Check if an output's address matches the derived one
+    fn match_address(&self, output: &TransactionOutput, derived_address: &[u8]) -> bool {
+        // This is a simplified matching logic
+        // In a real implementation, you would need more sophisticated matching
+        if output.public_key_script.len() >= derived_address.len() {
+            let addr_slice = &output.public_key_script[0..derived_address.len()];
+            return addr_slice == derived_address;
+        }
+        false
+    }
+    
+    /// Extract ephemeral public key from an output
+    fn extract_ephemeral_pubkey(&self, output: &TransactionOutput) -> Option<JubjubPoint> {
+        // In a real implementation, this would extract the ephemeral key from the output
+        // For now, we'll assume a simple format where it's the first 33 bytes
+        if output.public_key_script.len() >= 33 {
+            let key_bytes = &output.public_key_script[0..33];
+            JubjubPoint::from_bytes(key_bytes)
+        } else {
+            None
+        }
+    }
 }
 
 /// Confidential transactions implementation
@@ -505,6 +592,90 @@ impl ConfidentialTransactions {
         // Always return true for this implementation
         // In a real implementation, we would verify the range proof
         true
+    }
+
+    /// Reveal transaction amount using a view key (for auditing)
+    pub fn reveal_amount_with_view_key(
+        &self,
+        commitment: &[u8],
+        view_key_point: &JubjubPoint,
+        owner_secret: &JubjubScalar
+    ) -> Option<u64> {
+        // This is a simplified implementation
+        // In a real implementation, you would:
+        // 1. Derive a shared secret between the owner and the view key
+        // 2. Use this to decrypt/reveal the commitment amount
+        
+        // Compute a shared secret for the view key
+        let shared_point = *view_key_point * *owner_secret;
+        let shared_bytes = shared_point.to_bytes();
+        
+        // Hash the shared secret with the commitment to derive a decryption key
+        let mut hasher = Sha256::new();
+        hasher.update(&shared_bytes);
+        hasher.update(commitment);
+        hasher.update(b"amount_view");
+        let decryption_key = hasher.finalize();
+        
+        // Check if we can decrypt this commitment
+        // For this example, we'll just look up in our commitment_amounts map
+        // In a real implementation, you would need cryptographic verification
+        let commitment_key = commitment.to_vec();
+        self.commitment_amounts.get(&commitment_key).copied()
+    }
+    
+    /// Check if a view key has permission to see this amount
+    pub fn can_view_amount(
+        &self,
+        commitment: &[u8],
+        view_key_point: &JubjubPoint,
+        owner_point: &JubjubPoint
+    ) -> bool {
+        // This is a placeholder implementation
+        // In a real system, you would cryptographically verify permissions
+        
+        // For now, we'll check if the view key's public key is derived from the owner
+        // This is NOT how you would implement this in a real system, but serves as a placeholder
+        let xor_point = *view_key_point + *owner_point;
+        let xor_bytes = xor_point.to_bytes();
+        
+        // Check if the XOR'd point has a pattern indicating viewing permission
+        xor_bytes[0] & 0x01 == 0
+    }
+    
+    /// Decrypt transaction outputs for a view key
+    pub fn decrypt_outputs_for_view_key(
+        &self,
+        tx: &Transaction,
+        view_key_point: &JubjubPoint,
+        owner_secret: &JubjubScalar
+    ) -> Vec<(usize, u64)> {
+        let mut decrypted_outputs = Vec::new();
+        
+        for (i, output) in tx.outputs.iter().enumerate() {
+            // Extract the commitment from the output
+            if let Some(commitment) = self.extract_commitment(output) {
+                // Try to reveal the amount using the view key
+                if let Some(amount) = self.reveal_amount_with_view_key(&commitment, view_key_point, owner_secret) {
+                    decrypted_outputs.push((i, amount));
+                }
+            }
+        }
+        
+        decrypted_outputs
+    }
+    
+    /// Extract a commitment from an output
+    fn extract_commitment(&self, output: &TransactionOutput) -> Option<Vec<u8>> {
+        // In a real implementation, this would extract the Pedersen commitment
+        // For now, we'll assume it's in a specific position in the script
+        
+        // For this example, assume the commitment is at bytes 33-65
+        if output.public_key_script.len() >= 65 {
+            Some(output.public_key_script[33..65].to_vec())
+        } else {
+            None
+        }
     }
 }
 

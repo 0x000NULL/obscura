@@ -10,6 +10,7 @@ pub mod bulletproofs;
 pub mod commitment_verification;
 pub mod pedersen;
 pub mod atomic_swap;
+pub mod view_key;
 
 // Add curve modules
 pub mod bls12_381;
@@ -29,6 +30,7 @@ pub use atomic_swap::{CrossCurveSwap, SwapState};
 pub use bls12_381::{BlsKeypair, BlsPublicKey, BlsSignature};
 pub use jubjub::{JubjubPoint, JubjubScalar};
 pub use pedersen::{DualCurveCommitment, PedersenCommitment, BlsPedersenCommitment};
+pub use view_key::{ViewKey, ViewKeyPermissions, ViewKeyManager};
 
 // Key management functions
 // These functions are intended for use in the wallet implementation

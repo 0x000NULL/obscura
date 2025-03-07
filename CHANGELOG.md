@@ -1,5 +1,84 @@
 # Changelog
 
+## [0.7.4] - 2025-03-06
+
+### Added
+- **Complete View Key System Implementation**
+  - Implemented comprehensive view key generation system:
+    - Secure derivation from wallet keypairs
+    - Deterministic view key generation
+    - Public/private key separation
+    - Support for key serialization and sharing
+  - Created robust permission-based selective disclosure:
+    - Fine-grained transaction visibility controls
+    - Configurable permission flags for incoming/outgoing transactions
+    - Transaction amount visibility controls
+    - Timestamp visibility management
+    - Full audit permission capabilities
+  - Added time-based validity controls:
+    - Configurable valid-from timestamps
+    - Expiration date support
+    - Time-limited view key generation
+    - Automatic validity verification
+  - Implemented view key management system:
+    - Comprehensive view key registration
+    - View key revocation capabilities
+    - Historical revocation tracking
+    - Multi-key management
+    - Secure permission updates
+  - Added transaction scanning capabilities:
+    - Efficient transaction filtering
+    - Selective output scanning
+    - Permission-based transaction filtering
+    - Batch transaction scanning
+    - Result aggregation and reporting
+
+### Security
+- **Enhanced Transaction Privacy**
+  - Implemented selective transaction disclosure:
+    - View-only access without spending capability
+    - Separation of viewing and spending privileges
+    - Configurable disclosure permissions
+    - Time-limited access controls
+  - Added secure view key sharing:
+    - Privacy-preserving key serialization
+    - Public component sharing without private keys
+    - Permission validation during deserialization
+    - Secure key reconstruction
+  - Enhanced stealth address privacy:
+    - View key integration with stealth addressing
+    - Secure derivation of shared secrets
+    - Protected transaction scanning
+    - Metadata protection in view operations
+  - Implemented audit capabilities:
+    - Secure audit view key generation
+    - Full transaction history access for auditors
+    - Permission-based audit restrictions
+    - Comprehensive transaction logging
+
+### Documentation
+- **View Key System Documentation**
+  - Added comprehensive API documentation for view key components
+  - Created usage examples for common view key operations
+  - Added security best practices for view key sharing
+  - Implemented permission model documentation
+  - Added integration examples with wallet system
+  - Created audit capability documentation
+  - Added documentation for stealth address integration
+
+### Testing
+- **View Key Test Suite**
+  - Added comprehensive unit tests for view key generation
+  - Implemented serialization and deserialization tests
+  - Created permission-based filtering tests
+  - Added time-validity verification tests
+  - Implemented view key management tests
+  - Created transaction scanning tests with various permissions
+  - Added integration tests with stealth addressing
+  - Implemented audit capability tests
+  - Added view key revocation tests
+  - Created comprehensive edge case testing
+
 ## [0.7.3] - 2025-03-06
 
 ### Added

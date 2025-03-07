@@ -1,6 +1,6 @@
 [package]
 name = "obscura"
-version = "0.7.3"
+version = "0.7.4"
 authors = ["Obscura Team <ethan@obscura.org>"]
 description = "A privacy-focused cryptocurrency with stealth addresses and confidential transactions"
 repository = "https://github.com/obscura-org/obscura"
@@ -13,6 +13,7 @@ rand_core = "0.6"
 sha2 = "0.10"
 blake2 = "0.10.6"
 blake3 = "1.3"
+blake2b_simd = "1.0"
 hmac = "0.12"
 merlin = "3.0"
 ring = "0.16.20"

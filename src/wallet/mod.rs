@@ -5,6 +5,7 @@ use crate::crypto;
 use crate::crypto::jubjub::{
     JubjubKeypair, JubjubPoint, JubjubPointExt, JubjubScalar, JubjubScalarExt,
 };
+use crate::crypto::view_key::{ViewKey, ViewKeyPermissions, ViewKeyManager};
 use crate::utils::{current_time, format_time_diff};
 use ark_ec::CurveGroup;
 use chrono::Utc;
@@ -28,6 +29,8 @@ pub struct Wallet {
     last_sync_time: u64,
     // Spent outpoints pending confirmation
     pending_spent_outpoints: Arc<Mutex<HashSet<OutPoint>>>,
+    // View key management
+    view_key_manager: ViewKeyManager,
 }
 
 impl Default for Wallet {
@@ -41,6 +44,7 @@ impl Default for Wallet {
             transaction_timestamps: HashMap::new(),
             last_sync_time: current_time(),
             pending_spent_outpoints: Arc::new(Mutex::new(HashSet::new())),
+            view_key_manager: ViewKeyManager::new(),
         }
     }
 }
@@ -63,6 +67,7 @@ impl Wallet {
             transaction_timestamps: HashMap::new(),
             last_sync_time: current_time(),
             pending_spent_outpoints: Arc::new(Mutex::new(HashSet::new())),
+            view_key_manager: ViewKeyManager::new(),
         }
     }
 
@@ -1105,6 +1110,110 @@ impl Wallet {
         }
 
         pending
+    }
+
+    /// Generate a new view key with default permissions
+    pub fn generate_view_key(&mut self) -> Option<ViewKey> {
+        if let Some(keypair) = &self.keypair {
+            let default_permissions = ViewKeyPermissions {
+                view_incoming: true,
+                view_outgoing: false,
+                view_amounts: true,
+                view_timestamps: true,
+                full_audit: false,
+                valid_from: 0,
+                valid_until: 0,
+            };
+            
+            Some(self.view_key_manager.generate_view_key(keypair, default_permissions))
+        } else {
+            None
+        }
+    }
+
+    /// Generate a new view key with custom permissions
+    pub fn generate_view_key_with_permissions(&mut self, permissions: ViewKeyPermissions) -> Option<ViewKey> {
+        if let Some(keypair) = &self.keypair {
+            Some(self.view_key_manager.generate_view_key(keypair, permissions))
+        } else {
+            None
+        }
+    }
+
+    /// Register an existing view key
+    pub fn register_view_key(&mut self, view_key: ViewKey) {
+        self.view_key_manager.register_view_key(view_key);
+    }
+
+    /// Revoke a view key
+    pub fn revoke_view_key(&mut self, public_key: &JubjubPoint) {
+        self.view_key_manager.revoke_view_key(public_key);
+    }
+
+    /// Get all registered view keys
+    pub fn get_view_keys(&self) -> Vec<&ViewKey> {
+        self.view_key_manager.get_all_view_keys()
+    }
+
+    /// Check if a view key is revoked
+    pub fn is_view_key_revoked(&self, public_key: &JubjubPoint) -> bool {
+        self.view_key_manager.is_revoked(public_key)
+    }
+
+    /// Export a view key to share with someone
+    pub fn export_view_key(&self, public_key: &JubjubPoint) -> Option<Vec<u8>> {
+        self.view_key_manager
+            .get_view_key(public_key)
+            .map(|vk| vk.to_bytes())
+    }
+
+    /// Scan transactions with registered view keys
+    pub fn scan_with_view_keys(&self, transactions: &[Transaction]) -> HashMap<Vec<u8>, Vec<TransactionOutput>> {
+        self.view_key_manager.scan_transactions(transactions, current_time())
+    }
+
+    /// Create a time-limited view key (valid for specified duration in seconds)
+    pub fn create_time_limited_view_key(&mut self, duration_seconds: u64) -> Option<ViewKey> {
+        if let Some(keypair) = &self.keypair {
+            let now = current_time();
+            let permissions = ViewKeyPermissions {
+                view_incoming: true,
+                view_outgoing: false,
+                view_amounts: true,
+                view_timestamps: true,
+                full_audit: false,
+                valid_from: now,
+                valid_until: now + duration_seconds,
+            };
+            
+            Some(self.view_key_manager.generate_view_key(keypair, permissions))
+        } else {
+            None
+        }
+    }
+
+    /// Create an audit view key (can view all transactions)
+    pub fn create_audit_view_key(&mut self) -> Option<ViewKey> {
+        if let Some(keypair) = &self.keypair {
+            let permissions = ViewKeyPermissions {
+                view_incoming: true,
+                view_outgoing: true,
+                view_amounts: true,
+                view_timestamps: true,
+                full_audit: true,
+                valid_from: 0,
+                valid_until: 0,
+            };
+            
+            Some(self.view_key_manager.generate_view_key(keypair, permissions))
+        } else {
+            None
+        }
+    }
+
+    /// Update permissions for an existing view key
+    pub fn update_view_key_permissions(&mut self, public_key: &JubjubPoint, permissions: ViewKeyPermissions) -> bool {
+        self.view_key_manager.update_permissions(public_key, permissions)
     }
 }
 

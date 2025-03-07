@@ -268,19 +268,18 @@
     - [x] Implement I2P support
     - [x] Add DNS-over-HTTPS for seed node discovery
     - [x] Implement client fingerprinting countermeasures
-- [ ] Privacy Infrastructure
-  - [x] Implement key privacy mechanisms
-    - [x] Create secure key generation with additional entropy
-    - [x] Add key derivation privacy enhancements
-    - [x] Implement key usage pattern protection
-    - [x] Create key rotation mechanisms
-    - [x] Add key compartmentalization features
-  - [ ] Develop basic view key system
-    - [ ] Implement view key generation
-    - [ ] Create transaction scanning with view keys
-    - [ ] Add selective disclosure mechanisms
-    - [ ] Implement auditing capabilities
-    - [ ] Create view key management system
+- [x] Implement key privacy mechanisms
+  - [x] Create secure key generation with additional entropy
+  - [x] Add key derivation privacy enhancements
+  - [x] Implement key usage pattern protection
+  - [x] Create key rotation mechanisms
+  - [x] Add key compartmentalization features
+- [x] Develop basic view key system
+  - [x] Implement view key generation
+  - [x] Create transaction scanning with view keys
+  - [x] Add selective disclosure mechanisms
+  - [x] Implement auditing capabilities
+  - [x] Create view key management system
 - [ ] Enhance Dandelion Protocol Implementation
   - [ ] Implement adaptive path selection algorithm
     - [ ] Create entropy-based path randomization

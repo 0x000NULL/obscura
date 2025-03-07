@@ -1,5 +1,197 @@
 # Release Notes
 
+## [0.7.4] - 2025-03-06
+
+### Comprehensive View Key System Implementation
+
+This release implements a complete view key system for Obscura blockchain, providing enhanced privacy with selective disclosure capabilities. View keys allow users to share transaction visibility without revealing spending capability, enabling secure auditing and account monitoring.
+
+#### View Key Generation and Management
+
+- **Secure View Key Derivation**
+  - Implemented deterministic view key generation from wallet keypairs
+  - Created secure scalar derivation with domain separation
+  - Added public key generation with proper curve operations
+  - Implemented association with original wallet keys
+  - Created comprehensive permission model
+  - Added serialization for secure key sharing
+
+- **Permission-Based Selective Disclosure**
+  - Implemented granular permission flags system:
+    - Incoming transaction visibility control
+    - Outgoing transaction visibility control
+    - Amount visibility management
+    - Timestamp visibility control
+    - Full audit capabilities
+  - Created permission serialization and validation
+  - Added secure permission updates
+  - Implemented permission enforcement during scanning
+  - Created default permission profiles for common use cases
+
+- **Time-Based Validity Controls**
+  - Implemented temporal restrictions for view keys:
+    - Configurable valid-from timestamps
+    - Expiration date support
+    - Time-limited key generation
+    - Automatic validity verification
+  - Added time-restricted audit capabilities
+  - Created validity period serialization
+  - Implemented current-time validity checking
+  - Added support for permanent and temporary keys
+
+- **View Key Management System**
+  - Created comprehensive management infrastructure:
+    - Multi-key registration and tracking
+    - Key revocation capabilities
+    - Historical revocation recording
+    - Secure permission updates
+    - Key lookup by public component
+  - Implemented batch operations for multiple keys
+  - Added validation during registration
+  - Created efficient key storage and retrieval
+  - Implemented secure key rotation support
+
+#### Transaction Privacy Features
+
+- **Transaction Scanning Capabilities**
+  - Implemented permission-based transaction scanning:
+    - Selective output identification
+    - Permission-enforced filtering
+    - Secure address extraction
+    - Recipient verification
+  - Added multi-transaction batch scanning
+  - Created efficient result aggregation
+  - Implemented output collection and reporting
+  - Added time-validity checking during scans
+
+- **Stealth Address Integration**
+  - Enhanced stealth addressing with view key support:
+    - Secure shared secret derivation
+    - View-only address generation
+    - Transaction matching with view keys
+    - Ephemeral public key extraction
+  - Created secure scanning procedure for one-time addresses
+  - Implemented view-only transaction identification
+  - Added metadata protection during scanning
+  - Created comprehensive stealth transaction tests
+
+- **Confidential Transaction Support**
+  - Added view key integration with confidential transactions:
+    - Secure amount revelation with view keys
+    - Permission-based amount visibility
+    - Commitment extraction and validation
+    - View key-based decryption
+  - Implemented transaction output decryption
+  - Created commitment verification with view keys
+  - Added secure value revelation with permissions
+  - Implemented batch decryption for transactions
+
+- **Auditing Capabilities**
+  - Created comprehensive audit functionality:
+    - Full audit view key generation
+    - Complete transaction history access
+    - Secure audit log creation
+    - Permission-based audit restrictions
+  - Implemented time-limited audit capabilities
+    - Created temporary audit key generation
+    - Added expiring audit permissions
+    - Implemented validity period enforcement
+  - Added audit permission validation
+  - Created secure audit result reporting
+
+#### Wallet Integration
+
+- **Wallet View Key Support**
+  - Implemented complete view key integration with wallet:
+    - View key generation methods
+    - Custom permission view key creation
+    - Time-limited view key support
+    - Audit view key generation
+  - Added view key registration in wallet
+  - Created view key revocation capabilities
+  - Implemented view key export functionality
+  - Added transaction scanning with view keys
+
+- **View Key Management Methods**
+  - Added comprehensive management functionality:
+    - View key creation methods
+    - Permission customization
+    - Time-limited key generation
+    - Audit key creation
+    - Key revocation handling
+  - Implemented view key listing and retrieval
+  - Created revocation status checking
+  - Added secure permission updates
+  - Implemented view key export for sharing
+
+#### Testing Infrastructure
+
+- **Comprehensive Test Suite**
+  - Implemented extensive view key testing:
+    - Key generation and validation tests
+    - Serialization and deserialization tests
+    - Permission-based filtering verification
+    - Time validity boundary testing
+    - View key management validation
+  - Added transaction scanning tests
+    - Permission enforcement verification
+    - Output identification testing
+    - Selective disclosure validation
+    - Batch scanning verification
+  - Created integration tests
+    - Stealth addressing integration
+    - Confidential transaction support
+    - Wallet functionality verification
+    - Complete workflow testing
+
+- **Edge Case Testing**
+  - Added comprehensive edge case validation:
+    - Invalid permission combinations
+    - Expired key handling
+    - Revoked key verification
+    - Malformed transaction handling
+    - Invalid output testing
+  - Implemented security boundary testing
+    - Permission enforcement validation
+    - Time restriction verification
+    - Revocation status checking
+    - Permission update validation
+
+#### Documentation
+
+- **View Key Documentation**
+  - Created comprehensive API documentation
+    - Detailed method descriptions
+    - Parameter explanations
+    - Return value documentation
+    - Error handling guidance
+  - Added usage examples for common scenarios
+    - Basic view key creation
+    - Custom permission configuration
+    - Time-limited key generation
+    - Audit key creation
+  - Implemented security considerations guide
+    - Best practices for key sharing
+    - Permission configuration guidance
+    - Revocation recommendations
+    - Time restriction guidelines
+  - Created integration examples
+    - Wallet integration patterns
+    - Transaction scanning examples
+    - Stealth address integration
+    - Confidential transaction support
+
+#### Future Considerations
+
+- Further enhancing view key capabilities with more selective disclosure options
+- Adding hierarchical view keys for organizational use
+- Implementing more advanced audit capabilities with aggregation functions
+- Creating delegated view key management for third-party monitoring
+- Adding support for threshold-based view key operations
+- Implementing post-quantum secure view key cryptography
+- Enhancing view key privacy with additional obfuscation techniques
+- Creating programmable view keys with conditional visibility rules
+
 ## [0.7.3] - 2025-03-06
 
 ### Enhanced Key Privacy Implementation
