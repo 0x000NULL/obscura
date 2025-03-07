@@ -71,6 +71,17 @@ Struct for tracking peer behavior and reputation:
 - IP subnet information
 - Transaction request patterns
 - Compatibility with privacy networks
+- Routing reliability metrics:
+  - Routing reliability score (0.0-1.0)
+  - Average relay time with historical samples
+  - Relay success rate (successful relays / total relays)
+  - Historical paths participation tracking
+  - Reputation stability measurement
+- Advanced routing features:
+  - Last used timestamps for frequency-based selection
+  - Performance-based reliability assessment
+  - Time-based relay history with multiple samples
+  - Specialized compatibility flags for privacy modes
 
 ## Advanced Privacy Features
 
@@ -81,6 +92,22 @@ Struct for tracking peer behavior and reputation:
 - Higher reputation peers are preferred for stem phase routing
 - Scores decay over time to prevent long-term bias
 - Successful relays increase reputation; suspicious behavior decreases it
+- Comprehensive routing reliability metrics track peer performance:
+  - Success rate of transaction relays (ratio of successful to total relays)
+  - Average relay time measurements with historical samples
+  - Routing reliability score (0.0-1.0) combining success rate, time, and stability
+  - Reputation stability factor based on data sample size
+- Advanced path selection algorithm prioritizes reliable peers:
+  - Privacy level-based adaptive reputation thresholds
+  - Minimum ratio enforcement for reputable peers (70% by default)
+  - Weighted selection based on multiple performance factors
+  - Path length adjustment based on desired privacy level
+  - Specialized selection for different privacy modes (Standard/Tor/Mixnet/Layered)
+- Performance-based reputation adjustments:
+  - Bonuses for consistently reliable peers (high success rate, low latency)
+  - Penalties proportional to severity of suspicious behavior
+  - Frequency-based adjustments to avoid predictable routing patterns
+  - Historical path tracking for performance analysis
 
 #### Anonymity Set Management
 - Transactions are associated with diverse anonymity sets of high-reputation peers
@@ -268,7 +295,12 @@ pub const REPUTATION_PENALTY_SUSPICIOUS: f64 = -5.0;
 pub const REPUTATION_PENALTY_SYBIL: f64 = -30.0;
 pub const REPUTATION_REWARD_SUCCESSFUL_RELAY: f64 = 2.0;
 pub const REPUTATION_THRESHOLD_STEM: f64 = 20.0;
-pub const ANONYMITY_SET_MIN_SIZE: usize = 5;
+pub const REPUTATION_CRITICAL_PATH_THRESHOLD: f64 = 50.0;
+pub const REPUTATION_WEIGHT_FACTOR: f64 = 2.5;
+pub const REPUTATION_ADAPTIVE_THRESHOLDS: bool = true;
+pub const REPUTATION_MIN_SAMPLE_SIZE: usize = 10;
+pub const REPUTATION_RELIABILITY_BONUS: f64 = 10.0;
+pub const REPUTATION_ENFORCED_RATIO: f64 = 0.7;
 
 pub const ANTI_SNOOPING_ENABLED: bool = true;
 pub const MAX_TX_REQUESTS_BEFORE_PENALTY: u32 = 5;
@@ -303,6 +335,12 @@ The Dandelion protocol is fully integrated with the node's network maintenance c
 - `route_transaction_via_tor(transaction)`: Routes through Tor network
 - `route_transaction_via_mixnet(transaction)`: Routes through Mixnet
 - `route_transaction_layered(transaction)`: Uses layered encryption for routing
+
+### Reputation-Based Routing Methods
+- `select_reputation_based_path(tx_hash, available_peers, privacy_level)`: Selects an optimal path based on peer reputation and required privacy level
+- `update_peer_routing_reliability(peer, relay_success, relay_time)`: Updates a peer's routing reliability metrics based on relay performance
+- `generate_path_selection_weights(tx_hash, peers)`: Generates weighted probabilities for peer selection considering reputation, network conditions, and subnet diversity
+- `add_transaction_with_privacy(tx_hash, source, privacy_mode)`: Adds transaction with specified privacy mode using reputation-based routing
 
 ### Advanced Privacy Protection
 - `handle_transaction_request(peer, tx_hash)`: Anti-snooping protection for transaction requests
@@ -651,4 +689,109 @@ This enhanced Dandelion implementation provides comprehensive privacy guarantees
 5. **Integration options with Tor/Mixnet** for maximum privacy
 6. **Layered encryption** for path privacy
 
-These enhancements provide multiple layers of protection that significantly improve transaction privacy while maintaining network performance and reliability. The modular design allows for configuration based on privacy needs and resource constraints. 
+These enhancements provide multiple layers of protection that significantly improve transaction privacy while maintaining network performance and reliability. The modular design allows for configuration based on privacy needs and resource constraints.
+
+## 5. Reputation System Configuration
+
+The reputation-based routing system can be configured to meet different privacy and performance requirements:
+
+### Basic Configuration
+
+The system is enabled by default with reasonable parameters:
+
+```rust
+// Enable the dynamic peer scoring system
+pub const DYNAMIC_PEER_SCORING_ENABLED: bool = true;
+
+// Configure the reputation thresholds
+pub const REPUTATION_THRESHOLD_STEM: f64 = 20.0;
+pub const REPUTATION_CRITICAL_PATH_THRESHOLD: f64 = 50.0;
+
+// Configure the minimum ratio of high-reputation peers
+pub const REPUTATION_ENFORCED_RATIO: f64 = 0.7;
+```
+
+### Advanced Configuration
+
+For enhanced privacy, you can adjust the parameters:
+
+```rust
+// Increase reputation influence on path selection
+pub const REPUTATION_WEIGHT_FACTOR: f64 = 3.5; // Stronger reputation influence (default: 2.5)
+
+// Make thresholds more adaptive to privacy needs
+pub const REPUTATION_ADAPTIVE_THRESHOLDS: bool = true;
+
+// Require higher ratio of reputable peers for maximum privacy
+pub const REPUTATION_ENFORCED_RATIO: f64 = 0.9; // 90% of peers must be reputable (default: 0.7)
+
+// Configure the bonus for consistently reliable peers
+pub const REPUTATION_RELIABILITY_BONUS: f64 = 15.0; // Higher bonus (default: 10.0)
+```
+
+### Example: Using Reputation-Based Path Selection
+
+Here's how to use the reputation-based routing in code:
+
+```rust
+// Create a transaction hash
+let tx_hash = [1u8; 32];
+
+// Standard privacy level (0.0-1.0, higher = more privacy)
+let standard_privacy = 0.7;
+let standard_path = dandelion_manager.select_reputation_based_path(&tx_hash, &available_peers, standard_privacy);
+
+// High privacy level for sensitive transactions
+let high_privacy = 1.0;
+let high_privacy_path = dandelion_manager.select_reputation_based_path(&tx_hash, &available_peers, high_privacy);
+
+// Specialized routing for Tor mode
+let tor_peers = peers.iter().filter(|p| p.tor_compatible).collect::<Vec<_>>();
+let tor_path = dandelion_manager.select_reputation_based_path(&tx_hash, &tor_peers, 0.9);
+```
+
+### Example: Updating Peer Routing Reliability
+
+Track and update peer performance:
+
+```rust
+// Record a successful relay with timing information
+dandelion_manager.update_peer_routing_reliability(
+    peer_addr,
+    true, // Success
+    Some(Duration::from_millis(65)) // Relay took 65ms
+);
+
+// Record a failed relay
+dandelion_manager.update_peer_routing_reliability(
+    peer_addr,
+    false, // Failure
+    None // No timing information available
+);
+```
+
+### Example: Advanced Transaction Routing
+
+Route transactions with different privacy requirements:
+
+```rust
+// Standard transaction
+let standard_state = dandelion_manager.add_transaction(tx_hash, source_addr);
+
+// High-privacy transaction with specialized routing mode
+let privacy_state = dandelion_manager.add_transaction_with_privacy(
+    tx_hash,
+    source_addr,
+    PrivacyRoutingMode::Layered // Highest privacy mode
+);
+```
+
+### Tuning Performance vs. Privacy
+
+Depending on your priorities, you can tune the system:
+
+- **For Maximum Privacy**: Increase `REPUTATION_CRITICAL_PATH_THRESHOLD` and `REPUTATION_ENFORCED_RATIO` to use only the most reliable peers.
+- **For Better Performance**: Lower `REPUTATION_THRESHOLD_STEM` to allow more peers to participate in routing.
+- **For Best Balance**: Use adaptive thresholds and ensure a healthy peer reputation distribution.
+
+The reputation system continuously learns from network behavior and adjusts peer selection accordingly, providing a self-tuning mechanism that improves over time. 

@@ -1,5 +1,61 @@
 # Changelog
 
+## [0.7.5] - 2025-03-06
+
+### Added
+- **Enhanced Dandelion Protocol Implementation**
+  - Implemented adaptive path selection with entropy-based path randomization:
+    - Added 64-byte entropy pool with secure refresh mechanism
+    - Created multiple entropy sources (system, timing, transaction history, network conditions)
+    - Implemented cryptographic mixing using ChaCha20 permutation
+    - Added deterministic but unpredictable transaction path selection
+    - Implemented 5-minute entropy refresh interval
+  - Added intelligent path selection weights:
+    - Implemented reputation-based path selection factor
+    - Created network latency-based weighting
+    - Added subnet diversity preference
+    - Implemented combined weight calculation system
+    - Created deterministic weight generation per transaction
+  - Enhanced path diversity mechanisms:
+    - Implemented adaptive path length based on entropy and network conditions
+    - Added subnet tracking during path creation
+    - Created weighted selection algorithm for peers
+    - Implemented traffic-adaptive path length adjustment
+    - Added historical path tracking for analysis
+  - Implemented comprehensive node reputation-based routing:
+    - Created dedicated reputation-based path selection algorithm
+    - Added advanced routing reliability metrics (success rate, relay time, stability)
+    - Implemented privacy level-based reputation thresholds
+    - Created enhanced peer reputation data structure with performance metrics
+    - Added routing reliability bonuses for consistent performance
+    - Implemented frequency-based peer rotation to prevent pattern analysis
+    - Added specialized routing for different privacy modes (Standard, Tor, Mixnet, Layered)
+    - Created minimum reputation ratio enforcement for secure paths
+    - Implemented fallback mechanisms for reputation-constrained environments
+
+### Security
+- **Network Privacy Enhancements**
+  - Strengthened Dandelion stem phase:
+    - Added unpredictable but deterministic routing paths
+    - Implemented subnet diversity to prevent correlation attacks
+    - Created defense against path inference attacks
+    - Added transaction-specific path generation
+    - Implemented network condition-aware routing
+  - Improved resistance against network analysis:
+    - Created deterministic but private transaction routing
+    - Added reputation-weighted peer selection
+    - Implemented adaptive path selection based on network conditions
+    - Enhanced subnet diversity in transaction paths
+    - Created robust testing for path randomization verification
+  - Enhanced reputation-based security measures:
+    - Added comprehensive peer performance tracking
+    - Implemented adaptive reputation thresholds for privacy-critical transactions
+    - Created reliability-focused routing for sensitive operations
+    - Added performance-based reputation rewards and penalties
+    - Implemented historical path analysis for improved security decisions
+    - Added transaction propagation mode selection based on privacy requirements
+    - Created specialized handling for different privacy routing modes
+
 ## [0.7.4] - 2025-03-06
 
 ### Added

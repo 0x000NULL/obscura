@@ -20,6 +20,7 @@ pub const MAX_ROUTING_PATH_LENGTH: usize = 5; // Maximum nodes in stem path
 pub const FLUFF_PROPAGATION_DELAY_MIN_MS: u64 = 50; // Minimum delay when broadcasting
 pub const FLUFF_PROPAGATION_DELAY_MAX_MS: u64 = 500; // Maximum delay when broadcasting
 pub const STEM_PATH_RECALCULATION_INTERVAL: Duration = Duration::from_secs(600); // 10 minutes
+pub const ENTROPY_SOURCE_REFRESH_INTERVAL: Duration = Duration::from_secs(300); // 5 minutes
 
 // Enhanced privacy configuration
 pub const MULTI_HOP_STEM_PROBABILITY: f64 = 0.3; // Probability of using multi-hop stem path
@@ -48,6 +49,12 @@ pub const REPUTATION_PENALTY_SUSPICIOUS: f64 = -5.0; // Penalty for suspicious a
 pub const REPUTATION_PENALTY_SYBIL: f64 = -30.0; // Penalty for suspected Sybil behavior
 pub const REPUTATION_REWARD_SUCCESSFUL_RELAY: f64 = 2.0; // Reward for successful relay
 pub const REPUTATION_THRESHOLD_STEM: f64 = 20.0; // Minimum score to be used in stem routing
+pub const REPUTATION_CRITICAL_PATH_THRESHOLD: f64 = 50.0; // Threshold for high-privacy transactions
+pub const REPUTATION_WEIGHT_FACTOR: f64 = 2.5; // Weight multiplier for reputation in path selection
+pub const REPUTATION_ADAPTIVE_THRESHOLDS: bool = true; // Use adaptive reputation thresholds
+pub const REPUTATION_MIN_SAMPLE_SIZE: usize = 10; // Minimum number of reputation samples for adaption
+pub const REPUTATION_RELIABILITY_BONUS: f64 = 10.0; // Bonus for consistently reliable peers
+pub const REPUTATION_ENFORCED_RATIO: f64 = 0.7; // Minimum ratio of high-reputation peers in path
 pub const ANONYMITY_SET_MIN_SIZE: usize = 5; // Minimum size of anonymity set
 pub const MIN_PEERS_FOR_SYBIL_DETECTION: usize = 5; // Minimum peers needed for Sybil detection
 
@@ -149,6 +156,12 @@ pub struct PeerReputation {
     pub tor_compatible: bool,  // Whether peer supports Tor
     pub mixnet_compatible: bool, // Whether peer supports Mixnet
     pub layered_encryption_compatible: bool, // Whether peer supports layered encryption
+    pub routing_reliability: f64, // Measure of peer reliability for routing (0.0-1.0)
+    pub avg_relay_time: Option<Duration>, // Average time to relay transactions
+    pub relay_time_samples: VecDeque<Duration>, // Samples of relay times
+    pub relay_success_rate: f64, // Success rate of relays (0.0-1.0)
+    pub historical_paths: Vec<usize>, // IDs of historical paths this peer was part of
+    pub reputation_stability: f64, // Measure of how stable the reputation has been (0.0-1.0)
 }
 
 // Transaction batch for traffic analysis protection
@@ -306,6 +319,10 @@ pub struct DandelionManager {
 
     // Differential privacy noise generator state
     differential_privacy_state: Vec<f64>,
+
+    // Entropy source for path randomization
+    entropy_pool: Vec<u8>,
+    last_entropy_refresh: Instant,
 }
 
 #[derive(Debug)]
@@ -317,6 +334,13 @@ pub struct EclipseAttackResult {
 
 impl DandelionManager {
     pub fn new() -> Self {
+        // Create an initial entropy pool
+        let mut entropy_pool = Vec::with_capacity(64);
+        let mut rng = thread_rng();
+        for _ in 0..64 {
+            entropy_pool.push(rng.gen::<u8>());
+        }
+
         DandelionManager {
             transactions: HashMap::new(),
             stem_successors: HashMap::new(),
@@ -331,8 +355,8 @@ impl DandelionManager {
             last_decoy_generation: Instant::now(),
             secure_rng: ChaCha20Rng::from_entropy(),
             current_network_traffic: 0.0,
-            recent_transactions: VecDeque::new(),
-            recent_paths: VecDeque::new(),
+            recent_transactions: VecDeque::with_capacity(100),
+            recent_paths: VecDeque::with_capacity(20),
             anonymity_sets: HashMap::new(),
             next_anonymity_set_id: 0,
             last_anonymity_set_rotation: Instant::now(),
@@ -345,11 +369,13 @@ impl DandelionManager {
             layered_encryption_sessions: HashMap::new(),
             historical_paths: HashMap::new(),
             last_reputation_decay: Instant::now(),
-            dummy_transaction_hashes: VecDeque::new(),
+            dummy_transaction_hashes: VecDeque::with_capacity(50),
             snoop_detection_counters: HashMap::new(),
             last_snoop_check: Instant::now(),
-            ip_diversity_history: VecDeque::new(),
+            ip_diversity_history: VecDeque::with_capacity(20),
             differential_privacy_state: Vec::new(),
+            entropy_pool,
+            last_entropy_refresh: Instant::now(),
         }
     }
 
@@ -410,6 +436,9 @@ impl DandelionManager {
             return;
         }
 
+        // Refresh entropy pool before path calculation
+        self.refresh_entropy_pool();
+
         println!("DEBUG: Clearing existing paths");
         // Clear existing paths
         self.stem_successors.clear();
@@ -426,20 +455,44 @@ impl DandelionManager {
 
         println!("DEBUG: Building paths for {} peers", known_peers.len());
 
-        // Create a randomized list of peers
-        let mut rng = thread_rng();
+        // Create a unique dummy transaction hash for path generation
+        let mut dummy_tx_hash = [0u8; 32];
+        self.secure_rng.fill_bytes(&mut dummy_tx_hash);
 
-        // For each peer, assign a successor that is not itself
+        // For each peer, assign a successor that is not itself using entropy-based weighting
         for &peer in known_peers {
             // Create a list of potential successors (all peers except the current one)
-            let possible_successors: Vec<&SocketAddr> =
-                known_peers.iter().filter(|&p| p != &peer).collect();
+            let possible_successors: Vec<SocketAddr> =
+                known_peers.iter().filter(|&p| p != &peer).map(|&p| p).collect();
 
             if !possible_successors.is_empty() {
-                // Randomly select a successor for this peer
-                let successor = possible_successors.choose(&mut rng).unwrap();
-                println!("DEBUG: Assigning successor {} to peer {}", successor, peer);
-                self.stem_successors.insert(peer, **successor);
+                // Generate weights for this peer's successors
+                let weights = self.generate_path_selection_weights(&dummy_tx_hash, &possible_successors);
+                
+                // Calculate total weight
+                let total_weight: f64 = weights.values().sum();
+                
+                if total_weight > 0.0 {
+                    // Select a successor based on weights
+                    let selection_point = self.secure_rng.gen::<f64>() * total_weight;
+                    let mut cumulative_prob = 0.0;
+                    
+                    for (successor, weight) in &weights {
+                        cumulative_prob += weight;
+                        
+                        if cumulative_prob >= selection_point {
+                            println!("DEBUG: Assigning successor {} to peer {}", successor, peer);
+                            self.stem_successors.insert(peer, *successor);
+                            break;
+                        }
+                    }
+                } else {
+                    // Fallback to random selection if weights are all zero
+                    let mut rng = thread_rng();
+                    let successor = possible_successors.choose(&mut rng).unwrap();
+                    println!("DEBUG: Assigning successor {} to peer {} (fallback)", successor, peer);
+                    self.stem_successors.insert(peer, *successor);
+                }
             }
         }
 
@@ -449,16 +502,17 @@ impl DandelionManager {
             if !self.stem_successors.contains_key(&peer) {
                 println!("DEBUG: Peer {} has no successor, assigning one", peer);
                 // This should be rare but just in case - assign a fallback successor
-                let fallback_successors: Vec<&SocketAddr> =
-                    known_peers.iter().filter(|&p| p != &peer).collect();
+                let fallback_successors: Vec<SocketAddr> =
+                    known_peers.iter().filter(|&p| p != &peer).map(|&p| p).collect();
 
                 if !fallback_successors.is_empty() {
+                    let mut rng = thread_rng();
                     let fallback = fallback_successors.choose(&mut rng).unwrap();
                     println!(
                         "DEBUG: Assigned fallback successor {} to peer {}",
                         fallback, peer
                     );
-                    self.stem_successors.insert(peer, **fallback);
+                    self.stem_successors.insert(peer, *fallback);
                 }
             }
         }
@@ -474,46 +528,78 @@ impl DandelionManager {
         tx_hash: [u8; 32],
         source_addr: Option<SocketAddr>,
     ) -> PropagationState {
-        let now = Instant::now();
+        // Transaction already in stem phase
+        if let Some(existing) = self.transactions.get(&tx_hash) {
+            return existing.state.clone();
+        }
 
-        // Determine if we start in stem or fluff phase
-        // We use a probability threshold to sometimes skip stem phase completely
-        let mut rng = thread_rng();
-        let state = if rng.gen_bool(STEM_PROBABILITY) {
-            PropagationState::Stem
-        } else {
-            PropagationState::Fluff
+        let now = Instant::now();
+        
+        // Generate random time in stem phase
+        let stem_time = Duration::from_secs(
+            self.secure_rng
+                .gen_range(STEM_PHASE_MIN_TIMEOUT.as_secs()..STEM_PHASE_MAX_TIMEOUT.as_secs()),
+        );
+
+        // Default to stem phase
+        let mut state = PropagationState::Stem;
+
+        // Use a high privacy level (0.8) for reputation-based path selection by default
+        // Indicates we want to prioritize reputation heavily
+        let privacy_level = 0.8;
+
+        // Rarely, use multi-hop stem phase or other special routing
+        let routing_choice = self.secure_rng.gen::<f64>();
+        let mut relay_path = Vec::new();
+
+        if routing_choice < MULTI_HOP_STEM_PROBABILITY {
+            // Use multi-hop stem phase with reputation-based routing
+            if !self.outbound_peers.is_empty() {
+                relay_path = self.select_reputation_based_path(&tx_hash, &self.outbound_peers, privacy_level);
+                
+                if !relay_path.is_empty() {
+                    state = PropagationState::MultiHopStem(relay_path.len());
+                }
+            }
+        } else if routing_choice < MULTI_HOP_STEM_PROBABILITY + MULTI_PATH_ROUTING_PROBABILITY {
+            // Use multi-path routing with high-reputation peers
+            if !self.outbound_peers.is_empty() {
+                let trusted_paths: Vec<SocketAddr> = self.get_peers_by_reputation(Some(REPUTATION_CRITICAL_PATH_THRESHOLD))
+                    .into_iter()
+                    .map(|(addr, _)| addr)
+                    .filter(|p| self.outbound_peers.contains(p))
+                    .collect();
+                
+                if trusted_paths.len() >= 2 {
+                    state = PropagationState::MultiPathStem(trusted_paths.len());
+                    relay_path = trusted_paths;
+                }
+            }
+        }
+
+        // Create the transaction metadata
+        let metadata = PropagationMetadata {
+            state: state.clone(),
+            received_time: now,
+            transition_time: now + stem_time,
+            relayed: false,
+            source_addr,
+            relay_path,
+            batch_id: None,
+            is_decoy: false,
+            adaptive_delay: None,
+            suspicious_peers: HashSet::new(),
+            privacy_mode: PrivacyRoutingMode::Standard,
+            encryption_layers: 0,
+            transaction_modified: false,
+            anonymity_set: HashSet::new(),
+            differential_delay: Duration::from_millis(0),
+            tx_data: Vec::new(),
+            fluff_time: None,
         };
 
-        // Calculate random timeout for stem->fluff transition
-        // Randomizing this makes timing analysis more difficult
-        let delay =
-            rng.gen_range(STEM_PHASE_MIN_TIMEOUT.as_secs()..=STEM_PHASE_MAX_TIMEOUT.as_secs());
-        let transition_time = now + Duration::from_secs(delay);
-
-        // Add transaction to our manager
-        self.transactions.insert(
-            tx_hash,
-            PropagationMetadata {
-                state: state.clone(),
-                received_time: now,
-                transition_time,
-                relayed: false,
-                source_addr,
-                relay_path: Vec::new(),
-                batch_id: None,
-                is_decoy: false,
-                adaptive_delay: None,
-                suspicious_peers: HashSet::new(),
-                privacy_mode: PrivacyRoutingMode::Standard,
-                encryption_layers: 0,
-                transaction_modified: false,
-                anonymity_set: HashSet::new(),
-                differential_delay: Duration::from_millis(0),
-                tx_data: Vec::new(),
-                fluff_time: None,
-            },
-        );
+        // Store metadata
+        self.transactions.insert(tx_hash, metadata);
 
         state
     }
@@ -771,6 +857,9 @@ impl DandelionManager {
             return;
         }
 
+        // Refresh entropy before path calculation
+        self.refresh_entropy_pool();
+
         // Clear existing multi-hop paths
         self.multi_hop_paths.clear();
 
@@ -795,25 +884,32 @@ impl DandelionManager {
             return;
         }
 
-        // Create diverse paths
-        let avoid_peers: Vec<SocketAddr> = Vec::new(); // Create an empty list as we don't have avoid peers
-
+        // Create unique dummy transaction hash for each peer for path generation
         for peer in &trusted_peers {
-            // Only use peers that are not in the avoid list
-            if avoid_peers.contains(peer) {
-                continue;
+            // Create a dummy transaction hash from peer address and entropy
+            let mut dummy_tx_hash = [0u8; 32];
+            let peer_bytes = match peer.ip() {
+                IpAddr::V4(ipv4) => ipv4.octets().to_vec(),
+                IpAddr::V6(ipv6) => ipv6.octets()[0..4].to_vec(),
+            };
+            
+            for (i, &byte) in peer_bytes.iter().enumerate() {
+                if i < dummy_tx_hash.len() {
+                    dummy_tx_hash[i] = byte;
+                }
             }
-
-            // Build a path starting with this peer
-            let mut path = Vec::with_capacity(MAX_ROUTING_PATH_LENGTH);
-            path.push(*peer);
-
-            // Add additional hops, ensuring diverse paths
-            self.build_diverse_path(&mut path, &trusted_peers, &avoid_peers);
-
-            // Store the path
+            
+            // Mix with entropy pool
+            for (i, &byte) in self.entropy_pool.iter().enumerate().take(28) {
+                dummy_tx_hash[i + 4] = byte;
+            }
+            
+            // Use adaptive path selection to create a path
+            let path = self.select_adaptive_path(&dummy_tx_hash, &trusted_peers);
+            
+            // Store the path if it meets minimum requirements
             if path.len() >= MIN_ROUTING_PATH_LENGTH {
-                self.multi_hop_paths.insert(*peer, path.clone());
+                self.multi_hop_paths.insert(*peer, path);
             }
         }
     }
@@ -966,6 +1062,12 @@ impl DandelionManager {
                 tor_compatible: false,
                 mixnet_compatible: false,
                 layered_encryption_compatible: false,
+                routing_reliability: 0.5, // Start with neutral reliability
+                avg_relay_time: None,
+                relay_time_samples: VecDeque::with_capacity(20),
+                relay_success_rate: 0.0,
+                historical_paths: Vec::new(),
+                reputation_stability: 0.0,
             });
 
         behavior.suspicious_actions += 1;
@@ -1010,62 +1112,126 @@ impl DandelionManager {
         source_addr: Option<SocketAddr>,
         privacy_mode: PrivacyRoutingMode,
     ) -> PropagationState {
-        let now = Instant::now();
-        let mut rng = thread_rng();
+        // Transaction already in stem phase
+        if let Some(existing) = self.transactions.get(&tx_hash) {
+            return existing.state.clone();
+        }
 
-        // Determine initial state based on probability and privacy mode
-        let state = match privacy_mode {
-            PrivacyRoutingMode::Standard => {
-                // Always use Stem or MultiHopStem for standard privacy mode
-                // This guarantees the test assertion will pass
-                if rng.gen_bool(MULTI_HOP_STEM_PROBABILITY) {
-                    let hop_count = rng.gen_range(2..=MAX_MULTI_HOP_LENGTH);
-                    PropagationState::MultiHopStem(hop_count)
-                } else {
-                    PropagationState::Stem
-                }
-            }
-            PrivacyRoutingMode::Tor => PropagationState::TorRelayed,
-            PrivacyRoutingMode::Mixnet => PropagationState::MixnetRelayed,
-            PrivacyRoutingMode::Layered => PropagationState::LayeredEncrypted,
+        let now = Instant::now();
+        
+        // Generate random time in stem phase
+        let stem_time = Duration::from_secs(
+            self.secure_rng
+                .gen_range(STEM_PHASE_MIN_TIMEOUT.as_secs()..STEM_PHASE_MAX_TIMEOUT.as_secs()),
+        );
+
+        // Default to stem phase
+        let mut state = PropagationState::Stem;
+
+        // Set privacy level based on privacy mode
+        let privacy_level = match privacy_mode {
+            PrivacyRoutingMode::Standard => 0.8,
+            PrivacyRoutingMode::Tor => 0.9,
+            PrivacyRoutingMode::Mixnet => 0.95,
+            PrivacyRoutingMode::Layered => 1.0,
         };
 
-        // Calculate random timeout for stem->fluff transition with some differential privacy
-        let base_delay =
-            rng.gen_range(STEM_PHASE_MIN_TIMEOUT.as_secs()..=STEM_PHASE_MAX_TIMEOUT.as_secs());
-        let diff_privacy_delay = self.calculate_differential_privacy_delay(&tx_hash);
-        let transition_time = now + Duration::from_secs(base_delay) + diff_privacy_delay;
+        // Prepare relay path based on privacy mode
+        let mut relay_path = Vec::new();
+        
+        match privacy_mode {
+            PrivacyRoutingMode::Standard => {
+                // For standard mode, use reputation-based multi-hop routing
+                if !self.outbound_peers.is_empty() {
+                    relay_path = self.select_reputation_based_path(&tx_hash, &self.outbound_peers, privacy_level);
+                    
+                    if !relay_path.is_empty() {
+                        state = PropagationState::MultiHopStem(relay_path.len());
+                    }
+                }
+            }
+            PrivacyRoutingMode::Tor => {
+                // For Tor mode, select only Tor-compatible high-reputation peers
+                if !self.outbound_peers.is_empty() {
+                    let tor_peers: Vec<SocketAddr> = self.peer_reputation
+                        .iter()
+                        .filter(|(addr, rep)| {
+                            rep.tor_compatible && 
+                            rep.reputation_score >= REPUTATION_CRITICAL_PATH_THRESHOLD &&
+                            self.outbound_peers.contains(addr)
+                        })
+                        .map(|(addr, _)| *addr)
+                        .collect();
+                    
+                    if !tor_peers.is_empty() {
+                        relay_path = self.select_reputation_based_path(&tx_hash, &tor_peers, privacy_level);
+                        state = PropagationState::TorRelayed;
+                    }
+                }
+            }
+            PrivacyRoutingMode::Mixnet => {
+                // For Mixnet mode, select only Mixnet-compatible high-reputation peers
+                if !self.outbound_peers.is_empty() {
+                    let mixnet_peers: Vec<SocketAddr> = self.peer_reputation
+                        .iter()
+                        .filter(|(addr, rep)| {
+                            rep.mixnet_compatible && 
+                            rep.reputation_score >= REPUTATION_CRITICAL_PATH_THRESHOLD &&
+                            self.outbound_peers.contains(addr)
+                        })
+                        .map(|(addr, _)| *addr)
+                        .collect();
+                    
+                    if !mixnet_peers.is_empty() {
+                        relay_path = self.select_reputation_based_path(&tx_hash, &mixnet_peers, privacy_level);
+                        state = PropagationState::MixnetRelayed;
+                    }
+                }
+            }
+            PrivacyRoutingMode::Layered => {
+                // For Layered mode, select only layered-encryption-compatible high-reputation peers
+                if !self.outbound_peers.is_empty() {
+                    let layered_peers: Vec<SocketAddr> = self.peer_reputation
+                        .iter()
+                        .filter(|(addr, rep)| {
+                            rep.layered_encryption_compatible && 
+                            rep.reputation_score >= REPUTATION_CRITICAL_PATH_THRESHOLD &&
+                            self.outbound_peers.contains(addr)
+                        })
+                        .map(|(addr, _)| *addr)
+                        .collect();
+                    
+                    if !layered_peers.is_empty() {
+                        relay_path = self.select_reputation_based_path(&tx_hash, &layered_peers, privacy_level);
+                        state = PropagationState::LayeredEncrypted;
+                    }
+                }
+            }
+        }
 
-        // Get the best anonymity set for this transaction
-        let anonymity_set = self.get_best_anonymity_set();
+        // Create the transaction metadata
+        let metadata = PropagationMetadata {
+            state: state.clone(),
+            received_time: now,
+            transition_time: now + stem_time,
+            relayed: false,
+            source_addr,
+            relay_path,
+            batch_id: None,
+            is_decoy: false,
+            adaptive_delay: None,
+            suspicious_peers: HashSet::new(),
+            privacy_mode,
+            encryption_layers: if privacy_mode == PrivacyRoutingMode::Layered { relay_path.len() } else { 0 },
+            transaction_modified: false,
+            anonymity_set: HashSet::new(),
+            differential_delay: Duration::from_millis(0),
+            tx_data: Vec::new(),
+            fluff_time: None,
+        };
 
-        // Add transaction to our manager
-        self.transactions.insert(
-            tx_hash,
-            PropagationMetadata {
-                state: state.clone(),
-                received_time: now,
-                transition_time,
-                relayed: false,
-                source_addr,
-                relay_path: Vec::new(),
-                batch_id: None,
-                is_decoy: false,
-                adaptive_delay: None,
-                suspicious_peers: HashSet::new(),
-                privacy_mode: privacy_mode.clone(),
-                encryption_layers: if privacy_mode == PrivacyRoutingMode::Layered {
-                    3
-                } else {
-                    0
-                },
-                transaction_modified: false,
-                anonymity_set,
-                differential_delay: diff_privacy_delay,
-                tx_data: Vec::new(),
-                fluff_time: None,
-            },
-        );
+        // Store metadata
+        self.transactions.insert(tx_hash, metadata);
 
         state
     }
@@ -1209,41 +1375,48 @@ impl DandelionManager {
 
     /// Initialize a peer's reputation if it doesn't exist
     pub fn initialize_peer_reputation(&mut self, peer: SocketAddr) {
-        if !self.peer_reputation.contains_key(&peer) {
-            let now = Instant::now();
-            let ip_subnet = match peer.ip() {
-                IpAddr::V4(ipv4) => {
-                    let octets = ipv4.octets();
-                    [octets[0], octets[1], octets[2], octets[3]]
-                }
-                IpAddr::V6(_) => [0, 0, 0, 0], // Simplified for IPv6
-            };
-
-            self.peer_reputation.insert(
-                peer,
-                PeerReputation {
-                    reputation_score: 50.0, // Start with neutral-positive score
-                    last_reputation_update: now,
-                    successful_relays: 0,
-                    failed_relays: 0,
-                    suspicious_actions: 0,
-                    sybil_indicators: 0,
-                    eclipse_indicators: 0,
-                    last_used_for_stem: None,
-                    last_used_for_fluff: None,
-                    ip_subnet,
-                    autonomous_system: None, // Would require ASN lookup
-                    transaction_requests: HashMap::new(),
-                    connection_patterns: VecDeque::with_capacity(5),
-                    dummy_responses_sent: 0,
-                    last_penalized: None,
-                    peer_cluster: None,
-                    tor_compatible: false,
-                    mixnet_compatible: false,
-                    layered_encryption_compatible: false,
-                },
-            );
+        if self.peer_reputation.contains_key(&peer) {
+            return;
         }
+
+        // Extract subnet info for grouping (first two octets of IPv4)
+        let subnet = match peer.ip() {
+            IpAddr::V4(ipv4) => {
+                let octets = ipv4.octets();
+                [octets[0], octets[1], octets[2], octets[3]]
+            }
+            IpAddr::V6(_) => [0, 0, 0, 0], // Special case for IPv6
+        };
+
+        let reputation = PeerReputation {
+            reputation_score: 0.0,
+            last_reputation_update: Instant::now(),
+            successful_relays: 0,
+            failed_relays: 0,
+            suspicious_actions: 0,
+            sybil_indicators: 0,
+            eclipse_indicators: 0,
+            last_used_for_stem: None,
+            last_used_for_fluff: None,
+            ip_subnet: subnet,
+            autonomous_system: None,
+            transaction_requests: HashMap::new(),
+            connection_patterns: VecDeque::new(),
+            dummy_responses_sent: 0,
+            last_penalized: None,
+            peer_cluster: None,
+            tor_compatible: false,
+            mixnet_compatible: false,
+            layered_encryption_compatible: false,
+            routing_reliability: 0.5, // Start with neutral reliability
+            avg_relay_time: None,
+            relay_time_samples: VecDeque::with_capacity(20),
+            relay_success_rate: 0.0,
+            historical_paths: Vec::new(),
+            reputation_stability: 0.0,
+        };
+
+        self.peer_reputation.insert(peer, reputation);
     }
 
     /// Update a peer's reputation score
@@ -2051,11 +2224,663 @@ impl DandelionManager {
         }
         None
     }
+
+    /// Refresh the entropy pool used for path randomization
+    pub fn refresh_entropy_pool(&mut self) {
+        let now = Instant::now();
+        
+        // Don't refresh too frequently to avoid predictability
+        if now.duration_since(self.last_entropy_refresh) < ENTROPY_SOURCE_REFRESH_INTERVAL {
+            return;
+        }
+        
+        // Mix in new entropy from various sources
+        let mut new_entropy = Vec::with_capacity(64);
+        
+        // System entropy
+        let mut system_rng = thread_rng();
+        for _ in 0..16 {
+            new_entropy.push(system_rng.gen::<u8>());
+        }
+        
+        // Timing information (hard to predict externally)
+        let timing_bytes = SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_else(|_| Duration::from_secs(0))
+            .as_nanos()
+            .to_le_bytes();
+        new_entropy.extend_from_slice(&timing_bytes[0..16]);
+        
+        // Transaction history (difficult for attackers to predict)
+        let tx_count = self.transactions.len() as u64;
+        new_entropy.extend_from_slice(&tx_count.to_le_bytes());
+        
+        // Network conditions
+        for (peer, condition) in &self.network_conditions {
+            let addr_bytes = match peer.ip() {
+                IpAddr::V4(ip) => ip.octets().to_vec(),
+                IpAddr::V6(ip) => ip.octets()[0..4].to_vec(),
+            };
+            
+            let latency_ns = condition.avg_latency.as_nanos() as u64;
+            let latency_bytes = latency_ns.to_le_bytes();
+            
+            new_entropy.extend_from_slice(&addr_bytes);
+            new_entropy.extend_from_slice(&latency_bytes);
+            
+            // Avoid collecting too much data
+            if new_entropy.len() > 48 {
+                break;
+            }
+        }
+        
+        // Combine with existing entropy using ChaCha20 permutation
+        let mut combined_entropy = Vec::with_capacity(64);
+        combined_entropy.extend_from_slice(&self.entropy_pool);
+        combined_entropy.extend_from_slice(&new_entropy);
+        
+        // Use cryptographic mixing for secure entropy combination
+        let seed: [u8; 32] = {
+            let mut hash = [0u8; 32];
+            for (i, chunk) in combined_entropy.chunks(32).enumerate() {
+                for (j, &byte) in chunk.iter().enumerate() {
+                    if i * 32 + j < 32 {
+                        hash[i * 32 + j] ^= byte;
+                    }
+                }
+            }
+            hash
+        };
+        
+        let mut rng = ChaCha20Rng::from_seed(seed);
+        
+        // Create new entropy pool
+        self.entropy_pool.clear();
+        for _ in 0..64 {
+            self.entropy_pool.push(rng.gen::<u8>());
+        }
+        
+        self.last_entropy_refresh = now;
+    }
+    
+    /// Generate entropy-based weights for path selection
+    /// This creates a randomization factor that's unpredictable but deterministic for a given transaction
+    pub fn generate_path_selection_weights(&mut self, tx_hash: &[u8; 32], peers: &[SocketAddr]) -> HashMap<SocketAddr, f64> {
+        // Refresh entropy pool if needed
+        if Instant::now().duration_since(self.last_entropy_refresh) >= ENTROPY_SOURCE_REFRESH_INTERVAL {
+            self.refresh_entropy_pool();
+        }
+        
+        let mut weights = HashMap::new();
+        
+        // Create a seed that combines transaction hash with our entropy pool
+        let mut seed_material = Vec::with_capacity(tx_hash.len() + 32);
+        seed_material.extend_from_slice(tx_hash);
+        seed_material.extend_from_slice(&self.entropy_pool[0..32]);
+        
+        // Create a deterministic seed for this transaction
+        let mut seed = [0u8; 32];
+        for (i, chunk) in seed_material.chunks(32).enumerate() {
+            for (j, &byte) in chunk.iter().enumerate() {
+                if i * 32 + j < 32 {
+                    seed[i * 32 + j] ^= byte;
+                }
+            }
+        }
+        
+        // Create a deterministic RNG for this transaction
+        let mut rng = ChaCha20Rng::from_seed(seed);
+        
+        // Assign weights to peers
+        for &peer in peers {
+            // Generate a weight based on our entropy and the transaction
+            let base_weight = rng.gen_range(0.5..1.5);
+            
+            // Apply reputation-based adjustment
+            let reputation_factor = if let Some(rep) = self.peer_reputation.get(&peer) {
+                // Map reputation from [-100, 100] to [0.5, 1.5]
+                (rep.reputation_score + 100.0) / 133.33 + 0.5
+            } else {
+                1.0 // Neutral for unknown peers
+            };
+            
+            // Apply network conditions adjustment
+            let network_factor = if let Some(cond) = self.network_conditions.get(&peer) {
+                // Prefer peers with lower latency
+                let latency_ms = cond.avg_latency.as_millis() as f64;
+                // Inversely weight by latency, but keep within reasonable bounds
+                (1000.0 / (latency_ms + 100.0)).clamp(0.75, 1.25)
+            } else {
+                1.0 // Neutral for unknown network conditions
+            };
+            
+            // Apply subnet diversity adjustment
+            // Extract the subnet to determine diversity
+            let subnet = self.get_peer_subnet(&peer);
+            
+            // Count how many peers we've already selected from this subnet
+            let subnet_count = weights
+                .keys()
+                .filter(|p| self.get_peer_subnet(p) == subnet)
+                .count() as f64;
+            
+            // Penalize peers from subnets we've already selected from
+            let diversity_factor = if subnet_count > 0.0 {
+                // Apply diminishing probability as we select more from same subnet
+                1.0 / (1.0 + subnet_count * 0.5)
+            } else {
+                // Bonus for first peer from a subnet
+                1.2
+            };
+            
+            // Combine all factors with some randomness
+            let weight = base_weight * reputation_factor * network_factor * diversity_factor;
+            
+            weights.insert(peer, weight);
+        }
+        
+        weights
+    }
+
+    /// Select a path using adaptive entropy-based path selection
+    pub fn select_adaptive_path(&mut self, tx_hash: &[u8; 32], available_peers: &[SocketAddr]) -> Vec<SocketAddr> {
+        if available_peers.len() < MIN_ROUTING_PATH_LENGTH {
+            // Not enough peers for a proper path
+            return available_peers.to_vec();
+        }
+        
+        // Generate weights for peer selection
+        let weights = self.generate_path_selection_weights(tx_hash, available_peers);
+        
+        // Determine path length based on entropy and network conditions
+        let path_length = {
+            let entropy_byte = self.entropy_pool[tx_hash[0] as usize % 64];
+            let base_length = MIN_ROUTING_PATH_LENGTH + (entropy_byte % 3) as usize;
+            
+            // Adjust based on network traffic
+            let traffic_adjustment = if self.current_network_traffic > 0.8 {
+                -1 // High traffic, shorter paths
+            } else if self.current_network_traffic < 0.3 {
+                1 // Low traffic, longer paths
+            } else {
+                0 // Normal traffic, no adjustment
+            };
+            
+            // Ensure within bounds
+            (base_length as isize + traffic_adjustment)
+                .clamp(MIN_ROUTING_PATH_LENGTH as isize, MAX_ROUTING_PATH_LENGTH as isize) as usize
+        };
+        
+        // Prepare for selection
+        let mut selected_peers = Vec::with_capacity(path_length);
+        let mut remaining_peers: Vec<SocketAddr> = available_peers.to_vec();
+        let mut used_subnets = HashSet::new();
+        
+        // Select nodes for the path
+        for _ in 0..path_length {
+            if remaining_peers.is_empty() {
+                break;
+            }
+            
+            // Calculate selection probabilities based on weights
+            let total_weight: f64 = remaining_peers.iter()
+                .filter_map(|p| weights.get(p).copied())
+                .sum();
+            
+            if total_weight <= 0.0 {
+                break;
+            }
+            
+            // Select a peer weighted by our calculated factors
+            let mut cumulative_prob = 0.0;
+            let selection_point = self.secure_rng.gen::<f64>() * total_weight;
+            
+            let mut selected_idx = 0;
+            for (i, peer) in remaining_peers.iter().enumerate() {
+                let weight = weights.get(peer).copied().unwrap_or(0.0);
+                cumulative_prob += weight;
+                
+                if cumulative_prob >= selection_point {
+                    selected_idx = i;
+                    break;
+                }
+            }
+            
+            // Add the selected peer to our path
+            let selected_peer = remaining_peers.remove(selected_idx);
+            selected_peers.push(selected_peer);
+            
+            // Track its subnet for diversity
+            if let IpAddr::V4(ipv4) = selected_peer.ip() {
+                let octets = ipv4.octets();
+                used_subnets.insert([octets[0], octets[1]]);
+            }
+        }
+        
+        // For the path metrics
+        if !selected_peers.is_empty() {
+            self.recent_paths.push_back(selected_peers.clone());
+            
+            // Maintain limited history
+            while self.recent_paths.len() > 20 {
+                self.recent_paths.pop_front();
+            }
+        }
+        
+        selected_peers
+    }
+
+    /// Initialize peer reputation with extended attributes for routing reliability
+    pub fn initialize_peer_reputation(&mut self, peer: SocketAddr) {
+        if self.peer_reputation.contains_key(&peer) {
+            return;
+        }
+
+        // Extract subnet info for grouping (first two octets of IPv4)
+        let subnet = match peer.ip() {
+            IpAddr::V4(ipv4) => {
+                let octets = ipv4.octets();
+                [octets[0], octets[1], octets[2], octets[3]]
+            }
+            IpAddr::V6(_) => [0, 0, 0, 0], // Special case for IPv6
+        };
+
+        let reputation = PeerReputation {
+            reputation_score: 0.0,
+            last_reputation_update: Instant::now(),
+            successful_relays: 0,
+            failed_relays: 0,
+            suspicious_actions: 0,
+            sybil_indicators: 0,
+            eclipse_indicators: 0,
+            last_used_for_stem: None,
+            last_used_for_fluff: None,
+            ip_subnet: subnet,
+            autonomous_system: None,
+            transaction_requests: HashMap::new(),
+            connection_patterns: VecDeque::new(),
+            dummy_responses_sent: 0,
+            last_penalized: None,
+            peer_cluster: None,
+            tor_compatible: false,
+            mixnet_compatible: false,
+            layered_encryption_compatible: false,
+            routing_reliability: 0.5, // Start with neutral reliability
+            avg_relay_time: None,
+            relay_time_samples: VecDeque::with_capacity(20),
+            relay_success_rate: 0.0,
+            historical_paths: Vec::new(),
+            reputation_stability: 0.0,
+        };
+
+        self.peer_reputation.insert(peer, reputation);
+    }
+
+    /// Update peer's routing reliability metrics based on relay performance
+    pub fn update_peer_routing_reliability(&mut self, peer: SocketAddr, relay_success: bool, relay_time: Option<Duration>) {
+        if !DYNAMIC_PEER_SCORING_ENABLED {
+            return;
+        }
+
+        self.initialize_peer_reputation(peer);
+        
+        if let Some(reputation) = self.peer_reputation.get_mut(&peer) {
+            // Update success/failure counters
+            if relay_success {
+                reputation.successful_relays += 1;
+            } else {
+                reputation.failed_relays += 1;
+            }
+            
+            // Update relay success rate
+            let total_relays = reputation.successful_relays + reputation.failed_relays;
+            if total_relays > 0 {
+                reputation.relay_success_rate = reputation.successful_relays as f64 / total_relays as f64;
+            }
+            
+            // Update relay time if provided
+            if let Some(time) = relay_time {
+                reputation.relay_time_samples.push_back(time);
+                
+                // Keep only the most recent samples
+                while reputation.relay_time_samples.len() > 20 {
+                    reputation.relay_time_samples.pop_front();
+                }
+                
+                // Recalculate average relay time
+                if !reputation.relay_time_samples.is_empty() {
+                    let total_ms: u64 = reputation.relay_time_samples
+                        .iter()
+                        .map(|d| d.as_millis() as u64)
+                        .sum();
+                    let avg_ms = total_ms / reputation.relay_time_samples.len() as u64;
+                    reputation.avg_relay_time = Some(Duration::from_millis(avg_ms));
+                }
+            }
+            
+            // Update routing reliability score (weighted combination of factors)
+            let success_factor = reputation.relay_success_rate;
+            
+            let time_factor = if let Some(avg_time) = reputation.avg_relay_time {
+                // Lower times are better - clamp to reasonable range
+                let ms = avg_time.as_millis() as f64;
+                (1000.0 / (ms + 100.0)).clamp(0.1, 1.0)
+            } else {
+                0.5 // Neutral if no time data
+            };
+            
+            // Reputation stability factor
+            let stability_factor = if total_relays > 10 {
+                // More relays = more stable data
+                (total_relays.min(100) as f64) / 100.0
+            } else {
+                // Less data = less stability
+                0.3
+            };
+            
+            // Update stability metric
+            reputation.reputation_stability = stability_factor;
+            
+            // Calculate combined routing reliability (weighted average)
+            reputation.routing_reliability = (
+                success_factor * 0.5 + // 50% weight on success rate
+                time_factor * 0.3 + // 30% weight on relay time
+                stability_factor * 0.2 // 20% weight on stability
+            ).clamp(0.0, 1.0);
+            
+            // Apply bonus to reputation score for consistent performance
+            if total_relays > 20 && reputation.routing_reliability > 0.8 {
+                self.update_peer_reputation(peer, REPUTATION_RELIABILITY_BONUS * 0.05, "Consistent routing reliability");
+            }
+        }
+    }
+
+    /// Select a path based primarily on peer reputation
+    pub fn select_reputation_based_path(&mut self, tx_hash: &[u8; 32], available_peers: &[SocketAddr], privacy_level: f64) -> Vec<SocketAddr> {
+        // Filter peers based on reputation threshold that varies with privacy level
+        let min_reputation = if REPUTATION_ADAPTIVE_THRESHOLDS {
+            // Scale threshold based on desired privacy level (0.0-1.0)
+            let base_threshold = REPUTATION_THRESHOLD_STEM;
+            let max_threshold = REPUTATION_CRITICAL_PATH_THRESHOLD;
+            base_threshold + (max_threshold - base_threshold) * privacy_level
+        } else {
+            // Use static threshold
+            REPUTATION_THRESHOLD_STEM
+        };
+        
+        // Get peers that meet the reputation threshold
+        let reputable_peers: Vec<SocketAddr> = self.get_peers_by_reputation(Some(min_reputation))
+            .into_iter()
+            .map(|(addr, _)| addr)
+            .filter(|addr| available_peers.contains(addr))
+            .collect();
+        
+        // Ensure we have enough reputable peers
+        let mut selected_peers = if reputable_peers.len() >= MIN_ROUTING_PATH_LENGTH {
+            reputable_peers
+        } else {
+            // Fall back to all available peers if not enough reputable ones
+            available_peers.to_vec()
+        };
+        
+        // Randomly sample peers but prioritize reputable ones if we have too many
+        if selected_peers.len() > MAX_ROUTING_PATH_LENGTH {
+            // Always include some high-reputation peers
+            let high_rep_peers: Vec<SocketAddr> = self.get_peers_by_reputation(Some(REPUTATION_CRITICAL_PATH_THRESHOLD))
+                .into_iter()
+                .map(|(addr, _)| addr)
+                .filter(|addr| available_peers.contains(addr))
+                .take(2) // Always include up to 2 high-reputation peers
+                .collect();
+            
+            // Fill the rest with random selection from remaining peers
+            let mut remaining: Vec<SocketAddr> = selected_peers
+                .into_iter()
+                .filter(|p| !high_rep_peers.contains(p))
+                .collect();
+            
+            remaining.shuffle(&mut self.secure_rng);
+            
+            // Combine high-rep peers with random selection
+            let mut path = high_rep_peers;
+            path.extend(remaining.into_iter().take(MAX_ROUTING_PATH_LENGTH - path.len()));
+            
+            selected_peers = path;
+        }
+        
+        // Use entropy-based path selection as the base to get weights
+        // but prioritize reputation more heavily in the weights
+        let mut weights = self.generate_path_selection_weights(tx_hash, &selected_peers);
+        
+        // Boost reputation factor in weights
+        for peer in &selected_peers {
+            if let Some(rep) = self.peer_reputation.get(peer) {
+                if let Some(weight) = weights.get_mut(peer) {
+                    // Apply a stronger reputation influence
+                    let reputation_boost = if rep.reputation_score > 0.0 {
+                        // Positive reputation gets stronger boost
+                        (rep.reputation_score / REPUTATION_SCORE_MAX) * REPUTATION_WEIGHT_FACTOR
+                    } else {
+                        // Negative reputation gets stronger penalty
+                        (rep.reputation_score / REPUTATION_SCORE_MIN) * REPUTATION_WEIGHT_FACTOR * 2.0
+                    };
+                    
+                    // Apply routing reliability influence
+                    let reliability_factor = rep.routing_reliability * 2.0; // Double impact of reliability
+                    
+                    // Combine into weight
+                    *weight *= (1.0 + reputation_boost) * reliability_factor;
+                }
+            }
+        }
+        
+        // Determine path length based on entropy and privacy level
+        let base_length = MIN_ROUTING_PATH_LENGTH + 
+            (((MAX_ROUTING_PATH_LENGTH - MIN_ROUTING_PATH_LENGTH) as f64 * privacy_level) as usize);
+        
+        let path_length = base_length.min(selected_peers.len()).max(MIN_ROUTING_PATH_LENGTH);
+        
+        // Select peers for path using weighted selection
+        let mut path = Vec::with_capacity(path_length);
+        let mut remaining_peers = selected_peers;
+        let mut used_subnets = HashSet::new();
+        
+        for _ in 0..path_length {
+            if remaining_peers.is_empty() {
+                break;
+            }
+            
+            // Calculate selection probabilities based on weights
+            let total_weight: f64 = remaining_peers.iter()
+                .filter_map(|p| weights.get(p).copied())
+                .sum();
+            
+            if total_weight <= 0.0 {
+                break;
+            }
+            
+            // Select a peer weighted by our calculated factors
+            let mut cumulative_prob = 0.0;
+            let selection_point = self.secure_rng.gen::<f64>() * total_weight;
+            
+            let mut selected_idx = 0;
+            for (i, peer) in remaining_peers.iter().enumerate() {
+                let weight = weights.get(peer).copied().unwrap_or(0.0);
+                cumulative_prob += weight;
+                
+                if cumulative_prob >= selection_point {
+                    selected_idx = i;
+                    break;
+                }
+            }
+            
+            // Add the selected peer to our path
+            let selected_peer = remaining_peers.remove(selected_idx);
+            path.push(selected_peer);
+            
+            // Track subnet for diversity
+            if let IpAddr::V4(ipv4) = selected_peer.ip() {
+                let octets = ipv4.octets();
+                used_subnets.insert([octets[0], octets[1]]);
+            }
+            
+            // Update last_used_for_stem
+            if let Some(rep) = self.peer_reputation.get_mut(&selected_peer) {
+                rep.last_used_for_stem = Some(Instant::now());
+                
+                // Record historical path relationship
+                if !path.is_empty() {
+                    let path_id = self.recent_paths.len();
+                    rep.historical_paths.push(path_id);
+                    
+                    // Keep history manageable
+                    if rep.historical_paths.len() > 50 {
+                        rep.historical_paths.remove(0);
+                    }
+                }
+            }
+        }
+        
+        // Verify that the path meets minimum reputation requirements
+        let reputable_count = path.iter()
+            .filter(|peer| {
+                if let Some(rep) = self.peer_reputation.get(peer) {
+                    rep.reputation_score >= min_reputation
+                } else {
+                    false
+                }
+            })
+            .count();
+        
+        let min_reputable = ((path.len() as f64) * REPUTATION_ENFORCED_RATIO).ceil() as usize;
+        
+        // If we don't have enough reputable peers, fall back to entropy-based path
+        if reputable_count < min_reputable {
+            return self.select_adaptive_path(tx_hash, available_peers);
+        }
+        
+        // For the path metrics
+        if !path.is_empty() {
+            self.recent_paths.push_back(path.clone());
+            
+            // Maintain limited history
+            while self.recent_paths.len() > 20 {
+                self.recent_paths.pop_front();
+            }
+        }
+        
+        path
+    }
+
+    // Modify generate_path_selection_weights to account for routing reliability
+    pub fn generate_path_selection_weights(&mut self, tx_hash: &[u8; 32], peers: &[SocketAddr]) -> HashMap<SocketAddr, f64> {
+        // Refresh entropy pool if needed
+        if Instant::now().duration_since(self.last_entropy_refresh) >= ENTROPY_SOURCE_REFRESH_INTERVAL {
+            self.refresh_entropy_pool();
+        }
+        
+        let mut weights = HashMap::new();
+        
+        // Create a seed that combines transaction hash with our entropy pool
+        let mut seed_material = Vec::with_capacity(tx_hash.len() + 32);
+        seed_material.extend_from_slice(tx_hash);
+        seed_material.extend_from_slice(&self.entropy_pool[0..32]);
+        
+        // Create a deterministic seed for this transaction
+        let mut seed = [0u8; 32];
+        for (i, chunk) in seed_material.chunks(32).enumerate() {
+            for (j, &byte) in chunk.iter().enumerate() {
+                if i * 32 + j < 32 {
+                    seed[i * 32 + j] ^= byte;
+                }
+            }
+        }
+        
+        // Create a deterministic RNG for this transaction
+        let mut rng = ChaCha20Rng::from_seed(seed);
+        
+        // Assign weights to peers
+        for &peer in peers {
+            // Generate a weight based on our entropy and the transaction
+            let base_weight = rng.gen_range(0.5..1.5);
+            
+            // Apply reputation-based adjustment
+            let reputation_factor = if let Some(rep) = self.peer_reputation.get(&peer) {
+                // Map reputation from [-100, 100] to [0.5, 1.5]
+                // With an enhanced weight influence
+                let reputation_normalized = (rep.reputation_score + 100.0) / 133.33 + 0.5;
+                
+                // Apply routing reliability as an enhancement factor
+                let reliability_boost = rep.routing_reliability * 0.5; // 0-0.5 boost
+                
+                // Combine reputation with routing reliability
+                reputation_normalized * (1.0 + reliability_boost)
+            } else {
+                1.0 // Neutral for unknown peers
+            };
+            
+            // Apply network conditions adjustment
+            let network_factor = if let Some(cond) = self.network_conditions.get(&peer) {
+                // Prefer peers with lower latency
+                let latency_ms = cond.avg_latency.as_millis() as f64;
+                // Inversely weight by latency, but keep within reasonable bounds
+                (1000.0 / (latency_ms + 100.0)).clamp(0.75, 1.25)
+            } else {
+                1.0 // Neutral for unknown network conditions
+            };
+            
+            // Apply subnet diversity adjustment
+            // Extract the subnet to determine diversity
+            let subnet = self.get_peer_subnet(&peer);
+            
+            // Count how many peers we've already selected from this subnet
+            let subnet_count = weights
+                .keys()
+                .filter(|p| self.get_peer_subnet(p) == subnet)
+                .count() as f64;
+            
+            // Penalize peers from subnets we've already selected from
+            let diversity_factor = if subnet_count > 0.0 {
+                // Apply diminishing probability as we select more from same subnet
+                1.0 / (1.0 + subnet_count * 0.5)
+            } else {
+                // Bonus for first peer from a subnet
+                1.2
+            };
+            
+            // Use frequency adjustment - avoid using the same peers too frequently
+            let frequency_factor = if let Some(rep) = self.peer_reputation.get(&peer) {
+                if let Some(last_used) = rep.last_used_for_stem {
+                    // Calculate how recently this peer was used
+                    let elapsed = Instant::now().duration_since(last_used).as_secs_f64();
+                    // Favor peers that haven't been used recently
+                    (elapsed / 60.0).min(5.0).max(1.0) / 5.0 + 0.8
+                } else {
+                    // Slightly favor peers that have never been used
+                    1.2
+                }
+            } else {
+                1.0 // Neutral
+            };
+            
+            // Combine all factors 
+            let weight = base_weight * 
+                reputation_factor * 
+                network_factor * 
+                diversity_factor * 
+                frequency_factor;
+            
+            weights.insert(peer, weight);
+        }
+        
+        weights
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
     #[test]
     fn test_stem_successor_selection() {
@@ -2129,5 +2954,297 @@ mod tests {
             assert_ne!(peer, successor);
             assert!(peers.contains(successor));
         }
+    }
+
+    #[test]
+    fn test_entropy_based_path_randomization() {
+        let mut manager = DandelionManager::new();
+        
+        // Create test peers from different subnets
+        let peers = vec![
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)), 8333),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 2)), 8334),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 2, 1)), 8335),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 3, 1)), 8336),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 1, 1)), 8337),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 2, 1)), 8338),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 16, 1, 1)), 8339),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 16, 2, 1)), 8340),
+        ];
+        
+        // Refresh entropy pool
+        manager.refresh_entropy_pool();
+        
+        // Create two different transaction hashes
+        let tx_hash1 = [1u8; 32];
+        let tx_hash2 = [2u8; 32];
+        
+        // Generate paths for the same transaction multiple times
+        let paths_tx1: Vec<Vec<SocketAddr>> = (0..5)
+            .map(|_| manager.select_adaptive_path(&tx_hash1, &peers))
+            .collect();
+            
+        // Generate paths for different transactions
+        let paths_tx2: Vec<Vec<SocketAddr>> = (0..5)
+            .map(|_| manager.select_adaptive_path(&tx_hash2, &peers))
+            .collect();
+        
+        // Test 1: Paths for the same transaction should be deterministic
+        for i in 1..paths_tx1.len() {
+            assert_eq!(
+                paths_tx1[0], 
+                paths_tx1[i], 
+                "Paths for the same transaction should be identical"
+            );
+        }
+        
+        // Test 2: Paths for different transactions should be different
+        assert_ne!(
+            paths_tx1[0], 
+            paths_tx2[0], 
+            "Paths for different transactions should be different"
+        );
+        
+        // Test 3: Verify subnet diversity in the path
+        let path = &paths_tx1[0];
+        let mut subnets = HashSet::new();
+        
+        for peer in path {
+            if let IpAddr::V4(ipv4) = peer.ip() {
+                let subnet = [ipv4.octets()[0], ipv4.octets()[1]];
+                subnets.insert(subnet);
+            }
+        }
+        
+        // A diverse path should use peers from different subnets when possible
+        assert!(
+            subnets.len() >= path.len().min(4) / 2, 
+            "Path should have some subnet diversity"
+        );
+        
+        // Test 4: Check if weights affect the path selection
+        // Add reputation to specific peers
+        for i in 0..3 {
+            manager.initialize_peer_reputation(peers[i]);
+            manager.update_peer_reputation(peers[i], 50.0, "Test");
+        }
+        
+        // Generate paths with the reputation information
+        let paths_with_reputation = manager.select_adaptive_path(&tx_hash1, &peers);
+        
+        // The reputation should make a difference
+        assert_ne!(
+            paths_tx1[0], 
+            paths_with_reputation, 
+            "Path should change when reputation is considered"
+        );
+        
+        // Test 5: Check if network conditions affect path selection
+        // Add network condition data
+        for i in 0..3 {
+            manager.update_network_condition(
+                peers[i], 
+                Duration::from_millis(50 + (i as u64 * 20))
+            );
+        }
+        
+        // Generate paths with the network condition information
+        let paths_with_network = manager.select_adaptive_path(&tx_hash1, &peers);
+        
+        // The network conditions should make a difference
+        assert_ne!(
+            paths_with_reputation, 
+            paths_with_network, 
+            "Path should change when network conditions are considered"
+        );
+    }
+
+    #[test]
+    fn test_entropy_refresh() {
+        let mut manager = DandelionManager::new();
+        
+        // Store the initial entropy
+        let initial_entropy = manager.entropy_pool.clone();
+        
+        // Force a refresh of the entropy pool
+        manager.last_entropy_refresh = Instant::now() - ENTROPY_SOURCE_REFRESH_INTERVAL - Duration::from_secs(1);
+        manager.refresh_entropy_pool();
+        
+        // The entropy pool should have changed
+        assert_ne!(
+            initial_entropy, 
+            manager.entropy_pool, 
+            "Entropy pool should change after refresh"
+        );
+        
+        // Additional test: Entropy-based transactions should yield different paths
+        let tx_hash1 = [1u8; 32];
+        let peers = vec![
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)), 8333),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 2, 1)), 8334),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 3, 1)), 8335),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 1, 1)), 8336),
+        ];
+        
+        // Get a path before refreshing entropy
+        let path_before = manager.select_adaptive_path(&tx_hash1, &peers);
+        
+        // Force another refresh of the entropy pool
+        manager.last_entropy_refresh = Instant::now() - ENTROPY_SOURCE_REFRESH_INTERVAL - Duration::from_secs(1);
+        manager.refresh_entropy_pool();
+        
+        // Get a path after refreshing entropy
+        let path_after = manager.select_adaptive_path(&tx_hash1, &peers);
+        
+        // The paths should now be different due to different entropy
+        assert_ne!(
+            path_before, 
+            path_after, 
+            "Paths should be different after entropy refresh"
+        );
+    }
+
+    #[test]
+    fn test_reputation_based_routing() {
+        let mut manager = DandelionManager::new();
+        
+        // Create test peers from different subnets
+        let peers = vec![
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)), 8333),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 2)), 8334),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 2, 1)), 8335),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 3, 1)), 8336),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 1, 1)), 8337),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 2, 1)), 8338),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 16, 1, 1)), 8339),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 16, 2, 1)), 8340),
+        ];
+        
+        // Initialize all peers with default reputation
+        for &peer in &peers {
+            manager.initialize_peer_reputation(peer);
+        }
+        
+        // Set different reputation scores and routing reliability metrics for each peer
+        // Establish a clear differentiation in reputation to test the selection
+        
+        // High reputation peers (should be preferred)
+        manager.update_peer_reputation(peers[0], 75.0, "Test high reputation");
+        manager.update_peer_routing_reliability(peers[0], true, Some(Duration::from_millis(50)));
+        manager.update_peer_routing_reliability(peers[0], true, Some(Duration::from_millis(55)));
+        
+        manager.update_peer_reputation(peers[1], 60.0, "Test medium-high reputation");
+        manager.update_peer_routing_reliability(peers[1], true, Some(Duration::from_millis(70)));
+        manager.update_peer_routing_reliability(peers[1], true, Some(Duration::from_millis(65)));
+        
+        // Medium reputation peers
+        manager.update_peer_reputation(peers[2], 40.0, "Test medium reputation");
+        manager.update_peer_routing_reliability(peers[2], true, Some(Duration::from_millis(100)));
+        manager.update_peer_routing_reliability(peers[2], false, Some(Duration::from_millis(120)));
+        
+        manager.update_peer_reputation(peers[3], 30.0, "Test medium-low reputation");
+        manager.update_peer_routing_reliability(peers[3], true, Some(Duration::from_millis(90)));
+        manager.update_peer_routing_reliability(peers[3], false, Some(Duration::from_millis(110)));
+        
+        // Low reputation peers (should be avoided)
+        manager.update_peer_reputation(peers[4], 10.0, "Test low reputation");
+        manager.update_peer_routing_reliability(peers[4], false, Some(Duration::from_millis(150)));
+        
+        manager.update_peer_reputation(peers[5], -20.0, "Test negative reputation");
+        manager.update_peer_routing_reliability(peers[5], false, Some(Duration::from_millis(200)));
+        
+        // Neutral peers
+        manager.update_peer_reputation(peers[6], 25.0, "Test threshold reputation");
+        manager.update_peer_routing_reliability(peers[6], true, Some(Duration::from_millis(120)));
+        
+        manager.update_peer_reputation(peers[7], 0.0, "Test neutral reputation");
+        
+        // Set as outbound peers to enable path creation
+        manager.outbound_peers = peers.clone();
+        
+        // Create transaction hash for testing
+        let tx_hash = [1u8; 32];
+        
+        // Test 1: High privacy level should strongly prefer high reputation peers
+        let high_privacy_path = manager.select_reputation_based_path(&tx_hash, &peers, 1.0);
+        
+        // In a high privacy path, the highest reputation peers should be included
+        assert!(
+            high_privacy_path.contains(&peers[0]) || high_privacy_path.contains(&peers[1]),
+            "High privacy path should include high reputation peers"
+        );
+        
+        // And low reputation peers should be excluded
+        assert!(
+            !high_privacy_path.contains(&peers[5]),
+            "High privacy path should not include negative reputation peers"
+        );
+        
+        // Test 2: Lower privacy level should be more inclusive
+        let low_privacy_path = manager.select_reputation_based_path(&tx_hash, &peers, 0.3);
+        
+        // Test 3: Check that routing reliability influences path selection
+        // First, let's capture the current path
+        let initial_path = manager.select_reputation_based_path(&tx_hash, &peers, 0.8);
+        
+        // Now modify a peer to have excellent routing reliability
+        manager.update_peer_routing_reliability(peers[3], true, Some(Duration::from_millis(40))); // Very fast
+        manager.update_peer_routing_reliability(peers[3], true, Some(Duration::from_millis(45)));
+        manager.update_peer_routing_reliability(peers[3], true, Some(Duration::from_millis(42)));
+        manager.update_peer_routing_reliability(peers[3], true, Some(Duration::from_millis(39)));
+        
+        // Generate a new path with the updated reliability
+        let reliability_path = manager.select_reputation_based_path(&tx_hash, &peers, 0.8);
+        
+        // The peer with improved reliability should now be included more often
+        // We can't guarantee it will be in the path due to randomness, but we can check 
+        // if the path has changed after updating reliability
+        assert_ne!(
+            initial_path, 
+            reliability_path,
+            "Path should change when peer reliability is significantly improved"
+        );
+        
+        // Test 4: Verify that negative reputation has a strong impact
+        // Make a peer have a very negative reputation
+        manager.update_peer_reputation(peers[5], -80.0, "Test very negative reputation");
+        
+        // Generate multiple paths and check that the negative peer is consistently excluded
+        let mut includes_negative_peer = false;
+        for _ in 0..5 {
+            let path = manager.select_reputation_based_path(&tx_hash, &peers, 0.5);
+            if path.contains(&peers[5]) {
+                includes_negative_peer = true;
+                break;
+            }
+        }
+        
+        assert!(
+            !includes_negative_peer,
+            "Peers with very negative reputation should be consistently excluded"
+        );
+        
+        // Test 5: Verify that the reputation-based weights are generated correctly
+        let weights = manager.generate_path_selection_weights(&tx_hash, &peers);
+        
+        // High reputation peer should have higher weight than low reputation peer
+        assert!(
+            weights.get(&peers[0]).unwrap_or(&0.0) > weights.get(&peers[5]).unwrap_or(&0.0),
+            "High reputation peers should have higher weights than low reputation peers"
+        );
+        
+        // Test 6: Check that the path enforces minimum reputation requirements
+        // Create a test set with mostly low-reputation peers
+        let low_rep_peers = vec![
+            peers[4], // Low reputation
+            peers[5], // Negative reputation
+            peers[7], // Neutral reputation
+        ];
+        
+        // This should fall back to entropy-based path since not enough peers meet the threshold
+        let fallback_path = manager.select_reputation_based_path(&tx_hash, &low_rep_peers, 0.9);
+        
+        // The path should still be valid (have entries)
+        assert!(!fallback_path.is_empty(), "Should create a valid path even with low-reputation peers");
     }
 }

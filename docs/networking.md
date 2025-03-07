@@ -28,9 +28,15 @@ Obscura's networking layer is designed for privacy and efficiency, implementing 
 
 ### Dandelion++ Implementation
 - Stem phase routing
-- Fluff phase broadcasting
-- Embargo timer
-- Transaction aggregation
+- Fluff phase propagation
+- Entropy-based path randomization
+- Node reputation-based routing
+  - Dynamic peer reliability tracking
+  - Adaptive reputation thresholds
+  - Performance-based path selection
+  - Privacy level-based routing decisions
+- Privacy mode specialization
+- Network analysis resistance measures
 
 ### Connection Management
 - Peer discovery

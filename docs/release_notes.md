@@ -1,5 +1,100 @@
 # Release Notes
 
+## [0.7.5] - 2025-03-06
+
+### Enhanced Dandelion Protocol with Entropy-Based Path Randomization and Reputation-Based Routing
+
+This release significantly improves the Dandelion Protocol implementation with the introduction of entropy-based path randomization and comprehensive node reputation-based routing for transactions. These enhancements strengthen the privacy guarantees of Obscura blockchain by making transaction propagation more resistant to network analysis while maintaining deterministic behavior for reliable operation.
+
+#### Adaptive Path Selection with Entropy-Based Randomization
+
+- **Advanced Entropy Management System**
+  - Implemented a 64-byte entropy pool with secure refresh mechanisms
+  - Created diverse entropy sources to ensure high-quality randomization:
+    - System entropy from cryptographically secure RNG
+    - Timing-based entropy from system clock
+    - Transaction history-based entropy
+    - Network condition-based entropy
+  - Added cryptographic mixing using ChaCha20 permutation
+  - Implemented periodic 5-minute entropy refresh intervals
+  - Created secure, deterministic derivation for transaction-specific paths
+
+- **Intelligent Path Selection Algorithm**
+  - Implemented multi-factor path selection with weighted probabilities:
+    - Reputation-based weighting for trusted peer preference
+    - Network latency-based weighting for performance optimization
+    - Subnet diversity weighting to prevent correlation attacks
+    - Transaction-specific randomization for path unpredictability
+  - Created deterministic but unpredictable transaction routing:
+    - Transaction-hash based path generation
+    - Entropy-mixed path selection
+    - Consistent routing for the same transaction
+    - Divergent paths for different transactions
+  - Added network condition awareness:
+    - Adaptive path length based on network traffic
+    - Shorter paths during high congestion
+    - Longer paths during low network utilization
+
+- **Enhanced Privacy Through Path Diversity**
+  - Implemented subnet diversity preference in path selection:
+    - Tracking of subnet distribution during path creation
+    - Penalty for peers from already-represented subnets
+    - Bonus for peers from new subnets
+  - Created comprehensive path characteristics tracking:
+    - Historical path recording for diversity analysis
+    - Path length adaptation based on network conditions
+    - Subnet distribution monitoring
+  - Added robust unit testing for verification:
+    - Path determinism testing
+    - Transaction-specific path verification
+    - Subnet diversity validation
+    - Reputation and network condition influence testing
+
+#### Advanced Node Reputation-Based Routing
+
+- **Enhanced Peer Reputation System**
+  - Implemented comprehensive routing reliability metrics:
+    - Transaction relay success rate tracking
+    - Average relay time measurement
+    - Reputation stability assessment
+    - Historical path participation analysis
+  - Created advanced reputation scoring with multiple factors:
+    - Base reputation score (-100 to 100)
+    - Routing reliability score (0.0-1.0)
+    - Subnet diversity consideration
+    - Network performance metrics
+  - Added reputation rewards for consistent performance:
+    - Automatic bonus for highly reliable peers
+    - Reliability assessment with configurable thresholds
+    - Penalty mitigation for occasional failures
+    - Long-term performance evaluation
+
+- **Privacy-Focused Routing Decisions**
+  - Implemented reputation-based path selection algorithm:
+    - Adaptive thresholds based on privacy requirements
+    - Minimum ratio enforcement for reputable peers
+    - Dynamic path length based on privacy level
+    - Fallback mechanisms for limited peer scenarios
+  - Created routing mode specialization:
+    - Standard routing for common transactions
+    - High-reputation paths for privacy-critical operations
+    - Specialized routing for Tor/Mixnet/Layered encryption
+    - Reputation enforcement across all privacy modes
+
+- **Transaction Routing Enhancements**
+  - Improved transaction propagation modes:
+    - Reputation-based multi-hop stem routing
+    - High-reputation multi-path routing
+    - Privacy level-based path selection
+    - Dynamic routing decision based on transaction context
+  - Added frequency-based routing adjustments:
+    - Peer rotation to prevent predictable usage patterns
+    - Time-based penalties for recent use
+    - Adaptive selection based on historical performance
+    - Enhanced subnet diversity requirements
+
+This implementation completes critical components of the Dandelion Protocol enhancement roadmap, significantly improving Obscura's transaction privacy without compromising performance or reliability. The combination of entropy-based path randomization and reputation-based routing creates transaction propagation routes that are both secure and resilient against network analysis, making deanonymization attacks substantially more difficult.
+
 ## [0.7.4] - 2025-03-06
 
 ### Comprehensive View Key System Implementation

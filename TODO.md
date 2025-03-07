@@ -246,7 +246,7 @@
       - [x] Design shared secret derivation protocol
       - [x] Implement key blinding techniques
       - [x] Add forward secrecy mechanisms
-    - [ ] Implement BLS12-381 specific functions
+    - [x] Implement BLS12-381 specific functions
       - [x] Create optimized BLS12-381 curve operations
       - [x] Implement Jubjub curve for efficient in-circuit operations
       - [x] Develop cross-curve operations for atomic swaps
@@ -282,8 +282,8 @@
   - [x] Create view key management system
 - [ ] Enhance Dandelion Protocol Implementation
   - [ ] Implement adaptive path selection algorithm
-    - [ ] Create entropy-based path randomization
-    - [ ] Implement node reputation-based routing
+    - [x] Create entropy-based path randomization
+    - [x] Implement node reputation-based routing
     - [ ] Add path length variation based on network conditions
     - [ ] Create route diversity enforcement
     - [ ] Implement anti-fingerprinting measures for path selection
