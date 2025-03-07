@@ -120,7 +120,124 @@ Struct for tracking peer behavior and reputation:
 - Uses data to ensure no single node becomes a predictable intermediary
 - Intelligent path rotation based on effectiveness metrics
 
-### 2. Advanced Adversarial Resistance
+### 2. Route Diversity Enforcement
+
+The implementation ensures path diversity across multiple dimensions to prevent route correlation and enhance transaction privacy:
+
+#### Diversity Metrics
+- **Autonomous System Diversity**
+  - Enforces minimum number of distinct autonomous systems in path (MIN_AS_DIVERSITY)
+  - Prevents routing through single network provider
+  - Reduces risk of AS-level traffic analysis
+  - Tracks AS-level path diversity over time
+
+- **Geographic Diversity**
+  - Ensures paths traverse multiple countries (MIN_COUNTRY_DIVERSITY)
+  - Prevents geographic correlation of transactions
+  - Enhances resistance to jurisdiction-based analysis
+  - Maintains country-level diversity metrics
+
+- **Subnet Diversity**
+  - Enforces minimum ratio of unique subnets in path (MIN_SUBNET_DIVERSITY_RATIO)
+  - Prevents path concentration in specific network segments
+  - Enhances resistance to network-level analysis
+  - Tracks subnet diversity distribution
+
+#### Diversity Scoring System
+- **Multi-Factor Diversity Score**
+  - AS diversity (40% weight)
+  - Geographic diversity (30% weight)
+  - Subnet diversity (30% weight)
+  - Minimum threshold for path acceptance (DIVERSITY_SCORE_THRESHOLD)
+
+- **Path Selection Algorithm**
+  - Attempts multiple candidate paths (up to MAX_ATTEMPTS)
+  - Selects path with highest diversity score above threshold
+  - Falls back to reputation-based path if diversity requirements not met
+  - Implements early exit for highly diverse paths (score > 0.9)
+
+#### Anti-Pattern Protection
+- **Path Reuse Prevention**
+  - Tracks recent paths in fixed-size cache (ROUTE_DIVERSITY_CACHE_SIZE)
+  - Penalizes frequent reuse of similar paths (ROUTE_REUSE_PENALTY)
+  - Uses XXHash for efficient path similarity detection
+  - Maintains temporal diversity of routing decisions
+
+- **Adaptive Privacy Levels**
+  - Adjusts privacy requirements based on network conditions
+  - Reduces requirements under high load (-0.1 adjustment)
+  - Increases requirements during quiet periods (+0.1 adjustment)
+  - Maintains balance between privacy and performance
+
+#### Integration with Other Privacy Features
+- Works in conjunction with reputation-based routing
+- Respects minimum anonymity set requirements
+- Maintains compatibility with all privacy routing modes
+- Enhances effectiveness of Tor/Mixnet integration
+
+#### Configuration Parameters
+```rust
+// Route diversity configuration
+pub const MIN_AS_DIVERSITY: usize = 2;
+pub const MIN_COUNTRY_DIVERSITY: usize = 2;
+pub const MIN_SUBNET_DIVERSITY_RATIO: f64 = 0.6;
+pub const ROUTE_DIVERSITY_CACHE_SIZE: usize = 1000;
+pub const ROUTE_REUSE_PENALTY: f64 = 0.3;
+pub const DIVERSITY_SCORE_THRESHOLD: f64 = 0.7;
+```
+
+### 3. Advanced Anti-Fingerprinting Measures
+
+The implementation includes sophisticated anti-fingerprinting measures to prevent transaction path analysis and pattern detection:
+
+#### Path Pattern Analysis
+- **Multi-dimensional Pattern Tracking**
+  - Path length characteristics monitoring
+  - Subnet distribution pattern analysis
+  - Timing characteristics observation
+  - Pattern similarity scoring with weighted components:
+    - Length similarity (20% weight)
+    - Subnet distribution (50% weight)
+    - Timing characteristics (30% weight)
+
+#### Pattern Detection and Prevention
+- **Pattern Frequency Monitoring**
+  - Fixed-size pattern cache (PATH_PATTERN_CACHE_SIZE)
+  - Maximum pattern frequency limitation (10%)
+  - Sliding window analysis (1-hour window)
+  - Pattern cleanup mechanism for stale entries
+
+- **Advanced Pattern Detection**
+  - XXHash-based pattern hashing for efficient comparison
+  - Configurable similarity thresholds
+  - Adaptive pattern detection based on network conditions
+  - Comprehensive pattern cleanup mechanism
+
+#### Timing Obfuscation
+- **Randomized Timing**
+  - Random timing jitter (±50ms) for path selection
+  - Timing characteristics analysis in pattern matching
+  - Temporal diversity enforcement
+  - Operation timing randomization
+
+#### Integration Features
+- **Seamless Operation**
+  - Works in conjunction with route diversity enforcement
+  - Compatible with all privacy routing modes
+  - Enhanced effectiveness of existing privacy features
+  - Minimal performance impact through efficient caching
+
+#### Configuration Parameters
+```rust
+// Anti-fingerprinting configuration
+pub const PATH_PATTERN_CACHE_SIZE: usize = 100;
+pub const PATTERN_SIMILARITY_THRESHOLD: f64 = 0.7;
+pub const TIMING_JITTER_RANGE_MS: u64 = 100;
+pub const PATTERN_HISTORY_WINDOW: Duration = Duration::from_secs(3600);
+pub const MAX_PATTERN_FREQUENCY: f64 = 0.1;
+```
+
+### 4. Advanced Adversarial Resistance
 
 #### Anti-Snooping Heuristics
 - Tracks transaction request patterns to detect graph analysis attempts
@@ -139,7 +256,7 @@ Struct for tracking peer behavior and reputation:
 - Makes pattern recognition more difficult for observers
 - Configurable via `STEGANOGRAPHIC_HIDING_ENABLED` parameter
 
-### 3. Traffic Analysis Protection
+### 5. Traffic Analysis Protection
 
 #### Transaction Batching
 - Groups multiple transactions before fluff phase
@@ -158,7 +275,7 @@ Struct for tracking peer behavior and reputation:
 - Breaks chain analysis by making transactions look different at each hop
 - Prevents correlation between received and sent transactions
 
-### 4. Sybil & Eclipse Attack Detection
+### 6. Sybil & Eclipse Attack Detection
 
 #### Automated Sybil Attack Detection
 - Identifies clusters of peers from similar IP subnets
@@ -178,7 +295,7 @@ Struct for tracking peer behavior and reputation:
 - Maintains diversity requirements during failover
 - Tracks failure patterns for future routing decisions
 
-### 5. Integration with Privacy Networks
+### 7. Integration with Privacy Networks
 
 #### Tor Integration
 - Optional routing through Tor network for ultimate privacy
@@ -199,7 +316,7 @@ Struct for tracking peer behavior and reputation:
 - Uses cryptographically secure key generation
 - Controlled via `LAYERED_ENCRYPTION_ENABLED` parameter
 
-### 6. Cryptographic & Protocol Hardening
+### 8. Cryptographic & Protocol Hardening
 
 #### Cryptographic-Grade Randomness
 - Uses ChaCha20Rng for security-critical operations
@@ -211,6 +328,151 @@ Struct for tracking peer behavior and reputation:
 - Currently disabled by default (`POST_QUANTUM_ENCRYPTION_ENABLED`)
 - Reserved for future implementation when standards mature
 
+## Dandelion++ Enhancements
+
+The Dandelion protocol has been enhanced with Dandelion++ features to provide stronger privacy guarantees:
+
+### Transaction Aggregation
+- Configurable transaction aggregation (up to 10 transactions)
+- Dynamic timeout mechanism (2 seconds default)
+- Privacy-preserving batch formation
+- Secure aggregation state management
+- Efficient batch processing system
+
+```rust
+pub const TRANSACTION_AGGREGATION_ENABLED: bool = true;
+pub const MAX_AGGREGATION_SIZE: usize = 10;
+pub const AGGREGATION_TIMEOUT_MS: u64 = 2000;
+```
+
+### Stem Transaction Batching
+- Dynamic stem phase batching (2-5 second batches)
+- Configurable batch size limits (5 transactions default)
+- Randomized batch release timing
+- Batch privacy mode support
+- Secure batch state tracking
+
+```rust
+pub const STEM_BATCH_SIZE: usize = 5;
+pub const STEM_BATCH_TIMEOUT_MS: u64 = 3000;
+```
+
+### Stem/Fluff Transition Randomization
+- Randomized transition timing (1-5 second window)
+- Network condition-based adjustments
+- Secure transition state management
+- Transition entropy sources
+- Transition timing obfuscation
+
+```rust
+pub const STEM_FLUFF_TRANSITION_MIN_DELAY_MS: u64 = 1000;
+pub const STEM_FLUFF_TRANSITION_MAX_DELAY_MS: u64 = 5000;
+```
+
+### Multiple Fluff Phase Entry Points
+- Support for 2-4 entry points per transaction
+- Reputation-based entry point selection
+- Subnet diversity requirements
+- Entry point rotation mechanism
+- Secure entry point management
+
+```rust
+pub const FLUFF_ENTRY_POINTS_MIN: usize = 2;
+pub const FLUFF_ENTRY_POINTS_MAX: usize = 4;
+```
+
+### Routing Table Inference Resistance
+- Entropy-based routing table refresh (30 second intervals)
+- Routing entropy calculation
+- Subnet diversity tracking
+- Historical path analysis
+- Routing pattern detection
+
+```rust
+pub const ROUTING_TABLE_INFERENCE_RESISTANCE_ENABLED: bool = true;
+pub const ROUTING_TABLE_REFRESH_INTERVAL_MS: u64 = 30000;
+```
+
+### Implementation Details
+
+The Dandelion++ enhancements are implemented through several key structures:
+
+#### AggregatedTransactions
+```rust
+pub struct AggregatedTransactions {
+    pub aggregation_id: u64,
+    pub transactions: Vec<[u8; 32]>,
+    pub creation_time: Instant,
+    pub total_size: usize,
+    pub privacy_mode: PrivacyRoutingMode,
+}
+```
+
+#### StemBatch
+```rust
+pub struct StemBatch {
+    pub batch_id: u64,
+    pub transactions: Vec<[u8; 32]>,
+    pub creation_time: Instant,
+    pub transition_time: Instant,
+    pub entry_points: Vec<SocketAddr>,
+    pub privacy_mode: PrivacyRoutingMode,
+}
+```
+
+### Usage Example
+
+```rust
+// Create a transaction with Dandelion++ privacy features
+let tx_hash = [1u8; 32];
+
+// Add transaction with aggregation
+if let Some(aggregation_id) = dandelion_manager.aggregate_transactions(tx_hash) {
+    println!("Transaction added to aggregation {}", aggregation_id);
+}
+
+// Or add to stem batch
+if let Some(batch_id) = dandelion_manager.create_stem_batch(tx_hash) {
+    println!("Transaction added to stem batch {}", batch_id);
+}
+
+// Process batches ready for fluff phase
+let ready_txs = dandelion_manager.process_stem_batches();
+for (tx_hash, entry_points) in ready_txs {
+    println!("Transaction {} ready for fluff phase with {} entry points", 
+             hex::encode(tx_hash), entry_points.len());
+}
+
+// Refresh routing table for inference resistance
+dandelion_manager.refresh_routing_table();
+```
+
+### Security Considerations
+
+The Dandelion++ enhancements provide several additional security properties:
+
+1. **Transaction Unlinkability**: Through transaction aggregation and batching, it becomes harder to link transactions to their origins.
+
+2. **Timing Attack Resistance**: Randomized stem/fluff transitions and multiple entry points make timing analysis more difficult.
+
+3. **Graph Analysis Resistance**: Routing table inference resistance prevents attackers from learning the network topology.
+
+4. **Sybil Attack Resistance**: Reputation-based entry point selection helps resist Sybil attacks.
+
+5. **Eclipse Attack Resistance**: Multiple entry points and subnet diversity requirements protect against eclipse attacks.
+
+### Performance Considerations
+
+The Dandelion++ features introduce some additional latency and resource usage:
+
+1. **Transaction Aggregation**: Adds up to 2 seconds delay for aggregation
+2. **Stem Batching**: Adds 2-5 seconds delay for batch formation
+3. **Transition Randomization**: Adds 1-5 seconds random delay
+4. **Memory Usage**: Requires additional memory for batch and aggregation tracking
+5. **CPU Usage**: Additional cryptographic operations for routing table entropy
+
+These overheads are configurable through the various parameters and can be tuned based on network conditions and privacy requirements.
+
 ## Implementation Details
 
 ### Transaction Processing Flow
@@ -219,6 +481,11 @@ Struct for tracking peer behavior and reputation:
    - Its privacy routing mode is determined (Standard, Tor, Mixnet, Layered)
    - It's added to the mempool
    - The node decides whether to route it in stem phase or fluff phase
+   - Path length is determined based on network conditions:
+     - Current network latency and congestion
+     - Available high-reputation peers
+     - Historical network performance
+     - Anti-fingerprinting variations
    - For stem phase, it chooses between standard, multi-hop, multi-path, or batched routing
    - For privacy networks, it uses the appropriate specialized routing
 

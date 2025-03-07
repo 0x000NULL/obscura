@@ -14,6 +14,12 @@ Obscura implements a comprehensive set of privacy features at the network, trans
 - [DNS-over-HTTPS for Seed Discovery](../networking/dns_over_https.md): Prevents DNS leakage and monitoring
 - [Traffic Pattern Obfuscation](../networking/traffic_pattern_obfuscation.md): Prevents analysis based on traffic patterns
 - [Dandelion Protocol](dandelion_protocol.md): Privacy-preserving transaction propagation
+  - Transaction aggregation (up to 10 transactions)
+  - Stem transaction batching (2-5 second batches)
+  - Randomized stem/fluff transition (1-5 second window)
+  - Multiple fluff phase entry points (2-4 points)
+  - Routing table inference resistance
+  - Entropy-based routing table refresh
 
 ## Transaction Privacy
 

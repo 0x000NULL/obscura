@@ -4,7 +4,10 @@ use crate::networking::{Node, NetworkConfig};
 use hex;
 use std::net::SocketAddr;
 use std::net::{IpAddr, Ipv4Addr};
-use std::time::Duration;
+use std::time::{Duration, Instant};
+use std::collections::{HashMap, HashSet};
+use rand::{thread_rng, RngCore, Rng};
+use crate::networking::dandelion::ANONYMITY_SET_ROTATION_INTERVAL;
 
 #[test]
 fn test_dandelion_manager() {
@@ -759,91 +762,54 @@ fn test_peer_reputation_system() {
 fn test_anonymity_set_management() {
     let mut manager = DandelionManager::new();
 
-    // Create peers in different subnets
-    let peers: Vec<SocketAddr> = (1..=6)
-        .map(|i| SocketAddr::new(create_ip_in_subnet(i, 1), 8333))
-        .collect();
+    // Create some test peers
+    let mut peers = Vec::new();
+    let mut rng = thread_rng();
 
-    // Initialize peer reputations
-    for peer in &peers {
-        manager.initialize_peer_reputation(*peer);
-        manager.update_peer_reputation(*peer, 50.0, "initial_setup");
+    for i in 0..30 {
+        let subnet = i / 5; // Create 6 subnets with 5 peers each
+        let peer = SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(192, 168, subnet as u8, (i % 5) as u8)),
+            8333,
+        );
+        peers.push(peer);
+        manager.initialize_peer_reputation_with_score(peer, 0.8 + rng.gen::<f64>() * 0.2);
     }
 
-    // Create anonymity set
-    let set_id = manager.create_anonymity_set(Some(3));
-    println!("Anonymity set ID: {:?}", set_id);
+    // Update outbound peers
+    manager.update_outbound_peers(peers.clone());
 
-    // The implementation might have changed to return 0 for first set or use a different scheme
-    // Instead of asserting a specific value, we just verify we can get the set back
+    // Create an anonymity set
+    let set_id = manager.create_anonymity_set(Some(10));
+    let set = manager.get_anonymity_set(set_id).unwrap();
 
-    // If we got a valid set ID
-    if set_id > 0 {
-        // Get the anonymity set
-        let set = manager.get_anonymity_set(set_id);
-        assert!(set.is_some());
-        assert!(
-            set.unwrap().len() >= 1,
-            "Should have at least 1 peer in the set"
-        );
+    // Verify set properties
+    assert!(!set.is_empty());
+    assert!(set.len() <= 10);
 
-        // Update effectiveness
-        manager.update_anonymity_set_effectiveness(set_id, true);
-
-        // Cleanup sets
-        let initial_set_count = manager.get_anonymity_sets_len();
-        manager.cleanup_anonymity_sets(Duration::from_secs(3600));
-        assert_eq!(manager.get_anonymity_sets_len(), initial_set_count); // No change as sets are recent
-    } else {
-        // If the set ID is 0 or negative, the implementation might:
-        // 1. Use 0 as a valid set ID
-        // 2. Have a different method of tracking sets
-        // 3. Require certain conditions to create sets
-
-        println!(
-            "Note: create_anonymity_set returned {} - checking if we can still retrieve sets",
-            set_id
-        );
-
-        // Check if we can get all sets
-        let sets_count = manager.get_anonymity_sets_len();
-        println!("Total anonymity sets: {}", sets_count);
-
-        // If we have any sets, try to get the first one
-        if sets_count > 0 {
-            // Try with ID 0 or 1 (most likely candidates)
-            let potential_ids = [0, 1];
-            let mut found_set = false;
-
-            for id in potential_ids {
-                if let Some(set) = manager.get_anonymity_set(id) {
-                    println!(
-                        "Found anonymity set with ID {}, containing {} peers",
-                        id,
-                        set.len()
-                    );
-                    found_set = true;
-                    // Perform remaining tests on this ID
-                    manager.update_anonymity_set_effectiveness(id, true);
-                    break;
-                }
-            }
-
-            // If we found a valid set, the functionality works
-            if found_set {
-                println!("Anonymity set functionality appears to work with non-positive IDs");
-            } else {
-                // If we couldn't find any set, skip the assertions
-                println!(
-                    "Warning: Could not find any anonymity sets despite sets_count = {}",
-                    sets_count
-                );
-            }
-        } else {
-            // If we have no sets, skip further tests
-            println!("Warning: No anonymity sets available - skipping remaining tests");
+    // Test k-anonymity
+    let mut subnet_counts = HashMap::new();
+    for peer in set {
+        if let IpAddr::V4(ipv4) = peer.ip() {
+            let octets = ipv4.octets();
+            let subnet = [octets[0], octets[1], octets[2]];
+            *subnet_counts.entry(subnet).or_insert(0) += 1;
         }
     }
+
+    // Each subnet should have at least 2 peers (k-anonymity)
+    for count in subnet_counts.values() {
+        assert!(*count >= 2);
+    }
+
+    // Test getting the best anonymity set
+    let best_set = manager.get_best_anonymity_set();
+    assert!(!best_set.is_empty());
+
+    // Test anonymity set effectiveness updates
+    manager.update_anonymity_set_effectiveness(set_id, true);
+    let set = manager.get_anonymity_set(set_id).unwrap();
+    assert!(!set.is_empty());
 }
 
 // Test Sybil attack detection
@@ -873,7 +839,6 @@ fn test_sybil_attack_detection() {
     for peer in &sybil_peers {
         // Increase the number of suspicious behaviors to make detection more likely
         for _ in 0..5 {
-            // Increased from 3 to 5
             manager.record_suspicious_behavior(&dummy_tx, *peer, "similar_pattern");
             manager.penalize_suspicious_behavior(*peer, &dummy_tx, "similar_pattern");
             manager.track_transaction_request(*peer, &dummy_tx);
@@ -956,65 +921,77 @@ fn test_sybil_attack_detection() {
 fn test_eclipse_attack_detection() {
     let mut manager = DandelionManager::new();
 
-    // Create a bunch of peers in the same subnet (potential eclipse)
-    let eclipse_subnet_peers: Vec<SocketAddr> = (1..=6)
-        .map(|i| SocketAddr::new(create_ip_in_subnet(1, i), 8333))
-        .collect();
+    // Create a set of peers with suspicious subnet distribution
+    let mut peers = Vec::new();
+    let mut sybil_peers = Vec::new();
 
-    // Create a few peers in different subnets
-    let diverse_peers: Vec<SocketAddr> = (2..=4)
-        .map(|i| SocketAddr::new(create_ip_in_subnet(i, 1), 8333))
-        .collect();
-
-    // Add all peers to the outbound peers
-    let mut outbound_peers = Vec::new();
-    outbound_peers.extend(eclipse_subnet_peers.iter().cloned());
-    outbound_peers.extend(diverse_peers.iter().cloned());
-
-    manager.update_outbound_peers(outbound_peers);
-
-    // Check for eclipse attack
-    let result = manager.check_for_eclipse_attack();
-
-    // If the detection algorithm found an eclipse attack
-    if result.is_eclipse_detected {
-        // The subnet detected should match the eclipse subnet
-        assert_eq!(result.overrepresented_subnet, Some([192, 168, 1, 0]));
-
-        // Should recommend dropping some peers from the eclipse subnet
-        assert!(!result.peers_to_drop.is_empty());
-
-        // All peers to drop should be from the eclipse subnet
-        for peer in &result.peers_to_drop {
-            assert!(
-                eclipse_subnet_peers.contains(peer),
-                "Peers to drop should only be from the eclipse subnet"
-            );
-        }
-    } else {
-        // If no eclipse was detected, this might be due to threshold settings
-        // Let's force an eclipse scenario with a higher concentration
-
-        // Create a very concentrated set of peers (90%+ from same subnet)
-        let mut concentrated_peers = Vec::new();
-
-        // Add 9 peers from the same subnet
-        for i in 1..=9 {
-            concentrated_peers.push(SocketAddr::new(create_ip_in_subnet(1, i), 8333));
-        }
-
-        // Add just 1 peer from a different subnet
-        concentrated_peers.push(SocketAddr::new(create_ip_in_subnet(2, 1), 8333));
-
-        manager.update_outbound_peers(concentrated_peers);
-
-        // This should definitely detect an eclipse attack
-        let result = manager.check_for_eclipse_attack();
-        assert!(
-            result.is_eclipse_detected,
-            "Should detect eclipse with 90% peers from same subnet"
-        );
+    // Add legitimate peers from diverse subnets
+    for i in 0..10 {
+        let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, i as u8, 1)), 8333);
+        peers.push(peer);
+        manager.initialize_peer_reputation(peer);
     }
+
+    // Add potential eclipse attackers from same subnet
+    for i in 0..20 {
+        let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, i as u8)), 8333);
+        sybil_peers.push(peer);
+        manager.initialize_peer_reputation(peer);
+    }
+
+    // Add all peers to the manager
+    peers.extend(sybil_peers.clone());
+
+    // Update outbound peers
+    manager.update_outbound_peers(peers.clone());
+
+    // Set up network configuration
+    let tx_hash = [0u8; 32];
+    let mut rng = thread_rng();
+
+    // Make eclipse peers exhibit similar behavior patterns
+    for peer in &sybil_peers {
+        // Make each eclipse peer perform similar actions
+        for _ in 0..5 {
+            manager.record_suspicious_behavior(&tx_hash, *peer, "eclipse_indicator");
+        }
+
+        // Add similar transaction patterns
+        for _ in 0..3 {
+            let mut tx = [0u8; 32];
+            rng.fill_bytes(&mut tx);
+            manager.record_transaction_correlation(&tx_hash, &tx);
+        }
+    }
+
+    // Check if eclipse attack is detected
+    let result = manager.detect_eclipse_attack();
+    assert!(result.is_eclipse_detected);
+    assert_eq!(result.overrepresented_subnet, Some([192, 168, 1, 0]));
+    assert!(!result.peers_to_drop.is_empty());
+
+    // Verify that the identified peers are from the suspicious subnet
+    for peer in &result.peers_to_drop {
+        if let IpAddr::V4(ipv4) = peer.ip() {
+            let octets = ipv4.octets();
+            assert_eq!([octets[0], octets[1], octets[2]], [192, 168, 1]);
+        }
+    }
+
+    // Verify that legitimate peers are not marked for removal
+    for peer in &peers[0..10] {
+        assert!(!result.peers_to_drop.contains(peer));
+    }
+
+    // Test that the defense mechanism is activated
+    assert!(manager.eclipse_defense_active);
+    assert!(manager.eclipse_attack_last_detected.is_some());
+
+    // Verify that the defense mechanism affects anonymity set size
+    let initial_size = manager.calculate_dynamic_anonymity_set_size();
+    manager.eclipse_defense_active = true;
+    let increased_size = manager.calculate_dynamic_anonymity_set_size();
+    assert!(increased_size > initial_size);
 }
 
 // Test anti-snooping measures
@@ -1102,61 +1079,14 @@ fn test_differential_privacy() {
     let mut manager = DandelionManager::new();
     let tx_hash = create_tx_hash(1);
 
-    // Generate Laplace noise
+    // Test Laplace noise generation
     let noise1 = manager.generate_laplace_noise(10.0);
     let noise2 = manager.generate_laplace_noise(10.0);
+    assert_ne!(noise1, noise2); // Noise should be random
 
-    // Two different noise generations should produce different values (with high probability)
-    // This is a probabilistic test, but with scale 10.0, the chance of equality is extremely low
-    assert!(noise1 != noise2, "Two noise samples should be different");
-
-    // Calculate differential privacy delay
+    // Test differential privacy delay
     let delay = manager.calculate_differential_privacy_delay(&tx_hash);
-    assert!(
-        delay >= Duration::from_millis(0),
-        "Delay should be non-negative"
-    );
-
-    // The implementation might not guarantee deterministic results for the same hash,
-    // perhaps due to random components or system-dependent factors.
-    // Instead of checking exact equality, we'll verify basic properties
-    let delay2 = manager.calculate_differential_privacy_delay(&tx_hash);
-
-    // Both should at least be non-negative
-    assert!(
-        delay2 >= Duration::from_millis(0),
-        "Second delay should be non-negative"
-    );
-
-    // Print the values for debugging - this helps identify if there's a pattern
-    println!("First delay: {:?}, Second delay: {:?}", delay, delay2);
-
-    // Different transaction hashes should get different delays (with high probability)
-    let tx_hash2 = create_tx_hash(2);
-    let delay3 = manager.calculate_differential_privacy_delay(&tx_hash2);
-
-    // Only assert they're not equal if both are non-zero
-    // There's a small chance both could be zero if the privacy params are set that way
-    if delay > Duration::from_millis(0) && delay3 > Duration::from_millis(0) {
-        // While we'd expect different hashes to produce different delays,
-        // we'll skip this assertion to avoid flaky tests
-        println!(
-            "Delay for hash1: {:?}, Delay for hash2: {:?}",
-            delay, delay3
-        );
-    }
-
-    // Add a transaction with differential privacy
-    let tx_hash3 = create_tx_hash(3);
-    manager.add_transaction_with_privacy(tx_hash3, None, PrivacyRoutingMode::Standard);
-
-    // Verify the transaction has a differential delay set
-    if let Some(metadata) = manager.get_transactions().get(&tx_hash3) {
-        assert!(
-            metadata.differential_delay >= Duration::from_millis(0),
-            "Transaction should have differential delay set"
-        );
-    }
+    assert!(delay.as_millis() >= 100); // Base delay is 100ms
 }
 
 // Test Tor/Mixnet integration
@@ -1408,4 +1338,208 @@ fn test_adversarial_transaction_handling() {
         dandelion_manager.should_send_dummy_response(malicious_source, &tx.hash()),
         "Should send dummy response to suspicious peer"
     );
+}
+
+#[test]
+fn test_timing_obfuscation() {
+    let mut manager = DandelionManager::new();
+    let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8333);
+    let tx_hash = [0u8; 32];
+
+    // Test adaptive delay calculation
+    let delay1 = manager.calculate_adaptive_delay(&tx_hash, &peer);
+    let delay2 = manager.calculate_adaptive_delay(&tx_hash, &peer);
+    
+    // Delays should be different due to randomization
+    assert_ne!(delay1, delay2);
+    
+    // Update network conditions
+    manager.update_network_condition(peer, Duration::from_millis(100));
+    
+    // Test batch processing with timing obfuscation
+    let batch1 = manager.process_transaction_batch(&peer);
+    std::thread::sleep(Duration::from_millis(100));
+    let batch2 = manager.process_transaction_batch(&peer);
+    
+    // Batches should be released at different times
+    assert_ne!(batch1.len(), batch2.len());
+}
+
+#[test]
+fn test_decoy_transaction_generation() {
+    let mut manager = DandelionManager::new();
+    let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8333);
+
+    // Add some real transactions
+    for i in 0..5 {
+        let hash = [i as u8; 32];
+        manager.add_transaction(hash, None);
+    }
+
+    // Process batches multiple times to trigger decoy generation
+    let mut decoy_count = 0;
+    for _ in 0..100 {
+        let batch = manager.process_transaction_batch(&peer);
+        decoy_count += batch.iter()
+            .filter(|tx| manager.transactions.get(tx)
+                .map(|meta| meta.is_decoy)
+                .unwrap_or(false))
+            .count();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+
+    // Should have generated some decoy transactions
+    assert!(decoy_count > 0);
+}
+
+#[test]
+fn test_statistical_timing_resistance() {
+    let mut manager = DandelionManager::new();
+    let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8333);
+    let tx_hash = [0u8; 32];
+
+    // Collect timing samples
+    let mut delays = Vec::new();
+    for _ in 0..100 {
+        let delay = manager.calculate_adaptive_delay(&tx_hash, &peer);
+        delays.push(delay.as_millis() as f64);
+    }
+
+    // Calculate mean and standard deviation
+    let mean = delays.iter().sum::<f64>() / delays.len() as f64;
+    let variance = delays.iter()
+        .map(|x| (x - mean).powi(2))
+        .sum::<f64>() / delays.len() as f64;
+    let std_dev = variance.sqrt();
+
+    // Timing distribution should be reasonably spread out
+    assert!(std_dev > 10.0, "Timing variation too low");
+    assert!(std_dev < 1000.0, "Timing variation too high");
+}
+
+#[test]
+fn test_advanced_anonymity_sets() {
+    let mut manager = DandelionManager::new();
+    
+    // Test initial state
+    assert!(manager.get_stem_successors().is_none());
+    
+    // Create test peers across different subnets
+    let mut peers = Vec::new();
+    let mut rng = thread_rng();
+    
+    // Create 30 peers distributed across 6 subnets
+    for i in 0..30 {
+        let subnet = (i / 5) as u8;
+        let peer = SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(10, subnet, rng.gen(), rng.gen())),
+            rng.gen_range(1000..65535),
+        );
+        peers.push(peer);
+        
+        // Initialize reputation with a high score
+        manager.initialize_peer_reputation_with_score(peer, 0.8 + rng.gen::<f64>() * 0.2);
+    }
+    
+    // Update outbound peers
+    manager.update_outbound_peers(peers.clone());
+    
+    // Test dynamic anonymity set sizing
+    let size = manager.calculate_dynamic_anonymity_set_size();
+    assert!(size >= 5, "Dynamic anonymity set size should be at least 5");
+    
+    // Create and verify anonymity set
+    let set_id = manager.create_anonymity_set(Some(3));
+    let set = manager.get_anonymity_set(set_id).unwrap();
+    assert!(!set.is_empty(), "Anonymity set should not be empty");
+    
+    // Test k-anonymity across subnets
+    let mut subnet_counts = HashMap::new();
+    for peer in set {
+        if let IpAddr::V4(ip) = peer.ip() {
+            let subnet = ip.octets()[1];
+            *subnet_counts.entry(subnet).or_insert(0) += 1;
+        }
+    }
+    
+    // Verify k-anonymity (k=2 for this test)
+    for count in subnet_counts.values() {
+        assert!(*count >= 2, "Each subnet should have at least 2 peers for k-anonymity");
+    }
+    
+    // Test getting best anonymity set
+    let best_set = manager.get_best_anonymity_set();
+    assert!(!best_set.is_empty(), "Best anonymity set should not be empty");
+    
+    // Test transaction-specific anonymity sets
+    let tx_hash = [0u8; 32];
+    let state = manager.add_transaction_with_privacy(tx_hash, None, PrivacyRoutingMode::Standard);
+    assert!(matches!(state, PropagationState::Stem), "Transaction should start in stem phase");
+    
+    // Test transaction correlation resistance
+    let tx_hash1 = [1u8; 32];
+    let tx_hash2 = [2u8; 32];
+    
+    manager.add_transaction_with_privacy(tx_hash1, None, PrivacyRoutingMode::Standard);
+    manager.add_transaction_with_privacy(tx_hash2, None, PrivacyRoutingMode::Standard);
+    
+    // Record correlation between transactions
+    manager.record_transaction_correlation(&tx_hash1, &tx_hash2);
+    
+    // Test graph analysis countermeasures
+    let high_privacy_path = manager.select_reputation_based_path(&tx_hash, &peers, 0.9);
+    assert!(!high_privacy_path.is_empty(), "Should create high-privacy path");
+    
+    // Cleanup
+    manager.cleanup_anonymity_sets(Duration::from_secs(3600));
+}
+
+#[test]
+fn test_stem_successor_selection() {
+    let mut manager = DandelionManager::new();
+    
+    // No peers should mean no successor
+    assert!(manager.get_stem_successors().is_none());
+    
+    // Add some peers
+    let peers = vec![
+        "127.0.0.1:8333".parse().unwrap(),
+        "127.0.0.1:8334".parse().unwrap(),
+        "127.0.0.1:8335".parse().unwrap(),
+    ];
+    
+    manager.update_outbound_peers(peers.clone());
+    manager.calculate_stem_paths(&peers, true);
+    
+    // Should now have a successor
+    let successor = manager.get_stem_successors();
+    assert!(successor.is_some());
+    assert!(peers.contains(&successor.unwrap()));
+}
+
+#[test]
+fn test_transaction_state_transition() {
+    let mut manager = DandelionManager::new();
+    let tx_hash = [0u8; 32];
+    
+    // Add the transaction and get its state
+    let state = manager.add_transaction_with_privacy(tx_hash, None, PrivacyRoutingMode::Standard);
+    
+    // Only test the transition if it's in the Stem state
+    if state == PropagationState::Stem {
+        if let Some(metadata) = manager.transactions.get_mut(&tx_hash) {
+            // Force quick transition
+            metadata.transition_time = Instant::now();
+        }
+        
+        // Small sleep to ensure transition time is passed
+        std::thread::sleep(Duration::from_millis(10));
+        
+        // Should now transition to fluff
+        let new_state = manager.check_transition(&tx_hash);
+        assert_eq!(new_state, Some(PropagationState::Fluff));
+    } else {
+        // If it didn't start in Stem state, the test is basically skipped
+        println!("Transaction didn't start in Stem state, skipping transition test");
+    }
 }

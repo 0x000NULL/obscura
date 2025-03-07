@@ -1,99 +1,127 @@
 # Release Notes
 
-## [0.7.5] - 2025-03-06
+## [0.7.5] - 2025-03-07
 
-### Enhanced Dandelion Protocol with Entropy-Based Path Randomization and Reputation-Based Routing
+### Enhanced Dandelion Protocol with Advanced Privacy Features
 
-This release significantly improves the Dandelion Protocol implementation with the introduction of entropy-based path randomization and comprehensive node reputation-based routing for transactions. These enhancements strengthen the privacy guarantees of Obscura blockchain by making transaction propagation more resistant to network analysis while maintaining deterministic behavior for reliable operation.
+This release significantly improves the Dandelion Protocol implementation with comprehensive privacy enhancements, including the complete Dandelion++ feature set, advanced timing obfuscation, and entropy-based path randomization. These enhancements strengthen the privacy guarantees of Obscura blockchain by making transaction propagation more resistant to timing analysis and network surveillance while maintaining reliable operation.
 
-#### Adaptive Path Selection with Entropy-Based Randomization
+#### Dandelion++ Enhancements
 
-- **Advanced Entropy Management System**
-  - Implemented a 64-byte entropy pool with secure refresh mechanisms
-  - Created diverse entropy sources to ensure high-quality randomization:
-    - System entropy from cryptographically secure RNG
-    - Timing-based entropy from system clock
-    - Transaction history-based entropy
-    - Network condition-based entropy
-  - Added cryptographic mixing using ChaCha20 permutation
-  - Implemented periodic 5-minute entropy refresh intervals
-  - Created secure, deterministic derivation for transaction-specific paths
+- **Transaction Aggregation**
+  - Implemented configurable transaction aggregation (up to 10 transactions)
+  - Created dynamic timeout mechanism (2 seconds default)
+  - Added privacy-preserving batch formation
+  - Implemented secure aggregation state management
+  - Created efficient batch processing system
 
-- **Intelligent Path Selection Algorithm**
-  - Implemented multi-factor path selection with weighted probabilities:
-    - Reputation-based weighting for trusted peer preference
-    - Network latency-based weighting for performance optimization
-    - Subnet diversity weighting to prevent correlation attacks
-    - Transaction-specific randomization for path unpredictability
-  - Created deterministic but unpredictable transaction routing:
-    - Transaction-hash based path generation
-    - Entropy-mixed path selection
-    - Consistent routing for the same transaction
-    - Divergent paths for different transactions
-  - Added network condition awareness:
-    - Adaptive path length based on network traffic
-    - Shorter paths during high congestion
-    - Longer paths during low network utilization
+- **Stem Transaction Batching**
+  - Added dynamic stem phase batching (2-5 second batches)
+  - Implemented configurable batch size limits (5 transactions default)
+  - Created randomized batch release timing
+  - Added batch privacy mode support
+  - Implemented secure batch state tracking
 
-- **Enhanced Privacy Through Path Diversity**
-  - Implemented subnet diversity preference in path selection:
-    - Tracking of subnet distribution during path creation
-    - Penalty for peers from already-represented subnets
-    - Bonus for peers from new subnets
-  - Created comprehensive path characteristics tracking:
-    - Historical path recording for diversity analysis
-    - Path length adaptation based on network conditions
-    - Subnet distribution monitoring
-  - Added robust unit testing for verification:
-    - Path determinism testing
-    - Transaction-specific path verification
-    - Subnet diversity validation
-    - Reputation and network condition influence testing
+- **Stem/Fluff Transition Randomization**
+  - Added randomized transition timing (1-5 second window)
+  - Implemented network condition-based adjustments
+  - Created secure transition state management
+  - Added transition entropy sources
+  - Implemented transition timing obfuscation
 
-#### Advanced Node Reputation-Based Routing
+- **Multiple Fluff Phase Entry Points**
+  - Added support for 2-4 entry points per transaction
+  - Implemented reputation-based entry point selection
+  - Created subnet diversity requirements
+  - Added entry point rotation mechanism
+  - Implemented secure entry point management
 
-- **Enhanced Peer Reputation System**
-  - Implemented comprehensive routing reliability metrics:
-    - Transaction relay success rate tracking
-    - Average relay time measurement
-    - Reputation stability assessment
-    - Historical path participation analysis
-  - Created advanced reputation scoring with multiple factors:
-    - Base reputation score (-100 to 100)
-    - Routing reliability score (0.0-1.0)
-    - Subnet diversity consideration
-    - Network performance metrics
-  - Added reputation rewards for consistent performance:
-    - Automatic bonus for highly reliable peers
-    - Reliability assessment with configurable thresholds
-    - Penalty mitigation for occasional failures
-    - Long-term performance evaluation
+- **Routing Table Inference Resistance**
+  - Created entropy-based routing table refresh (30 second intervals)
+  - Implemented routing entropy calculation
+  - Added subnet diversity tracking
+  - Created historical path analysis
+  - Implemented routing pattern detection
 
-- **Privacy-Focused Routing Decisions**
-  - Implemented reputation-based path selection algorithm:
-    - Adaptive thresholds based on privacy requirements
-    - Minimum ratio enforcement for reputable peers
-    - Dynamic path length based on privacy level
-    - Fallback mechanisms for limited peer scenarios
-  - Created routing mode specialization:
-    - Standard routing for common transactions
-    - High-reputation paths for privacy-critical operations
-    - Specialized routing for Tor/Mixnet/Layered encryption
-    - Reputation enforcement across all privacy modes
+#### Advanced Timing Obfuscation System
 
-- **Transaction Routing Enhancements**
-  - Improved transaction propagation modes:
-    - Reputation-based multi-hop stem routing
-    - High-reputation multi-path routing
-    - Privacy level-based path selection
-    - Dynamic routing decision based on transaction context
-  - Added frequency-based routing adjustments:
-    - Peer rotation to prevent predictable usage patterns
-    - Time-based penalties for recent use
-    - Adaptive selection based on historical performance
-    - Enhanced subnet diversity requirements
+- **Variable Delay Scheduling Based on Network Traffic**
+  - Implemented adaptive delay calculation based on network conditions
+  - Created dynamic delay ranges (10ms to 1000ms) based on traffic levels
+  - Added randomized jitter to prevent timing correlation
+  - Implemented network traffic monitoring and adaptation
+  - Created comprehensive delay calculation system
+  - Added traffic-aware timing adjustments
 
-This implementation completes critical components of the Dandelion Protocol enhancement roadmap, significantly improving Obscura's transaction privacy without compromising performance or reliability. The combination of entropy-based path randomization and reputation-based routing creates transaction propagation routes that are both secure and resilient against network analysis, making deanonymization attacks substantially more difficult.
+- **Decoy Transaction Propagation**
+  - Implemented probabilistic decoy transaction generation (10% probability)
+  - Added configurable decoy generation intervals
+  - Created transaction batching with decoys
+  - Implemented decoy detection and filtering
+  - Created secure decoy transaction generation
+
+- **Randomized Batch Propagation**
+  - Added dynamic batch size calculation (2-10 transactions)
+  - Created traffic-based batch size adjustment
+  - Implemented variable batch release timing
+  - Added batch composition randomization
+  - Created secure batch management
+
+- **Statistical Timing Analysis Resistance**
+  - Implemented normal distribution noise generation
+  - Created configurable statistical parameters
+  - Added timing pattern analysis and randomization
+  - Implemented statistical noise calibration
+  - Created timing correlation protection
+
+#### Enhanced Path Selection and Diversity
+
+- **Adaptive Path Selection with Entropy**
+  - Added 64-byte entropy pool with secure refresh mechanism
+  - Created multiple entropy sources for path randomization
+  - Implemented cryptographic mixing using ChaCha20
+  - Added deterministic but unpredictable path selection
+  - Implemented 5-minute entropy refresh interval
+
+- **Intelligent Path Selection Weights**
+  - Implemented reputation-based selection factor
+  - Created network latency-based weighting
+  - Added subnet diversity preference
+  - Implemented combined weight calculation
+  - Created deterministic weight generation
+
+- **Route Diversity Enforcement**
+  - Implemented multi-dimensional diversity metrics
+  - Created weighted diversity scoring (40/30/30 split)
+  - Added path reuse prevention with XXHash
+  - Implemented adaptive privacy levels
+  - Created configurable diversity thresholds
+
+#### Advanced Security Features
+
+- **Anti-Fingerprinting Measures**
+  - Implemented path pattern tracking
+  - Created similarity scoring system
+  - Added pattern frequency monitoring
+  - Implemented timing obfuscation
+  - Created adaptive detection thresholds
+
+- **Node Reputation System**
+  - Created reputation-based routing
+  - Added reliability metrics tracking
+  - Implemented privacy-level thresholds
+  - Created performance-based bonuses
+  - Added secure fallback mechanisms
+
+#### Testing and Verification
+
+- Added comprehensive test suite for timing obfuscation
+- Implemented path diversity verification tests
+- Created reputation system validation tests
+- Added statistical analysis resistance tests
+- Implemented security measure verification
+
+This release represents a significant enhancement to transaction privacy in the Obscura network, making it substantially more resistant to timing analysis and network surveillance while maintaining efficient operation. The implementation of Dandelion++ features, combined with advanced timing obfuscation and path diversity mechanisms, provides a robust foundation for future privacy enhancements.
 
 ## [0.7.4] - 2025-03-06
 

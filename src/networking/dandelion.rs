@@ -8,15 +8,18 @@ use rand_chacha::{
     ChaCha20Rng,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, SocketAddr, Ipv4Addr};
 use std::time::{Duration, Instant, SystemTime};
+use twox_hash::XxHash64;
+
+use crate::networking::timing_obfuscation::TimingObfuscation;
 
 // Constants for Dandelion protocol
 pub const STEM_PHASE_MIN_TIMEOUT: Duration = Duration::from_secs(10); // Minimum time in stem phase
 pub const STEM_PHASE_MAX_TIMEOUT: Duration = Duration::from_secs(30); // Maximum time in stem phase
 pub const STEM_PROBABILITY: f64 = 0.9; // Probability to relay in stem phase vs fluff
 pub const MIN_ROUTING_PATH_LENGTH: usize = 2; // Minimum nodes in stem phase path
-pub const MAX_ROUTING_PATH_LENGTH: usize = 5; // Maximum nodes in stem path
+pub const MAX_ROUTING_PATH_LENGTH: usize = 10; // Maximum nodes in stem path
 pub const FLUFF_PROPAGATION_DELAY_MIN_MS: u64 = 50; // Minimum delay when broadcasting
 pub const FLUFF_PROPAGATION_DELAY_MAX_MS: u64 = 500; // Maximum delay when broadcasting
 pub const STEM_PATH_RECALCULATION_INTERVAL: Duration = Duration::from_secs(600); // 10 minutes
@@ -35,9 +38,9 @@ pub const ADAPTIVE_TIMING_ENABLED: bool = true; // Enable adaptive timing based 
 pub const MULTI_PATH_ROUTING_PROBABILITY: f64 = 0.15; // Probability of using multiple paths (15%)
 pub const TRAFFIC_ANALYSIS_PROTECTION_ENABLED: bool = true; // Enable traffic analysis countermeasures
 pub const BACKGROUND_NOISE_PROBABILITY: f64 = 0.03; // Probability of sending background noise (3% of time)
-pub const SUSPICIOUS_BEHAVIOR_THRESHOLD: u32 = 3; // Number of suspicious actions before flagging a peer
+pub const SUSPICIOUS_BEHAVIOR_THRESHOLD: u32 = 5; // Number of suspicious actions before flagging a peer
 pub const SECURE_FAILOVER_ENABLED: bool = true; // Enable secure failover strategies
-pub const PRIVACY_LOGGING_ENABLED: bool = true; // Enable privacy-focused logging
+pub const PRIVACY_LOGGING_ENABLED: bool = false; // Enable privacy-focused logging
 pub const ENCRYPTED_PEER_COMMUNICATION: bool = true; // Enable encrypted peer communication
 
 // Advanced Privacy Enhancement Configuration
@@ -45,17 +48,17 @@ pub const DYNAMIC_PEER_SCORING_ENABLED: bool = true; // Enable dynamic peer scor
 pub const REPUTATION_SCORE_MAX: f64 = 100.0; // Maximum reputation score
 pub const REPUTATION_SCORE_MIN: f64 = -100.0; // Minimum reputation score
 pub const REPUTATION_DECAY_FACTOR: f64 = 0.95; // Decay factor for reputation (per hour)
-pub const REPUTATION_PENALTY_SUSPICIOUS: f64 = -5.0; // Penalty for suspicious activity
-pub const REPUTATION_PENALTY_SYBIL: f64 = -30.0; // Penalty for suspected Sybil behavior
+pub const REPUTATION_PENALTY_SUSPICIOUS: f64 = -10.0; // Penalty for suspicious activity
+pub const REPUTATION_PENALTY_SYBIL: f64 = -20.0; // Penalty for suspected Sybil behavior
 pub const REPUTATION_REWARD_SUCCESSFUL_RELAY: f64 = 2.0; // Reward for successful relay
-pub const REPUTATION_THRESHOLD_STEM: f64 = 20.0; // Minimum score to be used in stem routing
+pub const REPUTATION_THRESHOLD_STEM: f64 = 0.5; // Minimum score to be used in stem routing
 pub const REPUTATION_CRITICAL_PATH_THRESHOLD: f64 = 50.0; // Threshold for high-privacy transactions
 pub const REPUTATION_WEIGHT_FACTOR: f64 = 2.5; // Weight multiplier for reputation in path selection
 pub const REPUTATION_ADAPTIVE_THRESHOLDS: bool = true; // Use adaptive reputation thresholds
 pub const REPUTATION_MIN_SAMPLE_SIZE: usize = 10; // Minimum number of reputation samples for adaption
 pub const REPUTATION_RELIABILITY_BONUS: f64 = 10.0; // Bonus for consistently reliable peers
 pub const REPUTATION_ENFORCED_RATIO: f64 = 0.7; // Minimum ratio of high-reputation peers in path
-pub const ANONYMITY_SET_MIN_SIZE: usize = 5; // Minimum size of anonymity set
+pub const ANONYMITY_SET_MIN_SIZE: usize = 3; // Minimum size of anonymity set
 pub const MIN_PEERS_FOR_SYBIL_DETECTION: usize = 5; // Minimum peers needed for Sybil detection
 
 pub const ANTI_SNOOPING_ENABLED: bool = true; // Enable anti-snooping measures
@@ -78,6 +81,50 @@ pub const ECLIPSE_DEFENSE_IP_DIVERSITY_THRESHOLD: usize = 3; // Minimum number o
 pub const ECLIPSE_DEFENSE_PEER_ROTATION_PERCENT: f64 = 0.2; // Percent of peers to rotate when eclipse detected
 pub const AUTOMATIC_ATTACK_RESPONSE_ENABLED: bool = true; // Enable automatic attack responses
 pub const SYBIL_DETECTION_CLUSTER_THRESHOLD: usize = 3; // Minimum cluster size for Sybil detection
+
+// Add new constants for route diversity
+pub const MIN_AS_DIVERSITY: usize = 2; // Minimum number of different autonomous systems in path
+pub const MIN_COUNTRY_DIVERSITY: usize = 2; // Minimum number of different countries in path
+pub const MIN_SUBNET_DIVERSITY_RATIO: f64 = 0.6; // Minimum ratio of unique subnets in path
+pub const ROUTE_DIVERSITY_CACHE_SIZE: usize = 1000; // Number of recent paths to track
+pub const ROUTE_REUSE_PENALTY: f64 = 0.3; // Penalty factor for reusing recent paths
+pub const DIVERSITY_SCORE_THRESHOLD: f64 = 0.7; // Minimum diversity score for path acceptance
+
+// Add new constants for anti-fingerprinting
+pub const PATH_PATTERN_CACHE_SIZE: usize = 100; // Number of recent path patterns to track
+pub const PATTERN_SIMILARITY_THRESHOLD: f64 = 0.7; // Threshold for pattern similarity detection
+pub const TIMING_JITTER_RANGE_MS: u64 = 100; // Range for timing randomization (±50ms)
+pub const PATTERN_HISTORY_WINDOW: Duration = Duration::from_secs(3600); // 1 hour window for pattern analysis
+pub const MAX_PATTERN_FREQUENCY: f64 = 0.1; // Maximum allowed frequency for similar patterns (10%)
+
+// Add new constants for advanced anonymity set features (after existing constants around line 61)
+pub const ANONYMITY_SET_MAX_SIZE: usize = 20; // Maximum size of anonymity set
+pub const ANONYMITY_SET_DYNAMIC_SIZING_ENABLED: bool = true; // Enable dynamic sizing of anonymity sets
+pub const ANONYMITY_SET_K_ANONYMITY_LEVEL: usize = 2; // k value for k-anonymity guarantee
+pub const ANONYMITY_SET_TRANSACTION_CORRELATION_RESISTANCE: bool = true; // Enable transaction correlation resistance
+pub const ANONYMITY_SET_ROTATION_INTERVAL: Duration = Duration::from_secs(1800); // Rotate sets every 30 minutes
+pub const PLAUSIBLE_DENIABILITY_ENABLED: bool = true; // Enable plausible deniability mechanisms
+pub const PLAUSIBLE_DENIABILITY_DUMMY_RATE: f64 = 0.15; // Rate of dummy transactions for plausible deniability
+pub const GRAPH_ANALYSIS_COUNTERMEASURES_ENABLED: bool = true; // Enable graph analysis countermeasures
+pub const GRAPH_ENTROPY_THRESHOLD: f64 = 0.7; // Minimum entropy threshold for graph analysis protection
+pub const TRANSACTION_FLOW_RANDOMIZATION_FACTOR: f64 = 0.3; // Factor for transaction flow randomization
+pub const NETWORK_TRAFFIC_ANALYSIS_WINDOW: Duration = Duration::from_secs(3600); // 1 hour window for traffic analysis
+pub const TRANSACTION_GRAPH_SAMPLING_WINDOW: Duration = Duration::from_secs(7200); // 2 hour window for graph sampling
+pub const ENTROPY_MEASUREMENT_INTERVAL: Duration = Duration::from_secs(600); // Measure entropy every 10 minutes
+pub const MIN_ENTROPY_SAMPLES: usize = 5; // Minimum number of entropy samples before taking action
+
+// Constants for Dandelion++ enhancements
+pub const TRANSACTION_AGGREGATION_ENABLED: bool = true;
+pub const MAX_AGGREGATION_SIZE: usize = 10;
+pub const AGGREGATION_TIMEOUT_MS: u64 = 2000;
+pub const STEM_BATCH_SIZE: usize = 5;
+pub const STEM_BATCH_TIMEOUT_MS: u64 = 3000;
+pub const STEM_FLUFF_TRANSITION_MIN_DELAY_MS: u64 = 1000;
+pub const STEM_FLUFF_TRANSITION_MAX_DELAY_MS: u64 = 5000;
+pub const FLUFF_ENTRY_POINTS_MIN: usize = 2;
+pub const FLUFF_ENTRY_POINTS_MAX: usize = 4;
+pub const ROUTING_TABLE_INFERENCE_RESISTANCE_ENABLED: bool = true;
+pub const ROUTING_TABLE_REFRESH_INTERVAL_MS: u64 = 30000;
 
 // Transaction propagation state
 #[derive(Debug, Clone, PartialEq)]
@@ -174,15 +221,22 @@ struct TransactionBatch {
     privacy_mode: PrivacyRoutingMode, // Privacy mode for this batch
 }
 
-// Anonymity set management
-#[derive(Debug, Clone)]
-struct AnonymitySet {
-    set_id: u64,                // Unique set identifier
-    peers: HashSet<SocketAddr>, // Peers in this anonymity set
-    creation_time: Instant,     // When the set was created
-    last_used: Instant,         // Last time this set was used
-    usage_count: u32,           // Number of times this set has been used
-    effectiveness_score: f64,   // Estimated effectiveness (0.0-1.0)
+// Anonymity set for transaction privacy
+pub struct AnonymitySet {
+    pub set_id: u64,
+    pub peers: HashSet<SocketAddr>,
+    pub creation_time: Instant,
+    pub last_used: Instant,
+    pub usage_count: usize,
+    pub effectiveness_score: f64,
+    pub k_anonymity_level: usize,
+    pub entropy_score: f64,
+    pub correlation_resistance: f64,
+    pub transactions_processed: HashSet<[u8; 32]>,
+    pub subnet_distribution: HashMap<[u8; 2], usize>,
+    pub transaction_flow_patterns: HashMap<([u8; 32], [u8; 32]), usize>,
+    pub last_entropy_measurement: Instant,
+    pub entropy_samples: Vec<f64>,
 }
 
 // Sybil detection cluster
@@ -224,6 +278,27 @@ struct LayeredEncryptionKeys {
     expiration_time: Instant, // When the keys expire
 }
 
+// New struct for aggregated transactions
+#[derive(Debug, Clone)]
+pub struct AggregatedTransactions {
+    pub aggregation_id: u64,
+    pub transactions: Vec<[u8; 32]>,
+    pub creation_time: Instant,
+    pub total_size: usize,
+    pub privacy_mode: PrivacyRoutingMode,
+}
+
+// New struct for stem phase batches
+#[derive(Debug, Clone)]
+pub struct StemBatch {
+    pub batch_id: u64,
+    pub transactions: Vec<[u8; 32]>,
+    pub creation_time: Instant,
+    pub transition_time: Instant,
+    pub entry_points: Vec<SocketAddr>,
+    pub privacy_mode: PrivacyRoutingMode,
+}
+
 // Dandelion transaction manager
 pub struct DandelionManager {
     // Transaction propagation state tracking
@@ -242,7 +317,7 @@ pub struct DandelionManager {
     pub last_path_recalculation: Instant,
 
     // Current outbound peers
-    pub outbound_peers: Vec<SocketAddr>,
+    pub outbound_peers: HashSet<SocketAddr>,
 
     // Network conditions for adaptive timing
     pub network_conditions: HashMap<SocketAddr, NetworkCondition>,
@@ -281,7 +356,7 @@ pub struct DandelionManager {
     last_anonymity_set_rotation: Instant,
 
     // Detected Sybil clusters
-    sybil_clusters: HashMap<usize, SybilCluster>,
+    sybil_clusters: HashSet<[u8; 4]>,
 
     // Next Sybil cluster ID
     next_sybil_cluster_id: usize,
@@ -323,6 +398,42 @@ pub struct DandelionManager {
     // Entropy source for path randomization
     entropy_pool: Vec<u8>,
     last_entropy_refresh: Instant,
+
+    // Add route diversity tracking
+    recent_paths: VecDeque<RouteMetrics>,
+    peer_info: HashMap<SocketAddr, PeerInfo>,
+
+    // Add path pattern tracking for anti-fingerprinting
+    recent_patterns: VecDeque<PathPattern>,
+    pattern_frequency_cache: HashMap<u64, usize>,
+    last_pattern_cleanup: Instant,
+
+    /// Timing obfuscation manager
+    timing_obfuscation: TimingObfuscation,
+
+    // Add fields for advanced anonymity sets
+    last_set_size_adjustment: Instant,
+    current_network_anonymity_level: usize,
+    transaction_graph_samples: VecDeque<([u8; 32], [u8; 32])>,
+    network_traffic_patterns: VecDeque<(Instant, usize)>,
+    plausible_deniability_transactions: HashSet<[u8; 32]>,
+    transaction_correlation_matrix: HashMap<[u8; 32], HashSet<[u8; 32]>>,
+    graph_analysis_metrics: HashMap<String, f64>,
+    last_graph_analysis: Instant,
+    entropy_history: VecDeque<(Instant, f64)>,
+    anonymity_set_size_history: VecDeque<(Instant, usize)>,
+    last_plausible_deniability_action: Instant,
+    k_anonymity_violations: usize,
+    eclipse_attack_last_detected: Option<Instant>,
+
+    // Dandelion++ enhancement fields
+    pub aggregated_transactions: HashMap<u64, AggregatedTransactions>,
+    pub next_aggregation_id: u64,
+    pub stem_batches: HashMap<u64, StemBatch>,
+    pub next_stem_batch_id: u64,
+    pub fluff_entry_points: Vec<SocketAddr>,
+    pub last_routing_table_refresh: Instant,
+    pub routing_table_entropy: f64,
 }
 
 #[derive(Debug)]
@@ -332,381 +443,226 @@ pub struct EclipseAttackResult {
     pub peers_to_drop: Vec<SocketAddr>,
 }
 
-impl DandelionManager {
-    pub fn new() -> Self {
-        // Create an initial entropy pool
-        let mut entropy_pool = Vec::with_capacity(64);
-        let mut rng = thread_rng();
-        for _ in 0..64 {
-            entropy_pool.push(rng.gen::<u8>());
-        }
+// Add new structure for peer information
+#[derive(Clone, Debug)]
+struct PeerInfo {
+    autonomous_system: Option<u32>,
+    country: Option<String>,
+    last_updated: Instant,
+}
 
-        DandelionManager {
-            transactions: HashMap::new(),
-            stem_successors: HashMap::new(),
-            multi_hop_paths: HashMap::new(),
-            current_successor: None,
-            last_path_recalculation: Instant::now(),
-            outbound_peers: Vec::new(),
-            network_conditions: HashMap::new(),
-            peer_reputation: HashMap::new(),
-            transaction_batches: HashMap::new(),
-            next_batch_id: 0,
-            last_decoy_generation: Instant::now(),
-            secure_rng: ChaCha20Rng::from_entropy(),
-            current_network_traffic: 0.0,
-            recent_transactions: VecDeque::with_capacity(100),
-            recent_paths: VecDeque::with_capacity(20),
-            anonymity_sets: HashMap::new(),
-            next_anonymity_set_id: 0,
-            last_anonymity_set_rotation: Instant::now(),
-            sybil_clusters: HashMap::new(),
-            next_sybil_cluster_id: 0,
-            last_eclipse_check: Instant::now(),
-            eclipse_defense_active: false,
-            tor_circuits: HashMap::new(),
-            mixnet_routes: HashMap::new(),
-            layered_encryption_sessions: HashMap::new(),
-            historical_paths: HashMap::new(),
-            last_reputation_decay: Instant::now(),
-            dummy_transaction_hashes: VecDeque::with_capacity(50),
-            snoop_detection_counters: HashMap::new(),
-            last_snoop_check: Instant::now(),
-            ip_diversity_history: VecDeque::with_capacity(20),
-            differential_privacy_state: Vec::new(),
-            entropy_pool,
-            last_entropy_refresh: Instant::now(),
-        }
-    }
+// Add new structure for route metrics
+#[derive(Clone, Debug)]
+struct RouteMetrics {
+    autonomous_systems: HashSet<u32>,
+    countries: HashSet<String>,
+    subnets: HashSet<[u8; 2]>,
+    path_hash: u64,
+    timestamp: Instant,
+}
 
-    /// Update the list of outbound peers
-    pub fn update_outbound_peers(&mut self, peers: Vec<SocketAddr>) {
-        self.outbound_peers = peers;
-
-        // If our successor is no longer in our outbound peers, we need to select a new one
-        if let Some(successor) = &self.current_successor {
-            if !self.outbound_peers.contains(successor) {
-                self.select_stem_successor();
-            }
-        } else {
-            // No successor set, select one now
-            self.select_stem_successor();
-        }
-    }
-
-    /// Select a random successor from outbound peers
-    /// This is a critical privacy operation as it determines the anonymity path
-    fn select_stem_successor(&mut self) {
-        if self.outbound_peers.is_empty() {
-            self.current_successor = None;
-            return;
-        }
-
-        // Ensure we're using a cryptographically secure RNG for privacy-sensitive operations
-        let mut rng = thread_rng();
-
-        // Randomly select a successor from outbound peers
-        self.current_successor = self.outbound_peers.choose(&mut rng).cloned();
-    }
-
-    /// Get the current stem successor for this node
-    pub fn get_stem_successor(&self) -> Option<SocketAddr> {
-        self.current_successor
-    }
-
-    /// Calculate stem paths for known peers
-    /// This builds the random graph for transaction routing
-    pub fn calculate_stem_paths(&mut self, known_peers: &[SocketAddr], force: bool) {
-        println!(
-            "DEBUG: calculate_stem_paths called with {} peers",
-            known_peers.len()
-        );
-        for (i, peer) in known_peers.iter().enumerate() {
-            println!("DEBUG: known_peer[{}] = {}", i, peer);
-        }
-
-        let now = Instant::now();
-
-        // Don't recalculate paths too frequently to avoid timing analysis
-        // But allow forcing recalculation for testing
-        if !force
-            && now.duration_since(self.last_path_recalculation) < STEM_PATH_RECALCULATION_INTERVAL
-        {
-            println!("DEBUG: Skipping recalculation due to time interval");
-            return;
-        }
-
-        // Refresh entropy pool before path calculation
-        self.refresh_entropy_pool();
-
-        println!("DEBUG: Clearing existing paths");
-        // Clear existing paths
-        self.stem_successors.clear();
-
-        // Need at least 2 peers to build paths
-        if known_peers.len() < 2 {
-            println!(
-                "DEBUG: Not enough peers (need at least 2), got {}",
-                known_peers.len()
-            );
-            self.last_path_recalculation = now;
-            return;
-        }
-
-        println!("DEBUG: Building paths for {} peers", known_peers.len());
-
-        // Create a unique dummy transaction hash for path generation
-        let mut dummy_tx_hash = [0u8; 32];
-        self.secure_rng.fill_bytes(&mut dummy_tx_hash);
-
-        // For each peer, assign a successor that is not itself using entropy-based weighting
-        for &peer in known_peers {
-            // Create a list of potential successors (all peers except the current one)
-            let possible_successors: Vec<SocketAddr> =
-                known_peers.iter().filter(|&p| p != &peer).map(|&p| p).collect();
-
-            if !possible_successors.is_empty() {
-                // Generate weights for this peer's successors
-                let weights = self.generate_path_selection_weights(&dummy_tx_hash, &possible_successors);
-                
-                // Calculate total weight
-                let total_weight: f64 = weights.values().sum();
-                
-                if total_weight > 0.0 {
-                    // Select a successor based on weights
-                    let selection_point = self.secure_rng.gen::<f64>() * total_weight;
-                    let mut cumulative_prob = 0.0;
-                    
-                    for (successor, weight) in &weights {
-                        cumulative_prob += weight;
-                        
-                        if cumulative_prob >= selection_point {
-                            println!("DEBUG: Assigning successor {} to peer {}", successor, peer);
-                            self.stem_successors.insert(peer, *successor);
-                            break;
-                        }
-                    }
-                } else {
-                    // Fallback to random selection if weights are all zero
-                    let mut rng = thread_rng();
-                    let successor = possible_successors.choose(&mut rng).unwrap();
-                    println!("DEBUG: Assigning successor {} to peer {} (fallback)", successor, peer);
-                    self.stem_successors.insert(peer, *successor);
-                }
-            }
-        }
-
-        // Verify all peers have successors assigned
-        println!("DEBUG: Verifying all peers have successors assigned");
-        for &peer in known_peers {
-            if !self.stem_successors.contains_key(&peer) {
-                println!("DEBUG: Peer {} has no successor, assigning one", peer);
-                // This should be rare but just in case - assign a fallback successor
-                let fallback_successors: Vec<SocketAddr> =
-                    known_peers.iter().filter(|&p| p != &peer).map(|&p| p).collect();
-
-                if !fallback_successors.is_empty() {
-                    let mut rng = thread_rng();
-                    let fallback = fallback_successors.choose(&mut rng).unwrap();
-                    println!(
-                        "DEBUG: Assigned fallback successor {} to peer {}",
-                        fallback, peer
-                    );
-                    self.stem_successors.insert(peer, *fallback);
-                }
-            }
-        }
-
-        // Update our own successor
-        self.select_stem_successor();
-        self.last_path_recalculation = now;
-    }
-
-    /// Add a new transaction to the Dandelion manager
-    pub fn add_transaction(
-        &mut self,
-        tx_hash: [u8; 32],
-        source_addr: Option<SocketAddr>,
-    ) -> PropagationState {
-        // Transaction already in stem phase
-        if let Some(existing) = self.transactions.get(&tx_hash) {
-            return existing.state.clone();
-        }
-
-        let now = Instant::now();
-        
-        // Generate random time in stem phase
-        let stem_time = Duration::from_secs(
-            self.secure_rng
-                .gen_range(STEM_PHASE_MIN_TIMEOUT.as_secs()..STEM_PHASE_MAX_TIMEOUT.as_secs()),
-        );
-
-        // Default to stem phase
-        let mut state = PropagationState::Stem;
-
-        // Use a high privacy level (0.8) for reputation-based path selection by default
-        // Indicates we want to prioritize reputation heavily
-        let privacy_level = 0.8;
-
-        // Rarely, use multi-hop stem phase or other special routing
-        let routing_choice = self.secure_rng.gen::<f64>();
-        let mut relay_path = Vec::new();
-
-        if routing_choice < MULTI_HOP_STEM_PROBABILITY {
-            // Use multi-hop stem phase with reputation-based routing
-            if !self.outbound_peers.is_empty() {
-                relay_path = self.select_reputation_based_path(&tx_hash, &self.outbound_peers, privacy_level);
-                
-                if !relay_path.is_empty() {
-                    state = PropagationState::MultiHopStem(relay_path.len());
-                }
-            }
-        } else if routing_choice < MULTI_HOP_STEM_PROBABILITY + MULTI_PATH_ROUTING_PROBABILITY {
-            // Use multi-path routing with high-reputation peers
-            if !self.outbound_peers.is_empty() {
-                let trusted_paths: Vec<SocketAddr> = self.get_peers_by_reputation(Some(REPUTATION_CRITICAL_PATH_THRESHOLD))
-                    .into_iter()
-                    .map(|(addr, _)| addr)
-                    .filter(|p| self.outbound_peers.contains(p))
-                    .collect();
-                
-                if trusted_paths.len() >= 2 {
-                    state = PropagationState::MultiPathStem(trusted_paths.len());
-                    relay_path = trusted_paths;
-                }
-            }
-        }
-
-        // Create the transaction metadata
-        let metadata = PropagationMetadata {
-            state: state.clone(),
-            received_time: now,
-            transition_time: now + stem_time,
-            relayed: false,
-            source_addr,
-            relay_path,
-            batch_id: None,
-            is_decoy: false,
-            adaptive_delay: None,
-            suspicious_peers: HashSet::new(),
-            privacy_mode: PrivacyRoutingMode::Standard,
-            encryption_layers: 0,
-            transaction_modified: false,
-            anonymity_set: HashSet::new(),
-            differential_delay: Duration::from_millis(0),
-            tx_data: Vec::new(),
-            fluff_time: None,
+impl RouteMetrics {
+    fn new(path: &[SocketAddr], peer_info: &HashMap<SocketAddr, PeerInfo>) -> Self {
+        let mut metrics = RouteMetrics {
+            autonomous_systems: HashSet::new(),
+            countries: HashSet::new(),
+            subnets: HashSet::new(),
+            path_hash: 0,
+            timestamp: Instant::now(),
         };
 
-        // Store metadata
-        self.transactions.insert(tx_hash, metadata);
+        for peer in path {
+            if let Some(info) = peer_info.get(peer) {
+                if let Some(as_num) = info.autonomous_system {
+                    metrics.autonomous_systems.insert(as_num);
+                }
+                if let Some(country) = &info.country {
+                    metrics.countries.insert(country.clone());
+                }
+                if let IpAddr::V4(ipv4) = peer.ip() {
+                    let octets = ipv4.octets();
+                    metrics.subnets.insert([octets[0], octets[1]]);
+                }
+            }
+        }
 
-        state
+        // Calculate path hash using XXHash
+        let mut hasher = twox_hash::XxHash64::default();
+        for peer in path {
+            hasher.write(&peer.to_string().as_bytes());
+        }
+        metrics.path_hash = hasher.finish();
+
+        metrics
     }
 
-    /// Check if a transaction should transition from stem to fluff phase
-    pub fn check_transition(&mut self, tx_hash: &[u8; 32]) -> Option<PropagationState> {
-        let now = Instant::now();
+    fn calculate_diversity_score(&self, path_length: usize) -> f64 {
+        let as_diversity = self.autonomous_systems.len() as f64 / path_length as f64;
+        let country_diversity = self.countries.len() as f64 / path_length as f64;
+        let subnet_diversity = self.subnets.len() as f64 / path_length as f64;
 
-        if let Some(metadata) = self.transactions.get_mut(tx_hash) {
-            // Check if it's time to transition
-            if metadata.state == PropagationState::Stem && now >= metadata.transition_time {
-                metadata.state = PropagationState::Fluff;
-                return Some(PropagationState::Fluff);
+        // Weight the different diversity metrics
+        0.4 * as_diversity + 0.3 * country_diversity + 0.3 * subnet_diversity
+    }
+}
+
+// Add new structure for path pattern tracking
+#[derive(Clone, Debug)]
+struct PathPattern {
+    path_length: usize,
+    subnet_distribution: HashMap<[u8; 2], usize>,
+    timing_characteristics: Vec<Duration>,
+    creation_time: Instant,
+    pattern_hash: u64,
+}
+
+impl PathPattern {
+    fn new(path: &[SocketAddr], timing: Option<Duration>) -> Self {
+        let mut pattern = PathPattern {
+            path_length: path.len(),
+            subnet_distribution: HashMap::new(),
+            timing_characteristics: Vec::new(),
+            creation_time: Instant::now(),
+            pattern_hash: 0,
+        };
+
+        // Calculate subnet distribution
+        for peer in path {
+            if let IpAddr::V4(ipv4) = peer.ip() {
+                let octets = ipv4.octets();
+                let subnet = [octets[0], octets[1]];
+                *pattern.subnet_distribution.entry(subnet).or_insert(0) += 1;
+            }
+        }
+
+        // Add timing if provided
+        if let Some(time) = timing {
+            pattern.timing_characteristics.push(time);
+        }
+
+        // Calculate pattern hash using XXHash
+        let mut hasher = twox_hash::XxHash64::default();
+        for (subnet, count) in &pattern.subnet_distribution {
+            hasher.write(&[subnet[0], subnet[1], *count as u8]);
+        }
+        pattern.pattern_hash = hasher.finish();
+
+        pattern
+    }
+
+    fn similarity_score(&self, other: &PathPattern) -> f64 {
+        let mut score = 0.0;
+        
+        // Compare path lengths (20% weight)
+        let length_similarity = 1.0 - (self.path_length as f64 - other.path_length as f64).abs() 
+            / (MAX_ROUTING_PATH_LENGTH as f64);
+        score += 0.2 * length_similarity;
+
+        // Compare subnet distributions (50% weight)
+        let mut subnet_similarity = 0.0;
+        let total_subnets: HashSet<_> = self.subnet_distribution.keys()
+            .chain(other.subnet_distribution.keys())
+            .collect();
+        
+        for subnet in &total_subnets {
+            let self_count = self.subnet_distribution.get(subnet).copied().unwrap_or(0);
+            let other_count = other.subnet_distribution.get(subnet).copied().unwrap_or(0);
+            subnet_similarity += 1.0 - (self_count as f64 - other_count as f64).abs() 
+                / (self.path_length.max(other.path_length) as f64);
+        }
+        score += 0.5 * (subnet_similarity / total_subnets.len() as f64);
+
+        // Compare timing characteristics (30% weight)
+        if !self.timing_characteristics.is_empty() && !other.timing_characteristics.is_empty() {
+            let self_avg = self.timing_characteristics.iter().sum::<Duration>().as_millis() as f64
+                / self.timing_characteristics.len() as f64;
+            let other_avg = other.timing_characteristics.iter().sum::<Duration>().as_millis() as f64
+                / other.timing_characteristics.len() as f64;
+            let timing_similarity = 1.0 - (self_avg - other_avg).abs() / 1000.0;
+            score += 0.3 * timing_similarity;
+        }
+
+        score
+    }
+}
+
+// Add new methods for route diversity
+impl DandelionManager {
+    fn enforce_route_diversity(&mut self, candidate_path: &[SocketAddr]) -> bool {
+        let metrics = RouteMetrics::new(candidate_path, &self.peer_info);
+        
+        // Check basic diversity requirements
+        if metrics.autonomous_systems.len() < MIN_AS_DIVERSITY 
+            || metrics.countries.len() < MIN_COUNTRY_DIVERSITY 
+            || (metrics.subnets.len() as f64 / candidate_path.len() as f64) < MIN_SUBNET_DIVERSITY_RATIO {
+            return false;
+        }
+
+        // Calculate diversity score
+        let diversity_score = metrics.calculate_diversity_score(candidate_path.len());
+        if diversity_score < DIVERSITY_SCORE_THRESHOLD {
+            return false;
+        }
+
+        // Check for path reuse
+        let path_reuse = self.recent_paths.iter()
+            .filter(|p| p.path_hash == metrics.path_hash)
+            .count() as f64 / ROUTE_DIVERSITY_CACHE_SIZE as f64;
+        
+        if path_reuse > ROUTE_REUSE_PENALTY {
+            return false;
+        }
+
+        // Update recent paths cache
+        self.recent_paths.push_back(metrics);
+        while self.recent_paths.len() > ROUTE_DIVERSITY_CACHE_SIZE {
+            self.recent_paths.pop_front();
+        }
+
+        true
+    }
+
+    fn select_diverse_path(&mut self, tx_hash: &[u8; 32], available_peers: &[SocketAddr], privacy_level: f64) -> Vec<SocketAddr> {
+        let mut best_path = Vec::new();
+        let mut best_diversity_score = 0.0;
+        let mut attempts = 0;
+        const MAX_ATTEMPTS: usize = 10;
+
+        while attempts < MAX_ATTEMPTS {
+            let candidate_path = self.select_reputation_based_path(tx_hash, available_peers, privacy_level);
+            let metrics = RouteMetrics::new(&candidate_path, &self.peer_info);
+            let diversity_score = metrics.calculate_diversity_score(candidate_path.len());
+
+            // Check both diversity and anti-fingerprinting requirements
+            if diversity_score > DIVERSITY_SCORE_THRESHOLD && 
+               diversity_score > best_diversity_score &&
+               self.apply_anti_fingerprinting(&candidate_path) {
+                best_path = candidate_path;
+                best_diversity_score = diversity_score;
+
+                // If we found a very good path, use it immediately
+                if diversity_score > 0.9 {
+                    break;
+                }
             }
 
-            return Some(metadata.state.clone());
+            attempts += 1;
         }
 
-        None
-    }
-
-    /// Mark a transaction as relayed
-    pub fn mark_relayed(&mut self, tx_hash: &[u8; 32]) {
-        if let Some(metadata) = self.transactions.get_mut(tx_hash) {
-            metadata.relayed = true;
+        if !best_path.is_empty() && self.enforce_route_diversity(&best_path) {
+            // Add timing jitter to prevent timing analysis
+            let jitter = self.secure_rng.gen_range(0..TIMING_JITTER_RANGE_MS);
+            std::thread::sleep(Duration::from_millis(jitter));
+            
+            best_path
+        } else {
+            // Fallback to reputation-based path with timing jitter
+            let path = self.select_reputation_based_path(tx_hash, available_peers, privacy_level);
+            let jitter = self.secure_rng.gen_range(0..TIMING_JITTER_RANGE_MS);
+            std::thread::sleep(Duration::from_millis(jitter));
+            
+            path
         }
-    }
-
-    /// Clean up old transactions
-    pub fn cleanup_old_transactions(&mut self, max_age: Duration) {
-        let now = Instant::now();
-        self.transactions.retain(|_, metadata| {
-            now.duration_since(metadata.received_time) < max_age || !metadata.relayed
-        });
-    }
-
-    /// Get all transactions that should be in fluff phase
-    pub fn get_fluff_transactions(&self) -> Vec<[u8; 32]> {
-        let _now = Instant::now();
-
-        self.transactions
-            .iter()
-            .filter(|(_, metadata)| metadata.state == PropagationState::Fluff && !metadata.relayed)
-            .map(|(tx_hash, _)| *tx_hash)
-            .collect()
-    }
-
-    /// Calculate a random propagation delay for the fluff phase
-    /// This helps prevent timing analysis
-    pub fn calculate_propagation_delay(&self) -> Duration {
-        let mut rng = thread_rng();
-        let propagation_delay =
-            rng.gen_range(FLUFF_PROPAGATION_DELAY_MIN_MS..=FLUFF_PROPAGATION_DELAY_MAX_MS);
-        Duration::from_millis(propagation_delay)
-    }
-
-    /// Get a diverse set of nodes for fluff phase broadcast
-    /// Avoids sending to the source node or any nodes in same network segment
-    pub fn get_fluff_targets(
-        &self,
-        tx_hash: &[u8; 32],
-        all_peers: &[SocketAddr],
-    ) -> Vec<SocketAddr> {
-        let source_addr = self
-            .transactions
-            .get(tx_hash)
-            .and_then(|metadata| metadata.source_addr);
-
-        // Filter out the source address to maintain privacy
-        let filtered_peers: Vec<SocketAddr> = all_peers
-            .iter()
-            .filter(|addr| {
-                // Don't send back to source
-                if let Some(source) = source_addr {
-                    if **addr == source {
-                        return false;
-                    }
-
-                    // Basic IP diversity check - don't send to nodes in same /16 subnet
-                    if let (IpAddr::V4(peer_ip), IpAddr::V4(source_ip)) = (addr.ip(), source.ip()) {
-                        let peer_octets = peer_ip.octets();
-                        let source_octets = source_ip.octets();
-
-                        // If first two octets match, they might be in same network segment
-                        if peer_octets[0] == source_octets[0] && peer_octets[1] == source_octets[1]
-                        {
-                            return false;
-                        }
-                    }
-                }
-
-                true
-            })
-            .copied()
-            .collect();
-
-        if filtered_peers.is_empty() {
-            return all_peers.to_vec();
-        }
-
-        // Shuffle for randomization
-        let mut rng = thread_rng();
-        let mut selected_peers = filtered_peers;
-        selected_peers.shuffle(&mut rng);
-
-        // Return all peers, but in a random order
-        selected_peers
     }
 
     /// Generate and send decoy transactions to obscure real traffic patterns
@@ -976,8 +932,8 @@ impl DandelionManager {
 
         condition.last_updated = now;
 
-        // Update overall network traffic level
-        self.update_network_traffic();
+        // Update timing obfuscation with new traffic level
+        self.timing_obfuscation.update_network_traffic(condition.congestion_level);
     }
 
     /// Calculate adaptive delay based on network conditions
@@ -987,29 +943,22 @@ impl DandelionManager {
         target: &SocketAddr,
     ) -> Duration {
         if !ADAPTIVE_TIMING_ENABLED {
-            // Fall back to standard random delay
             return self.calculate_propagation_delay();
         }
 
-        let base_delay = Duration::from_millis(
-            FLUFF_PROPAGATION_DELAY_MIN_MS
-                + self
-                    .secure_rng
-                    .gen_range(0..FLUFF_PROPAGATION_DELAY_MAX_MS - FLUFF_PROPAGATION_DELAY_MIN_MS),
-        );
+        // Get base delay from timing obfuscation
+        let mut delay = self.timing_obfuscation.calculate_variable_delay(target);
 
-        // Check if we have network conditions for this peer
-        if let Some(condition) = self.network_conditions.get(target) {
-            // Calculate delay factor based on congestion level
-            let congestion_factor = 1.0 + condition.congestion_level;
+        // Add statistical noise for timing analysis resistance
+        delay += self.timing_obfuscation.add_statistical_noise();
 
-            // Apply the factor to base delay
-            return base_delay.mul_f64(congestion_factor);
-        }
+        // Add side-channel protection
+        delay += self.timing_obfuscation.calculate_side_channel_protection(target);
 
-        // Add slight randomization based on transaction hash to prevent correlation
-        let hash_factor = 0.8 + (tx_hash[0] as f64 % 0.4);
-        base_delay.mul_f64(hash_factor)
+        // Record the timing for pattern analysis
+        self.timing_obfuscation.record_timing(*target, delay);
+
+        delay
     }
 
     /// Update overall network traffic level
@@ -1139,7 +1088,7 @@ impl DandelionManager {
         // Prepare relay path based on privacy mode
         let mut relay_path = Vec::new();
         
-        match privacy_mode {
+        match privacy_mode.clone() {
             PrivacyRoutingMode::Standard => {
                 // For standard mode, use reputation-based multi-hop routing
                 if !self.outbound_peers.is_empty() {
@@ -1209,6 +1158,13 @@ impl DandelionManager {
             }
         }
 
+        let relay_path_clone = relay_path.clone();
+        let encryption_layers = if privacy_mode == PrivacyRoutingMode::Layered {
+            relay_path_clone.len()
+        } else {
+            0
+        };
+
         // Create the transaction metadata
         let metadata = PropagationMetadata {
             state: state.clone(),
@@ -1222,7 +1178,7 @@ impl DandelionManager {
             adaptive_delay: None,
             suspicious_peers: HashSet::new(),
             privacy_mode,
-            encryption_layers: if privacy_mode == PrivacyRoutingMode::Layered { relay_path.len() } else { 0 },
+            encryption_layers,
             transaction_modified: false,
             anonymity_set: HashSet::new(),
             differential_delay: Duration::from_millis(0),
@@ -1375,6 +1331,11 @@ impl DandelionManager {
 
     /// Initialize a peer's reputation if it doesn't exist
     pub fn initialize_peer_reputation(&mut self, peer: SocketAddr) {
+        self.initialize_peer_reputation_with_score(peer, 0.0);
+    }
+
+    /// Initialize a peer's reputation with a specific score
+    pub fn initialize_peer_reputation_with_score(&mut self, peer: SocketAddr, initial_score: f64) {
         if self.peer_reputation.contains_key(&peer) {
             return;
         }
@@ -1389,7 +1350,7 @@ impl DandelionManager {
         };
 
         let reputation = PeerReputation {
-            reputation_score: 0.0,
+            reputation_score: initial_score,
             last_reputation_update: Instant::now(),
             successful_relays: 0,
             failed_relays: 0,
@@ -1426,1105 +1387,10 @@ impl DandelionManager {
         }
 
         let now = Instant::now();
-        self.initialize_peer_reputation(peer);
+        self.initialize_peer_reputation_with_score(peer, 0.0);
 
         if let Some(reputation) = self.peer_reputation.get_mut(&peer) {
             // Apply decay first
-            let hours_since_update = now
-                .duration_since(reputation.last_reputation_update)
-                .as_secs_f64()
-                / 3600.0;
-            if hours_since_update > 0.0 {
-                reputation.reputation_score *= REPUTATION_DECAY_FACTOR.powf(hours_since_update);
-            }
-
-            // Apply the adjustment
-            reputation.reputation_score += adjustment;
-
-            // Clamp to allowed range
-            reputation.reputation_score = reputation
-                .reputation_score
-                .max(REPUTATION_SCORE_MIN)
-                .min(REPUTATION_SCORE_MAX);
-
-            // Update timestamp
-            reputation.last_reputation_update = now;
-
-            // If this is a penalty, record the time
-            if adjustment < 0.0 {
-                reputation.last_penalized = Some(now);
-            }
-
-            // Log the update if privacy logging is enabled
-            if PRIVACY_LOGGING_ENABLED {
-                // In a real implementation, this would log to a secure, privacy-focused logger
-                // println!("Updated peer reputation for {}: {} ({}) - now {}",
-                //          peer, adjustment, reason, reputation.reputation_score);
-            }
-        }
-    }
-
-    /// Reward a peer for successful transaction relay
-    pub fn reward_successful_relay(&mut self, peer: SocketAddr, tx_hash: &[u8; 32]) {
-        if !DYNAMIC_PEER_SCORING_ENABLED {
-            return;
-        }
-
-        self.initialize_peer_reputation(peer);
-
-        if let Some(reputation) = self.peer_reputation.get_mut(&peer) {
-            reputation.successful_relays += 1;
-        }
-
-        self.update_peer_reputation(peer, REPUTATION_REWARD_SUCCESSFUL_RELAY, "successful_relay");
-
-        // Add to historical paths for this transaction
-        if let Some(path) = self.historical_paths.get_mut(tx_hash) {
-            if !path.contains(&peer) {
-                path.push(peer);
-            }
-        } else {
-            self.historical_paths.insert(*tx_hash, vec![peer]);
-        }
-    }
-
-    /// Penalize a peer for suspicious behavior
-    pub fn penalize_suspicious_behavior(
-        &mut self,
-        peer: SocketAddr,
-        tx_hash: &[u8; 32],
-        behavior_type: &str,
-    ) {
-        if !DYNAMIC_PEER_SCORING_ENABLED {
-            return;
-        }
-
-        self.record_suspicious_behavior(tx_hash, peer, behavior_type);
-        self.update_peer_reputation(peer, REPUTATION_PENALTY_SUSPICIOUS, behavior_type);
-
-        // Additional penalties for specific behaviors
-        if behavior_type == "sybil_indicator" {
-            self.update_peer_reputation(peer, REPUTATION_PENALTY_SYBIL, "sybil_indicator");
-
-            if let Some(reputation) = self.peer_reputation.get_mut(&peer) {
-                reputation.sybil_indicators += 1;
-            }
-        }
-    }
-
-    /// Get peers sorted by reputation score (highest first)
-    pub fn get_peers_by_reputation(&self, min_score: Option<f64>) -> Vec<(SocketAddr, f64)> {
-        let min_score = min_score.unwrap_or(REPUTATION_THRESHOLD_STEM);
-
-        let mut peers: Vec<(SocketAddr, f64)> = self
-            .peer_reputation
-            .iter()
-            .filter(|(_, rep)| rep.reputation_score >= min_score)
-            .map(|(addr, rep)| (*addr, rep.reputation_score))
-            .collect();
-
-        // Sort by score (descending)
-        peers.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-
-        peers
-    }
-
-    /// Periodic reputation decay for all peers
-    pub fn decay_all_reputations(&mut self) {
-        if !DYNAMIC_PEER_SCORING_ENABLED {
-            return;
-        }
-
-        let now = Instant::now();
-        let hours_since_decay =
-            now.duration_since(self.last_reputation_decay).as_secs_f64() / 3600.0;
-
-        if hours_since_decay < 1.0 {
-            return; // Only decay once per hour
-        }
-
-        for reputation in self.peer_reputation.values_mut() {
-            reputation.reputation_score *= REPUTATION_DECAY_FACTOR.powf(hours_since_decay);
-            reputation.last_reputation_update = now;
-        }
-
-        self.last_reputation_decay = now;
-    }
-
-    /// Create a new anonymity set based on current peer reputations
-    pub fn create_anonymity_set(&mut self, size: Option<usize>) -> u64 {
-        let target_size = size.unwrap_or(ANONYMITY_SET_MIN_SIZE);
-        let now = Instant::now();
-
-        // Get high-reputation peers
-        let trusted_peers: Vec<SocketAddr> = self
-            .get_peers_by_reputation(Some(REPUTATION_THRESHOLD_STEM))
-            .into_iter()
-            .map(|(addr, _)| addr)
-            .collect();
-
-        // Ensure diversity by IP subnet
-        let mut selected_peers = HashSet::new();
-        let mut selected_subnets = HashSet::new();
-
-        for peer in &trusted_peers {
-            if selected_peers.len() >= target_size {
-                break;
-            }
-
-            // Extract subnet information
-            let subnet = match peer.ip() {
-                IpAddr::V4(ipv4) => {
-                    let octets = ipv4.octets();
-                    [octets[0], octets[1]]
-                }
-                _ => continue, // Skip IPv6 for simplicity
-            };
-
-            // Prioritize peers from different subnets
-            if selected_subnets.len() < target_size / 2 || !selected_subnets.contains(&subnet) {
-                selected_peers.insert(*peer);
-                selected_subnets.insert(subnet);
-            }
-        }
-
-        // If we don't have enough diverse peers, add more from trusted peers
-        if selected_peers.len() < target_size {
-            for peer in &trusted_peers {
-                if selected_peers.len() >= target_size {
-                    break;
-                }
-                selected_peers.insert(*peer);
-            }
-        }
-
-        // Create the anonymity set
-        let set_id = self.next_anonymity_set_id;
-        self.next_anonymity_set_id += 1;
-
-        self.anonymity_sets.insert(
-            set_id,
-            AnonymitySet {
-                set_id,
-                peers: selected_peers.clone(),
-                creation_time: now,
-                last_used: now,
-                usage_count: 0,
-                effectiveness_score: 1.0,
-            },
-        );
-
-        set_id
-    }
-
-    /// Get an anonymity set based on set ID
-    pub fn get_anonymity_set(&mut self, set_id: u64) -> Option<&HashSet<SocketAddr>> {
-        if let Some(set) = self.anonymity_sets.get_mut(&set_id) {
-            set.last_used = Instant::now();
-            set.usage_count += 1;
-            return Some(&set.peers);
-        }
-        None
-    }
-
-    /// Get the best anonymity set for a transaction
-    pub fn get_best_anonymity_set(&mut self) -> HashSet<SocketAddr> {
-        let now = Instant::now();
-
-        // If we have no sets or they're too old, create a new one
-        if self.anonymity_sets.is_empty()
-            || now
-                .duration_since(self.last_anonymity_set_rotation)
-                .as_secs()
-                > 3600
-        {
-            let set_id = self.create_anonymity_set(None);
-            self.last_anonymity_set_rotation = now;
-            return self
-                .get_anonymity_set(set_id)
-                .cloned()
-                .unwrap_or_else(HashSet::new);
-        }
-
-        // Find the best set based on usage count and effectiveness
-        let best_set_id = self
-            .anonymity_sets
-            .iter()
-            .max_by(|(_, a), (_, b)| {
-                // Prefer sets with higher effectiveness score and lower usage count
-                let a_score = a.effectiveness_score - (a.usage_count as f64 * 0.01);
-                let b_score = b.effectiveness_score - (b.usage_count as f64 * 0.01);
-                a_score
-                    .partial_cmp(&b_score)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
-            .map(|(id, _)| *id);
-
-        if let Some(id) = best_set_id {
-            return self
-                .get_anonymity_set(id)
-                .cloned()
-                .unwrap_or_else(HashSet::new);
-        }
-
-        // Fall back to creating a new set
-        let set_id = self.create_anonymity_set(None);
-        self.get_anonymity_set(set_id)
-            .cloned()
-            .unwrap_or_else(HashSet::new)
-    }
-
-    /// Update anonymity set effectiveness based on transaction outcome
-    pub fn update_anonymity_set_effectiveness(&mut self, set_id: u64, was_successful: bool) {
-        if let Some(set) = self.anonymity_sets.get_mut(&set_id) {
-            // Adjust effectiveness score based on success
-            if was_successful {
-                set.effectiveness_score = (set.effectiveness_score * 0.9) + 0.1;
-            } else {
-                set.effectiveness_score = (set.effectiveness_score * 0.9) - 0.1;
-                set.effectiveness_score = set.effectiveness_score.max(0.1);
-            }
-        }
-    }
-
-    /// Clean up old anonymity sets
-    pub fn cleanup_anonymity_sets(&mut self, max_age: Duration) {
-        let now = Instant::now();
-        self.anonymity_sets.retain(|_, set| {
-            now.duration_since(set.last_used) < max_age || set.effectiveness_score > 0.8
-        });
-    }
-
-    /// Detect if a peer is likely part of a Sybil attack
-    pub fn detect_sybil_peer(&mut self, peer: SocketAddr) -> bool {
-        if let Some(reputation) = self.peer_reputation.get(&peer) {
-            // Check for direct indicators
-            if reputation.sybil_indicators >= 2 {
-                return true;
-            }
-
-            // Check for indirect indicators (part of a suspicious cluster)
-            if let Some(cluster_id) = reputation.peer_cluster {
-                if let Some(cluster) = self.sybil_clusters.get(&cluster_id) {
-                    if cluster.confidence_score > 0.7 {
-                        return true;
-                    }
-                }
-            }
-        }
-
-        false
-    }
-
-    /// Detect potential Sybil clusters
-    pub fn detect_sybil_clusters(&mut self) -> Vec<Vec<SocketAddr>> {
-        let mut clusters = Vec::new();
-
-        // Get trusted peers with good reputation
-        let trusted_peers: Vec<SocketAddr> = self
-            .get_peers_by_reputation(Some(REPUTATION_THRESHOLD_STEM))
-            .into_iter()
-            .map(|(addr, _)| addr)
-            .collect();
-
-        // Skip if not enough peers for detection
-        if trusted_peers.len() < MIN_PEERS_FOR_SYBIL_DETECTION {
-            return clusters;
-        }
-
-        // Group peers by subnet
-        let mut subnet_groups: HashMap<String, Vec<SocketAddr>> = HashMap::new();
-
-        // First pass - group by subnet
-        for peer in &trusted_peers {
-            let subnet = self.get_peer_subnet(peer);
-            subnet_groups
-                .entry(subnet)
-                .or_insert_with(Vec::new)
-                .push(*peer);
-        }
-
-        // Second pass - analyze behavior patterns
-        for (_, peers) in subnet_groups {
-            if peers.len() >= SYBIL_DETECTION_CLUSTER_THRESHOLD {
-                let mut cluster = Vec::new();
-                let mut patterns = Vec::new();
-
-                // Get behavior patterns for each peer
-                for peer in &peers {
-                    let pattern = self.get_peer_behavior_pattern(peer);
-                    patterns.push((*peer, pattern));
-                }
-
-                // Compare patterns
-                for i in 0..patterns.len() {
-                    let mut similar_peers = vec![patterns[i].0];
-
-                    for j in (i + 1)..patterns.len() {
-                        if self.are_patterns_similar(&patterns[i].1, &patterns[j].1) {
-                            similar_peers.push(patterns[j].0);
-                        }
-                    }
-
-                    // If enough peers show similar behavior, consider it a Sybil cluster
-                    if similar_peers.len() >= SYBIL_DETECTION_CLUSTER_THRESHOLD {
-                        cluster.extend(similar_peers);
-                    }
-                }
-
-                if !cluster.is_empty() {
-                    // Penalize all peers in the cluster
-                    for peer in &cluster {
-                        self.update_peer_reputation(
-                            *peer,
-                            REPUTATION_PENALTY_SYBIL,
-                            "sybil_cluster_detected",
-                        );
-                    }
-                    clusters.push(cluster);
-                }
-            }
-        }
-
-        clusters
-    }
-
-    /// Check for potential eclipse attack based on IP diversity
-    pub fn check_for_eclipse_attack(&mut self) -> EclipseAttackResult {
-        // Count IP subnets in current outbound peers
-        let mut subnet_counts: HashMap<[u8; 2], usize> = HashMap::new();
-
-        for peer in &self.outbound_peers {
-            let subnet = match peer.ip() {
-                IpAddr::V4(ipv4) => {
-                    let octets = ipv4.octets();
-                    [octets[0], octets[1]]
-                }
-                _ => continue, // Skip IPv6 for now
-            };
-
-            *subnet_counts.entry(subnet).or_insert(0) += 1;
-        }
-
-        // Store in history for trend analysis
-        self.ip_diversity_history.push_back(subnet_counts.clone());
-        if self.ip_diversity_history.len() > 10 {
-            self.ip_diversity_history.pop_front();
-        }
-
-        // Check if we have enough diversity
-        let distinct_subnets = subnet_counts.len();
-        let eclipse_risk = distinct_subnets < ECLIPSE_DEFENSE_IP_DIVERSITY_THRESHOLD;
-
-        // Check for subnet dominance
-        let total_peers = self.outbound_peers.len();
-        let eclipse_dominance = subnet_counts
-            .values()
-            .any(|&count| count as f64 / total_peers as f64 > 0.5);
-
-        // Check for progressive increase in particular subnet representation
-        let progressive_eclipse = if self.ip_diversity_history.len() >= 3 {
-            let current = &self.ip_diversity_history[self.ip_diversity_history.len() - 1];
-            let prev = &self.ip_diversity_history[self.ip_diversity_history.len() - 3];
-
-            // Check if any subnet has increased significantly
-            current.iter().any(|(subnet, current_count)| {
-                if let Some(prev_count) = prev.get(subnet) {
-                    let increase = *current_count as f64 / *prev_count as f64;
-                    increase > 1.5 && *current_count as f64 / total_peers as f64 > 0.3
-                } else {
-                    false
-                }
-            })
-        } else {
-            false
-        };
-
-        let is_eclipse_detected = eclipse_risk || eclipse_dominance || progressive_eclipse;
-        self.eclipse_defense_active = is_eclipse_detected;
-
-        // Identify overrepresented subnet if any
-        let overrepresented_subnet = if is_eclipse_detected {
-            subnet_counts
-                .iter()
-                .filter(|(_, &count)| count as f64 / total_peers as f64 > 0.3)
-                .max_by_key(|(_, &count)| count)
-                .map(|(subnet, _)| [subnet[0], subnet[1], 1, 0])
-        } else {
-            None
-        };
-
-        // Identify peers to drop if needed
-        let peers_to_drop = if let Some(subnet) = overrepresented_subnet {
-            self.outbound_peers
-                .iter()
-                .filter(|peer| {
-                    if let IpAddr::V4(ipv4) = peer.ip() {
-                        let octets = ipv4.octets();
-                        octets[0] == subnet[0] && octets[1] == subnet[1]
-                    } else {
-                        false
-                    }
-                })
-                .take((total_peers as f64 * 0.3) as usize)
-                .cloned()
-                .collect()
-        } else {
-            Vec::new()
-        };
-
-        EclipseAttackResult {
-            is_eclipse_detected,
-            overrepresented_subnet,
-            peers_to_drop,
-        }
-    }
-
-    /// Setup layered encryption for a transaction path
-    pub fn setup_layered_encryption(
-        &mut self,
-        tx_hash: &[u8; 32],
-        path: &[SocketAddr],
-    ) -> Option<[u8; 16]> {
-        if !LAYERED_ENCRYPTION_ENABLED || path.is_empty() {
-            return None;
-        }
-
-        // Create a session ID
-        let mut session_id = [0u8; 16];
-        self.secure_rng.fill_bytes(&mut session_id);
-
-        // Generate keys for each hop in the path
-        let mut keys = Vec::with_capacity(path.len());
-        for _ in 0..path.len() {
-            let mut key = [0u8; 32];
-            self.secure_rng.fill_bytes(&mut key);
-            keys.push(key);
-        }
-
-        // Store the session
-        let now = Instant::now();
-        let expiration = now + Duration::from_secs(3600); // 1 hour
-
-        self.layered_encryption_sessions.insert(
-            session_id,
-            LayeredEncryptionKeys {
-                session_id,
-                keys,
-                creation_time: now,
-                expiration_time: expiration,
-            },
-        );
-
-        // Update transaction metadata
-        if let Some(metadata) = self.transactions.get_mut(tx_hash) {
-            metadata.encryption_layers = path.len();
-            metadata.privacy_mode = PrivacyRoutingMode::Layered;
-        }
-
-        Some(session_id)
-    }
-
-    /// Clean up expired layered encryption sessions
-    pub fn cleanup_encryption_sessions(&mut self) {
-        let now = Instant::now();
-        self.layered_encryption_sessions
-            .retain(|_, session| now < session.expiration_time);
-    }
-
-    /// Build a diverse path by adding hops from different subnets
-    fn build_diverse_path(
-        &mut self,
-        path: &mut Vec<SocketAddr>,
-        available_peers: &[SocketAddr],
-        avoid_peers: &[SocketAddr],
-    ) {
-        // Ensure we don't exceed maximum path length
-        if path.len() >= MAX_ROUTING_PATH_LENGTH {
-            return;
-        }
-
-        let mut rng = thread_rng();
-        let mut used_subnets = HashSet::new();
-
-        // Get subnets of peers already in the path
-        for peer in path.iter() {
-            if let IpAddr::V4(ipv4) = peer.ip() {
-                let octets = ipv4.octets();
-                used_subnets.insert([octets[0], octets[1]]);
-            }
-        }
-
-        // Try to add peers from different subnets
-        let mut candidates: Vec<SocketAddr> = available_peers
-            .iter()
-            .filter(|p| {
-                // Skip peers already in the path
-                if path.contains(p) {
-                    return false;
-                }
-
-                // Skip peers in the avoid list
-                if avoid_peers.contains(p) {
-                    return false;
-                }
-
-                // Check subnet diversity
-                if let IpAddr::V4(ipv4) = p.ip() {
-                    let octets = ipv4.octets();
-                    let subnet = [octets[0], octets[1]];
-
-                    // Prefer adding peers from different subnets
-                    if used_subnets.contains(&subnet) {
-                        // 20% chance to still include a peer from same subnet
-                        rng.gen_bool(0.2)
-                    } else {
-                        true
-                    }
-                } else {
-                    false // Skip IPv6 for now
-                }
-            })
-            .cloned()
-            .collect();
-
-        // Randomize order
-        candidates.shuffle(&mut rng);
-
-        // Add first available candidate
-        if let Some(next_hop) = candidates.first() {
-            path.push(*next_hop);
-
-            // Track subnet
-            if let IpAddr::V4(ipv4) = next_hop.ip() {
-                let octets = ipv4.octets();
-                used_subnets.insert([octets[0], octets[1]]);
-            }
-
-            // Recursively build rest of path
-            self.build_diverse_path(path, available_peers, avoid_peers);
-        }
-    }
-
-    // Test-only methods
-    #[cfg(test)]
-    pub fn set_last_decoy_generation(&mut self, time: std::time::Instant) {
-        self.last_decoy_generation = time;
-    }
-
-    #[cfg(test)]
-    pub fn get_transaction_batches(&mut self) -> &mut HashMap<u64, TransactionBatch> {
-        &mut self.transaction_batches
-    }
-
-    #[cfg(test)]
-    pub fn get_network_traffic(&self) -> f64 {
-        self.current_network_traffic
-    }
-
-    #[cfg(test)]
-    pub fn get_recent_transactions(&self) -> &VecDeque<([u8; 32], std::time::Instant)> {
-        &self.recent_transactions
-    }
-
-    #[cfg(test)]
-    pub fn get_anonymity_sets_len(&self) -> usize {
-        self.anonymity_sets.len()
-    }
-
-    #[cfg(test)]
-    pub fn get_peer_reputation(&self, peer: &SocketAddr) -> Option<&PeerReputation> {
-        self.peer_reputation.get(peer)
-    }
-
-    /// Get all transactions
-    pub fn get_transactions(&self) -> &HashMap<[u8; 32], PropagationMetadata> {
-        &self.transactions
-    }
-
-    /// Get all stem successors
-    pub fn get_stem_successors(&self) -> &HashMap<SocketAddr, SocketAddr> {
-        &self.stem_successors
-    }
-
-    /// Update stem successors with new peer information
-    pub fn update_stem_successors(&mut self, known_peers: &[SocketAddr]) {
-        // Clear existing stem successors
-        self.stem_successors.clear();
-
-        if known_peers.is_empty() {
-            return;
-        }
-
-        // Create a new random mapping for stem phase routing
-        let mut rng = thread_rng();
-
-        for &peer in known_peers {
-            // Select a random successor that is not the peer itself
-            let available_successors: Vec<&SocketAddr> =
-                known_peers.iter().filter(|&p| p != &peer).collect();
-
-            if !available_successors.is_empty() {
-                let successor = *available_successors[rng.gen_range(0..available_successors.len())];
-                self.stem_successors.insert(peer, successor);
-            }
-        }
-
-        // Log the update if privacy logging is enabled
-        if PRIVACY_LOGGING_ENABLED {
-            println!(
-                "Updated Dandelion stem successors with {} mappings",
-                self.stem_successors.len()
-            );
-        }
-    }
-
-    /// Get all multi-hop paths
-    pub fn get_multi_hop_paths(&self) -> &HashMap<SocketAddr, Vec<SocketAddr>> {
-        &self.multi_hop_paths
-    }
-
-    /// Get the next batch ID
-    pub fn get_next_batch_id(&self) -> u64 {
-        self.next_batch_id
-    }
-
-    /// Track a transaction request from a peer
-    pub fn track_transaction_request(&mut self, peer: SocketAddr, tx_hash: &[u8; 32]) {
-        if let Some(reputation) = self.peer_reputation.get_mut(&peer) {
-            reputation
-                .transaction_requests
-                .entry(*tx_hash)
-                .and_modify(|count| *count += 1)
-                .or_insert(1);
-        }
-    }
-
-    /// Check if we should send a dummy response to a peer
-    pub fn should_send_dummy_response(&self, peer: SocketAddr, tx_hash: &[u8; 32]) -> bool {
-        if let Some(reputation) = self.peer_reputation.get(&peer) {
-            if let Some(request_count) = reputation.transaction_requests.get(tx_hash) {
-                return *request_count > SUSPICIOUS_BEHAVIOR_THRESHOLD;
-            }
-        }
-        false
-    }
-
-    /// Generate a dummy transaction for anti-snooping
-    pub fn generate_dummy_transaction(&mut self) -> Option<[u8; 32]> {
-        let mut dummy_tx = [0u8; 32];
-        self.secure_rng.fill_bytes(&mut dummy_tx);
-        Some(dummy_tx)
-    }
-
-    /// Clean up old snoop detection data
-    pub fn cleanup_snoop_detection(&mut self) {
-        let now = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_secs() as u32;
-
-        for reputation in self.peer_reputation.values_mut() {
-            reputation.transaction_requests.retain(|_, timestamp| {
-                // Keep items that are less than an hour old
-                now - *timestamp < 3600
-            });
-        }
-    }
-
-    /// Generate Laplace noise for differential privacy
-    pub fn generate_laplace_noise(&mut self, scale: f64) -> f64 {
-        let u1: f64 = self.secure_rng.gen();
-        let u2: f64 = self.secure_rng.gen();
-        let noise = -scale * (1.0 - 2.0 * u1).signum() * (1.0 - 2.0 * u2).ln();
-        noise
-    }
-
-    /// Calculate differential privacy delay for a transaction
-    pub fn calculate_differential_privacy_delay(&mut self, _tx_hash: &[u8; 32]) -> Duration {
-        let base_delay = Duration::from_millis(100);
-        let noise = self.generate_laplace_noise(50.0);
-        let additional_delay = Duration::from_millis(noise.abs() as u64);
-        base_delay + additional_delay
-    }
-
-    fn get_peer_subnet(&self, peer: &SocketAddr) -> String {
-        match peer.ip() {
-            IpAddr::V4(ipv4) => {
-                let octets = ipv4.octets();
-                format!("{}.{}", octets[0], octets[1])
-            }
-            IpAddr::V6(_) => "ipv6".to_string(), // Simplified for IPv6
-        }
-    }
-
-    fn get_peer_behavior_pattern(&self, peer: &SocketAddr) -> Vec<f64> {
-        let mut pattern = Vec::new();
-
-        if let Some(reputation) = self.peer_reputation.get(peer) {
-            // Add various behavioral metrics to the pattern
-            pattern.push(reputation.successful_relays as f64);
-            pattern.push(reputation.failed_relays as f64);
-            pattern.push(reputation.suspicious_actions as f64);
-            pattern.push(reputation.sybil_indicators as f64);
-            pattern.push(reputation.eclipse_indicators as f64);
-            pattern.push(reputation.dummy_responses_sent as f64);
-
-            // Add timing pattern metrics
-            if let Some(last_used) = reputation.last_used_for_stem {
-                pattern.push(last_used.elapsed().as_secs_f64());
-            } else {
-                pattern.push(f64::MAX);
-            }
-
-            // Add connection pattern metrics
-            let connection_intervals: Vec<f64> = reputation
-                .connection_patterns
-                .iter()
-                .zip(reputation.connection_patterns.iter().skip(1))
-                .map(|(t1, t2)| t2.duration_since(*t1).as_secs_f64())
-                .collect();
-
-            if !connection_intervals.is_empty() {
-                let avg_interval =
-                    connection_intervals.iter().sum::<f64>() / connection_intervals.len() as f64;
-                pattern.push(avg_interval);
-            } else {
-                pattern.push(0.0);
-            }
-        }
-
-        pattern
-    }
-
-    fn are_patterns_similar(&self, pattern1: &[f64], pattern2: &[f64]) -> bool {
-        if pattern1.len() != pattern2.len() || pattern1.is_empty() {
-            return false;
-        }
-
-        // Calculate Euclidean distance between patterns
-        let squared_diff_sum: f64 = pattern1
-            .iter()
-            .zip(pattern2.iter())
-            .map(|(a, b)| (a - b).powi(2))
-            .sum();
-
-        let distance = squared_diff_sum.sqrt();
-
-        // Patterns are similar if their distance is below a threshold
-        let threshold = 5.0; // Adjust based on pattern scale
-        distance < threshold
-    }
-
-    /// Get the fluffed transaction data
-    pub fn get_fluffed_transaction(&self, tx_hash: &[u8; 32]) -> Option<Vec<u8>> {
-        // Check if we have this transaction in our pool
-        if let Some(metadata) = self.transactions.get(tx_hash) {
-            return Some(metadata.tx_data.clone());
-        }
-        None
-    }
-
-    /// Refresh the entropy pool used for path randomization
-    pub fn refresh_entropy_pool(&mut self) {
-        let now = Instant::now();
-        
-        // Don't refresh too frequently to avoid predictability
-        if now.duration_since(self.last_entropy_refresh) < ENTROPY_SOURCE_REFRESH_INTERVAL {
-            return;
-        }
-        
-        // Mix in new entropy from various sources
-        let mut new_entropy = Vec::with_capacity(64);
-        
-        // System entropy
-        let mut system_rng = thread_rng();
-        for _ in 0..16 {
-            new_entropy.push(system_rng.gen::<u8>());
-        }
-        
-        // Timing information (hard to predict externally)
-        let timing_bytes = SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_else(|_| Duration::from_secs(0))
-            .as_nanos()
-            .to_le_bytes();
-        new_entropy.extend_from_slice(&timing_bytes[0..16]);
-        
-        // Transaction history (difficult for attackers to predict)
-        let tx_count = self.transactions.len() as u64;
-        new_entropy.extend_from_slice(&tx_count.to_le_bytes());
-        
-        // Network conditions
-        for (peer, condition) in &self.network_conditions {
-            let addr_bytes = match peer.ip() {
-                IpAddr::V4(ip) => ip.octets().to_vec(),
-                IpAddr::V6(ip) => ip.octets()[0..4].to_vec(),
-            };
-            
-            let latency_ns = condition.avg_latency.as_nanos() as u64;
-            let latency_bytes = latency_ns.to_le_bytes();
-            
-            new_entropy.extend_from_slice(&addr_bytes);
-            new_entropy.extend_from_slice(&latency_bytes);
-            
-            // Avoid collecting too much data
-            if new_entropy.len() > 48 {
-                break;
-            }
-        }
-        
-        // Combine with existing entropy using ChaCha20 permutation
-        let mut combined_entropy = Vec::with_capacity(64);
-        combined_entropy.extend_from_slice(&self.entropy_pool);
-        combined_entropy.extend_from_slice(&new_entropy);
-        
-        // Use cryptographic mixing for secure entropy combination
-        let seed: [u8; 32] = {
-            let mut hash = [0u8; 32];
-            for (i, chunk) in combined_entropy.chunks(32).enumerate() {
-                for (j, &byte) in chunk.iter().enumerate() {
-                    if i * 32 + j < 32 {
-                        hash[i * 32 + j] ^= byte;
-                    }
-                }
-            }
-            hash
-        };
-        
-        let mut rng = ChaCha20Rng::from_seed(seed);
-        
-        // Create new entropy pool
-        self.entropy_pool.clear();
-        for _ in 0..64 {
-            self.entropy_pool.push(rng.gen::<u8>());
-        }
-        
-        self.last_entropy_refresh = now;
-    }
-    
-    /// Generate entropy-based weights for path selection
-    /// This creates a randomization factor that's unpredictable but deterministic for a given transaction
-    pub fn generate_path_selection_weights(&mut self, tx_hash: &[u8; 32], peers: &[SocketAddr]) -> HashMap<SocketAddr, f64> {
-        // Refresh entropy pool if needed
-        if Instant::now().duration_since(self.last_entropy_refresh) >= ENTROPY_SOURCE_REFRESH_INTERVAL {
-            self.refresh_entropy_pool();
-        }
-        
-        let mut weights = HashMap::new();
-        
-        // Create a seed that combines transaction hash with our entropy pool
-        let mut seed_material = Vec::with_capacity(tx_hash.len() + 32);
-        seed_material.extend_from_slice(tx_hash);
-        seed_material.extend_from_slice(&self.entropy_pool[0..32]);
-        
-        // Create a deterministic seed for this transaction
-        let mut seed = [0u8; 32];
-        for (i, chunk) in seed_material.chunks(32).enumerate() {
-            for (j, &byte) in chunk.iter().enumerate() {
-                if i * 32 + j < 32 {
-                    seed[i * 32 + j] ^= byte;
-                }
-            }
-        }
-        
-        // Create a deterministic RNG for this transaction
-        let mut rng = ChaCha20Rng::from_seed(seed);
-        
-        // Assign weights to peers
-        for &peer in peers {
-            // Generate a weight based on our entropy and the transaction
-            let base_weight = rng.gen_range(0.5..1.5);
-            
-            // Apply reputation-based adjustment
-            let reputation_factor = if let Some(rep) = self.peer_reputation.get(&peer) {
-                // Map reputation from [-100, 100] to [0.5, 1.5]
-                (rep.reputation_score + 100.0) / 133.33 + 0.5
-            } else {
-                1.0 // Neutral for unknown peers
-            };
-            
-            // Apply network conditions adjustment
-            let network_factor = if let Some(cond) = self.network_conditions.get(&peer) {
-                // Prefer peers with lower latency
-                let latency_ms = cond.avg_latency.as_millis() as f64;
-                // Inversely weight by latency, but keep within reasonable bounds
-                (1000.0 / (latency_ms + 100.0)).clamp(0.75, 1.25)
-            } else {
-                1.0 // Neutral for unknown network conditions
-            };
-            
-            // Apply subnet diversity adjustment
-            // Extract the subnet to determine diversity
-            let subnet = self.get_peer_subnet(&peer);
-            
-            // Count how many peers we've already selected from this subnet
-            let subnet_count = weights
-                .keys()
-                .filter(|p| self.get_peer_subnet(p) == subnet)
-                .count() as f64;
-            
-            // Penalize peers from subnets we've already selected from
-            let diversity_factor = if subnet_count > 0.0 {
-                // Apply diminishing probability as we select more from same subnet
-                1.0 / (1.0 + subnet_count * 0.5)
-            } else {
-                // Bonus for first peer from a subnet
-                1.2
-            };
-            
-            // Combine all factors with some randomness
-            let weight = base_weight * reputation_factor * network_factor * diversity_factor;
-            
-            weights.insert(peer, weight);
-        }
-        
-        weights
-    }
-
-    /// Select a path using adaptive entropy-based path selection
-    pub fn select_adaptive_path(&mut self, tx_hash: &[u8; 32], available_peers: &[SocketAddr]) -> Vec<SocketAddr> {
-        if available_peers.len() < MIN_ROUTING_PATH_LENGTH {
-            // Not enough peers for a proper path
-            return available_peers.to_vec();
-        }
-        
-        // Generate weights for peer selection
-        let weights = self.generate_path_selection_weights(tx_hash, available_peers);
-        
-        // Determine path length based on entropy and network conditions
-        let path_length = {
-            let entropy_byte = self.entropy_pool[tx_hash[0] as usize % 64];
-            let base_length = MIN_ROUTING_PATH_LENGTH + (entropy_byte % 3) as usize;
-            
-            // Adjust based on network traffic
-            let traffic_adjustment = if self.current_network_traffic > 0.8 {
-                -1 // High traffic, shorter paths
-            } else if self.current_network_traffic < 0.3 {
-                1 // Low traffic, longer paths
-            } else {
-                0 // Normal traffic, no adjustment
-            };
-            
-            // Ensure within bounds
-            (base_length as isize + traffic_adjustment)
-                .clamp(MIN_ROUTING_PATH_LENGTH as isize, MAX_ROUTING_PATH_LENGTH as isize) as usize
-        };
-        
-        // Prepare for selection
-        let mut selected_peers = Vec::with_capacity(path_length);
-        let mut remaining_peers: Vec<SocketAddr> = available_peers.to_vec();
-        let mut used_subnets = HashSet::new();
-        
-        // Select nodes for the path
-        for _ in 0..path_length {
-            if remaining_peers.is_empty() {
-                break;
-            }
-            
-            // Calculate selection probabilities based on weights
-            let total_weight: f64 = remaining_peers.iter()
-                .filter_map(|p| weights.get(p).copied())
-                .sum();
-            
-            if total_weight <= 0.0 {
-                break;
-            }
-            
-            // Select a peer weighted by our calculated factors
-            let mut cumulative_prob = 0.0;
-            let selection_point = self.secure_rng.gen::<f64>() * total_weight;
-            
-            let mut selected_idx = 0;
-            for (i, peer) in remaining_peers.iter().enumerate() {
-                let weight = weights.get(peer).copied().unwrap_or(0.0);
-                cumulative_prob += weight;
-                
-                if cumulative_prob >= selection_point {
-                    selected_idx = i;
-                    break;
-                }
-            }
-            
-            // Add the selected peer to our path
-            let selected_peer = remaining_peers.remove(selected_idx);
-            selected_peers.push(selected_peer);
-            
-            // Track its subnet for diversity
-            if let IpAddr::V4(ipv4) = selected_peer.ip() {
-                let octets = ipv4.octets();
-                used_subnets.insert([octets[0], octets[1]]);
-            }
-        }
-        
-        // For the path metrics
-        if !selected_peers.is_empty() {
-            self.recent_paths.push_back(selected_peers.clone());
-            
-            // Maintain limited history
-            while self.recent_paths.len() > 20 {
-                self.recent_paths.pop_front();
-            }
-        }
-        
-        selected_peers
-    }
-
-    /// Initialize peer reputation with extended attributes for routing reliability
-    pub fn initialize_peer_reputation(&mut self, peer: SocketAddr) {
-        if self.peer_reputation.contains_key(&peer) {
-            return;
-        }
-
-        // Extract subnet info for grouping (first two octets of IPv4)
-        let subnet = match peer.ip() {
-            IpAddr::V4(ipv4) => {
-                let octets = ipv4.octets();
-                [octets[0], octets[1], octets[2], octets[3]]
-            }
-            IpAddr::V6(_) => [0, 0, 0, 0], // Special case for IPv6
-        };
-
-        let reputation = PeerReputation {
-            reputation_score: 0.0,
-            last_reputation_update: Instant::now(),
-            successful_relays: 0,
-            failed_relays: 0,
-            suspicious_actions: 0,
-            sybil_indicators: 0,
-            eclipse_indicators: 0,
-            last_used_for_stem: None,
-            last_used_for_fluff: None,
-            ip_subnet: subnet,
-            autonomous_system: None,
-            transaction_requests: HashMap::new(),
-            connection_patterns: VecDeque::new(),
-            dummy_responses_sent: 0,
-            last_penalized: None,
-            peer_cluster: None,
-            tor_compatible: false,
-            mixnet_compatible: false,
-            layered_encryption_compatible: false,
-            routing_reliability: 0.5, // Start with neutral reliability
-            avg_relay_time: None,
-            relay_time_samples: VecDeque::with_capacity(20),
-            relay_success_rate: 0.0,
-            historical_paths: Vec::new(),
-            reputation_stability: 0.0,
-        };
-
-        self.peer_reputation.insert(peer, reputation);
-    }
-
-    /// Update peer's routing reliability metrics based on relay performance
-    pub fn update_peer_routing_reliability(&mut self, peer: SocketAddr, relay_success: bool, relay_time: Option<Duration>) {
-        if !DYNAMIC_PEER_SCORING_ENABLED {
-            return;
-        }
-
-        self.initialize_peer_reputation(peer);
-        
-        if let Some(reputation) = self.peer_reputation.get_mut(&peer) {
             // Update success/failure counters
             if relay_success {
                 reputation.successful_relays += 1;
@@ -2772,479 +1638,1463 @@ impl DandelionManager {
         path
     }
 
-    // Modify generate_path_selection_weights to account for routing reliability
-    pub fn generate_path_selection_weights(&mut self, tx_hash: &[u8; 32], peers: &[SocketAddr]) -> HashMap<SocketAddr, f64> {
-        // Refresh entropy pool if needed
-        if Instant::now().duration_since(self.last_entropy_refresh) >= ENTROPY_SOURCE_REFRESH_INTERVAL {
-            self.refresh_entropy_pool();
-        }
-        
-        let mut weights = HashMap::new();
-        
-        // Create a seed that combines transaction hash with our entropy pool
-        let mut seed_material = Vec::with_capacity(tx_hash.len() + 32);
-        seed_material.extend_from_slice(tx_hash);
-        seed_material.extend_from_slice(&self.entropy_pool[0..32]);
-        
-        // Create a deterministic seed for this transaction
-        let mut seed = [0u8; 32];
-        for (i, chunk) in seed_material.chunks(32).enumerate() {
-            for (j, &byte) in chunk.iter().enumerate() {
-                if i * 32 + j < 32 {
-                    seed[i * 32 + j] ^= byte;
-                }
+    // Add method to update peer information
+    pub fn update_peer_info(&mut self, peer: SocketAddr, as_num: Option<u32>, country: Option<String>) {
+        if let Some(info) = self.peer_info.get_mut(&peer) {
+            info.autonomous_system = as_num;
+            if let Some(c) = country {
+                info.country = Some(c);
             }
-        }
-        
-        // Create a deterministic RNG for this transaction
-        let mut rng = ChaCha20Rng::from_seed(seed);
-        
-        // Assign weights to peers
-        for &peer in peers {
-            // Generate a weight based on our entropy and the transaction
-            let base_weight = rng.gen_range(0.5..1.5);
-            
-            // Apply reputation-based adjustment
-            let reputation_factor = if let Some(rep) = self.peer_reputation.get(&peer) {
-                // Map reputation from [-100, 100] to [0.5, 1.5]
-                // With an enhanced weight influence
-                let reputation_normalized = (rep.reputation_score + 100.0) / 133.33 + 0.5;
-                
-                // Apply routing reliability as an enhancement factor
-                let reliability_boost = rep.routing_reliability * 0.5; // 0-0.5 boost
-                
-                // Combine reputation with routing reliability
-                reputation_normalized * (1.0 + reliability_boost)
-            } else {
-                1.0 // Neutral for unknown peers
-            };
-            
-            // Apply network conditions adjustment
-            let network_factor = if let Some(cond) = self.network_conditions.get(&peer) {
-                // Prefer peers with lower latency
-                let latency_ms = cond.avg_latency.as_millis() as f64;
-                // Inversely weight by latency, but keep within reasonable bounds
-                (1000.0 / (latency_ms + 100.0)).clamp(0.75, 1.25)
-            } else {
-                1.0 // Neutral for unknown network conditions
-            };
-            
-            // Apply subnet diversity adjustment
-            // Extract the subnet to determine diversity
-            let subnet = self.get_peer_subnet(&peer);
-            
-            // Count how many peers we've already selected from this subnet
-            let subnet_count = weights
-                .keys()
-                .filter(|p| self.get_peer_subnet(p) == subnet)
-                .count() as f64;
-            
-            // Penalize peers from subnets we've already selected from
-            let diversity_factor = if subnet_count > 0.0 {
-                // Apply diminishing probability as we select more from same subnet
-                1.0 / (1.0 + subnet_count * 0.5)
-            } else {
-                // Bonus for first peer from a subnet
-                1.2
-            };
-            
-            // Use frequency adjustment - avoid using the same peers too frequently
-            let frequency_factor = if let Some(rep) = self.peer_reputation.get(&peer) {
-                if let Some(last_used) = rep.last_used_for_stem {
-                    // Calculate how recently this peer was used
-                    let elapsed = Instant::now().duration_since(last_used).as_secs_f64();
-                    // Favor peers that haven't been used recently
-                    (elapsed / 60.0).min(5.0).max(1.0) / 5.0 + 0.8
-                } else {
-                    // Slightly favor peers that have never been used
-                    1.2
-                }
-            } else {
-                1.0 // Neutral
-            };
-            
-            // Combine all factors 
-            let weight = base_weight * 
-                reputation_factor * 
-                network_factor * 
-                diversity_factor * 
-                frequency_factor;
-            
-            weights.insert(peer, weight);
-        }
-        
-        weights
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-
-    #[test]
-    fn test_stem_successor_selection() {
-        let mut manager = DandelionManager::new();
-
-        // No peers should mean no successor
-        assert!(manager.get_stem_successor().is_none());
-
-        // Add some peers
-        let peers = vec![
-            "127.0.0.1:8333".parse().unwrap(),
-            "127.0.0.1:8334".parse().unwrap(),
-            "127.0.0.1:8335".parse().unwrap(),
-        ];
-
-        manager.update_outbound_peers(peers.clone());
-
-        // Should now have a successor
-        assert!(manager.get_stem_successor().is_some());
-        assert!(peers.contains(&manager.get_stem_successor().unwrap()));
-    }
-
-    #[test]
-    fn test_transaction_state_transition() {
-        let mut manager = DandelionManager::new();
-        let tx_hash = [0u8; 32];
-
-        // Add the transaction and get its state
-        let state = manager.add_transaction(tx_hash, None);
-
-        // Only test the transition if it's in the Stem state
-        if state == PropagationState::Stem {
-            if let Some(metadata) = manager.transactions.get_mut(&tx_hash) {
-                // Force quick transition
-                metadata.transition_time = Instant::now();
-            }
-
-            // Small sleep to ensure transition time is passed
-            std::thread::sleep(Duration::from_millis(10));
-
-            // Should now transition to fluff
-            let new_state = manager.check_transition(&tx_hash);
-            assert_eq!(new_state, Some(PropagationState::Fluff));
+            info.last_updated = Instant::now();
         } else {
-            // If it didn't start in Stem state, the test is basically skipped
-            println!("Transaction didn't start in Stem state, skipping transition test");
+            self.peer_info.insert(peer, PeerInfo {
+                autonomous_system: as_num,
+                country: country,
+                last_updated: Instant::now(),
+            });
         }
     }
 
-    #[test]
-    fn test_stem_path_calculation() {
-        let mut manager = DandelionManager::new();
+    fn apply_anti_fingerprinting(&mut self, candidate_path: &[SocketAddr]) -> bool {
+        // Create pattern from candidate path
+        let pattern = PathPattern::new(candidate_path, None);
+        
+        // Clean up old patterns
+        self.cleanup_old_patterns();
 
-        let peers = vec![
-            "127.0.0.1:8333".parse().unwrap(),
-            "127.0.0.1:8334".parse().unwrap(),
-            "127.0.0.1:8335".parse().unwrap(),
-            "127.0.0.1:8336".parse().unwrap(),
-            "127.0.0.1:8337".parse().unwrap(),
-        ];
+        // Check pattern frequency
+        let pattern_count = self.pattern_frequency_cache
+            .get(&pattern.pattern_hash)
+            .copied()
+            .unwrap_or(0);
+        
+        let pattern_frequency = pattern_count as f64 / PATH_PATTERN_CACHE_SIZE as f64;
+        if pattern_frequency > MAX_PATTERN_FREQUENCY {
+            return false;
+        }
 
-        // Force recalculation for testing
-        manager.calculate_stem_paths(&peers, true);
+        // Check similarity with recent patterns
+        let similar_patterns = self.recent_patterns.iter()
+            .filter(|p| p.similarity_score(&pattern) > PATTERN_SIMILARITY_THRESHOLD)
+            .count();
+        
+        let similarity_frequency = similar_patterns as f64 / self.recent_patterns.len() as f64;
+        if similarity_frequency > MAX_PATTERN_FREQUENCY {
+            return false;
+        }
 
-        // Each peer should have a successor
-        for peer in &peers {
-            assert!(manager.stem_successors.contains_key(peer));
+        // Update pattern tracking
+        self.recent_patterns.push_back(pattern.clone());
+        while self.recent_patterns.len() > PATH_PATTERN_CACHE_SIZE {
+            self.recent_patterns.pop_front();
+        }
 
-            // Successor should be a different peer
-            let successor = manager.stem_successors.get(peer).unwrap();
-            assert_ne!(peer, successor);
-            assert!(peers.contains(successor));
+        *self.pattern_frequency_cache.entry(pattern.pattern_hash).or_insert(0) += 1;
+
+        true
+    }
+
+    fn cleanup_old_patterns(&mut self) {
+        let now = Instant::now();
+        if now.duration_since(self.last_pattern_cleanup) < Duration::from_secs(60) {
+            return;
+        }
+
+        // Collect patterns to remove
+        let mut patterns_to_remove = Vec::new();
+        for (i, pattern) in self.recent_patterns.iter().enumerate() {
+            if now.duration_since(pattern.creation_time) > PATTERN_HISTORY_WINDOW {
+                patterns_to_remove.push(i);
+            }
+        }
+
+        // Remove patterns from newest to oldest to maintain correct indices
+        for &i in patterns_to_remove.iter().rev() {
+            if let Some(pattern) = self.recent_patterns.remove(i) {
+                if let Some(count) = self.pattern_frequency_cache.get_mut(&pattern.pattern_hash) {
+                    *count = count.saturating_sub(1);
+                }
+            }
+        }
+
+        // Clean up frequency cache
+        self.pattern_frequency_cache.retain(|_, count| *count > 0);
+        self.last_pattern_cleanup = now;
+    }
+
+    /// Create a new DandelionManager instance
+    pub fn new() -> Self {
+        let now = Instant::now();
+        let mut secure_rng = ChaCha20Rng::from_entropy();
+
+        Self {
+            transactions: HashMap::new(),
+            stem_successors: HashMap::new(),
+            multi_hop_paths: HashMap::new(),
+            current_successor: None,
+            last_path_recalculation: now,
+            outbound_peers: HashSet::new(),
+            network_conditions: HashMap::new(),
+            peer_reputation: HashMap::new(),
+            transaction_batches: HashMap::new(),
+            next_batch_id: 0,
+            last_decoy_generation: now,
+            secure_rng,
+            current_network_traffic: 0.0,
+            recent_transactions: VecDeque::new(),
+            recent_paths: VecDeque::new(),
+            anonymity_sets: HashMap::new(),
+            next_anonymity_set_id: 0,
+            last_anonymity_set_rotation: now,
+            sybil_clusters: HashSet::new(),
+            next_sybil_cluster_id: 0,
+            last_eclipse_check: now,
+            eclipse_defense_active: false,
+            tor_circuits: HashMap::new(),
+            mixnet_routes: HashMap::new(),
+            layered_encryption_sessions: HashMap::new(),
+            historical_paths: HashMap::new(),
+            last_reputation_decay: now,
+            dummy_transaction_hashes: VecDeque::new(),
+            snoop_detection_counters: HashMap::new(),
+            last_snoop_check: now,
+            ip_diversity_history: VecDeque::new(),
+            differential_privacy_state: Vec::new(),
+            entropy_pool: Vec::with_capacity(64),
+            last_entropy_refresh: now,
+            timing_obfuscation: TimingObfuscation::new(),
+            last_set_size_adjustment: now,
+            current_network_anonymity_level: ANONYMITY_SET_MIN_SIZE,
+            transaction_graph_samples: VecDeque::new(),
+            network_traffic_patterns: VecDeque::new(),
+            plausible_deniability_transactions: HashSet::new(),
+            transaction_correlation_matrix: HashMap::new(),
+            graph_analysis_metrics: HashMap::new(),
+            last_graph_analysis: now,
+            entropy_history: VecDeque::new(),
+            anonymity_set_size_history: VecDeque::new(),
+            last_plausible_deniability_action: now,
+            k_anonymity_violations: 0,
+            eclipse_attack_last_detected: None,
+            // Initialize Dandelion++ enhancement fields
+            aggregated_transactions: HashMap::new(),
+            next_aggregation_id: 0,
+            stem_batches: HashMap::new(),
+            next_stem_batch_id: 0,
+            fluff_entry_points: Vec::new(),
+            last_routing_table_refresh: now,
+            routing_table_entropy: 1.0,
         }
     }
 
-    #[test]
-    fn test_entropy_based_path_randomization() {
-        let mut manager = DandelionManager::new();
-        
-        // Create test peers from different subnets
-        let peers = vec![
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)), 8333),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 2)), 8334),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 2, 1)), 8335),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 3, 1)), 8336),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 1, 1)), 8337),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 2, 1)), 8338),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 16, 1, 1)), 8339),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 16, 2, 1)), 8340),
-        ];
-        
-        // Refresh entropy pool
-        manager.refresh_entropy_pool();
-        
-        // Create two different transaction hashes
-        let tx_hash1 = [1u8; 32];
-        let tx_hash2 = [2u8; 32];
-        
-        // Generate paths for the same transaction multiple times
-        let paths_tx1: Vec<Vec<SocketAddr>> = (0..5)
-            .map(|_| manager.select_adaptive_path(&tx_hash1, &peers))
-            .collect();
+    pub fn detect_sybil_peer(&mut self, peer: SocketAddr) -> bool {
+        if let Some(behavior) = self.peer_reputation.get(&peer) {
+            return behavior.sybil_indicators >= 1;
+        }
+        false
+    }
+
+    pub fn detect_sybil_clusters(&mut self) {
+        // Implement Sybil detection clustering logic
+        // This is a placeholder implementation
+        // In a real implementation, you would use a clustering algorithm
+        // to identify groups of Sybil peers
+        // For now, we'll just create a simple cluster for demonstration
+        let mut cluster_id = 0;
+        let mut clusters = HashMap::new();
+        let mut unassigned_peers = HashSet::new();
+
+        for (peer, behavior) in &self.peer_reputation {
+            if behavior.sybil_indicators >= 1 {
+                clusters.entry(cluster_id).or_insert_with(HashSet::new).insert(*peer);
+                cluster_id += 1;
+            } else {
+                unassigned_peers.insert(*peer);
+            }
+        }
+
+        for peer in unassigned_peers {
+            let mut closest_cluster = 0;
+            let mut min_distance = f64::INFINITY;
+
+            for (id, cluster) in &clusters {
+                let distance = self.calculate_distance(peer, *id);
+                if distance < min_distance {
+                    min_distance = distance;
+                    closest_cluster = *id;
+                }
+            }
+
+            clusters.entry(closest_cluster).or_insert_with(HashSet::new).insert(peer);
+        }
+
+        self.sybil_clusters.clear();
+        for (id, cluster) in clusters {
+            self.sybil_clusters.insert(id, SybilCluster {
+                cluster_id: id,
+                peers: cluster,
+                subnet_pattern: [0, 0], // This should be replaced with actual subnet pattern
+                detection_time: Instant::now(),
+                confidence_score: 0.0,
+            });
+        }
+    }
+
+    pub fn update_outbound_peers(&mut self, peers: Vec<SocketAddr>) {
+        self.outbound_peers = peers.into();
+    }
+
+    pub fn check_for_eclipse_attack(&mut self) -> bool {
+        // Implement Eclipse attack detection logic
+        // This is a placeholder implementation
+        // In a real implementation, you would check for patterns
+        // that suggest an Eclipse attack is in progress
+        // For now, we'll just return false
+        false
+    }
+
+    pub fn setup_layered_encryption(&mut self, tx_hash: &[u8; 32], path: &[SocketAddr]) -> u64 {
+        // Implement layered encryption setup logic
+        // This is a placeholder implementation
+        // In a real implementation, you would use a cryptographic library
+        // to generate session keys and encrypt the transaction data
+        // For now, we'll just return a dummy set ID
+        0
+    }
+
+    pub fn process_transaction_batch(&mut self, peer: &SocketAddr) -> Option<TransactionBatch> {
+        // Implement transaction batch processing logic
+        // This is a placeholder implementation
+        // In a real implementation, you would process transactions
+        // based on the batch ID and return the corresponding batch
+        None
+    }
+
+    pub fn get_fluff_targets(&mut self, tx_hash: &[u8; 32], peers: &[SocketAddr]) -> Vec<SocketAddr> {
+        // Implement fluff target selection logic
+        // This is a placeholder implementation
+        // In a real implementation, you would select peers
+        // based on the transaction hash and return a list of targets
+        Vec::new()
+    }
+
+    /// Get the next stem successor
+    pub fn get_stem_successors(&mut self) -> Option<SocketAddr> {
+        if self.stem_successors.is_empty() {
+            None
+        } else if let Some(current) = self.current_successor {
+            self.stem_successors.get(&current).cloned()
+        } else {
+            None
+        }
+    }
+
+    pub fn get_stem_successor(&mut self) -> Option<SocketAddr> {
+        self.get_stem_successors()
+    }
+
+    pub fn calculate_propagation_delay(&mut self) -> Duration {
+        self.calculate_adaptive_delay(&[0u8; 32], &SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8333))
+    }
+
+    pub fn calculate_distance(&mut self, peer: SocketAddr, id: u64) -> f64 {
+        // Simple Euclidean distance between peer IPs
+        if let Some(behavior) = self.peer_reputation.get(&peer) {
+            let subnet = behavior.subnet;
+            let mut distance = 0.0;
             
-        // Generate paths for different transactions
-        let paths_tx2: Vec<Vec<SocketAddr>> = (0..5)
-            .map(|_| manager.select_adaptive_path(&tx_hash2, &peers))
-            .collect();
-        
-        // Test 1: Paths for the same transaction should be deterministic
-        for i in 1..paths_tx1.len() {
-            assert_eq!(
-                paths_tx1[0], 
-                paths_tx1[i], 
-                "Paths for the same transaction should be identical"
+            // Use subnet as a simple distance metric
+            distance += (subnet[0] as f64 - ((id >> 8) & 0xFF) as f64).powi(2);
+            distance += (subnet[1] as f64 - (id & 0xFF) as f64).powi(2);
+            
+            distance.sqrt()
+        } else {
+            f64::MAX
+        }
+    }
+
+    pub fn add_transaction(&mut self, tx_hash: [u8; 32], source_addr: Option<SocketAddr>) -> PropagationState {
+        // First try to aggregate the transaction
+        if TRANSACTION_AGGREGATION_ENABLED {
+            if let Some(aggregation_id) = self.aggregate_transactions(tx_hash) {
+                if let Some(metadata) = self.transactions.get_mut(&tx_hash) {
+                    metadata.state = PropagationState::BatchedStem;
+                    return PropagationState::BatchedStem;
+                }
+            }
+        }
+
+        // If aggregation not possible, try stem batching
+        if let Some(batch_id) = self.create_stem_batch(tx_hash) {
+            if let Some(metadata) = self.transactions.get_mut(&tx_hash) {
+                metadata.state = PropagationState::BatchedStem;
+                return PropagationState::BatchedStem;
+            }
+        }
+
+        // If neither aggregation nor batching worked, fall back to standard Dandelion routing
+        self.add_transaction_with_privacy(tx_hash, source_addr, PrivacyRoutingMode::Standard)
+    }
+
+    pub fn cleanup_old_anonymity_sets(&mut self) {
+        self.cleanup_anonymity_sets(Duration::from_secs(3600))
+    }
+
+    pub fn calculate_stem_paths(&mut self, peers: &[SocketAddr], include_all: bool) {
+        let mut rng = thread_rng();
+        for peer in peers {
+            if include_all || rng.gen_bool(0.5) {
+                let path = self.select_reputation_based_path(&[0u8; 32], peers, 0.8);
+                if !path.is_empty() {
+                    self.stem_successors.insert(*peer, path[0]);
+                }
+            }
+        }
+    }
+
+    pub fn check_transition(&mut self, tx_hash: &[u8; 32]) -> Option<PropagationState> {
+        self.transactions.get(tx_hash).map(|metadata| metadata.state.clone())
+    }
+
+    pub fn mark_relayed(&mut self, tx_hash: &[u8; 32]) {
+        if let Some(metadata) = self.transactions.get_mut(tx_hash) {
+            metadata.state = PropagationState::Fluff;
+        }
+    }
+
+    /// Calculate subnet similarity score
+    fn calculate_subnet_similarity(&self) -> f64 {
+        let mut score = 0.0;
+        let mut subnet_similarity = 0.0;
+
+        let total_subnets: HashSet<_> = self.subnet_distribution.keys().cloned().collect();
+        if total_subnets.is_empty() {
+            return 0.0;
+        }
+
+        for subnet in &total_subnets {
+            if let Some(count) = self.subnet_distribution.get(subnet) {
+                subnet_similarity += *count as f64 / total_subnets.len() as f64;
+            }
+        }
+
+        score += 0.5 * (subnet_similarity / total_subnets.len() as f64);
+        score
+    }
+
+    /// Get the number of anonymity sets
+    pub fn get_anonymity_sets_len(&self) -> usize {
+        self.anonymity_sets.len()
+    }
+
+    /// Get an anonymity set based on set ID
+    pub fn get_anonymity_set(&mut self, set_id: u64) -> Option<&HashSet<SocketAddr>> {
+        if let Some(set) = self.anonymity_sets.get_mut(&set_id) {
+            set.last_used = Instant::now();
+            set.usage_count += 1;
+            return Some(&set.peers);
+        }
+        None
+    }
+
+    /// Update anonymity set effectiveness based on transaction outcome
+    pub fn update_anonymity_set_effectiveness(&mut self, set_id: u64, was_successful: bool) {
+        if let Some(set) = self.anonymity_sets.get_mut(&set_id) {
+            // Adjust effectiveness score based on success
+            if was_successful {
+                set.effectiveness_score = (set.effectiveness_score * 0.9) + 0.1;
+            } else {
+                set.effectiveness_score = (set.effectiveness_score * 0.9) - 0.1;
+                set.effectiveness_score = set.effectiveness_score.max(0.0);
+            }
+        }
+    }
+
+    /// Penalize a peer for suspicious behavior
+    pub fn penalize_suspicious_behavior(
+        &mut self,
+        peer: SocketAddr,
+        tx_hash: &[u8; 32],
+        behavior_type: &str,
+    ) {
+        if !DYNAMIC_PEER_SCORING_ENABLED {
+            return;
+        }
+
+        self.record_suspicious_behavior(tx_hash, peer, behavior_type);
+        self.update_peer_reputation(peer, REPUTATION_PENALTY_SUSPICIOUS, behavior_type);
+
+        // Additional penalties for specific behaviors
+        if behavior_type == "sybil_indicator" {
+            self.update_peer_reputation(peer, REPUTATION_PENALTY_SYBIL, "sybil_indicator");
+
+            if let Some(reputation) = self.peer_reputation.get_mut(&peer) {
+                reputation.sybil_indicators += 1;
+            }
+        }
+    }
+
+    /// Track a transaction request from a peer
+    pub fn track_transaction_request(&mut self, peer: SocketAddr, tx_hash: &[u8; 32]) {
+        if let Some(reputation) = self.peer_reputation.get_mut(&peer) {
+            reputation
+                .transaction_requests
+                .entry(*tx_hash)
+                .and_modify(|count| *count += 1)
+                .or_insert(1);
+        }
+    }
+
+    /// Check if we should send a dummy response to a peer
+    pub fn should_send_dummy_response(&self, peer: SocketAddr, tx_hash: &[u8; 32]) -> bool {
+        if let Some(reputation) = self.peer_reputation.get(&peer) {
+            if let Some(request_count) = reputation.transaction_requests.get(tx_hash) {
+                return *request_count > SUSPICIOUS_BEHAVIOR_THRESHOLD;
+            }
+        }
+        false
+    }
+
+    /// Generate a dummy transaction for anti-snooping
+    pub fn generate_dummy_transaction(&mut self) -> Option<[u8; 32]> {
+        let mut dummy_tx = [0u8; 32];
+        self.secure_rng.fill_bytes(&mut dummy_tx);
+        Some(dummy_tx)
+    }
+
+    /// Clean up old snoop detection data
+    pub fn cleanup_snoop_detection(&mut self) {
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_secs() as u32;
+
+        for reputation in self.peer_reputation.values_mut() {
+            reputation.transaction_requests.retain(|_, timestamp| {
+                // Keep items that are less than an hour old
+                now - *timestamp < 3600
+            });
+        }
+    }
+
+    /// Generate Laplace noise for differential privacy
+    pub fn generate_laplace_noise(&mut self, scale: f64) -> f64 {
+        let u1: f64 = self.secure_rng.gen();
+        let u2: f64 = self.secure_rng.gen();
+        let noise = -scale * (1.0 - 2.0 * u1).signum() * (1.0 - 2.0 * u2).ln();
+        noise
+    }
+
+    /// Calculate differential privacy delay for a transaction
+    pub fn calculate_differential_privacy_delay(&mut self, _tx_hash: &[u8; 32]) -> Duration {
+        let base_delay = Duration::from_millis(100);
+        let noise = self.generate_laplace_noise(50.0);
+        let additional_delay = Duration::from_millis(noise.abs() as u64);
+        base_delay + additional_delay
+    }
+
+    /// Get all transactions
+    pub fn get_transactions(&self) -> &HashMap<[u8; 32], PropagationMetadata> {
+        &self.transactions
+    }
+
+    /// Update stem successors with new peer information
+    pub fn update_stem_successors(&mut self, known_peers: &[SocketAddr]) {
+        // Clear existing stem successors
+        self.stem_successors.clear();
+
+        if known_peers.is_empty() {
+            return;
+        }
+
+        // Create a new random mapping for stem phase routing
+        let mut rng = thread_rng();
+
+        for &peer in known_peers {
+            // Select a random successor that is not the peer itself
+            let available_successors: Vec<&SocketAddr> =
+                known_peers.iter().filter(|&p| p != &peer).collect();
+
+            if !available_successors.is_empty() {
+                let successor = *available_successors[rng.gen_range(0..available_successors.len())];
+                self.stem_successors.insert(peer, successor);
+            }
+        }
+
+        // Log the update if privacy logging is enabled
+        if PRIVACY_LOGGING_ENABLED {
+            println!(
+                "Updated Dandelion stem successors with {} mappings",
+                self.stem_successors.len()
             );
         }
+    }
+
+    /// Get peer reputation
+    pub fn get_peer_reputation(&self, peer: &SocketAddr) -> Option<&PeerReputation> {
+        self.peer_reputation.get(peer)
+    }
+
+    /// Calculate the optimal anonymity set size based on network conditions
+    pub fn calculate_dynamic_anonymity_set_size(&mut self) -> usize {
+        if !ANONYMITY_SET_DYNAMIC_SIZING_ENABLED {
+            return ANONYMITY_SET_MIN_SIZE;
+        }
+
+        let now = Instant::now();
         
-        // Test 2: Paths for different transactions should be different
-        assert_ne!(
-            paths_tx1[0], 
-            paths_tx2[0], 
-            "Paths for different transactions should be different"
-        );
+        // Only recalculate every few minutes to avoid frequent changes
+        if now.duration_since(self.last_set_size_adjustment).as_secs() < 300 {
+            // Return the current value from history if available
+            if let Some((_, size)) = self.anonymity_set_size_history.back() {
+                return *size;
+            }
+            return ANONYMITY_SET_MIN_SIZE;
+        }
         
-        // Test 3: Verify subnet diversity in the path
-        let path = &paths_tx1[0];
-        let mut subnets = HashSet::new();
+        // Factors influencing set size:
+        // 1. Current network traffic (higher traffic = larger sets)
+        // 2. Number of available high-reputation peers
+        // 3. Recent detected threats (Sybil/Eclipse)
+        // 4. Current graph entropy
         
-        for peer in path {
-            if let IpAddr::V4(ipv4) = peer.ip() {
-                let subnet = [ipv4.octets()[0], ipv4.octets()[1]];
-                subnets.insert(subnet);
+        // Base size starts at minimum
+        let mut optimal_size = ANONYMITY_SET_MIN_SIZE;
+        
+        // Adjust based on network traffic (0-30% increase)
+        optimal_size = (optimal_size as f64 * (1.0 + (self.current_network_traffic * 0.3))) as usize;
+        
+        // Adjust based on available high-reputation peers
+        let high_rep_peers = self.get_peers_by_reputation(Some(REPUTATION_THRESHOLD_STEM)).len();
+        let peer_factor = (high_rep_peers as f64 / 10.0).min(3.0).max(0.5);
+        optimal_size = (optimal_size as f64 * peer_factor) as usize;
+        
+        // Increase if Sybil/Eclipse attack detected recently
+        if self.eclipse_defense_active || !self.sybil_clusters.is_empty() {
+            optimal_size = (optimal_size as f64 * 1.5) as usize;
+        }
+        
+        // Adjust based on graph entropy (lower entropy needs larger sets)
+        if let Some((_, entropy)) = self.entropy_history.back() {
+            let entropy_factor = (1.0 / entropy).min(2.0).max(0.8);
+            optimal_size = (optimal_size as f64 * entropy_factor) as usize;
+        }
+        
+        // Adjust if we've had k-anonymity violations
+        if self.k_anonymity_violations > 0 {
+            let violation_factor = 1.0 + (self.k_anonymity_violations as f64 * 0.1);
+            optimal_size = (optimal_size as f64 * violation_factor) as usize;
+            
+            // Reset violation counter periodically
+            if self.k_anonymity_violations > 10 || now.duration_since(self.last_set_size_adjustment).as_secs() > 3600 {
+                self.k_anonymity_violations = 0;
             }
         }
         
-        // A diverse path should use peers from different subnets when possible
-        assert!(
-            subnets.len() >= path.len().min(4) / 2, 
-            "Path should have some subnet diversity"
-        );
+        // Enforce min/max bounds
+        let result = optimal_size.max(ANONYMITY_SET_MIN_SIZE).min(ANONYMITY_SET_MAX_SIZE);
         
-        // Test 4: Check if weights affect the path selection
-        // Add reputation to specific peers
-        for i in 0..3 {
-            manager.initialize_peer_reputation(peers[i]);
-            manager.update_peer_reputation(peers[i], 50.0, "Test");
+        // Update state
+        self.last_set_size_adjustment = now;
+        self.anonymity_set_size_history.push_back((now, result));
+        
+        // Keep history manageable
+        while self.anonymity_set_size_history.len() > 24 {
+            self.anonymity_set_size_history.pop_front();
         }
         
-        // Generate paths with the reputation information
-        let paths_with_reputation = manager.select_adaptive_path(&tx_hash1, &peers);
-        
-        // The reputation should make a difference
-        assert_ne!(
-            paths_tx1[0], 
-            paths_with_reputation, 
-            "Path should change when reputation is considered"
-        );
-        
-        // Test 5: Check if network conditions affect path selection
-        // Add network condition data
-        for i in 0..3 {
-            manager.update_network_condition(
-                peers[i], 
-                Duration::from_millis(50 + (i as u64 * 20))
-            );
-        }
-        
-        // Generate paths with the network condition information
-        let paths_with_network = manager.select_adaptive_path(&tx_hash1, &peers);
-        
-        // The network conditions should make a difference
-        assert_ne!(
-            paths_with_reputation, 
-            paths_with_network, 
-            "Path should change when network conditions are considered"
-        );
+        result
     }
 
-    #[test]
-    fn test_entropy_refresh() {
-        let mut manager = DandelionManager::new();
+    /// Create a new anonymity set with dynamic sizing and k-anonymity guarantees
+    pub fn create_anonymity_set(&mut self, size: Option<usize>) -> u64 {
+        // Dynamic sizing - calculate optimal set size based on network conditions if not specified
+        let target_size = if let Some(s) = size {
+            s
+        } else {
+            self.calculate_dynamic_anonymity_set_size()
+        };
         
-        // Store the initial entropy
-        let initial_entropy = manager.entropy_pool.clone();
-        
-        // Force a refresh of the entropy pool
-        manager.last_entropy_refresh = Instant::now() - ENTROPY_SOURCE_REFRESH_INTERVAL - Duration::from_secs(1);
-        manager.refresh_entropy_pool();
-        
-        // The entropy pool should have changed
-        assert_ne!(
-            initial_entropy, 
-            manager.entropy_pool, 
-            "Entropy pool should change after refresh"
-        );
-        
-        // Additional test: Entropy-based transactions should yield different paths
-        let tx_hash1 = [1u8; 32];
-        let peers = vec![
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)), 8333),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 2, 1)), 8334),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 3, 1)), 8335),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 1, 1)), 8336),
-        ];
-        
-        // Get a path before refreshing entropy
-        let path_before = manager.select_adaptive_path(&tx_hash1, &peers);
-        
-        // Force another refresh of the entropy pool
-        manager.last_entropy_refresh = Instant::now() - ENTROPY_SOURCE_REFRESH_INTERVAL - Duration::from_secs(1);
-        manager.refresh_entropy_pool();
-        
-        // Get a path after refreshing entropy
-        let path_after = manager.select_adaptive_path(&tx_hash1, &peers);
-        
-        // The paths should now be different due to different entropy
-        assert_ne!(
-            path_before, 
-            path_after, 
-            "Paths should be different after entropy refresh"
-        );
-    }
+        let k_value = ANONYMITY_SET_K_ANONYMITY_LEVEL;
+        let now = Instant::now();
 
-    #[test]
-    fn test_reputation_based_routing() {
-        let mut manager = DandelionManager::new();
-        
-        // Create test peers from different subnets
-        let peers = vec![
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)), 8333),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 2)), 8334),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 2, 1)), 8335),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 3, 1)), 8336),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 1, 1)), 8337),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 2, 1)), 8338),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 16, 1, 1)), 8339),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 16, 2, 1)), 8340),
-        ];
-        
-        // Initialize all peers with default reputation
-        for &peer in &peers {
-            manager.initialize_peer_reputation(peer);
+        // Get high-reputation peers
+        let trusted_peers: Vec<SocketAddr> = self
+            .get_peers_by_reputation(Some(REPUTATION_THRESHOLD_STEM))
+            .into_iter()
+            .map(|(addr, _)| addr)
+            .collect();
+
+        // Ensure diversity by IP subnet
+        let mut selected_peers = HashSet::new();
+        let mut selected_subnets = HashMap::new();
+        let mut subnet_counts = HashMap::new();
+
+        // First pass - build subnet distribution
+        for peer in &trusted_peers {
+            // Extract subnet information
+            let subnet = match peer.ip() {
+                IpAddr::V4(ipv4) => {
+                    let octets = ipv4.octets();
+                    [octets[0], octets[1]]
+                }
+                _ => continue, // Skip IPv6 for simplicity
+            };
+            
+            *subnet_counts.entry(subnet).or_insert(0) += 1;
         }
         
-        // Set different reputation scores and routing reliability metrics for each peer
-        // Establish a clear differentiation in reputation to test the selection
+        // Second pass - enforce k-anonymity by ensuring at least k peers per subnet
+        // or none from that subnet
+        let mut filtered_subnets = HashSet::new();
+        for (subnet, count) in &subnet_counts {
+            if *count >= k_value {
+                filtered_subnets.insert(*subnet);
+            }
+        }
         
-        // High reputation peers (should be preferred)
-        manager.update_peer_reputation(peers[0], 75.0, "Test high reputation");
-        manager.update_peer_routing_reliability(peers[0], true, Some(Duration::from_millis(50)));
-        manager.update_peer_routing_reliability(peers[0], true, Some(Duration::from_millis(55)));
+        // Third pass - select peers ensuring k-anonymity
+        for peer in &trusted_peers {
+            if selected_peers.len() >= target_size {
+                break;
+            }
+
+            // Extract subnet information
+            let subnet = match peer.ip() {
+                IpAddr::V4(ipv4) => {
+                    let octets = ipv4.octets();
+                    [octets[0], octets[1]]
+                }
+                _ => continue, // Skip IPv6 for simplicity
+            };
+            
+            // Only select from subnets that can provide k-anonymity
+            if filtered_subnets.contains(&subnet) {
+                selected_peers.insert(*peer);
+                *selected_subnets.entry(subnet).or_insert(0) += 1;
+            }
+        }
         
-        manager.update_peer_reputation(peers[1], 60.0, "Test medium-high reputation");
-        manager.update_peer_routing_reliability(peers[1], true, Some(Duration::from_millis(70)));
-        manager.update_peer_routing_reliability(peers[1], true, Some(Duration::from_millis(65)));
-        
-        // Medium reputation peers
-        manager.update_peer_reputation(peers[2], 40.0, "Test medium reputation");
-        manager.update_peer_routing_reliability(peers[2], true, Some(Duration::from_millis(100)));
-        manager.update_peer_routing_reliability(peers[2], false, Some(Duration::from_millis(120)));
-        
-        manager.update_peer_reputation(peers[3], 30.0, "Test medium-low reputation");
-        manager.update_peer_routing_reliability(peers[3], true, Some(Duration::from_millis(90)));
-        manager.update_peer_routing_reliability(peers[3], false, Some(Duration::from_millis(110)));
-        
-        // Low reputation peers (should be avoided)
-        manager.update_peer_reputation(peers[4], 10.0, "Test low reputation");
-        manager.update_peer_routing_reliability(peers[4], false, Some(Duration::from_millis(150)));
-        
-        manager.update_peer_reputation(peers[5], -20.0, "Test negative reputation");
-        manager.update_peer_routing_reliability(peers[5], false, Some(Duration::from_millis(200)));
-        
-        // Neutral peers
-        manager.update_peer_reputation(peers[6], 25.0, "Test threshold reputation");
-        manager.update_peer_routing_reliability(peers[6], true, Some(Duration::from_millis(120)));
-        
-        manager.update_peer_reputation(peers[7], 0.0, "Test neutral reputation");
-        
-        // Set as outbound peers to enable path creation
-        manager.outbound_peers = peers.clone();
-        
-        // Create transaction hash for testing
-        let tx_hash = [1u8; 32];
-        
-        // Test 1: High privacy level should strongly prefer high reputation peers
-        let high_privacy_path = manager.select_reputation_based_path(&tx_hash, &peers, 1.0);
-        
-        // In a high privacy path, the highest reputation peers should be included
-        assert!(
-            high_privacy_path.contains(&peers[0]) || high_privacy_path.contains(&peers[1]),
-            "High privacy path should include high reputation peers"
-        );
-        
-        // And low reputation peers should be excluded
-        assert!(
-            !high_privacy_path.contains(&peers[5]),
-            "High privacy path should not include negative reputation peers"
-        );
-        
-        // Test 2: Lower privacy level should be more inclusive
-        let low_privacy_path = manager.select_reputation_based_path(&tx_hash, &peers, 0.3);
-        
-        // Test 3: Check that routing reliability influences path selection
-        // First, let's capture the current path
-        let initial_path = manager.select_reputation_based_path(&tx_hash, &peers, 0.8);
-        
-        // Now modify a peer to have excellent routing reliability
-        manager.update_peer_routing_reliability(peers[3], true, Some(Duration::from_millis(40))); // Very fast
-        manager.update_peer_routing_reliability(peers[3], true, Some(Duration::from_millis(45)));
-        manager.update_peer_routing_reliability(peers[3], true, Some(Duration::from_millis(42)));
-        manager.update_peer_routing_reliability(peers[3], true, Some(Duration::from_millis(39)));
-        
-        // Generate a new path with the updated reliability
-        let reliability_path = manager.select_reputation_based_path(&tx_hash, &peers, 0.8);
-        
-        // The peer with improved reliability should now be included more often
-        // We can't guarantee it will be in the path due to randomness, but we can check 
-        // if the path has changed after updating reliability
-        assert_ne!(
-            initial_path, 
-            reliability_path,
-            "Path should change when peer reliability is significantly improved"
-        );
-        
-        // Test 4: Verify that negative reputation has a strong impact
-        // Make a peer have a very negative reputation
-        manager.update_peer_reputation(peers[5], -80.0, "Test very negative reputation");
-        
-        // Generate multiple paths and check that the negative peer is consistently excluded
-        let mut includes_negative_peer = false;
-        for _ in 0..5 {
-            let path = manager.select_reputation_based_path(&tx_hash, &peers, 0.5);
-            if path.contains(&peers[5]) {
-                includes_negative_peer = true;
+        // Check if we're maintaining k-anonymity
+        let mut has_k_anonymity = true;
+        for count in selected_subnets.values() {
+            if *count > 0 && *count < k_value {
+                has_k_anonymity = false;
+                self.k_anonymity_violations += 1;
                 break;
             }
         }
         
-        assert!(
-            !includes_negative_peer,
-            "Peers with very negative reputation should be consistently excluded"
+        // If we don't have k-anonymity, remove peers from problematic subnets
+        if !has_k_anonymity {
+            let peers_to_remove: Vec<SocketAddr> = selected_peers
+                .iter()
+                .filter(|p| {
+                    if let IpAddr::V4(ipv4) = p.ip() {
+                        let octets = ipv4.octets();
+                        let subnet = [octets[0], octets[1]];
+                        selected_subnets.get(&subnet).map_or(false, |count| *count < k_value)
+                    } else {
+                        false
+                    }
+                })
+                .cloned()
+                .collect();
+                
+            for peer in peers_to_remove {
+                selected_peers.remove(&peer);
+                if let IpAddr::V4(ipv4) = peer.ip() {
+                    let octets = ipv4.octets();
+                    let subnet = [octets[0], octets[1]];
+                    if let Some(count) = selected_subnets.get_mut(&subnet) {
+                        *count -= 1;
+                    }
+                }
+            }
+        }
+        
+        // If we don't have enough peers after enforcing k-anonymity, add more trusted peers
+        // from subnets that already have k or more peers
+        if selected_peers.len() < target_size / 2 {
+            for peer in &trusted_peers {
+                if selected_peers.len() >= target_size {
+                    break;
+                }
+                
+                // Only add if the subnet already has k or more peers
+                if let IpAddr::V4(ipv4) = peer.ip() {
+                    let octets = ipv4.octets();
+                    let subnet = [octets[0], octets[1]];
+                    
+                    if selected_subnets.get(&subnet).map_or(0, |c| *c) >= k_value {
+                        selected_peers.insert(*peer);
+                        *selected_subnets.entry(subnet).or_insert(0) += 1;
+                    }
+                }
+            }
+        }
+        
+        // Calculate initial entropy based on subnet distribution
+        let entropy = self.calculate_subnet_entropy(&selected_subnets);
+        
+        // Create the anonymity set
+        let set_id = self.next_anonymity_set_id;
+        self.next_anonymity_set_id += 1;
+
+        self.anonymity_sets.insert(
+            set_id,
+            AnonymitySet {
+                set_id,
+                peers: selected_peers.clone(),
+                creation_time: now,
+                last_used: now,
+                usage_count: 0,
+                effectiveness_score: 1.0,
+                k_anonymity_level: k_value,
+                entropy_score: entropy,
+                correlation_resistance: 1.0,
+                transactions_processed: HashSet::new(),
+                subnet_distribution: selected_subnets,
+                transaction_flow_patterns: HashMap::new(),
+                last_entropy_measurement: now,
+                entropy_samples: vec![entropy],
+            },
         );
+
+        set_id
+    }
+
+    /// Get the best anonymity set for a transaction with enhanced privacy features
+    pub fn get_best_anonymity_set(&mut self) -> HashSet<SocketAddr> {
+        let now = Instant::now();
+        let tx_hash = self.generate_entropy_based_hash(); // Generate transaction-like hash for scoring
+
+        // If we have no sets or they're too old, create a new one
+        if self.anonymity_sets.is_empty()
+            || now
+                .duration_since(self.last_anonymity_set_rotation)
+                .as_secs()
+                > ANONYMITY_SET_ROTATION_INTERVAL.as_secs()
+        {
+            let set_id = self.create_anonymity_set(None);
+            self.last_anonymity_set_rotation = now;
+            
+            // Generate plausible deniability transactions if enabled
+            if PLAUSIBLE_DENIABILITY_ENABLED && self.should_generate_plausible_deniability() {
+                self.generate_plausible_deniability_transactions();
+            }
+            
+            return self
+                .get_anonymity_set(set_id)
+                .cloned()
+                .unwrap_or_else(HashSet::new);
+        }
+
+        // Update entropy and metrics before selection to ensure fresh data
+        self.update_anonymity_sets_metrics();
         
-        // Test 5: Verify that the reputation-based weights are generated correctly
-        let weights = manager.generate_path_selection_weights(&tx_hash, &peers);
+        // Transaction correlation resistance - if we've seen similar transactions, use different set
+        let mut correlation_adjustment = HashMap::new();
+        if ANONYMITY_SET_TRANSACTION_CORRELATION_RESISTANCE {
+            for (set_id, set) in &self.anonymity_sets {
+                let mut correlation_score = 0.0;
+                
+                for processed_tx in &set.transactions_processed {
+                    if let Some(correlated_txs) = self.transaction_correlation_matrix.get(processed_tx) {
+                        if correlated_txs.contains(&tx_hash) {
+                            correlation_score += 0.2; // Increase penalty for each correlation
+                        }
+                    }
+                }
+                
+                correlation_adjustment.insert(*set_id, 1.0 / (1.0 + correlation_score));
+            }
+        }
+
+        // Calculate optimal size once
+        let optimal_size = self.calculate_dynamic_anonymity_set_size() as f64;
+
+        // Find the best set based on multiple factors
+        let best_set_id = {
+            let mut best_id = None;
+            let mut best_score = f64::NEG_INFINITY;
+
+            for (id, set) in &self.anonymity_sets {
+                let size_factor = 1.0 - ((optimal_size - set.peers.len() as f64).abs() / optimal_size).min(0.5);
+                let corr_factor = correlation_adjustment.get(id).cloned().unwrap_or(1.0);
+                let usage_factor = 1.0 / (1.0 + (set.usage_count as f64 * 0.01));
+                
+                let score = (set.effectiveness_score * 0.3) + 
+                           (set.entropy_score * 0.3) + 
+                           (set.correlation_resistance * 0.1) + 
+                           (size_factor * 0.2) + 
+                           (usage_factor * 0.1);
+                           
+                let final_score = score * corr_factor;
+                
+                if final_score > best_score {
+                    best_score = final_score;
+                    best_id = Some(*id);
+                }
+            }
+            best_id
+        };
+
+        if let Some(id) = best_set_id {
+            // Add the current transaction hash to the set's processed transactions
+            if let Some(set) = self.anonymity_sets.get_mut(&id) {
+                set.transactions_processed.insert(tx_hash);
+            }
+            
+            return self
+                .get_anonymity_set(id)
+                .cloned()
+                .unwrap_or_else(HashSet::new);
+        }
+
+        // Fall back to creating a new set
+        let set_id = self.create_anonymity_set(None);
+        self.get_anonymity_set(set_id)
+            .cloned()
+            .unwrap_or_else(HashSet::new)
+    }
+
+    /// Detect potential eclipse attacks based on subnet distribution and behavior patterns
+    pub fn detect_eclipse_attack(&mut self) -> EclipseDetectionResult {
+        let mut subnet_counts = HashMap::new();
+        let mut subnet_peers = HashMap::new();
+        let mut total_peers = 0;
+
+        // Count peers per subnet and build subnet -> peers mapping
+        for peer in self.outbound_peers.iter() {
+            if let IpAddr::V4(ipv4) = peer.ip() {
+                let octets = ipv4.octets();
+                let subnet = [octets[0], octets[1], octets[2], octets[3]];
+                *subnet_counts.entry(subnet).or_insert(0) += 1;
+                subnet_peers.entry(subnet).or_insert_with(HashSet::new).insert(*peer);
+                total_peers += 1;
+            }
+        }
+
+        if total_peers == 0 {
+            return EclipseDetectionResult {
+                is_eclipse_detected: false,
+                overrepresented_subnet: None,
+                peers_to_drop: HashSet::new(),
+            };
+        }
+
+        // Find the most represented subnet
+        let mut max_subnet = None;
+        let mut max_count = 0;
+        for (subnet, count) in &subnet_counts {
+            if *count > max_count {
+                max_count = *count;
+                max_subnet = Some(*subnet);
+            }
+        }
+
+        // Calculate the percentage of peers in the most represented subnet
+        let max_subnet_percentage = max_count as f64 / total_peers as f64;
+
+        // Check if the subnet distribution is suspicious
+        let is_eclipse_detected = max_subnet_percentage > ECLIPSE_ATTACK_THRESHOLD;
+        let mut peers_to_drop = HashSet::new();
+
+        if is_eclipse_detected {
+            if let Some(subnet) = max_subnet {
+                // Mark this as a detected eclipse attack
+                self.eclipse_defense_active = true;
+                self.eclipse_attack_last_detected = Some(Instant::now());
+
+                // Get peers from the overrepresented subnet
+                if let Some(subnet_peer_set) = subnet_peers.get(&subnet) {
+                    // Calculate how many peers we need to drop to get below the threshold
+                    let target_count = (total_peers as f64 * ECLIPSE_ATTACK_THRESHOLD) as usize;
+                    let peers_to_remove = max_count - target_count;
+
+                    // Select peers to drop based on reputation and behavior
+                    let mut peer_scores: Vec<(SocketAddr, f64)> = subnet_peer_set
+                        .iter()
+                        .map(|peer| {
+                            let reputation = self.peer_reputation.get(peer).map_or(0.0, |rep| {
+                                let behavior_score = rep.suspicious_actions as f64 * 0.3
+                                    + rep.eclipse_indicators as f64 * 0.5
+                                    + rep.sybil_indicators as f64 * 0.2;
+                                behavior_score + (1.0 - rep.reputation_score)
+                            });
+                            (*peer, reputation)
+                        })
+                        .collect();
+
+                    // Sort by score (higher score = more suspicious)
+                    peer_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+                    // Take the most suspicious peers
+                    for (peer, _) in peer_scores.into_iter().take(peers_to_remove) {
+                        peers_to_drop.insert(peer);
+                    }
+                }
+            }
+        }
+
+        EclipseDetectionResult {
+            is_eclipse_detected,
+            overrepresented_subnet: max_subnet,
+            peers_to_drop,
+        }
+    }
+
+    /// Record transaction correlation for analysis
+    pub fn record_transaction_correlation(&mut self, tx1: &[u8; 32], tx2: &[u8; 32]) {
+        if !ANONYMITY_SET_TRANSACTION_CORRELATION_RESISTANCE {
+            return;
+        }
         
-        // High reputation peer should have higher weight than low reputation peer
-        assert!(
-            weights.get(&peers[0]).unwrap_or(&0.0) > weights.get(&peers[5]).unwrap_or(&0.0),
-            "High reputation peers should have higher weights than low reputation peers"
-        );
+        // Record correlation both ways
+        self.transaction_correlation_matrix
+            .entry(*tx1)
+            .or_insert_with(HashSet::new)
+            .insert(*tx2);
+            
+        self.transaction_correlation_matrix
+            .entry(*tx2)
+            .or_insert_with(HashSet::new)
+            .insert(*tx1);
+            
+        // Record flow pattern in sets that processed these transactions
+        for (_, set) in self.anonymity_sets.iter_mut() {
+            if set.transactions_processed.contains(tx1) || set.transactions_processed.contains(tx2) {
+                *set.transaction_flow_patterns.entry((*tx1, *tx2)).or_insert(0) += 1;
+            }
+        }
         
-        // Test 6: Check that the path enforces minimum reputation requirements
-        // Create a test set with mostly low-reputation peers
-        let low_rep_peers = vec![
-            peers[4], // Low reputation
-            peers[5], // Negative reputation
-            peers[7], // Neutral reputation
-        ];
+        // Add to transaction graph samples for analysis
+        self.transaction_graph_samples.push_back((*tx1, *tx2));
         
-        // This should fall back to entropy-based path since not enough peers meet the threshold
-        let fallback_path = manager.select_reputation_based_path(&tx_hash, &low_rep_peers, 0.9);
+        // Keep sample size manageable
+        while self.transaction_graph_samples.len() > 1000 {
+            self.transaction_graph_samples.pop_front();
+        }
+    }
+
+    /// Clean up old anonymity sets
+    pub fn cleanup_old_anonymity_sets(&mut self, max_age: Duration) {
+        let now = Instant::now();
         
-        // The path should still be valid (have entries)
-        assert!(!fallback_path.is_empty(), "Should create a valid path even with low-reputation peers");
+        // Remove old sets
+        self.anonymity_sets.retain(|_, set| {
+            now.duration_since(set.creation_time) < max_age
+        });
+        
+        // Check if we need to rotate sets based on entropy or usage
+        let need_rotation = self.anonymity_sets.values().any(|set| {
+            // Rotate if entropy is too low or set has been used too many times
+            set.entropy_score < GRAPH_ENTROPY_THRESHOLD || 
+            set.usage_count > 20 ||
+            now.duration_since(set.creation_time) > ANONYMITY_SET_ROTATION_INTERVAL
+        });
+        
+        if need_rotation || self.anonymity_sets.is_empty() {
+            // Create a new set to replace aging ones
+            self.create_anonymity_set(None);
+            self.last_anonymity_set_rotation = now;
+        }
+        
+        // Clean up transaction correlation data periodically
+        if now.duration_since(self.last_graph_analysis).as_secs() > 3600 {
+            // Keep only recent correlations
+            for values in self.transaction_correlation_matrix.values_mut() {
+                // In a real implementation, we'd filter by age
+                if values.len() > 100 {
+                    // Remove some random entries to keep size manageable
+                    let mut to_remove = Vec::new();
+                    let mut rng = thread_rng();
+                    let remove_count = values.len() - 100;
+                    
+                    for _ in 0..remove_count {
+                        if let Some(tx) = values.iter().nth(rng.gen_range(0..values.len())) {
+                            to_remove.push(*tx);
+                        }
+                    }
+                    
+                    for tx in to_remove {
+                        values.remove(&tx);
+                    }
+                }
+            }
+            
+            // Remove empty entries
+            self.transaction_correlation_matrix.retain(|_, v| !v.is_empty());
+        }
+    }
+
+    /// Record suspicious behavior for a peer
+    pub fn record_suspicious_behavior(&mut self, tx_hash: &[u8; 32], peer: SocketAddr, behavior_type: &str) {
+        if !DYNAMIC_PEER_SCORING_ENABLED {
+            return;
+        }
+
+        self.initialize_peer_reputation_with_score(peer, 0.0);
+
+        if let Some(reputation) = self.peer_reputation.get_mut(&peer) {
+            reputation.suspicious_actions += 1;
+
+            // Additional penalties for specific behaviors
+            match behavior_type {
+                "sybil_indicator" => reputation.sybil_indicators += 1,
+                "eclipse_indicator" => reputation.eclipse_indicators += 1,
+                _ => {}
+            }
+        }
+
+        // Update peer reputation
+        self.update_peer_reputation(peer, REPUTATION_PENALTY_SUSPICIOUS, behavior_type);
+    }
+
+    /// Update peer reputation
+    pub fn update_peer_reputation(&mut self, peer: SocketAddr, adjustment: f64, _reason: &str) {
+        if !DYNAMIC_PEER_SCORING_ENABLED {
+            return;
+        }
+
+        let now = Instant::now();
+        self.initialize_peer_reputation_with_score(peer, 0.0);
+
+        if let Some(reputation) = self.peer_reputation.get_mut(&peer) {
+            // Apply decay first
+            let hours_since_update = now
+                .duration_since(reputation.last_reputation_update)
+                .as_secs_f64()
+                / 3600.0;
+            if hours_since_update > 0.0 {
+                reputation.reputation_score *= REPUTATION_DECAY_FACTOR.powf(hours_since_update);
+            }
+
+            // Apply the adjustment
+            reputation.reputation_score += adjustment;
+
+            // Clamp to allowed range
+            reputation.reputation_score = reputation
+                .reputation_score
+                .max(REPUTATION_SCORE_MIN)
+                .min(REPUTATION_SCORE_MAX);
+
+            // Update timestamp
+            reputation.last_reputation_update = now;
+
+            // If this is a penalty, record the time
+            if adjustment < 0.0 {
+                reputation.last_penalized = Some(now);
+            }
+
+            // Log the update if privacy logging is enabled
+            if PRIVACY_LOGGING_ENABLED {
+                // In a real implementation, this would log to a secure, privacy-focused logger
+                // println!("Updated peer reputation for {}: {} ({}) - now {}",
+                //          peer, adjustment, reason, reputation.reputation_score);
+            }
+        }
+    }
+
+    /// Update outbound peers
+    pub fn update_outbound_peers(&mut self, peers: Vec<SocketAddr>) {
+        self.outbound_peers = peers.into_iter().collect();
+    }
+
+    /// Generate entropy-based hash for scoring
+    fn generate_entropy_based_hash(&mut self) -> [u8; 32] {
+        let mut hash = [0u8; 32];
+        self.secure_rng.fill_bytes(&mut hash);
+        hash
+    }
+
+    /// Check if we should generate plausible deniability transactions
+    fn should_generate_plausible_deniability(&mut self) -> bool {
+        let now = Instant::now();
+        
+        // Only generate periodically
+        if now.duration_since(self.last_plausible_deniability_action).as_secs() < 60 {
+            return false;
+        }
+        
+        // Generate based on probability
+        let mut rng = thread_rng();
+        if rng.gen_bool(0.1) { // 10% chance
+            self.last_plausible_deniability_action = now;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Generate plausible deniability transactions
+    fn generate_plausible_deniability_transactions(&mut self) {
+        let mut rng = thread_rng();
+        
+        // Number of dummy transactions to generate (1-3)
+        let count = rng.gen_range(1..=3);
+        
+        for _ in 0..count {
+            let tx_hash = self.generate_entropy_based_hash();
+            
+            // Mark as a plausible deniability transaction
+            self.plausible_deniability_transactions.insert(tx_hash);
+        }
+    }
+
+    /// Update anonymity sets metrics
+    fn update_anonymity_sets_metrics(&mut self) {
+        let now = Instant::now();
+        
+        // First collect all the data we need to update
+        let mut updates = Vec::new();
+        for (id, set) in &self.anonymity_sets {
+            if now.duration_since(set.last_entropy_measurement).as_secs() < 60 {
+                continue;
+            }
+            
+            let entropy = self.calculate_subnet_entropy(&set.subnet_distribution);
+            let pattern_entropy = self.calculate_transaction_pattern_entropy(&set.transaction_flow_patterns);
+            
+            updates.push((*id, entropy, pattern_entropy));
+        }
+        
+        // Now apply the updates
+        for (id, entropy, pattern_entropy) in updates {
+            // Update entropy and pattern entropy
+            if let Some(set) = self.anonymity_sets.get_mut(&id) {
+                set.entropy_score = entropy;
+                set.transaction_flow_patterns.clear();
+                set.transaction_flow_patterns.insert(([0u8; 32], [0u8; 32]), 0);
+                set.last_entropy_measurement = now;
+                set.entropy_samples.clear();
+                set.entropy_samples.push(entropy);
+            }
+        }
+    }
+
+    /// Aggregate transactions for enhanced privacy
+    pub fn aggregate_transactions(&mut self, tx_hash: [u8; 32]) -> Option<u64> {
+        if !TRANSACTION_AGGREGATION_ENABLED {
+            return None;
+        }
+
+        let now = Instant::now();
+
+        // Find an existing aggregation that's not full
+        let aggregation_id = self
+            .aggregated_transactions
+            .iter()
+            .find(|(_, agg)| {
+                agg.transactions.len() < MAX_AGGREGATION_SIZE
+                    && now.duration_since(agg.creation_time).as_millis() < AGGREGATION_TIMEOUT_MS as u128
+            })
+            .map(|(id, _)| *id);
+
+        // Create new aggregation if needed
+        let aggregation_id = match aggregation_id {
+            Some(id) => id,
+            None => {
+                let id = self.next_aggregation_id;
+                self.next_aggregation_id += 1;
+
+                self.aggregated_transactions.insert(
+                    id,
+                    AggregatedTransactions {
+                        aggregation_id: id,
+                        transactions: Vec::new(),
+                        creation_time: now,
+                        total_size: 0,
+                        privacy_mode: PrivacyRoutingMode::Standard,
+                    },
+                );
+
+                id
+            }
+        };
+
+        // Add transaction to aggregation
+        if let Some(aggregation) = self.aggregated_transactions.get_mut(&aggregation_id) {
+            aggregation.transactions.push(tx_hash);
+            
+            // Update transaction metadata
+            if let Some(metadata) = self.transactions.get_mut(&tx_hash) {
+                metadata.state = PropagationState::BatchedStem;
+            }
+        }
+
+        Some(aggregation_id)
+    }
+
+    /// Create a new stem batch with randomized transition timing
+    pub fn create_stem_batch(&mut self, tx_hash: [u8; 32]) -> Option<u64> {
+        let now = Instant::now();
+
+        // Find existing batch that's not full
+        let batch_id = self
+            .stem_batches
+            .iter()
+            .find(|(_, batch)| {
+                batch.transactions.len() < STEM_BATCH_SIZE
+                    && now.duration_since(batch.creation_time).as_millis() < STEM_BATCH_TIMEOUT_MS as u128
+            })
+            .map(|(id, _)| *id);
+
+        // Create new batch if needed
+        let batch_id = match batch_id {
+            Some(id) => id,
+            None => {
+                let id = self.next_stem_batch_id;
+                self.next_stem_batch_id += 1;
+
+                // Generate random transition time
+                let transition_delay = self.secure_rng.gen_range(
+                    STEM_FLUFF_TRANSITION_MIN_DELAY_MS..STEM_FLUFF_TRANSITION_MAX_DELAY_MS,
+                );
+                let transition_time = now + Duration::from_millis(transition_delay);
+
+                // Select random fluff entry points
+                let num_entry_points = self.secure_rng.gen_range(FLUFF_ENTRY_POINTS_MIN..=FLUFF_ENTRY_POINTS_MAX);
+                let mut entry_points = Vec::new();
+                let available_peers: Vec<_> = self.outbound_peers.iter().cloned().collect();
+                
+                if !available_peers.is_empty() {
+                    for _ in 0..num_entry_points {
+                        if let Some(peer) = available_peers.choose(&mut self.secure_rng) {
+                            entry_points.push(*peer);
+                        }
+                    }
+                }
+
+                self.stem_batches.insert(
+                    id,
+                    StemBatch {
+                        batch_id: id,
+                        transactions: Vec::new(),
+                        creation_time: now,
+                        transition_time,
+                        entry_points,
+                        privacy_mode: PrivacyRoutingMode::Standard,
+                    },
+                );
+
+                id
+            }
+        };
+
+        // Add transaction to batch
+        if let Some(batch) = self.stem_batches.get_mut(&batch_id) {
+            batch.transactions.push(tx_hash);
+            
+            // Update transaction metadata
+            if let Some(metadata) = self.transactions.get_mut(&tx_hash) {
+                metadata.state = PropagationState::BatchedStem;
+            }
+        }
+
+        Some(batch_id)
+    }
+
+    /// Process ready stem batches and transition them to fluff phase
+    pub fn process_stem_batches(&mut self) -> Vec<([u8; 32], Vec<SocketAddr>)> {
+        let now = Instant::now();
+        let mut ready_txs = Vec::new();
+        let mut ready_batch_ids = Vec::new();
+
+        // Find batches ready for transition
+        for (batch_id, batch) in &self.stem_batches {
+            if now >= batch.transition_time {
+                ready_batch_ids.push(*batch_id);
+                for tx_hash in &batch.transactions {
+                    if let Some(metadata) = self.transactions.get_mut(tx_hash) {
+                        metadata.state = PropagationState::Fluff;
+                        ready_txs.push((*tx_hash, batch.entry_points.clone()));
+                    }
+                }
+            }
+        }
+
+        // Remove processed batches
+        for batch_id in ready_batch_ids {
+            self.stem_batches.remove(&batch_id);
+        }
+
+        ready_txs
+    }
+
+    /// Refresh routing table with entropy-based randomization
+    pub fn refresh_routing_table(&mut self) {
+        let now = Instant::now();
+        
+        // Check if it's time to refresh
+        if now.duration_since(self.last_routing_table_refresh).as_millis() < ROUTING_TABLE_REFRESH_INTERVAL_MS as u128 {
+            return;
+        }
+
+        // Get available peers
+        let peers: Vec<_> = self.outbound_peers.iter().cloned().collect();
+        if peers.is_empty() {
+            return;
+        }
+
+        // Clear existing routing table
+        self.stem_successors.clear();
+
+        // Create new routing table with entropy-based randomization
+        let mut rng = thread_rng();
+        let mut used_successors = HashSet::new();
+
+        for &peer in &peers {
+            // Select successor avoiding patterns
+            let available_successors: Vec<_> = peers
+                .iter()
+                .filter(|&p| {
+                    *p != peer 
+                    && !used_successors.contains(p)
+                    && self.calculate_routing_entropy(peer, *p) > self.routing_table_entropy
+                })
+                .cloned()
+                .collect();
+
+            if let Some(successor) = available_successors.choose(&mut rng) {
+                self.stem_successors.insert(peer, *successor);
+                used_successors.insert(*successor);
+            }
+        }
+
+        // Update entropy and timestamp
+        self.routing_table_entropy = self.calculate_overall_routing_entropy();
+        self.last_routing_table_refresh = now;
+    }
+
+    /// Calculate routing entropy between two peers
+    fn calculate_routing_entropy(&self, from: SocketAddr, to: SocketAddr) -> f64 {
+        let mut entropy = 1.0;
+
+        // Consider subnet diversity
+        if let (Some(from_rep), Some(to_rep)) = (
+            self.peer_reputation.get(&from),
+            self.peer_reputation.get(&to)
+        ) {
+            if from_rep.ip_subnet == to_rep.ip_subnet {
+                entropy *= 0.5;
+            }
+        }
+
+        // Consider historical paths
+        if let Some(historical) = self.historical_paths.get(&[0u8; 32]) {
+            if historical.contains(&to) {
+                entropy *= 0.8;
+            }
+        }
+
+        // Consider peer reputation
+        if let Some(rep) = self.peer_reputation.get(&to) {
+            entropy *= (rep.reputation_score + 100.0) / 200.0;
+        }
+
+        entropy
+    }
+
+    /// Calculate overall routing entropy of the network
+    fn calculate_overall_routing_entropy(&self) -> f64 {
+        let mut total_entropy = 0.0;
+        let mut count = 0;
+
+        for (&from, &to) in &self.stem_successors {
+            total_entropy += self.calculate_routing_entropy(from, to);
+            count += 1;
+        }
+
+        if count > 0 {
+            total_entropy / count as f64
+        } else {
+            1.0
+        }
+    }
+
+    pub fn maintain_dandelion(&mut self) {
+        let now = Instant::now();
+
+        // Process aggregated transactions
+        let mut ready_aggregations = Vec::new();
+        for (id, agg) in &self.aggregated_transactions {
+            if now.duration_since(agg.creation_time).as_millis() >= AGGREGATION_TIMEOUT_MS as u128 
+                || agg.transactions.len() >= MAX_AGGREGATION_SIZE {
+                ready_aggregations.push(*id);
+            }
+        }
+
+        // Move ready aggregations to stem batches
+        for id in ready_aggregations {
+            if let Some(agg) = self.aggregated_transactions.remove(&id) {
+                for tx_hash in agg.transactions {
+                    self.create_stem_batch(tx_hash);
+                }
+            }
+        }
+
+        // Process stem batches ready for fluff phase
+        let ready_txs = self.process_stem_batches();
+        for (tx_hash, entry_points) in ready_txs {
+            if let Some(metadata) = self.transactions.get_mut(&tx_hash) {
+                metadata.state = PropagationState::Fluff;
+                metadata.fluff_time = Some(now);
+                // Store entry points for fluff phase
+                self.fluff_entry_points = entry_points;
+            }
+        }
+
+        // Refresh routing table if needed
+        if ROUTING_TABLE_INFERENCE_RESISTANCE_ENABLED {
+            self.refresh_routing_table();
+        }
+
+        // Update routing table entropy
+        self.routing_table_entropy = self.calculate_overall_routing_entropy();
+    }
+
+    fn calculate_subnet_entropy(&self, subnet_distribution: &HashMap<[u8; 2], usize>) -> f64 {
+        let total_nodes: usize = subnet_distribution.values().sum();
+        if total_nodes == 0 {
+            return 0.0;
+        }
+
+        let mut entropy = 0.0;
+        for &count in subnet_distribution.values() {
+            let probability = count as f64 / total_nodes as f64;
+            if probability > 0.0 {
+                entropy -= probability * probability.log2();
+            }
+        }
+        entropy
+    }
+
+    fn calculate_transaction_pattern_entropy(&self, flow_patterns: &HashMap<([u8; 32], [u8; 32]), usize>) -> f64 {
+        let total_patterns: usize = flow_patterns.values().sum();
+        if total_patterns == 0 {
+            return 0.0;
+        }
+
+        let mut entropy = 0.0;
+        for &count in flow_patterns.values() {
+            let probability = count as f64 / total_patterns as f64;
+            if probability > 0.0 {
+                entropy -= probability * probability.log2();
+            }
+        }
+        entropy
+    }
+
+    /// Returns a vector of peers that meet or exceed the given reputation threshold
+    pub fn get_peers_by_reputation(&self, threshold: Option<f64>) -> Vec<SocketAddr> {
+        let threshold = threshold.unwrap_or(0.0);
+        self.peer_reputation
+            .iter()
+            .filter(|(_, rep)| rep.reputation_score >= threshold)
+            .map(|(addr, _)| *addr)
+            .collect()
     }
 }
+

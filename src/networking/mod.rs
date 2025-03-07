@@ -62,6 +62,8 @@ pub mod i2p_proxy;
 pub mod dns_over_https;
 // Add the fingerprinting_protection module
 pub mod fingerprinting_protection;
+// Add the timing_obfuscation module
+pub mod timing_obfuscation;
 
 // Re-export key types from p2p module
 pub use p2p::{
@@ -306,7 +308,7 @@ impl Node {
 
     /// Get the stem successor for a transaction
     pub fn get_stem_successor(&self, tx_hash: &[u8; 32]) -> Option<SocketAddr> {
-        let dandelion_manager = self.dandelion_manager.lock().unwrap();
+        let mut dandelion_manager = self.dandelion_manager.lock().unwrap();
         dandelion_manager.get_stem_successor()
     }
 

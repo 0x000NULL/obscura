@@ -95,12 +95,34 @@ For privacy-enhanced messages, additional obfuscation may be applied.
 
 ### Dandelion++ Implementation
 - Stem phase
-  - Single successor routing
-  - Fluff probability
-  - Timeout mechanism
+  - Transaction aggregation (up to 10 transactions)
+  - Stem transaction batching (2-5 second batches)
+  - Randomized stem/fluff transition (1-5 second window)
+  - Multiple fluff phase entry points (2-4 points)
+  - Routing table inference resistance
+  - Entropy-based routing table refresh (30s intervals)
 - Fluff phase
-  - Diffusion parameters
-  - Propagation strategy
+  - Multiple entry point propagation
+  - Reputation-based entry point selection
+  - Subnet diversity enforcement
+  - Entry point rotation mechanism
+- Anti-fingerprinting measures
+  - Path pattern analysis:
+    - Multi-dimensional pattern tracking
+    - Similarity scoring system
+    - Pattern frequency monitoring
+  - Pattern detection:
+    - XXHash-based pattern hashing
+    - Adaptive detection thresholds
+    - Pattern cleanup mechanism
+  - Timing obfuscation:
+    - Random timing jitter (±50ms)
+    - Temporal diversity enforcement
+    - Operation timing randomization
+  - Integration:
+    - Route diversity enforcement
+    - Privacy mode compatibility
+    - Efficient caching system
 
 ### Connection Privacy
 - Tor support

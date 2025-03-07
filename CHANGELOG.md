@@ -1,9 +1,46 @@
 # Changelog
 
-## [0.7.5] - 2025-03-06
+## [0.7.5] - 2025-03-07
 
 ### Added
 - **Enhanced Dandelion Protocol Implementation**
+  - Added Dandelion++ enhancements:
+    - Implemented transaction aggregation with configurable batch sizes (up to 10 transactions)
+    - Created stem transaction batching with dynamic timing (2-5 second batches)
+    - Added randomized stem/fluff transition (1-5 second window)
+    - Implemented multiple fluff phase entry points (2-4 points)
+    - Created resistant routing against routing table inference
+    - Added entropy-based routing table refresh (30 second intervals)
+  - Implemented comprehensive timing obfuscation system:
+    - Added variable delay scheduling based on network traffic (10ms-1000ms range)
+    - Created dynamic delay calculation with network condition adaptation
+    - Implemented randomized jitter to prevent timing correlation
+    - Added traffic monitoring and delay adjustment system
+    - Created comprehensive delay calculation framework
+  - Added decoy transaction propagation:
+    - Implemented probabilistic decoy generation (10% probability)
+    - Created configurable decoy generation intervals
+    - Added transaction batching with decoys
+    - Implemented decoy detection and filtering
+    - Created secure decoy transaction generation
+  - Implemented randomized batch propagation:
+    - Added dynamic batch size calculation (2-10 transactions)
+    - Created traffic-based batch size adjustment
+    - Implemented variable batch release timing
+    - Added batch composition randomization
+    - Created secure batch management
+  - Added statistical timing analysis resistance:
+    - Implemented normal distribution noise generation
+    - Created configurable statistical parameters
+    - Added timing pattern analysis and randomization
+    - Implemented statistical noise calibration
+    - Created timing correlation protection
+  - Implemented timing side-channel protection:
+    - Added multi-layer timing protection
+    - Created combined delay calculation system
+    - Implemented secure timing randomization
+    - Added side-channel attack mitigation
+    - Created comprehensive timing obfuscation
   - Implemented adaptive path selection with entropy-based path randomization:
     - Added 64-byte entropy pool with secure refresh mechanism
     - Created multiple entropy sources (system, timing, transaction history, network conditions)
@@ -22,6 +59,35 @@
     - Created weighted selection algorithm for peers
     - Implemented traffic-adaptive path length adjustment
     - Added historical path tracking for analysis
+    - Added sophisticated path length variation based on network conditions:
+      - Implemented latency-based path length adjustment
+      - Added congestion-aware path length optimization
+      - Created reputation-based path length variation
+      - Implemented multi-factor path length determination
+      - Added anti-fingerprinting random variation
+      - Created network traffic trend analysis for path length
+    - Added comprehensive route diversity enforcement:
+      - Implemented multi-dimensional diversity metrics (AS, geographic, subnet)
+      - Created weighted diversity scoring system (40/30/30 split)
+      - Added path reuse prevention with XXHash-based similarity detection
+      - Implemented adaptive privacy levels based on network conditions
+      - Created configurable diversity thresholds and penalties
+      - Added comprehensive path diversity tracking and enforcement
+      - Integrated seamlessly with existing privacy features
+      - Added support for all privacy routing modes
+      - Created efficient path similarity detection using XXHash
+      - Implemented temporal diversity maintenance
+    - Added advanced anti-fingerprinting measures:
+      - Implemented path pattern tracking and analysis
+      - Created multi-dimensional similarity scoring (length, subnet, timing)
+      - Added pattern frequency monitoring and limitation
+      - Implemented timing characteristics obfuscation
+      - Created adaptive pattern detection thresholds
+      - Added temporal pattern analysis with sliding window
+      - Implemented comprehensive pattern cleanup mechanism
+      - Created timing jitter for path selection operations
+      - Added pattern hash calculation using XXHash
+      - Implemented pattern cache with frequency tracking
   - Implemented comprehensive node reputation-based routing:
     - Created dedicated reputation-based path selection algorithm
     - Added advanced routing reliability metrics (success rate, relay time, stability)
@@ -35,26 +101,30 @@
 
 ### Security
 - **Network Privacy Enhancements**
+  - Enhanced timing obfuscation:
+    - Added comprehensive delay randomization system
+    - Implemented network traffic-based timing adjustments
+    - Created statistical timing analysis resistance
+    - Added side-channel attack protection
+    - Implemented secure delay generation
   - Strengthened Dandelion stem phase:
     - Added unpredictable but deterministic routing paths
     - Implemented subnet diversity to prevent correlation attacks
     - Created defense against path inference attacks
     - Added transaction-specific path generation
     - Implemented network condition-aware routing
+    - Added route diversity enforcement with multiple diversity metrics
+    - Created comprehensive path diversity tracking system
   - Improved resistance against network analysis:
     - Created deterministic but private transaction routing
     - Added reputation-weighted peer selection
     - Implemented adaptive path selection based on network conditions
     - Enhanced subnet diversity in transaction paths
     - Created robust testing for path randomization verification
-  - Enhanced reputation-based security measures:
-    - Added comprehensive peer performance tracking
-    - Implemented adaptive reputation thresholds for privacy-critical transactions
-    - Created reliability-focused routing for sensitive operations
-    - Added performance-based reputation rewards and penalties
-    - Implemented historical path analysis for improved security decisions
-    - Added transaction propagation mode selection based on privacy requirements
-    - Created specialized handling for different privacy routing modes
+    - Added comprehensive route diversity tracking and enforcement
+    - Implemented multi-dimensional diversity scoring system
+    - Created efficient path similarity detection mechanism
+    - Added temporal diversity maintenance for enhanced privacy
 
 ## [0.7.4] - 2025-03-06
 
