@@ -519,13 +519,18 @@ impl FingerprintingProtectionService {
     
     /// Get the number of connections to maintain for the current client
     pub fn get_connection_target(&self, network_types: &[NetworkType]) -> usize {
-        if !self.config.enabled || !self.config.randomize_connection_patterns {
+        if !self.config.enabled {
             return self.config.min_privacy_connections;
         }
         
-        // Ensure we have at least the minimum privacy connections
-        let client_pattern = self.get_current_client().connection_pattern();
-        let mut min_connections = client_pattern.min_connections.max(self.config.min_privacy_connections);
+        let mut min_connections = self.config.min_privacy_connections;
+        
+        // If randomize_connection_patterns is enabled, use the client pattern
+        if self.config.randomize_connection_patterns {
+            // Ensure we have at least the minimum privacy connections
+            let client_pattern = self.get_current_client().connection_pattern();
+            min_connections = client_pattern.min_connections.max(min_connections);
+        }
         
         // Adjust based on network types available
         if network_types.contains(&NetworkType::Tor) || network_types.contains(&NetworkType::I2P) {
@@ -534,11 +539,16 @@ impl FingerprintingProtectionService {
             min_connections = min_connections.saturating_sub(2).max(2);
         }
         
-        // Randomize within the range a bit
-        let mut rng = thread_rng();
-        let connection_range = client_pattern.max_connections - min_connections;
-        if connection_range > 0 {
-            min_connections + rng.gen_range(0..connection_range)
+        // Randomize within the range a bit if randomize_connection_patterns is enabled
+        if self.config.randomize_connection_patterns {
+            let mut rng = thread_rng();
+            let client_pattern = self.get_current_client().connection_pattern();
+            let connection_range = client_pattern.max_connections - min_connections;
+            if connection_range > 0 {
+                min_connections + rng.gen_range(0..connection_range)
+            } else {
+                min_connections
+            }
         } else {
             min_connections
         }
