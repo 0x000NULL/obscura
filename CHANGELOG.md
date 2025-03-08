@@ -1,5 +1,125 @@
 # Changelog
 
+## [0.7.7] - 2025-03-08
+
+### Added
+- **Circuit-Based Routing Implementation**
+  - Implemented ephemeral circuit creation:
+    - Added secure random circuit ID generation
+    - Created configurable circuit lifetimes (default: 5 minutes)
+    - Implemented multi-hop circuit paths (2-5 hops)
+    - Added intelligent node selection with preferences and avoidance
+    - Created robust circuit status tracking and management
+  - Enhanced network-level privacy features:
+    - Implemented layered encryption with ChaCha20-Poly1305
+    - Added secure key derivation for each circuit hop
+    - Created circuit isolation mechanisms for different traffic types
+    - Implemented connection padding for obfuscation
+    - Added comprehensive circuit statistics monitoring
+  - Created circuit management infrastructure:
+    - Implemented `CircuitManager` for end-to-end circuit management
+    - Added circuit creation with configurable parameters
+    - Created circuit maintenance with heartbeat messages
+    - Implemented automatic circuit rotation based on lifetime
+    - Added circuit message handling for relay operations
+  - Implemented multi-hop routing paths:
+    - Built complete onion-routing system with layered encryption
+    - Added hop-by-hop message forwarding and verification
+    - Implemented ChaCha20Poly1305 encryption for each circuit layer
+    - Created secure relay node functionality with isolation guarantees
+    - Added comprehensive circuit relay statistics tracking
+    - Implemented dynamic route selection with path configuration
+    - Created robust error handling for routing failures and recovery
+  - Implemented advanced circuit isolation mechanisms:
+    - Added category-based circuit isolation (transaction, block, discovery)
+    - Created traffic type separation to prevent correlation
+    - Implemented automatic circuit creation per traffic category
+    - Added isolation enforcement with configurable settings
+    - Created dedicated API for category-specific circuit management
+  - Added sophisticated circuit rotation strategies:
+    - Implemented time-based, usage-based, and volume-based rotation
+    - Created randomized rotation with increasing probability over time
+    - Added combined rotation strategies for enhanced security
+    - Implemented asynchronous circuit replacement
+    - Created configurable rotation parameters with sensible defaults
+  - Implemented comprehensive padding traffic for circuit obfuscation:
+    - Added multiple padding strategies (constant, random, adaptive, normalized)
+    - Created intelligent traffic pattern obfuscation
+    - Implemented message size and timing randomization
+    - Added statistical traffic analysis resistance
+    - Created decoy traffic during idle periods
+    - Implemented burst padding for enhanced pattern hiding
+- **Advanced Traffic Obfuscation Techniques**
+  - Implemented sophisticated traffic morphing:
+    - Created traffic patterns that mimic common internet protocols (web browsing, streaming media, file transfers, messaging, and online gaming)
+    - Added configurable morphing type selection
+    - Implemented realistic protocol headers and data structures
+    - Created adaptive pattern selection based on network conditions
+    - Added detailed traffic structure mimicry for enhanced obfuscation
+  - Added payload padding with distribution matching:
+    - Implemented statistical distribution matching for common protocols (HTTP, DNS, Streaming, VPN, SSH, BitTorrent)
+    - Created multi-modal distribution system with probabilistic modeling
+    - Added protocol-specific padding patterns
+    - Implemented pattern-matched padding content generation
+    - Created comprehensive mixed distribution sampling system
+  - Added timing randomization via chaff traffic:
+    - Implemented configurable chaff traffic generator with multiple distribution options (uniform, normal, log-normal, Poisson, burst)
+    - Added adaptive timing based on network traffic patterns
+    - Created historical traffic pattern tracking and analysis
+    - Implemented congestion-aware chaff generation
+    - Added comprehensive chaff packet management and filtering
+  - Enhanced protocol obfuscation:
+    - Expanded protocol mimicry to include additional protocols (QUIC, WebSocket, MQTT, RTMP)
+    - Implemented detailed packet structures to better mimic legitimate protocols
+    - Added configurable options for protocol rotation and fingerprint randomization
+    - Created protocol-specific headers and payloads for convincing disguise
+    - Added comprehensive morphing and demorphing capabilities
+  - Implemented traffic pattern normalization:
+    - Created multiple normalization strategies (constant packet size, constant rate, padding to fixed size, fragmentation, aggregation)
+    - Added packet fragmentation and aggregation to disguise traffic patterns
+    - Implemented constant rate traffic generation
+    - Created comprehensive traffic normalization for combined strategies
+    - Added packet buffer management for efficient normalization
+
+- **Advanced Connection Fingerprinting Resistance**
+  - Implemented TCP fingerprint randomization:
+    - Added randomization of TCP window size (8192-65535)
+    - Created dynamic MSS selection (1400-1480)
+    - Implemented OS-specific TTL mimicry (64, 128, 255)
+    - Added window scaling factor variation (1-14)
+    - Created randomized TCP options (SACK, timestamps, ECN)
+    - Implemented socket parameter adjustments for each connection
+  - Added TLS parameterization variance:
+    - Implemented TLS version selection (1.2, 1.3)
+    - Created cipher suite order randomization
+    - Added ECC curve preference randomization
+    - Implemented variable signature algorithm preferences
+    - Created custom TLS extension ordering
+    - Added session ticket support randomization
+  - Developed handshake pattern diversity:
+    - Implemented browser-specific handshake patterns (Chrome, Firefox, Safari, Edge)
+    - Created mobile app handshake simulation
+    - Added custom randomized handshake patterns
+    - Implemented variable key exchange parameters
+    - Created pattern-specific TLS configurations
+  - Added browser-like connection behaviors:
+    - Implemented parallel connection limits (2-8 concurrent)
+    - Created connection pooling simulation
+    - Added realistic HTTP keepalive behaviors
+    - Implemented idle connection timing
+    - Created DNS prefetching simulation
+    - Added TLS session resumption behaviors
+    - Implemented TLS false start simulation
+    - Created HTTP/2 multiplexing behaviors
+  - Implemented connection parameter randomization:
+    - Added automatic parameter rotation (configurable intervals)
+    - Created peer-specific parameter overrides
+    - Implemented comprehensive randomization services
+    - Added configuration system for all parameters
+    - Created testing framework for parameter verification
+    - Implemented peer-specific handshake customization
+    - Added configurable browser profile simulation
+
 ## [0.7.6] - 2025-03-08
 
 ### Added
@@ -171,6 +291,14 @@
     - Implemented network condition-aware routing
     - Added route diversity enforcement with multiple diversity metrics
     - Created comprehensive path diversity tracking system
+  - Implemented multi-hop routing paths:
+    - Built complete onion-routing system with layered encryption
+    - Added hop-by-hop message forwarding and verification
+    - Implemented ChaCha20Poly1305 encryption for each circuit layer
+    - Created secure relay node functionality with isolation guarantees
+    - Added comprehensive circuit relay statistics tracking
+    - Implemented dynamic route selection with path configuration
+    - Created robust error handling for routing failures and recovery
   - Improved resistance against network analysis:
     - Created deterministic but private transaction routing
     - Added reputation-weighted peer selection

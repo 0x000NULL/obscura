@@ -47,6 +47,23 @@ impl Default for MessagePaddingConfig {
     }
 }
 
+impl MessagePaddingConfig {
+    /// Create a new MessagePaddingConfig from ConnectionObfuscationConfig
+    pub fn from_connection_config(conn_config: &ConnectionObfuscationConfig) -> Self {
+        Self {
+            enabled: conn_config.message_padding_enabled,
+            min_padding_bytes: conn_config.message_min_padding_bytes,
+            max_padding_bytes: conn_config.message_max_padding_bytes,
+            distribution_uniform: conn_config.message_padding_distribution_uniform,
+            interval_min_ms: conn_config.message_padding_interval_min_ms,
+            interval_max_ms: conn_config.message_padding_interval_max_ms,
+            send_dummy_enabled: conn_config.message_padding_send_dummy_enabled,
+            dummy_interval_min_ms: conn_config.message_padding_dummy_interval_min_ms,
+            dummy_interval_max_ms: conn_config.message_padding_dummy_interval_max_ms,
+        }
+    }
+}
+
 /// MessagePaddingStrategy defines the padding algorithms available
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MessagePaddingStrategy {
@@ -64,6 +81,31 @@ pub enum MessagePaddingStrategy {
     
     /// Adaptive padding based on network conditions
     Adaptive,
+    
+    /// Distribution matching to mimic real-world protocols
+    DistributionMatching(ProtocolDistribution),
+}
+
+/// Distributions to match for padding to make traffic analysis harder
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProtocolDistribution {
+    /// HTTP/HTTPS traffic pattern
+    Http,
+    
+    /// DNS query/response pattern
+    Dns,
+    
+    /// Streaming media traffic pattern
+    Streaming,
+    
+    /// VPN traffic pattern
+    Vpn,
+    
+    /// SSH traffic pattern
+    Ssh,
+    
+    /// BitTorrent traffic pattern
+    BitTorrent,
 }
 
 /// MessagePaddingService manages message padding for enhanced privacy
@@ -178,7 +220,263 @@ impl MessagePaddingService {
                 // Placeholder for future adaptive algorithm based on network conditions
                 self.config.message_min_padding_bytes
             }
+            
+            MessagePaddingStrategy::DistributionMatching(distribution) => {
+                self.get_distribution_matched_size(distribution)
+            }
         }
+    }
+    
+    /// Generate a padding size that matches real-world protocol distributions
+    fn get_distribution_matched_size(&self, distribution: ProtocolDistribution) -> usize {
+        let mut rng = thread_rng();
+        
+        match distribution {
+            ProtocolDistribution::Http => {
+                // HTTP has multimodal distribution with peaks around common sizes
+                let common_http_sizes = [
+                    (0.20, 300, 50),    // Small HTTP headers (~300 bytes)
+                    (0.30, 1460, 100),  // MTU size packets (~1460 bytes)
+                    (0.25, 8000, 500),  // Medium responses (~8KB)
+                    (0.15, 32000, 5000), // Large responses (~32KB)
+                    (0.10, 64000, 8000), // Very large responses (~64KB)
+                ];
+                
+                self.sample_from_mixed_distribution(&common_http_sizes)
+            },
+            
+            ProtocolDistribution::Dns => {
+                // DNS has mostly small packets with occasional larger ones
+                let dns_sizes = [
+                    (0.75, 64, 20),    // Standard DNS queries (40-80 bytes)
+                    (0.20, 512, 50),   // Typical DNS responses (450-550 bytes)
+                    (0.05, 1232, 200), // DNSSEC or extended responses (1000-1400 bytes)
+                ];
+                
+                self.sample_from_mixed_distribution(&dns_sizes)
+            },
+            
+            ProtocolDistribution::Streaming => {
+                // Streaming has consistent packet sizes with regular timing
+                let streaming_sizes = [
+                    (0.85, 1300, 100),  // Standard streaming packets (~1300 bytes)
+                    (0.10, 500, 50),    // Control packets (~500 bytes)
+                    (0.05, 64, 20),     // Keep-alive packets (~64 bytes)
+                ];
+                
+                self.sample_from_mixed_distribution(&streaming_sizes)
+            },
+            
+            ProtocolDistribution::Vpn => {
+                // VPN traffic tends to have consistent packet sizes at MTU boundaries
+                let vpn_sizes = [
+                    (0.30, 1380, 50),   // Slightly smaller than MTU due to VPN overhead
+                    (0.30, 590, 40),    // Split packets
+                    (0.20, 150, 30),    // Control packets
+                    (0.20, 80, 20),     // Small ACKs and keepalives
+                ];
+                
+                self.sample_from_mixed_distribution(&vpn_sizes)
+            },
+            
+            ProtocolDistribution::Ssh => {
+                // SSH traffic has a mix of tiny control packets and data packets
+                let ssh_sizes = [
+                    (0.40, 64, 16),      // Control packets (~48-80 bytes)
+                    (0.40, 256, 64),     // Small data transfers
+                    (0.15, 1024, 256),   // Larger data transfers
+                    (0.05, 4096, 1024),  // File transfers
+                ];
+                
+                self.sample_from_mixed_distribution(&ssh_sizes)
+            },
+            
+            ProtocolDistribution::BitTorrent => {
+                // BitTorrent traffic has a distinctive pattern
+                let bittorrent_sizes = [
+                    (0.30, 68, 8),       // Control messages (60-76 bytes)
+                    (0.05, 128, 32),     // Handshake messages
+                    (0.50, 1460, 100),   // Data blocks at MTU size
+                    (0.15, 16384, 1024), // Large piece transfers
+                ];
+                
+                self.sample_from_mixed_distribution(&bittorrent_sizes)
+            },
+        }
+    }
+    
+    /// Sample from a mixed normal distribution
+    /// Each element in distributions is (probability, mean, std_dev)
+    fn sample_from_mixed_distribution(&self, distributions: &[(f64, usize, usize)]) -> usize {
+        let mut rng = thread_rng();
+        
+        // Choose which distribution to sample from based on probabilities
+        let distribution_choice = rng.gen::<f64>();
+        let mut cumulative_prob = 0.0;
+        
+        for (prob, mean, std_dev) in distributions {
+            cumulative_prob += prob;
+            
+            if distribution_choice <= cumulative_prob {
+                // Sample from this normal distribution
+                let normal = Normal::new(*mean as f64, *std_dev as f64)
+                    .unwrap_or(Normal::new(100.0, 10.0).unwrap());
+                    
+                let mut sample = normal.sample(&mut rng);
+                
+                // Ensure it's positive and within reasonable bounds
+                sample = sample.max(16.0).min(100_000.0);
+                
+                return sample as usize;
+            }
+        }
+        
+        // Fallback (should never reach here if probabilities sum to 1.0)
+        rng.gen_range(self.config.message_min_padding_bytes..=self.config.message_max_padding_bytes)
+    }
+    
+    /// Set the padding strategy to distribution matching with the specified protocol
+    pub fn set_distribution_matching(&mut self, protocol: ProtocolDistribution) {
+        self.strategy = MessagePaddingStrategy::DistributionMatching(protocol);
+    }
+    
+    /// Generate padding that matches the pattern of a specific protocol
+    fn generate_pattern_matched_padding(&self, size: usize, protocol: ProtocolDistribution) -> Vec<u8> {
+        let mut rng = thread_rng();
+        let mut padding = Vec::with_capacity(size);
+        
+        match protocol {
+            ProtocolDistribution::Http => {
+                // HTTP-like padding with structured content
+                if size > 16 {
+                    // Add HTTP-like header structures
+                    let headers = [
+                        "Content-Type: ", "User-Agent: ", "Accept: ", "Connection: ", 
+                        "Cache-Control: ", "X-Forwarded-For: ", "Host: "
+                    ];
+                    
+                    // Add a few random headers
+                    let header_count = std::cmp::min(3, size / 32);
+                    for _ in 0..header_count {
+                        let header = headers[rng.gen_range(0..headers.len())];
+                        padding.extend_from_slice(header.as_bytes());
+                        
+                        // Add some random alphanumeric content
+                        let content_len = rng.gen_range(5..15);
+                        for _ in 0..content_len {
+                            padding.push(rng.gen_range(32..127));
+                        }
+                        
+                        // Add CRLF
+                        padding.extend_from_slice(b"\r\n");
+                    }
+                }
+            },
+            
+            ProtocolDistribution::Dns => {
+                // DNS-like padding with query structure
+                if size > 12 {
+                    // DNS header (12 bytes)
+                    let id = rng.gen::<u16>().to_be_bytes();
+                    padding.extend_from_slice(&id);
+                    
+                    // Flags, counts
+                    for _ in 0..10 {
+                        padding.push(rng.gen::<u8>());
+                    }
+                    
+                    // Domain name encoding pattern
+                    if size > 20 {
+                        let remaining = size - padding.len();
+                        let mut pos = 0;
+                        
+                        while pos < remaining {
+                            let segment_len = rng.gen_range(1..=15).min(remaining - pos);
+                            padding.push(segment_len as u8);
+                            
+                            for _ in 0..segment_len {
+                                padding.push(rng.gen_range(b'a'..=b'z'));
+                            }
+                            
+                            pos += segment_len + 1;
+                            
+                            if remaining - pos <= 5 || rng.gen::<f64>() < 0.3 {
+                                padding.push(0); // End of domain
+                                break;
+                            }
+                        }
+                    }
+                }
+            },
+            
+            ProtocolDistribution::Streaming => {
+                // Streaming media-like padding with packet patterns
+                if size > 4 {
+                    // RTP-like header
+                    padding.push(0x80); // Version, padding, extension, CSRC
+                    padding.push(rng.gen::<u8>()); // Payload type
+                    
+                    // Sequence number
+                    let seq = rng.gen::<u16>().to_be_bytes();
+                    padding.extend_from_slice(&seq);
+                    
+                    // Timestamp
+                    let ts = rng.gen::<u32>().to_be_bytes();
+                    padding.extend_from_slice(&ts);
+                    
+                    // SSRC identifier
+                    let ssrc = rng.gen::<u32>().to_be_bytes();
+                    padding.extend_from_slice(&ssrc);
+                }
+            },
+            
+            _ => {
+                // For other protocols, use random data but potentially add some structure
+                let structure_probability = 0.7;
+                
+                if rng.gen::<f64>() < structure_probability && size > 8 {
+                    // Add some structured elements that look like a real protocol
+                    let header_size = std::cmp::min(8, size / 2);
+                    
+                    // Add a pseudo-header
+                    for _ in 0..header_size {
+                        padding.push(rng.gen::<u8>());
+                    }
+                    
+                    // Add repeating patterns in the data portion
+                    let pattern_size = rng.gen_range(4..16).min((size - header_size) / 2);
+                    let mut pattern = Vec::with_capacity(pattern_size);
+                    
+                    for _ in 0..pattern_size {
+                        pattern.push(rng.gen::<u8>());
+                    }
+                    
+                    // Repeat the pattern with slight variations
+                    let mut remaining = size - header_size;
+                    while remaining > 0 {
+                        let chunk_size = std::cmp::min(pattern.len(), remaining);
+                        padding.extend_from_slice(&pattern[0..chunk_size]);
+                        remaining -= chunk_size;
+                        
+                        // Occasionally modify the pattern
+                        if rng.gen::<f64>() < 0.3 {
+                            let idx = rng.gen_range(0..pattern.len());
+                            pattern[idx] = rng.gen::<u8>();
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Fill any remaining space with random data
+        while padding.len() < size {
+            padding.push(rng.gen::<u8>());
+        }
+        
+        // Ensure we don't exceed the requested size
+        padding.truncate(size);
+        
+        padding
     }
     
     /// Apply random timing jitter to message processing
@@ -433,5 +731,72 @@ mod tests {
         let filtered = MessagePaddingService::filter_dummy_message(normal_message.clone());
         assert!(filtered.is_some());
         assert_eq!(filtered.unwrap().message_type, normal_message.message_type);
+    }
+    
+    #[test]
+    fn test_distribution_matched_padding() {
+        // Create a default ConnectionObfuscationConfig
+        let mut config = ConnectionObfuscationConfig::default();
+        
+        // Set the required fields
+        config.message_padding_enabled = true;
+        config.message_min_padding_bytes = 100;
+        config.message_max_padding_bytes = 1000;
+        config.message_padding_distribution_uniform = false;
+        
+        let mut service = MessagePaddingService::new(config);
+        service.set_distribution_matching(ProtocolDistribution::Http);
+        
+        let message = Message::new(MessageType::GetBlocks, vec![1, 2, 3, 4]);
+        let padded = service.apply_padding(message);
+        
+        assert!(padded.is_padded);
+        assert!(padded.padding_size > 0);
+        
+        // Remove padding and verify original message is preserved
+        let unpadded = service.remove_padding(padded);
+        assert_eq!(unpadded.payload, vec![1, 2, 3, 4]);
+    }
+    
+    #[test]
+    fn test_different_protocol_distributions() {
+        // Create a default ConnectionObfuscationConfig
+        let mut config = ConnectionObfuscationConfig::default();
+        
+        // Set the required fields
+        config.message_padding_enabled = true;
+        config.message_min_padding_bytes = 10;
+        config.message_max_padding_bytes = 1000;
+        
+        let mut service = MessagePaddingService::new(config);
+        
+        // Test with different protocol distributions
+        let protocols = [
+            ProtocolDistribution::Http,
+            ProtocolDistribution::Dns,
+            ProtocolDistribution::Streaming,
+            ProtocolDistribution::Vpn,
+            ProtocolDistribution::Ssh,
+            ProtocolDistribution::BitTorrent,
+        ];
+        
+        for protocol in &protocols {
+            service.set_distribution_matching(*protocol);
+            
+            // Generate multiple samples to check distribution
+            let mut sizes = Vec::new();
+            for _ in 0..100 {
+                let size = service.determine_padding_size();
+                sizes.push(size);
+            }
+            
+            // Basic verification - sizes should be > 0 and we should have some variety
+            assert!(sizes.iter().all(|&s| s > 0));
+            assert!(sizes.len() > 1);
+            
+            // We should see at least a few different values in our distribution
+            let unique_sizes = sizes.iter().collect::<std::collections::HashSet<_>>();
+            assert!(unique_sizes.len() > 5);
+        }
     }
 } 

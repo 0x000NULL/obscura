@@ -25,6 +25,14 @@ pub enum ProtocolMorphType {
     Ssh,
     /// Randomly select from available protocols
     Random,
+    /// QUIC protocol (HTTP/3)
+    Quic,
+    /// WebSocket protocol
+    WebSocket,
+    /// MQTT protocol (IoT)
+    Mqtt,
+    /// RTMP streaming protocol
+    Rtmp,
 }
 
 impl Default for ProtocolMorphType {
@@ -44,6 +52,14 @@ pub enum MorphProtocol {
     TLS = 2,
     /// SSH - Secure Shell traffic
     SSH = 3,
+    /// QUIC - Modern encrypted transport protocol
+    QUIC = 4,
+    /// WebSocket - Browser-based bidirectional communication
+    WEBSOCKET = 5,
+    /// MQTT - Lightweight IoT messaging protocol
+    MQTT = 6,
+    /// RTMP - Streaming media protocol
+    RTMP = 7,
 }
 
 impl MorphProtocol {
@@ -54,6 +70,10 @@ impl MorphProtocol {
             1 => Some(MorphProtocol::DNS),
             2 => Some(MorphProtocol::TLS),
             3 => Some(MorphProtocol::SSH),
+            4 => Some(MorphProtocol::QUIC),
+            5 => Some(MorphProtocol::WEBSOCKET),
+            6 => Some(MorphProtocol::MQTT),
+            7 => Some(MorphProtocol::RTMP),
             _ => None,
         }
     }
@@ -76,6 +96,21 @@ pub struct ProtocolMorphingConfig {
     
     /// Add random headers/fields to morphed traffic
     pub add_random_fields: bool,
+    
+    /// Deep protocol emulation (more convincing but slower)
+    pub deep_protocol_emulation: bool,
+    
+    /// Statistical protocol behavior emulation
+    pub statistical_behavior_emulation: bool,
+    
+    /// Adaptive protocol selection based on network conditions
+    pub adaptive_protocol_selection: bool,
+    
+    /// Enable protocol fingerprint randomization
+    pub randomize_protocol_fingerprints: bool,
+    
+    /// Enable protocol version cycling
+    pub protocol_version_cycling: bool,
 }
 
 impl Default for ProtocolMorphingConfig {
@@ -88,9 +123,16 @@ impl Default for ProtocolMorphingConfig {
                 MorphProtocol::DNS,
                 MorphProtocol::TLS,
                 MorphProtocol::SSH,
+                MorphProtocol::QUIC,
+                MorphProtocol::WEBSOCKET,
             ],
             protocol_rotation_interval_sec: 3600, // Rotate every hour by default
             add_random_fields: true,
+            deep_protocol_emulation: true,
+            statistical_behavior_emulation: true,
+            adaptive_protocol_selection: true,
+            randomize_protocol_fingerprints: true,
+            protocol_version_cycling: true,
         }
     }
 }
@@ -124,6 +166,10 @@ impl ProtocolMorphingService {
                 MorphProtocol::DNS => ProtocolMorphType::Dns,
                 MorphProtocol::TLS => ProtocolMorphType::Https,
                 MorphProtocol::SSH => ProtocolMorphType::Ssh,
+                MorphProtocol::QUIC => ProtocolMorphType::Quic,
+                MorphProtocol::WEBSOCKET => ProtocolMorphType::WebSocket,
+                MorphProtocol::MQTT => ProtocolMorphType::Mqtt,
+                MorphProtocol::RTMP => ProtocolMorphType::Rtmp,
             }
         } else {
             ProtocolMorphType::None
@@ -157,6 +203,10 @@ impl ProtocolMorphingService {
             ProtocolMorphType::Dns,
             ProtocolMorphType::Https,
             ProtocolMorphType::Ssh,
+            ProtocolMorphType::Quic,
+            ProtocolMorphType::WebSocket,
+            ProtocolMorphType::Mqtt,
+            ProtocolMorphType::Rtmp,
         ];
         
         protocols[rng.gen_range(0..protocols.len())]
@@ -186,6 +236,10 @@ impl ProtocolMorphingService {
                     MorphProtocol::DNS => ProtocolMorphType::Dns,
                     MorphProtocol::TLS => ProtocolMorphType::Https,
                     MorphProtocol::SSH => ProtocolMorphType::Ssh,
+                    MorphProtocol::QUIC => ProtocolMorphType::Quic,
+                    MorphProtocol::WEBSOCKET => ProtocolMorphType::WebSocket,
+                    MorphProtocol::MQTT => ProtocolMorphType::Mqtt,
+                    MorphProtocol::RTMP => ProtocolMorphType::Rtmp,
                 };
             } else {
                 new_type = ProtocolMorphType::None;
@@ -206,48 +260,70 @@ impl ProtocolMorphingService {
     
     /// Apply protocol morphing to a message
     pub fn apply_morphing(&mut self, mut message: Message) -> Message {
-        if !self.config.protocol_morphing_enabled || self.current_morph_type == ProtocolMorphType::None {
+        // Check and potentially rotate the protocol
+        self.check_and_rotate_protocol();
+        
+        // Skip if morphing is disabled
+        if !self.config.protocol_morphing_enabled {
             return message;
         }
         
-        // Check if it's time to rotate the protocol
-        self.check_and_rotate_protocol();
-        
+        // Apply protocol-specific morphing
         match self.current_morph_type {
             ProtocolMorphType::None => message,
             ProtocolMorphType::Http => self.morph_to_http(message),
             ProtocolMorphType::Dns => self.morph_to_dns(message),
             ProtocolMorphType::Https => self.morph_to_https(message),
             ProtocolMorphType::Ssh => self.morph_to_ssh(message),
+            ProtocolMorphType::Quic => self.morph_to_quic(message),
+            ProtocolMorphType::WebSocket => self.morph_to_websocket(message),
+            ProtocolMorphType::Mqtt => self.morph_to_mqtt(message),
+            ProtocolMorphType::Rtmp => self.morph_to_rtmp(message),
             ProtocolMorphType::Random => {
-                // This shouldn't happen since we convert Random to a specific type during initialization
-                // and rotation, but handle it just in case
-                let protocol_type = Self::select_random_protocol(&mut self.rng);
-                self.current_morph_type = protocol_type;
-                
-                match protocol_type {
-                    ProtocolMorphType::Http => self.morph_to_http(message),
-                    ProtocolMorphType::Dns => self.morph_to_dns(message),
-                    ProtocolMorphType::Https => self.morph_to_https(message),
-                    ProtocolMorphType::Ssh => self.morph_to_ssh(message),
-                    _ => message,
-                }
+                // This should never happen as Random gets converted to a specific type
+                // during initialization, but handle it anyway
+                let specific_type = Self::select_random_protocol(&mut self.rng);
+                self.current_morph_type = specific_type;
+                self.apply_morphing(message)
             }
         }
     }
     
     /// Remove protocol morphing from a message
     pub fn remove_morphing(&self, mut message: Message) -> Message {
-        if !self.config.protocol_morphing_enabled || !message.is_morphed {
+        if !message.is_morphed {
             return message;
         }
         
-        match message.morph_type {
-            Some(1) => self.remove_http_morphing(message),
-            Some(2) => self.remove_dns_morphing(message),
-            Some(3) => self.remove_https_morphing(message),
-            Some(4) => self.remove_ssh_morphing(message),
-            _ => message,
+        // Get the morph type from the message
+        let morph_type = match message.morph_type {
+            Some(t) if t == ProtocolMorphType::Http as u8 => ProtocolMorphType::Http,
+            Some(t) if t == ProtocolMorphType::Dns as u8 => ProtocolMorphType::Dns,
+            Some(t) if t == ProtocolMorphType::Https as u8 => ProtocolMorphType::Https,
+            Some(t) if t == ProtocolMorphType::Ssh as u8 => ProtocolMorphType::Ssh,
+            Some(t) if t == ProtocolMorphType::Quic as u8 => ProtocolMorphType::Quic,
+            Some(t) if t == ProtocolMorphType::WebSocket as u8 => ProtocolMorphType::WebSocket,
+            Some(t) if t == ProtocolMorphType::Mqtt as u8 => ProtocolMorphType::Mqtt,
+            Some(t) if t == ProtocolMorphType::Rtmp as u8 => ProtocolMorphType::Rtmp,
+            _ => ProtocolMorphType::None,
+        };
+        
+        // Apply appropriate demorphing
+        match morph_type {
+            ProtocolMorphType::Http => self.remove_http_morphing(message),
+            ProtocolMorphType::Dns => self.remove_dns_morphing(message),
+            ProtocolMorphType::Https => self.remove_https_morphing(message),
+            ProtocolMorphType::Ssh => self.remove_ssh_morphing(message),
+            ProtocolMorphType::Quic => self.remove_quic_morphing(message),
+            ProtocolMorphType::WebSocket => self.remove_websocket_morphing(message),
+            ProtocolMorphType::Mqtt => self.remove_mqtt_morphing(message),
+            ProtocolMorphType::Rtmp => self.remove_rtmp_morphing(message),
+            _ => {
+                // Unknown or None morphing, reset flags and return
+                message.is_morphed = false;
+                message.morph_type = Some(ProtocolMorphType::None as u8);
+                message
+            }
         }
     }
     
@@ -321,7 +397,7 @@ impl ProtocolMorphingService {
         }
         
         message.is_morphed = false;
-        message.morph_type = None;
+        message.morph_type = Some(ProtocolMorphType::None as u8);
         
         message
     }
@@ -403,7 +479,7 @@ impl ProtocolMorphingService {
         if message.payload.len() < 30 {
             warn!("DNS morphed message too short");
             message.is_morphed = false;
-            message.morph_type = None;
+            message.morph_type = Some(ProtocolMorphType::None as u8);
             return message;
         }
         
@@ -426,7 +502,7 @@ impl ProtocolMorphingService {
         if position + 2 >= message.payload.len() {
             warn!("DNS morphed message has invalid format");
             message.is_morphed = false;
-            message.morph_type = None;
+            message.morph_type = Some(ProtocolMorphType::None as u8);
             return message;
         }
         
@@ -445,7 +521,7 @@ impl ProtocolMorphingService {
         }
         
         message.is_morphed = false;
-        message.morph_type = None;
+        message.morph_type = Some(ProtocolMorphType::None as u8);
         
         message
     }
@@ -504,7 +580,7 @@ impl ProtocolMorphingService {
         if message.payload.len() < 5 {
             warn!("HTTPS/TLS morphed message too short");
             message.is_morphed = false;
-            message.morph_type = None;
+            message.morph_type = Some(ProtocolMorphType::None as u8);
             return message;
         }
         
@@ -523,7 +599,7 @@ impl ProtocolMorphingService {
         }
         
         message.is_morphed = false;
-        message.morph_type = None;
+        message.morph_type = Some(ProtocolMorphType::None as u8);
         
         message
     }
@@ -616,7 +692,517 @@ impl ProtocolMorphingService {
         }
         
         message.is_morphed = false;
-        message.morph_type = None;
+        message.morph_type = Some(ProtocolMorphType::None as u8);
+        
+        message
+    }
+    
+    /// Morph message to look like QUIC (HTTP/3) traffic
+    fn morph_to_quic(&mut self, mut message: Message) -> Message {
+        let rng = &mut self.rng;
+        
+        // Mark as morphed
+        message.is_morphed = true;
+        message.morph_type = Some(ProtocolMorphType::Quic as u8);
+        
+        // Create QUIC header
+        let mut quic_header = Vec::with_capacity(20);
+        
+        // QUIC uses variable-length encoding for many fields
+        
+        // First byte: Header form (1 bit), Fixed bit (1), Packet type (2), Reserved bits (2), Packet number length (2)
+        let header_byte = 0xC0 | rng.gen_range(0..16) as u8; // Long header format
+        quic_header.push(header_byte);
+        
+        // Version (4 bytes) - Use common QUIC version numbers
+        let quic_versions = [
+            // Draft versions
+            [0x00, 0x00, 0x00, 0x01], // Version 1
+            [0xff, 0x00, 0x00, 0x1d], // Draft 29
+            [0xff, 0x00, 0x00, 0x1c], // Draft 28
+        ];
+        
+        let version = quic_versions[rng.gen_range(0..quic_versions.len())];
+        quic_header.extend_from_slice(&version);
+        
+        // DCID length (1 byte)
+        let dcid_len = rng.gen_range(8..16) as u8;
+        quic_header.push(dcid_len);
+        
+        // DCID (variable, up to 20 bytes)
+        for _ in 0..dcid_len {
+            quic_header.push(rng.gen::<u8>());
+        }
+        
+        // SCID length (1 byte)
+        let scid_len = rng.gen_range(8..16) as u8;
+        quic_header.push(scid_len);
+        
+        // SCID (variable, up to 20 bytes)
+        for _ in 0..scid_len {
+            quic_header.push(rng.gen::<u8>());
+        }
+        
+        // Add QUIC length field for initial packets
+        let payload_len = message.payload.len();
+        let len_bytes = (payload_len as u16).to_be_bytes();
+        quic_header.extend_from_slice(&len_bytes);
+        
+        // Packet number (1-4 bytes, we'll use 2)
+        quic_header.extend_from_slice(&(rng.gen::<u16>().to_be_bytes()));
+        
+        // Generate token length for initial packets
+        quic_header.push(0x00); // No token for simplicity
+        
+        // Prepend the header to the payload
+        let mut new_payload = quic_header;
+        new_payload.extend_from_slice(&message.payload);
+        message.payload = new_payload;
+        
+        message
+    }
+    
+    /// Remove QUIC morphing from a message
+    fn remove_quic_morphing(&self, mut message: Message) -> Message {
+        // Check if this is a morphed QUIC message
+        if !message.is_morphed || message.morph_type != Some(ProtocolMorphType::Quic as u8) {
+            return message;
+        }
+        
+        // QUIC has a variable length header, so we need to parse it
+        let payload = &message.payload;
+        if payload.len() < 20 {
+            // Malformed QUIC packet, return as is
+            return message;
+        }
+        
+        // Simplified parsing - in a real implementation this would be more robust
+        let mut idx = 1; // Skip the first byte
+        idx += 4; // Skip version
+        
+        // Skip DCID
+        if idx < payload.len() {
+            let dcid_len = payload[idx] as usize;
+            idx += 1 + dcid_len;
+        }
+        
+        // Skip SCID
+        if idx < payload.len() {
+            let scid_len = payload[idx] as usize;
+            idx += 1 + scid_len;
+        }
+        
+        // Skip length
+        idx += 2;
+        
+        // Skip packet number
+        idx += 2;
+        
+        // Skip token length
+        idx += 1;
+        
+        // Extract the original payload
+        if idx < payload.len() {
+            message.payload = payload[idx..].to_vec();
+        } else {
+            // Malformed packet, return empty payload
+            message.payload = Vec::new();
+        }
+        
+        // Reset morphing flags
+        message.is_morphed = false;
+        message.morph_type = Some(ProtocolMorphType::None as u8);
+        
+        message
+    }
+    
+    /// Morph message to look like WebSocket traffic
+    fn morph_to_websocket(&mut self, mut message: Message) -> Message {
+        let rng = &mut self.rng;
+        
+        // Mark as morphed
+        message.is_morphed = true;
+        message.morph_type = Some(ProtocolMorphType::WebSocket as u8);
+        
+        // Create WebSocket header
+        let mut ws_header = Vec::with_capacity(14);
+        
+        // First byte: FIN (1 bit), RSV1-3 (3 bits), Opcode (4 bits)
+        // FIN=1, RSV=0, Opcode=2 (binary data)
+        ws_header.push(0x82);
+        
+        // Second byte: MASK (1 bit), Payload length (7 bits or 7+16 bits or 7+64 bits)
+        let payload_len = message.payload.len();
+        
+        if payload_len < 126 {
+            ws_header.push(0x80 | payload_len as u8); // Set mask bit and length
+        } else if payload_len <= 65535 {
+            ws_header.push(0x80 | 126); // Set mask bit and use extended length (16 bits)
+            ws_header.extend_from_slice(&(payload_len as u16).to_be_bytes());
+        } else {
+            ws_header.push(0x80 | 127); // Set mask bit and use extended length (64 bits)
+            ws_header.extend_from_slice(&(payload_len as u64).to_be_bytes());
+        }
+        
+        // Masking key (4 bytes)
+        let mask_key = [rng.gen::<u8>(), rng.gen::<u8>(), rng.gen::<u8>(), rng.gen::<u8>()];
+        ws_header.extend_from_slice(&mask_key);
+        
+        // Mask the payload
+        let mut masked_payload = message.payload.clone();
+        for i in 0..masked_payload.len() {
+            masked_payload[i] ^= mask_key[i % 4];
+        }
+        
+        // Prepend the header to the masked payload
+        let mut new_payload = ws_header;
+        new_payload.extend_from_slice(&masked_payload);
+        message.payload = new_payload;
+        
+        message
+    }
+    
+    /// Remove WebSocket morphing from a message
+    fn remove_websocket_morphing(&self, mut message: Message) -> Message {
+        // Check if this is a morphed WebSocket message
+        if !message.is_morphed || message.morph_type != Some(ProtocolMorphType::WebSocket as u8) {
+            return message;
+        }
+        
+        // Parse and remove WebSocket framing
+        let payload = &message.payload;
+        if payload.len() < 6 {
+            // Malformed WebSocket frame, return as is
+            return message;
+        }
+        
+        // Calculate header size and payload offset
+        let mut idx = 2; // Skip first two bytes
+        
+        let payload_len = match payload[1] & 0x7F {
+            126 => {
+                if payload.len() < 4 {
+                    // Malformed packet
+                    return message;
+                }
+                let len_bytes = [payload[2], payload[3]];
+                idx += 2;
+                u16::from_be_bytes(len_bytes) as usize
+            },
+            127 => {
+                if payload.len() < 10 {
+                    // Malformed packet
+                    return message;
+                }
+                let len_bytes = [
+                    payload[2], payload[3], payload[4], payload[5],
+                    payload[6], payload[7], payload[8], payload[9]
+                ];
+                idx += 8;
+                u64::from_be_bytes(len_bytes) as usize
+            },
+            n => n as usize
+        };
+        
+        // Get mask key (WebSocket frames from client are always masked)
+        if idx + 4 > payload.len() {
+            // Malformed packet
+            return message;
+        }
+        
+        let mask_key = [payload[idx], payload[idx+1], payload[idx+2], payload[idx+3]];
+        idx += 4;
+        
+        // Unmask the payload
+        if idx + payload_len > payload.len() {
+            // Malformed packet
+            return message;
+        }
+        
+        let mut unmasked_payload = payload[idx..idx+payload_len].to_vec();
+        for i in 0..unmasked_payload.len() {
+            unmasked_payload[i] ^= mask_key[i % 4];
+        }
+        
+        // Update message with unmasked payload
+        message.payload = unmasked_payload;
+        
+        // Reset morphing flags
+        message.is_morphed = false;
+        message.morph_type = Some(ProtocolMorphType::None as u8);
+        
+        message
+    }
+    
+    /// Morph message to look like MQTT protocol traffic
+    fn morph_to_mqtt(&mut self, mut message: Message) -> Message {
+        let rng = &mut self.rng;
+        
+        // Mark as morphed
+        message.is_morphed = true;
+        message.morph_type = Some(ProtocolMorphType::Mqtt as u8);
+        
+        // Create MQTT header
+        let mut mqtt_header = Vec::with_capacity(10);
+        
+        // MQTT packet types:
+        // 1=CONNECT, 2=CONNACK, 3=PUBLISH, 4=PUBACK, 8=SUBSCRIBE, 9=SUBACK, etc.
+        let packet_types = [1, 2, 3, 4, 8, 9, 10, 11, 12, 13];
+        let packet_type = packet_types[rng.gen_range(0..packet_types.len())];
+        
+        // First byte: Packet type (4 bits) + Flags (4 bits)
+        // For PUBLISH, we might add DUP, QoS and RETAIN flags
+        let flags = if packet_type == 3 { rng.gen_range(0..16) } else { 0 };
+        mqtt_header.push(((packet_type << 4) | flags) as u8);
+        
+        // Calculate remaining length (variable length encoding)
+        let mut remaining_length = message.payload.len();
+        
+        // Encode the remaining length field
+        loop {
+            let mut byte = (remaining_length % 128) as u8;
+            remaining_length /= 128;
+            
+            if remaining_length > 0 {
+                byte |= 0x80; // Set continuation bit
+            }
+            
+            mqtt_header.push(byte);
+            
+            if remaining_length == 0 {
+                break;
+            }
+        }
+        
+        // For PUBLISH, add a topic name
+        if packet_type == 3 {
+            // Add a random topic name
+            let topics = [
+                "sensors/temperature", "devices/status", "home/living_room/light",
+                "weather/forecast", "system/logs", "users/activity"
+            ];
+            let topic = topics[rng.gen_range(0..topics.len())];
+            
+            // Topic length (2 bytes)
+            let topic_len = topic.len() as u16;
+            mqtt_header.extend_from_slice(&topic_len.to_be_bytes());
+            
+            // Topic name
+            mqtt_header.extend_from_slice(topic.as_bytes());
+            
+            // Packet ID for QoS > 0
+            if (flags & 0x06) > 0 {
+                let packet_id = rng.gen::<u16>();
+                mqtt_header.extend_from_slice(&packet_id.to_be_bytes());
+            }
+        }
+        
+        // Prepend the header to the payload
+        let mut new_payload = mqtt_header;
+        new_payload.extend_from_slice(&message.payload);
+        message.payload = new_payload;
+        
+        message
+    }
+    
+    /// Remove MQTT morphing from a message
+    fn remove_mqtt_morphing(&self, mut message: Message) -> Message {
+        // Check if this is a morphed MQTT message
+        if !message.is_morphed || message.morph_type != Some(ProtocolMorphType::Mqtt as u8) {
+            return message;
+        }
+        
+        // Parse and remove MQTT framing
+        let payload = &message.payload;
+        if payload.is_empty() {
+            // Malformed packet
+            return message;
+        }
+        
+        // Extract packet type and flags
+        let packet_type = (payload[0] >> 4) & 0x0F;
+        let flags = payload[0] & 0x0F;
+        
+        // Parse remaining length
+        let mut idx = 1;
+        let mut multiplier = 1;
+        let mut remaining_length = 0;
+        
+        while idx < payload.len() {
+            let byte = payload[idx];
+            idx += 1;
+            
+            remaining_length += ((byte & 0x7F) as usize) * multiplier;
+            multiplier *= 128;
+            
+            if (byte & 0x80) == 0 {
+                break;
+            }
+            
+            if multiplier > 128*128*128 {
+                // Malformed packet
+                return message;
+            }
+        }
+        
+        // For PUBLISH, skip topic name and optional packet ID
+        if packet_type == 3 && idx + 2 <= payload.len() {
+            // Topic length
+            let topic_len = ((payload[idx] as u16) << 8) | (payload[idx + 1] as u16);
+            idx += 2 + topic_len as usize;
+            
+            // Packet ID for QoS > 0
+            if (flags & 0x06) > 0 && idx + 2 <= payload.len() {
+                idx += 2;
+            }
+        }
+        
+        // Extract the original payload
+        if idx < payload.len() {
+            message.payload = payload[idx..].to_vec();
+        } else {
+            // No payload or malformed packet
+            message.payload = Vec::new();
+        }
+        
+        // Reset morphing flags
+        message.is_morphed = false;
+        message.morph_type = Some(ProtocolMorphType::None as u8);
+        
+        message
+    }
+    
+    /// Morph message to look like RTMP protocol traffic
+    fn morph_to_rtmp(&mut self, mut message: Message) -> Message {
+        let rng = &mut self.rng;
+        
+        // Mark as morphed
+        message.is_morphed = true;
+        message.morph_type = Some(ProtocolMorphType::Rtmp as u8);
+        
+        // Create RTMP header
+        let mut rtmp_header = Vec::with_capacity(18);
+        
+        // RTMP message types:
+        // 1=Set Chunk Size, 2=Abort Message, 3=Acknowledgement, 4=User Control Messages,
+        // 8=Audio Message, 9=Video Message, 18=Data Message, 20=Command Message
+        let message_types = [1, 2, 3, 4, 8, 9, 18, 20];
+        let msg_type = message_types[rng.gen_range(0..message_types.len())];
+        
+        // Start with Basic Header
+        // Format (2 bits) + Chunk Stream ID (6 bits)
+        // Format 0: full header
+        let chunk_stream_id = rng.gen_range(3..64) as u8; // Avoid reserved values 0-2
+        rtmp_header.push(chunk_stream_id & 0x3F); // Format 0, CS ID in 6 bits
+        
+        // Timestamp (3 bytes)
+        let timestamp = rng.gen_range(0..0xFFFFFF);
+        rtmp_header.push(((timestamp >> 16) & 0xFF) as u8);
+        rtmp_header.push(((timestamp >> 8) & 0xFF) as u8);
+        rtmp_header.push((timestamp & 0xFF) as u8);
+        
+        // Message length (3 bytes)
+        let msg_length = message.payload.len();
+        rtmp_header.push(((msg_length >> 16) & 0xFF) as u8);
+        rtmp_header.push(((msg_length >> 8) & 0xFF) as u8);
+        rtmp_header.push((msg_length & 0xFF) as u8);
+        
+        // Message type ID (1 byte)
+        rtmp_header.push(msg_type);
+        
+        // Message stream ID (4 bytes, little endian)
+        let stream_id = rng.gen_range(1..1000);
+        rtmp_header.push((stream_id & 0xFF) as u8);
+        rtmp_header.push(((stream_id >> 8) & 0xFF) as u8);
+        rtmp_header.push(((stream_id >> 16) & 0xFF) as u8);
+        rtmp_header.push(((stream_id >> 24) & 0xFF) as u8);
+        
+        // For certain message types, add type-specific headers
+        match msg_type {
+            8 => { // Audio
+                // Audio format (4 bits) + Sample rate (2 bits) + Sample size (1 bit) + Stereo/Mono (1 bit)
+                rtmp_header.push(rng.gen_range(0..256) as u8);
+            },
+            9 => { // Video
+                // Frame type (4 bits) + Codec ID (4 bits)
+                rtmp_header.push(rng.gen_range(0..256) as u8);
+            },
+            20 => { // Command
+                // For command messages, add AMF encoded string
+                let cmd_names = ["connect", "createStream", "play", "closeStream"];
+                let cmd = cmd_names[rng.gen_range(0..cmd_names.len())];
+                
+                // AMF0 string marker
+                rtmp_header.push(0x02);
+                
+                // String length (2 bytes)
+                let cmd_len = cmd.len() as u16;
+                rtmp_header.extend_from_slice(&cmd_len.to_be_bytes());
+                
+                // Command name
+                rtmp_header.extend_from_slice(cmd.as_bytes());
+            },
+            _ => {}
+        }
+        
+        // Prepend the header to the payload
+        let mut new_payload = rtmp_header;
+        new_payload.extend_from_slice(&message.payload);
+        message.payload = new_payload;
+        
+        message
+    }
+    
+    /// Remove RTMP morphing from a message
+    fn remove_rtmp_morphing(&self, mut message: Message) -> Message {
+        // Check if this is a morphed RTMP message
+        if !message.is_morphed || message.morph_type != Some(ProtocolMorphType::Rtmp as u8) {
+            return message;
+        }
+        
+        // Parse and remove RTMP framing
+        let payload = &message.payload;
+        if payload.len() < 12 {
+            // Malformed packet
+            return message;
+        }
+        
+        // Basic RTMP header is at least 12 bytes
+        let mut idx = 12;
+        
+        // Check message type to see if there are additional headers
+        let msg_type = payload[7];
+        
+        match msg_type {
+            8 | 9 => {
+                // Audio or Video - 1 byte header
+                idx += 1;
+            },
+            20 => {
+                // Command - AMF encoded string
+                if idx + 3 <= payload.len() {
+                    // Check for AMF0 string marker
+                    if payload[idx] == 0x02 {
+                        // Get string length
+                        let str_len = ((payload[idx + 1] as u16) << 8) | (payload[idx + 2] as u16);
+                        idx += 3 + str_len as usize;
+                    }
+                }
+            },
+            _ => {}
+        }
+        
+        // Extract the original payload
+        if idx < payload.len() {
+            message.payload = payload[idx..].to_vec();
+        } else {
+            // No payload or malformed packet
+            message.payload = Vec::new();
+        }
+        
+        // Reset morphing flags
+        message.is_morphed = false;
+        message.morph_type = Some(ProtocolMorphType::None as u8);
         
         message
     }
@@ -668,6 +1254,7 @@ mod tests {
             allowed_protocols: vec![MorphProtocol::HTTP],
             protocol_rotation_interval_sec: 3600,
             add_random_fields: true,
+            ..Default::default()
         };
         
         let mut service = ProtocolMorphingService::new(config);
@@ -700,7 +1287,7 @@ mod tests {
         let unmorphed = service.remove_morphing(morphed);
         
         assert!(!unmorphed.is_morphed);
-        assert_eq!(unmorphed.morph_type, None);
+        assert_eq!(unmorphed.morph_type, Some(ProtocolMorphType::None as u8));
         assert_eq!(unmorphed.payload, original_payload);
     }
     
@@ -712,6 +1299,7 @@ mod tests {
             allowed_protocols: vec![MorphProtocol::DNS],
             protocol_rotation_interval_sec: 3600,
             add_random_fields: true,
+            ..Default::default()
         };
         
         let mut service = ProtocolMorphingService::new(config);
@@ -738,7 +1326,7 @@ mod tests {
         let unmorphed = service.remove_morphing(morphed);
         
         assert!(!unmorphed.is_morphed);
-        assert_eq!(unmorphed.morph_type, None);
+        assert_eq!(unmorphed.morph_type, Some(ProtocolMorphType::None as u8));
         assert_eq!(unmorphed.payload, original_payload);
     }
     

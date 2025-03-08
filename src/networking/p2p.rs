@@ -9,6 +9,10 @@ use socket2::TcpKeepalive;
 use crate::networking::padding::{MessagePaddingService, MessagePaddingConfig, MessagePaddingStrategy};
 use crate::networking::protocol_morphing::{ProtocolMorphingService, ProtocolMorphingConfig};
 use crate::networking::traffic_obfuscation::TrafficObfuscationService;
+use crate::networking::fingerprinting_protection::{
+    FingerprintingProtectionService, TcpFingerprintParameters, TlsParameters,
+    HandshakePattern, BrowserConnectionBehavior
+};
 use socket2;
 use std::fmt;
 
@@ -608,6 +612,7 @@ pub struct HandshakeProtocol {
     pub best_block_height: u64,
     connection_nonces: HashMap<u64, SocketAddr>,
     obfuscation_config: ConnectionObfuscationConfig,
+    fingerprinting_protection: Option<Arc<FingerprintingProtectionService>>,
 }
 
 impl HandshakeProtocol {
@@ -624,11 +629,17 @@ impl HandshakeProtocol {
             best_block_height,
             connection_nonces: HashMap::new(),
             obfuscation_config: ConnectionObfuscationConfig::default(),
+            fingerprinting_protection: None,
         }
     }
     
     pub fn with_obfuscation_config(mut self, config: ConnectionObfuscationConfig) -> Self {
         self.obfuscation_config = config;
+        self
+    }
+    
+    pub fn with_fingerprinting_protection(mut self, service: Arc<FingerprintingProtectionService>) -> Self {
+        self.fingerprinting_protection = Some(service);
         self
     }
 
@@ -642,20 +653,47 @@ impl HandshakeProtocol {
         stream.set_read_timeout(Some(Duration::from_secs(HANDSHAKE_TIMEOUT_SECS)))?;
         stream.set_write_timeout(Some(Duration::from_secs(HANDSHAKE_TIMEOUT_SECS)))?;
 
+        // Apply connection obfuscation
+        self.apply_connection_obfuscation(stream)?;
+        
+        // Get user agent from fingerprinting service if available
+        let user_agent = if let Some(fp_service) = &self.fingerprinting_protection {
+            fp_service.get_user_agent()
+        } else {
+            format!("Obscura/{}", env!("CARGO_PKG_VERSION"))
+        };
+        
+        // Get feature flags with possible randomization from fingerprinting service
+        let features = if let Some(fp_service) = &self.fingerprinting_protection {
+            fp_service.get_feature_flags(self.local_features)
+        } else {
+            self.local_features
+        };
+        
+        // Get handshake nonce with potential entropy from fingerprinting service
+        let nonce = if let Some(fp_service) = &self.fingerprinting_protection {
+            fp_service.get_handshake_nonce()
+        } else {
+            rand::random::<u64>()
+        };
+
         // Create and send our handshake message
-        let local_handshake = HandshakeMessage::new(
-            self.local_features,
+        let mut local_handshake = HandshakeMessage::new(
+            features,
             self.local_privacy_features,
             self.best_block_hash,
             self.best_block_height,
         );
+        
+        // Override with our custom user agent
+        local_handshake.user_agent = user_agent;
+        
+        // Override with our custom nonce
+        local_handshake.nonce = nonce;
 
         // Store our nonce to detect self-connections
         self.connection_nonces
             .insert(local_handshake.nonce, peer_addr);
-
-        // Apply connection obfuscation
-        self.apply_connection_obfuscation(stream)?;
 
         // Send our handshake
         local_handshake.send(stream)?;
@@ -665,11 +703,21 @@ impl HandshakeProtocol {
 
         // Check for self-connection by comparing nonces
         if self.connection_nonces.contains_key(&remote_handshake.nonce) {
+            // Unregister the peer with the fingerprinting service if needed
+            if let Some(fp_service) = &self.fingerprinting_protection {
+                fp_service.unregister_peer(&peer_addr);
+            }
+            
             return Err(HandshakeError::SelfConnection(remote_handshake.nonce));
         }
 
         // Check version compatibility
         if remote_handshake.version < MIN_COMPATIBLE_VERSION {
+            // Unregister the peer with the fingerprinting service if needed
+            if let Some(fp_service) = &self.fingerprinting_protection {
+                fp_service.unregister_peer(&peer_addr);
+            }
+            
             return Err(HandshakeError::VersionIncompatible(
                 remote_handshake.version,
             ));
@@ -717,23 +765,60 @@ impl HandshakeProtocol {
 
         // Check for self-connection by comparing nonces
         if self.connection_nonces.contains_key(&remote_handshake.nonce) {
+            // Unregister the peer with the fingerprinting service if needed
+            if let Some(fp_service) = &self.fingerprinting_protection {
+                fp_service.unregister_peer(&peer_addr);
+            }
+            
             return Err(HandshakeError::SelfConnection(remote_handshake.nonce));
         }
 
         // Check version compatibility
         if remote_handshake.version < MIN_COMPATIBLE_VERSION {
+            // Unregister the peer with the fingerprinting service if needed
+            if let Some(fp_service) = &self.fingerprinting_protection {
+                fp_service.unregister_peer(&peer_addr);
+            }
+            
             return Err(HandshakeError::VersionIncompatible(
                 remote_handshake.version,
             ));
         }
 
+        // Get user agent from fingerprinting service if available
+        let user_agent = if let Some(fp_service) = &self.fingerprinting_protection {
+            fp_service.get_user_agent()
+        } else {
+            format!("Obscura/{}", env!("CARGO_PKG_VERSION"))
+        };
+        
+        // Get feature flags with possible randomization from fingerprinting service
+        let features = if let Some(fp_service) = &self.fingerprinting_protection {
+            fp_service.get_feature_flags(self.local_features)
+        } else {
+            self.local_features
+        };
+        
+        // Get handshake nonce with potential entropy from fingerprinting service
+        let nonce = if let Some(fp_service) = &self.fingerprinting_protection {
+            fp_service.get_handshake_nonce()
+        } else {
+            rand::random::<u64>()
+        };
+
         // Create and send our handshake message
-        let local_handshake = HandshakeMessage::new(
-            self.local_features,
+        let mut local_handshake = HandshakeMessage::new(
+            features,
             self.local_privacy_features,
             self.best_block_hash,
             self.best_block_height,
         );
+        
+        // Override with our custom user agent
+        local_handshake.user_agent = user_agent;
+        
+        // Override with our custom nonce
+        local_handshake.nonce = nonce;
 
         // Store our nonce to detect self-connections
         self.connection_nonces
@@ -848,6 +933,20 @@ impl HandshakeProtocol {
                     std::mem::size_of_val(&tos_value) as libc::socklen_t,
                 );
             }
+        }
+        
+        // Apply fingerprinting protection if enabled
+        if let Some(fp_service) = &self.fingerprinting_protection {
+            let peer_addr = stream.peer_addr()?;
+            
+            // Apply TCP fingerprint randomization
+            fp_service.apply_tcp_fingerprint(&socket, &peer_addr)?;
+            
+            // Apply browser-like connection behavior
+            fp_service.apply_browser_connection_behavior(&socket)?;
+            
+            // Register the peer with the fingerprinting service
+            fp_service.register_peer(peer_addr);
         }
         
         Ok(())
@@ -1061,6 +1160,11 @@ pub fn apply_connection_obfuscation(
             allowed_protocols: Vec::new(), // Default or appropriate value
             protocol_rotation_interval_sec: 3600, // Default or appropriate value
             add_random_fields: true, // Default or appropriate value
+            deep_protocol_emulation: true, // More convincing but slower
+            statistical_behavior_emulation: true, // Enable statistical behavior emulation
+            adaptive_protocol_selection: true, // Enable adaptive protocol selection
+            randomize_protocol_fingerprints: true, // Enable protocol fingerprint randomization
+            protocol_version_cycling: true, // Enable protocol version cycling
         };
         
         let _morphing_service = ProtocolMorphingService::new(morphing_config);

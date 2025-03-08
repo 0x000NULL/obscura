@@ -1,0 +1,5 @@
+/// Get a circuit by its ID if it exists
+pub fn get_circuit(&self, circuit_id: &[u8; CIRCUIT_ID_SIZE]) -> Option<Circuit> {
+    let active_circuits = self.active_circuits.read().unwrap();
+    active_circuits.get(circuit_id).cloned()
+} 

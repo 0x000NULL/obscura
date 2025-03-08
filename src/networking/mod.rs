@@ -64,6 +64,8 @@ pub mod dns_over_https;
 pub mod fingerprinting_protection;
 // Add the timing_obfuscation module
 pub mod timing_obfuscation;
+// Add circuit-based routing module
+pub mod circuit;
 
 // Re-export key types from p2p module
 pub use p2p::{
@@ -96,7 +98,12 @@ pub use i2p_proxy::{I2PProxyService, I2PProxyConfig, I2PDestination, I2PAddressM
 pub use dns_over_https::{DoHService, DoHConfig, DoHError, RecordType, DoHProvider, DoHFormat};
 
 // Re-export key types from fingerprinting_protection module
-pub use fingerprinting_protection::{FingerprintingProtectionService, FingerprintingProtectionConfig};
+pub use fingerprinting_protection::{
+    FingerprintingProtectionService, FingerprintingProtectionConfig, 
+    ClientImplementation, TcpParameters, ConnectionPattern,
+    TcpFingerprintParameters, TlsParameters, TlsVersion,
+    HandshakePattern, BrowserConnectionBehavior
+};
 
 // Structure representing configuration options for the node
 #[derive(Clone, Debug)]

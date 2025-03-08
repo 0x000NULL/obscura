@@ -8,4 +8,7 @@ pub mod padding_tests;
 pub mod feature_support_tests;
 pub mod traffic_obfuscation_tests;
 pub mod i2p_proxy_tests;
-pub mod check_transition_test; 
+pub mod check_transition_test;
+pub mod circuit_tests;
+pub mod multi_hop_routing_tests;
+pub mod connection_fingerprinting_tests; 

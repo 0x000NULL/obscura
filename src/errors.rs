@@ -10,6 +10,24 @@ pub enum NetworkError {
     InvalidMessage,
     ProtocolError(String),
     ObfuscationError(String),
+    // Circuit-related errors
+    CircuitNotFound,
+    CircuitUnavailable,
+    CircuitCreationFailed(String),
+    InsufficientNodes,
+    CircuitExtensionFailed,
+    CircuitTimeout,
+    CircuitBroken,
+    CircuitInvalid,
+    // Multi-hop routing errors
+    EncryptionError,
+    DecryptionError,
+    SerializationError,
+    DeserializationError,
+    RoutingError(String),
+    HopNotFound,
+    InvalidHopCount,
+    CircuitRelayError(String),
 }
 
 impl From<io::Error> for NetworkError {
@@ -28,6 +46,24 @@ impl fmt::Display for NetworkError {
             NetworkError::InvalidMessage => write!(f, "Invalid message received"),
             NetworkError::ProtocolError(msg) => write!(f, "Protocol error: {}", msg),
             NetworkError::ObfuscationError(msg) => write!(f, "Obfuscation error: {}", msg),
+            // Circuit-related error messages
+            NetworkError::CircuitNotFound => write!(f, "Circuit not found"),
+            NetworkError::CircuitUnavailable => write!(f, "Circuit is unavailable"),
+            NetworkError::CircuitCreationFailed(msg) => write!(f, "Circuit creation failed: {}", msg),
+            NetworkError::InsufficientNodes => write!(f, "Insufficient nodes available for circuit creation"),
+            NetworkError::CircuitExtensionFailed => write!(f, "Failed to extend circuit to next hop"),
+            NetworkError::CircuitTimeout => write!(f, "Circuit operation timed out"),
+            NetworkError::CircuitBroken => write!(f, "Circuit is broken and cannot be used"),
+            NetworkError::CircuitInvalid => write!(f, "Circuit is invalid or malformed"),
+            // Multi-hop routing error messages
+            NetworkError::EncryptionError => write!(f, "Failed to encrypt circuit data"),
+            NetworkError::DecryptionError => write!(f, "Failed to decrypt circuit data"),
+            NetworkError::SerializationError => write!(f, "Failed to serialize circuit payload"),
+            NetworkError::DeserializationError => write!(f, "Failed to deserialize circuit payload"),
+            NetworkError::RoutingError(msg) => write!(f, "Routing error: {}", msg),
+            NetworkError::HopNotFound => write!(f, "Specified hop not found in circuit"),
+            NetworkError::InvalidHopCount => write!(f, "Invalid number of hops for circuit"),
+            NetworkError::CircuitRelayError(msg) => write!(f, "Circuit relay error: {}", msg),
         }
     }
 }
