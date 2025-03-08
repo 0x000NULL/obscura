@@ -5,7 +5,11 @@ use once_cell::sync::Lazy;
 use rand::thread_rng;
 use sha2::{Sha256, Digest};
 use rayon::iter::{IntoParallelIterator, ParallelIterator, ParallelExtend};
+use rayon::prelude::*;
+use rayon::iter::IntoParallelRefIterator;
 use std::sync::Arc;
+use std::time::Instant;
+use std::collections::HashMap;
 
 #[cfg(test)]
 use rand::{Rng, RngCore, CryptoRng};
@@ -17,11 +21,19 @@ const BATCH_SIZE: usize = 128;
 
 /// Precomputed tables for fixed-base operations
 static G1_TABLE: Lazy<Arc<Vec<G1Projective>>> = Lazy::new(|| {
-    Arc::new(generate_g1_table())
+    println!("Initializing G1_TABLE");
+    let start = Instant::now();
+    let table = generate_g1_table();
+    println!("G1_TABLE initialization took {:?}", start.elapsed());
+    Arc::new(table)
 });
 
 static G2_TABLE: Lazy<Arc<Vec<G2Projective>>> = Lazy::new(|| {
-    Arc::new(generate_g2_table())
+    println!("Initializing G2_TABLE");
+    let start = Instant::now();
+    let table = generate_g2_table();
+    println!("G2_TABLE initialization took {:?}", start.elapsed());
+    Arc::new(table)
 });
 
 /// Generate precomputation table for G1
@@ -52,36 +64,14 @@ fn generate_g2_table() -> Vec<G2Projective> {
 
 /// Optimized scalar multiplication using windowed method and precomputation
 pub fn optimized_g1_mul(point: &G1Projective, scalar: &Scalar) -> G1Projective {
-    let mut result = G1Projective::identity();
-    let mut temp = *point;
-    let bits = scalar.to_bytes_le();
-    
-    for byte in bits.iter() {
-        for i in 0..8 {
-            if (byte >> i) & 1 == 1 {
-                result += temp;
-            }
-            temp = temp.double();
-        }
-    }
-    result
+    // Use the blstrs built-in multiplication which is much more efficient
+    *point * scalar
 }
 
 /// Optimized scalar multiplication for G2
 pub fn optimized_g2_mul(point: &G2Projective, scalar: &Scalar) -> G2Projective {
-    let mut result = G2Projective::identity();
-    let mut temp = *point;
-    let bits = scalar.to_bytes_le();
-    
-    for byte in bits.iter() {
-        for i in 0..8 {
-            if (byte >> i) & 1 == 1 {
-                result += temp;
-            }
-            temp = temp.double();
-        }
-    }
-    result
+    // Use the blstrs built-in multiplication which is much more efficient
+    *point * scalar
 }
 
 /// Batch verification of multiple signatures using parallel processing
@@ -94,52 +84,41 @@ pub fn verify_batch_parallel(
         return false;
     }
 
-    let num_batches = (signatures.len() + BATCH_SIZE - 1) / BATCH_SIZE;
-    let mut combined_results = Vec::new();
-    
-    combined_results.par_extend(
-        (0..num_batches).into_par_iter().map(|batch_idx| {
-            let start = batch_idx * BATCH_SIZE;
-            let end = std::cmp::min(start + BATCH_SIZE, signatures.len());
-            let mut batch_result = G1Projective::identity();
-            
-            for i in start..end {
-                let hash_point = hash_to_g1(&messages[i]);
-                let scalar = Scalar::from(i as u64);
-                batch_result += signatures[i].0 * scalar - (hash_point * scalar);
-            }
-            
-            batch_result
+    // If there's only one signature, use the standard verification
+    if signatures.len() == 1 {
+        return verify_signature(&messages[0], &public_keys[0], &signatures[0]);
+    }
+
+    // Verify each signature individually but in parallel
+    let results: Vec<bool> = signatures.par_iter()
+        .zip(public_keys.par_iter())
+        .zip(messages.par_iter())
+        .map(|((signature, public_key), message)| {
+            verify_signature(message, public_key, signature)
         })
-    );
-
-    let final_result = combined_results.iter().fold(
-        G1Projective::identity(),
-        |acc, x| acc + x
-    );
-
-    final_result == G1Projective::identity()
+        .collect();
+    
+    // All signatures must verify
+    results.iter().all(|&result| result)
 }
 
 /// Improved hash-to-curve implementation using SWU map
 pub fn hash_to_g1(msg: &[u8]) -> G1Projective {
     let mut counter: u32 = 0;
-    let max_attempts = 1000; // Add a maximum attempt limit
+    let max_attempts = 100; // Reduced from 1000 to 100 for better performance
     
     while counter < max_attempts {
-        let mut input = Vec::with_capacity(msg.len() + 1);
+        let mut input = Vec::with_capacity(msg.len() + 4); // Allocate space for counter bytes
         input.extend_from_slice(msg);
-        input.push(counter as u8);
+        input.extend_from_slice(&counter.to_be_bytes()); // Use all 4 counter bytes for better distribution
         
         if let Some(point) = try_and_increment_g1_raw(&input, counter) {
-            return point.into();
+            return point;
         }
         counter = counter.wrapping_add(1);
     }
     
-    // If no valid point is found after max attempts, use a fallback approach
-    // This could be a default point or an alternative hash-to-curve method
-    // For now, we'll use the generator point as a fallback
+    // If no valid point is found after max attempts, use the generator point as a fallback
     G1Projective::generator()
 }
 
@@ -147,11 +126,13 @@ pub fn hash_to_g1(msg: &[u8]) -> G1Projective {
 pub fn try_and_increment_g1_raw(message: &[u8], counter: u32) -> Option<G1Projective> {
     let mut hasher = Sha256::new();
     hasher.update(message);
-    hasher.update(counter.to_be_bytes());
     let point_bytes = hasher.finalize();
 
     let mut compressed = [0u8; 48];
     compressed[0..32].copy_from_slice(&point_bytes[0..32]);
+    
+    // Set encoding flags for G1 compressed point
+    compressed[0] |= 0x80; // Set the first bit to indicate compression
     
     // Create point from compressed bytes and convert CtOption to Option
     let point = G1Projective::from_compressed(&compressed);
@@ -175,6 +156,14 @@ pub struct BlsSignature(G1Projective);
 /// A BLS public key
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BlsPublicKey(G2Projective);
+
+impl std::hash::Hash for BlsPublicKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // Convert to compressed bytes and hash those
+        let compressed = G2Affine::from(self.0).to_compressed();
+        compressed.hash(state);
+    }
+}
 
 /// A BLS keypair
 #[derive(Debug, Clone)]
@@ -327,43 +316,58 @@ pub fn verify_signature(
     public_key: &BlsPublicKey,
     signature: &BlsSignature,
 ) -> bool {
+    // Add timing for debugging
+    let start = Instant::now();
+
     // Hash the message to a point on G1
     let h = hash_to_g1(message);
+    let hash_time = start.elapsed();
+    println!("BLS verify: hash_to_g1 took {:?}", hash_time);
 
     // Convert to affine points for pairing
     let sig_affine = G1Affine::from(signature.0);
-    let pk_affine = G2Affine::from(public_key.0);
     let h_affine = G1Affine::from(h);
-    let g2_gen_affine = G2Affine::from(G2Projective::generator());
+    let pk_affine = G2Affine::from(public_key.0);
+    let g2_gen_affine = G2Affine::generator();
+    let convert_time = start.elapsed() - hash_time;
+    println!("BLS verify: conversion took {:?}", convert_time);
 
-    // Verify the pairing equation: e(sig, g2) = e(h, pk)
-    let lhs = pairing(&sig_affine, &g2_gen_affine);
-    let rhs = pairing(&h_affine, &pk_affine);
+    // Compute pairings
+    let pairing_start = Instant::now();
+    let pairing1 = pairing(&sig_affine, &g2_gen_affine);
+    let pairing1_time = pairing_start.elapsed();
+    println!("BLS verify: first pairing took {:?}", pairing1_time);
 
-    lhs == rhs
+    let pairing2_start = Instant::now();
+    let pairing2 = pairing(&h_affine, &pk_affine);
+    let pairing2_time = pairing2_start.elapsed();
+    println!("BLS verify: second pairing took {:?}", pairing2_time);
+
+    let total_time = start.elapsed();
+    println!("BLS verify: total time {:?}", total_time);
+
+    bool::from(pairing1 == pairing2)
 }
 
-/// Aggregate multiple BLS signatures into a single signature
-///
-/// # Arguments
-/// * `signatures` - A slice of signatures to aggregate
-///
-/// # Returns
-/// * An aggregated signature
+/// Aggregate multiple signatures into a single signature
 pub fn aggregate_signatures(signatures: &[BlsSignature]) -> BlsSignature {
-    if signatures.is_empty() {
-        return BlsSignature(G1Projective::identity());
+    let mut result = G1Projective::identity();
+    for sig in signatures {
+        result += sig.0;
     }
-
-    let mut agg_sig = signatures[0].0;
-    for sig in &signatures[1..] {
-        agg_sig += sig.0;
-    }
-
-    BlsSignature(agg_sig)
+    BlsSignature(result)
 }
 
-/// Batch verification of multiple signatures
+/// Aggregate multiple public keys into a single public key
+pub fn aggregate_public_keys(public_keys: &[BlsPublicKey]) -> BlsPublicKey {
+    let mut result = G2Projective::identity();
+    for pk in public_keys {
+        result += pk.0;
+    }
+    BlsPublicKey(result)
+}
+
+/// Batch verification of multiple signatures against multiple messages and public keys
 pub fn verify_batch(
     messages: &[&[u8]], 
     signatures: &[G1Projective],
@@ -372,7 +376,6 @@ pub fn verify_batch(
     // Check input validity
     if messages.is_empty() || signatures.len() != messages.len() || public_keys.len() != messages.len() {
         return false;
-
     }
 
     // Check that all points are on their respective curves
@@ -416,6 +419,15 @@ pub fn verify_batch(
     let pairing2 = pairing(&hash_affine, &pk_affine);
 
     bool::from(pairing1 == pairing2)
+}
+
+/// Ensure that the precomputed tables are initialized
+/// This function can be called explicitly to force initialization
+/// rather than waiting for lazy initialization
+pub fn ensure_tables_initialized() {
+    // Access the tables to ensure they're initialized
+    let _g1_table = G1_TABLE.as_ref();
+    let _g2_table = G2_TABLE.as_ref();
 }
 
 #[cfg(test)]

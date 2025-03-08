@@ -1,6 +1,6 @@
 use crate::crypto::jubjub::{JubjubKeypair, JubjubPoint, JubjubPointExt, JubjubSignature, JubjubScalarExt};
 use ark_ed_on_bls12_381::{Fr, EdwardsProjective, EdwardsAffine};
-use ark_ec::{CurveGroup, Group, AffineRepr};
+use ark_ec::CurveGroup;
 use ark_ff::{PrimeField, Zero};
 use ark_serialize::CanonicalSerialize;
 use sha2::{Digest, Sha256};

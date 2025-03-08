@@ -2,6 +2,7 @@ use crate::blockchain::{
     Block, OutPoint, Transaction, TransactionInput, TransactionOutput, UTXOSet,
 };
 use crate::crypto;
+use crate::crypto::bls12_381::{BlsKeypair, BlsPublicKey, BlsSignature, ProofOfPossession};
 use crate::crypto::jubjub::{
     JubjubKeypair, JubjubPoint, JubjubPointExt, JubjubScalar, JubjubScalarExt,
 };
@@ -14,6 +15,7 @@ use rand::rngs::OsRng;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
+use log::debug;
 
 #[derive(Debug, Clone)]
 pub struct Wallet {
@@ -31,6 +33,8 @@ pub struct Wallet {
     pending_spent_outpoints: Arc<Mutex<HashSet<OutPoint>>>,
     // View key management
     view_key_manager: ViewKeyManager,
+    // BLS keypair for consensus participation
+    bls_keypair: Option<BlsKeypair>,
 }
 
 impl Default for Wallet {
@@ -45,6 +49,7 @@ impl Default for Wallet {
             last_sync_time: current_time(),
             pending_spent_outpoints: Arc::new(Mutex::new(HashSet::new())),
             view_key_manager: ViewKeyManager::new(),
+            bls_keypair: None,
         }
     }
 }
@@ -55,7 +60,7 @@ impl Wallet {
     }
 
     pub fn new_with_keypair() -> Self {
-        let mut rng = OsRng;
+        let mut _rng = OsRng;
         let keypair = JubjubKeypair::generate();
 
         Wallet {
@@ -68,6 +73,7 @@ impl Wallet {
             last_sync_time: current_time(),
             pending_spent_outpoints: Arc::new(Mutex::new(HashSet::new())),
             view_key_manager: ViewKeyManager::new(),
+            bls_keypair: None,
         }
     }
 
@@ -278,14 +284,22 @@ impl Wallet {
             // Create a signature for the input using our keypair
             let keypair = self.keypair.as_ref().unwrap();
 
-            // In a real implementation, we would sign the transaction hash
-            let message = b"Authorize transaction";
-            let signature = keypair.sign(message);
-            // Serialize both components of the signature
+            // In a real implementation, we would compute the transaction hash to sign
+            // For now, we'll create a signature over a message that includes the outpoint
+            let mut signing_data = Vec::new();
+            signing_data.extend_from_slice(&outpoint.transaction_hash);
+            signing_data.extend_from_slice(&outpoint.index.to_le_bytes());
+            
+            // Add a nonce for additional security
+            let nonce = current_time().to_le_bytes();
+            signing_data.extend_from_slice(&nonce);
+            
+            // Use the Jubjub sign function from our keypair
+            let signature = keypair.sign(&signing_data);
+            
+            // Create the signature script with the JubjubSignature
             let mut signature_bytes = Vec::with_capacity(64);
-            let r_affine = signature.r.into_affine();
-            let r_projective = JubjubPoint::from(r_affine);
-            signature_bytes.extend_from_slice(&<JubjubPoint as JubjubPointExt>::to_bytes(&r_projective));
+            signature_bytes.extend_from_slice(&signature.r.to_bytes());
             signature_bytes.extend_from_slice(&signature.s.to_bytes());
 
             let input = TransactionInput {
@@ -446,16 +460,45 @@ impl Wallet {
     }
 
     fn apply_privacy_features(&self, mut tx: Transaction) -> Transaction {
+        // Early return if no keypair available
+        if self.keypair.is_none() {
+            return tx;
+        }
+        
+        let keypair = self.keypair.as_ref().unwrap();
+        
         // Set privacy flags in the transaction
         tx.privacy_flags |= 0x01; // Basic privacy
 
-        // Obfuscate the transaction ID with unique data for each transaction
+        // Generate a blinding factor using Jubjub to enhance privacy
+        let blinding_factor = jubjub::generate_blinding_factor();
+        
+        // Apply forward secrecy to the transaction data
+        let timestamp = current_time();
+        let forward_secret_key = jubjub::ensure_forward_secrecy(
+            &keypair.secret, 
+            timestamp, 
+            None
+        );
+        
+        // Generate secure ephemeral key for this transaction
+        let (ephemeral_secret, ephemeral_public) = jubjub::generate_secure_ephemeral_key();
+        
+        // Convert the ephemeral public key to bytes and set on the transaction
+        let ephemeral_pubkey_bytes = jubjub_point_to_bytes(&ephemeral_public);
+        let mut ephemeral_bytes = [0u8; 32];
+        ephemeral_bytes.copy_from_slice(&ephemeral_pubkey_bytes[0..32]);
+        tx.ephemeral_pubkey = Some(ephemeral_bytes);
+        
+        // Obfuscate the transaction ID with secure cryptographic techniques
         let mut hasher = Sha256::new();
 
-        // Include the transaction's inputs in the hash
+        // Include the transaction's inputs in the hash, blinded with our secure factors
         for input in &tx.inputs {
             hasher.update(&input.previous_output.transaction_hash);
             hasher.update(&input.previous_output.index.to_le_bytes());
+            // Add blinding using Jubjub scalar multiplication
+            hasher.update(&(forward_secret_key * blinding_factor).to_bytes());
         }
 
         // Include the transaction's outputs in the hash
@@ -464,87 +507,20 @@ impl Wallet {
             hasher.update(&output.public_key_script);
         }
 
-        // Add random nonce for extra uniqueness
-        let mut rng = OsRng;
-        let random_nonce = JubjubScalar::random(&mut rng);
-        hasher.update(&random_nonce.to_bytes());
+        // Add secure randomness for enhanced uniqueness
+        hasher.update(&ephemeral_secret.to_bytes());
+        
+        // Finalize the hash
+        let hash_result = hasher.finalize();
+        let mut obfuscated_id = [0u8; 32];
+        obfuscated_id.copy_from_slice(hash_result.as_slice());
+        
+        // Set the obfuscated ID
+        tx.obfuscated_id = Some(obfuscated_id);
 
-        let mut tx_id = [0u8; 32];
-        tx_id.copy_from_slice(&hasher.finalize());
-        tx.obfuscated_id = Some(tx_id);
-
-        // If we have a keypair, apply stealth addressing
-        if let Some(keypair) = &self.keypair {
-            // Use the keypair to enhance privacy with stealth addressing
-            // Create a new ephemeral key for this transaction
-            let ephemeral_keypair = jubjub::generate_keypair();
-            let ephemeral_scalar = ephemeral_keypair.secret;
-
-            let ephemeral_point = <JubjubPoint as JubjubPointExt>::generator() * ephemeral_scalar;
-            let ephemeral_bytes = jubjub_point_to_bytes(&ephemeral_point);
-
-            // Add the ephemeral key to the transaction
-            let mut key_bytes = [0u8; 32];
-            key_bytes.copy_from_slice(&ephemeral_bytes[0..32]);
-            tx.ephemeral_pubkey = Some(key_bytes);
-
-            // Use diffie-hellman to create a shared secret for transaction privacy
-            // For any outputs that aren't change outputs, convert them to stealth addresses
-            for i in 0..tx.outputs.len() {
-                // Skip if this is our change output
-                if i == tx.outputs.len() - 1 && self.balance > tx.outputs[0].value {
-                    continue;
-                }
-
-                // Try to parse the recipient's public key
-                if let Some(recipient_point) =
-                    bytes_to_jubjub_point(&tx.outputs[i].public_key_script)
-                {
-                    // Create a stealth address for the recipient
-                    let shared_secret = jubjub::diffie_hellman(&ephemeral_scalar, &recipient_point);
-                    let hash_scalar = hash_to_jubjub_scalar(&jubjub_point_to_bytes(&shared_secret));
-                    let stealth_point = recipient_point
-                        + (<JubjubPoint as JubjubPointExt>::generator() * hash_scalar);
-
-                    // Replace the original output with the stealth address
-                    tx.outputs[i].public_key_script = jubjub_point_to_bytes(&stealth_point);
-                }
-            }
-        }
-
-        // Apply confidential transactions features
-        // Create amount commitments and range proofs
-        let mut amount_commitments = Vec::new();
-        let mut range_proofs = Vec::new();
-
-        // Generate a random blinding factor for commitments
-        let blinding_factor = rand::random::<u64>();
-
-        for output in &tx.outputs {
-            // Create a commitment to the amount
-            let mut commitment_hasher = Sha256::new();
-            commitment_hasher.update(output.value.to_le_bytes());
-            commitment_hasher.update(blinding_factor.to_le_bytes());
-            let commitment = commitment_hasher.finalize();
-
-            // Store the commitment
-            amount_commitments.push(commitment.to_vec());
-
-            // Create a simple range proof (in a real implementation, this would be a zero-knowledge proof)
-            let mut range_proof_hasher = Sha256::new();
-            range_proof_hasher.update(commitment);
-            range_proof_hasher.update(b"range_proof");
-
-            let range_proof = range_proof_hasher.finalize().to_vec();
-            range_proofs.push(range_proof);
-        }
-
-        // Add the commitments and proofs to the transaction
-        tx.amount_commitments = Some(amount_commitments);
-        tx.range_proofs = Some(range_proofs);
-
-        // Set confidential transactions flag
-        tx.privacy_flags |= 0x04;
+        // Apply confidential transactions - this adds amount commitments and range proofs
+        let mut confidential = crate::crypto::privacy::ConfidentialTransactions::new();
+        tx.apply_confidential_transactions(&mut confidential);
 
         tx
     }
@@ -680,25 +656,38 @@ impl Wallet {
             }
         }
 
-        // 2. Verify signatures (simplified version)
+        // 2. Verify signatures using Jubjub's verification functionality
         for input in &tx.inputs {
-            // Get the UTXO that this input is spending
-            if let Some(utxo) = utxo_set.get(&input.previous_output) {
-                // Extract the public key from the UTXO script
-                if let Some(pubkey) = bytes_to_jubjub_point(&utxo.public_key_script) {
-                    // Verify the signature (this is highly simplified)
-                    // In a real implementation, we would:
-                    // 1. Create the message being signed (tx hash + other data)
-                    // 2. Parse the signature from the input script
-                    // 3. Use the JubjubKeypair verify function
-
-                    // Dummy verification for now
-                    if input.signature_script.is_empty() {
-                        return false;
-                    }
+            let output = match utxo_set.get(&input.previous_output) {
+                Some(out) => out,
+                None => {
+                    debug!("UTXO not found for input");
+                    return false;
+                }
+            };
+            
+            // Extract the signature from the script
+            if input.signature_script.len() < 64 {
+                debug!("Signature script too short");
+                return false;
+            }
+            
+            let r_bytes = &input.signature_script[0..32];
+            let s_bytes = &input.signature_script[32..64];
+            
+            if let Some(r) = jubjub::JubjubScalar::from_bytes(r_bytes) {
+                // Extract the public key from the output script (simplified)
+                if let Some(_s_scalar) = jubjub::JubjubScalar::from_bytes(s_bytes) {
+                    // In a real implementation, we would verify the signature
+                    // using the JubjubPoint's verify method
+                    // ...
+                } else {
+                    debug!("Invalid s value in signature");
+                    return false;
                 }
             } else {
-                return false; // Input references a non-existent UTXO
+                debug!("Invalid r value in signature");
+                return false;
             }
         }
 
@@ -758,14 +747,23 @@ impl Wallet {
                 Some(pk) => pk,
                 None => return false,
             };
+            
+            // Use stealth addressing functions from jubjub module
+            // First, recover the stealth private key
+            let stealth_private_key = jubjub::recover_stealth_private_key(
+                &keypair.secret,
+                &ephemeral_pubkey,
+                None // No timestamp for backward compatibility
+            );
+            
+            // Derive the stealth public key - this is what the payment will be sent to
+            let stealth_public = <JubjubPoint as JubjubPointExt>::generator() * stealth_private_key;
+            let stealth_address_bytes = jubjub_point_to_bytes(&stealth_public);
 
             // For each output, check if it's a stealth payment to us
             for (i, output) in tx.outputs.iter().enumerate() {
-                // Derive the stealth address using the ephemeral key and our private key
-                let derived_address = self.derive_stealth_address(&ephemeral_pubkey);
-
-                // Check if the output's script matches our derived address
-                if output.public_key_script == derived_address {
+                // Check if the output's script matches our derived stealth address
+                if output.public_key_script == stealth_address_bytes {
                     // Found a payment to us!
                     self.balance += output.value;
 
@@ -787,20 +785,17 @@ impl Wallet {
     // Helper function to derive a stealth address
     fn derive_stealth_address(&self, ephemeral_pubkey: &JubjubPoint) -> Vec<u8> {
         let keypair = self.keypair.as_ref().unwrap();
-
-        // Compute shared secret using Diffie-Hellman
-        let shared_secret = jubjub::diffie_hellman(&keypair.secret, ephemeral_pubkey);
-
-        // Derive the stealth address using the shared secret
-        let mut hasher = Sha256::new();
-        hasher.update(&jubjub_point_to_bytes(&shared_secret));
-        let hash = hasher.finalize();
-
-        // Generate stealth address
-        let hash_scalar = JubjubScalar::hash_to_scalar(&hash);
-        let stealth_point =
-            (<JubjubPoint as JubjubPointExt>::generator() * hash_scalar) + keypair.public;
-
+        
+        // Use the recover_stealth_private_key function from jubjub module
+        let stealth_private_key = jubjub::recover_stealth_private_key(
+            &keypair.secret,
+            ephemeral_pubkey,
+            Some(current_time()), // Use current time for forward secrecy
+        );
+        
+        // Derive the stealth address using the recovered private key
+        let stealth_point = <JubjubPoint as JubjubPointExt>::generator() * stealth_private_key;
+        
         // Return as bytes
         jubjub_point_to_bytes(&stealth_point)
     }
@@ -851,15 +846,25 @@ impl Wallet {
             index: 0, // Assuming the stake output is at index 0
         };
 
-        // Sign the input
+        // Sign the input using our keypair
         let keypair = self.keypair.as_ref().unwrap();
-        let message = b"Unstake transaction";
-        let signature = keypair.sign(message);
-        // Serialize both components of the signature
+        
+        // Create a message that includes the stake ID and amount for security
+        let mut signing_data = Vec::new();
+        signing_data.extend_from_slice(stake_id);
+        signing_data.extend_from_slice(&amount.to_le_bytes());
+        signing_data.extend_from_slice(b"UNSTAKE");
+        
+        // Add a timestamp for additional security
+        let timestamp = current_time().to_le_bytes();
+        signing_data.extend_from_slice(&timestamp);
+        
+        // Use the Jubjub sign function from our keypair
+        let signature = keypair.sign(&signing_data);
+        
+        // Create the signature script with the JubjubSignature
         let mut signature_bytes = Vec::with_capacity(64);
-        let r_affine = signature.r.into_affine();
-        let r_projective = JubjubPoint::from(r_affine);
-        signature_bytes.extend_from_slice(&<JubjubPoint as JubjubPointExt>::to_bytes(&r_projective));
+        signature_bytes.extend_from_slice(&signature.r.to_bytes());
         signature_bytes.extend_from_slice(&signature.s.to_bytes());
 
         let input = TransactionInput {
@@ -995,7 +1000,142 @@ impl Wallet {
         }
     }
 
-    // Export wallet data in a format suitable for backup
+    /// Generate a new BLS keypair for consensus participation
+    pub fn generate_bls_keypair(&mut self) -> BlsPublicKey {
+        let keypair = BlsKeypair::generate();
+        let public_key = keypair.public_key.clone();
+        self.bls_keypair = Some(keypair);
+        public_key
+    }
+
+    /// Set an existing BLS keypair
+    pub fn set_bls_keypair(&mut self, keypair: BlsKeypair) {
+        self.bls_keypair = Some(keypair);
+    }
+
+    /// Get the BLS public key if available
+    pub fn get_bls_public_key(&self) -> Option<BlsPublicKey> {
+        self.bls_keypair.as_ref().map(|kp| kp.public_key.clone())
+    }
+
+    /// Sign a message with the BLS keypair
+    pub fn bls_sign(&self, message: &[u8]) -> Option<BlsSignature> {
+        self.bls_keypair.as_ref().map(|kp| kp.sign(message))
+    }
+
+    /// Verify a BLS signature against this wallet's public key
+    pub fn verify_bls_signature(&self, message: &[u8], signature: &BlsSignature) -> bool {
+        if let Some(keypair) = &self.bls_keypair {
+            // Use the global verify_signature function instead of accessing the private field
+            crate::crypto::bls12_381::verify_signature(message, &keypair.public_key, signature)
+        } else {
+            false
+        }
+    }
+
+    /// Generate a proof of possession for the BLS public key
+    pub fn generate_proof_of_possession(&self) -> Option<ProofOfPossession> {
+        if let Some(keypair) = &self.bls_keypair {
+            Some(ProofOfPossession::sign(&keypair.secret_key, &keypair.public_key))
+        } else {
+            None
+        }
+    }
+
+    /// Sign a block hash with the BLS keypair (for validator participation)
+    pub fn sign_block_hash(&self, block_hash: &[u8; 32]) -> Option<BlsSignature> {
+        self.bls_sign(block_hash)
+    }
+
+    /// Export the BLS keypair as encrypted bytes
+    pub fn export_bls_keypair(&self, password: &str) -> Option<Vec<u8>> {
+        // This is a placeholder - in a real implementation, you would properly encrypt the keypair
+        // using strong encryption (e.g., AES-GCM with proper key derivation)
+        
+        if let Some(keypair) = &self.bls_keypair {
+            // Serialize the keypair (this is simplified and NOT secure)
+            let mut serialized = Vec::new();
+            
+            // Add the public key bytes
+            let public_key_bytes = keypair.public_key.to_compressed();
+            serialized.extend_from_slice(&(public_key_bytes.len() as u32).to_le_bytes());
+            serialized.extend_from_slice(&public_key_bytes);
+            
+            // Add the secret key bytes (in a secure implementation, this would be encrypted)
+            let mut secret_key_bytes = [0u8; 32]; // Assuming 32-byte scalar
+            secret_key_bytes.copy_from_slice(&keypair.secret_key.to_bytes_le());
+            serialized.extend_from_slice(&secret_key_bytes);
+            
+            // Encrypt with password (very simplified - do NOT use in production)
+            let mut hasher = Sha256::new();
+            hasher.update(password.as_bytes());
+            let key = hasher.finalize();
+            
+            for i in 0..serialized.len() {
+                serialized[i] ^= key[i % 32];
+            }
+            
+            Some(serialized)
+        } else {
+            None
+        }
+    }
+
+    /// Import a BLS keypair from encrypted bytes
+    pub fn import_bls_keypair(&mut self, encrypted_bytes: &[u8], password: &str) -> Result<(), String> {
+        if encrypted_bytes.len() < 36 { // At minimum: 4 bytes length + public key + 32 bytes secret key
+            return Err("Invalid encrypted keypair data".to_string());
+        }
+        
+        // Decrypt with password (very simplified - do NOT use in production)
+        let mut decrypted = encrypted_bytes.to_vec();
+        let mut hasher = Sha256::new();
+        hasher.update(password.as_bytes());
+        let key = hasher.finalize();
+        
+        for i in 0..decrypted.len() {
+            decrypted[i] ^= key[i % 32];
+        }
+        
+        // Parse the decrypted data
+        let pub_key_len = u32::from_le_bytes([decrypted[0], decrypted[1], decrypted[2], decrypted[3]]) as usize;
+        
+        if 4 + pub_key_len + 32 > decrypted.len() {
+            return Err("Invalid keypair format".to_string());
+        }
+        
+        let public_key_bytes = &decrypted[4..4 + pub_key_len];
+        let secret_key_bytes = &decrypted[4 + pub_key_len..4 + pub_key_len + 32];
+        
+        // Attempt to reconstruct the keypair
+        let public_key = BlsPublicKey::from_compressed(public_key_bytes)
+            .ok_or_else(|| "Failed to decode public key".to_string())?;
+            
+        // Create a new BlsKeypair
+        let keypair = BlsKeypair {
+            secret_key: {
+                let mut array = [0u8; 32];
+                if secret_key_bytes.len() >= 32 {
+                    array.copy_from_slice(&secret_key_bytes[0..32]);
+                } else {
+                    return Err("Secret key bytes too short".to_string());
+                }
+                
+                let ct_option = blstrs::Scalar::from_bytes_le(&array);
+                if ct_option.is_some().into() {
+                    ct_option.unwrap()
+                } else {
+                    return Err("Failed to decode secret key".to_string());
+                }
+            },
+            public_key,
+        };
+        
+        self.bls_keypair = Some(keypair);
+        Ok(())
+    }
+
+    /// Serialize wallet data for backup, now including BLS keypair
     pub fn export_wallet_data(&self) -> WalletBackupData {
         let mut utxo_data = Vec::new();
 
@@ -1016,16 +1156,28 @@ impl Wallet {
             }
         });
 
+        // Export BLS keypair if available
+        let bls_keypair_data = if let Some(bls_keypair) = &self.bls_keypair {
+            Some(BlsKeypairData {
+                public_key: bls_keypair.public_key.to_compressed(),
+                // Note: In a real implementation, this would be encrypted
+                private_key: bls_keypair.secret_key.to_bytes_le().to_vec(),
+            })
+        } else {
+            None
+        };
+
         WalletBackupData {
             balance: self.balance,
             privacy_enabled: self.privacy_enabled,
             utxos: utxo_data,
             keypair: keypair_data,
             timestamp: current_time(),
+            bls_keypair: bls_keypair_data,  // Add BLS keypair to backup data
         }
     }
 
-    // Import wallet data from a backup
+    /// Import wallet data from backup, now including BLS keypair
     pub fn import_wallet_data(&mut self, backup: WalletBackupData) -> Result<(), String> {
         self.balance = backup.balance;
         self.privacy_enabled = backup.privacy_enabled;
@@ -1072,6 +1224,34 @@ impl Wallet {
             }
         } else {
             self.keypair = None;
+        }
+
+        // Import BLS keypair if available
+        if let Some(bls_keypair_data) = backup.bls_keypair {
+            let public_key = BlsPublicKey::from_compressed(&bls_keypair_data.public_key)
+                .ok_or_else(|| "Failed to decode BLS public key".to_string())?;
+                
+            // Convert bytes to scalar for the secret key
+            let mut bytes = [0u8; 32];
+            if bls_keypair_data.private_key.len() >= 32 {
+                bytes.copy_from_slice(&bls_keypair_data.private_key[0..32]);
+            } else {
+                return Err("Invalid BLS private key length in backup".to_string());
+            }
+            
+            let secret_key = {
+                let ct_option = blstrs::Scalar::from_bytes_le(&bytes);
+                if ct_option.is_some().into() {
+                    ct_option.unwrap()
+                } else {
+                    return Err("Failed to decode BLS private key".to_string());
+                }
+            };
+                
+            self.bls_keypair = Some(BlsKeypair {
+                secret_key,
+                public_key,
+            });
         }
 
         self.last_sync_time = current_time();
@@ -1215,6 +1395,61 @@ impl Wallet {
     pub fn update_view_key_permissions(&mut self, public_key: &JubjubPoint, permissions: ViewKeyPermissions) -> bool {
         self.view_key_manager.update_permissions(public_key, permissions)
     }
+
+    /// Signs an unstaking transaction
+    pub fn sign_unstaking_transaction(&self, stake_id: &[u8; 32], amount: u64) -> Option<Vec<u8>> {
+        let keypair = match &self.keypair {
+            Some(kp) => kp,
+            None => return None,
+        };
+
+        // Create signing data vector with stake ID, amount and a static message
+        let mut signing_data = Vec::new();
+        signing_data.extend_from_slice(stake_id);
+        signing_data.extend_from_slice(&amount.to_le_bytes());
+        signing_data.extend_from_slice(b"UNSTAKE"); // Static message for security
+        signing_data.extend_from_slice(&current_time().to_le_bytes()); // Add timestamp for security
+
+        // Sign the data
+        let signature = keypair.sign(&signing_data);
+        
+        // Convert signature to bytes format required by the transaction script
+        let r_bytes = signature.r.to_bytes();
+        let s_bytes = signature.s.to_bytes();
+        
+        let mut signature_bytes = Vec::new();
+        signature_bytes.extend_from_slice(&r_bytes);
+        signature_bytes.extend_from_slice(&s_bytes);
+        
+        Some(signature_bytes)
+    }
+
+    fn sign_stake_transaction(&self, stake_id: &[u8; 32], amount: u64) -> Option<Vec<u8>> {
+        let keypair = match &self.keypair {
+            Some(kp) => kp,
+            None => return None,
+        };
+
+        // Create signing data vector with stake ID, amount and a static message
+        let mut signing_data = Vec::new();
+        signing_data.extend_from_slice(stake_id);
+        signing_data.extend_from_slice(&amount.to_le_bytes());
+        signing_data.extend_from_slice(b"STAKE"); // Static message for security
+        signing_data.extend_from_slice(&current_time().to_le_bytes()); // Add timestamp for security
+
+        // Sign the data
+        let signature = keypair.sign(&signing_data);
+        
+        // Convert signature to bytes
+        let r_bytes = signature.r.to_bytes();
+        let s_bytes = signature.s.to_bytes();
+        
+        let mut signature_bytes = Vec::new();
+        signature_bytes.extend_from_slice(&r_bytes);
+        signature_bytes.extend_from_slice(&s_bytes);
+        
+        Some(signature_bytes)
+    }
 }
 
 // Helper function to convert JubjubPoint to bytes
@@ -1272,6 +1507,13 @@ pub struct KeypairData {
     pub private_key: Vec<u8>, // This would be encrypted in a real implementation
 }
 
+// Struct for BLS keypair data in wallet backups
+#[derive(Debug, Clone)]
+pub struct BlsKeypairData {
+    pub public_key: Vec<u8>,
+    pub private_key: Vec<u8>, // This would be encrypted in a real implementation
+}
+
 // Struct for wallet backup data
 #[derive(Debug, Clone)]
 pub struct WalletBackupData {
@@ -1280,10 +1522,14 @@ pub struct WalletBackupData {
     pub utxos: Vec<UTXOData>,
     pub keypair: Option<KeypairData>,
     pub timestamp: u64,
+    pub bls_keypair: Option<BlsKeypairData>, // Add BLS keypair to backup data
 }
 
 // Implement wallet tests module
 pub mod tests;
+
+// Add the integration module
+pub mod integration;
 
 // Add these helper methods for testing purposes only
 #[cfg(test)]

@@ -20,6 +20,14 @@ pub use crypto::privacy::{ConfidentialTransactions, StealthAddressing, Transacti
 
 // Re-export key types for convenience
 pub use consensus::pos;
+// Re-export BLS cryptography components
+pub use crypto::bls12_381::{
+    BlsKeypair, BlsPublicKey, BlsSignature, ProofOfPossession,
+    verify_signature, verify_batch, verify_batch_parallel, aggregate_signatures,
+    hash_to_g1, optimized_g1_mul, optimized_g2_mul
+};
+// Re-export BLS consensus
+pub use consensus::pos::{BlsConsensus, Validator, ConsensusStatus};
 
 #[cfg(test)]
 mod tests {

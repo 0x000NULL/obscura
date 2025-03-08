@@ -204,25 +204,17 @@ impl StealthAddressing {
 
     /// Generate a one-time address for a recipient
     pub fn generate_one_time_address(&mut self, recipient_pubkey: &JubjubPoint) -> Vec<u8> {
-        // Generate an ephemeral keypair
+        // Generate a secure ephemeral keypair using the Jubjub implementation
         let ephemeral_keypair = crypto::jubjub::generate_keypair();
-        let ephemeral_secret = ephemeral_keypair.secret;
-        let ephemeral_public = ephemeral_keypair.public;
-
-        // Use the proper Diffie-Hellman implementation provided by the crypto module
-        let shared_secret = crypto::jubjub::diffie_hellman(&ephemeral_secret, recipient_pubkey);
-        let shared_secret_bytes = shared_secret.to_bytes();
-
-        // Hash the shared secret to create a one-time address
-        let mut hasher = Sha256::new();
-        hasher.update(&shared_secret_bytes);
-
-        // Add recipient's public key to the hash to ensure uniqueness
-        let pubkey_bytes = recipient_pubkey.to_bytes();
-        hasher.update(&pubkey_bytes);
-
-        // Get the final one-time address
-        let one_time_address = hasher.finalize().to_vec();
+        
+        // Use the create_stealth_address function from the Jubjub implementation
+        let (_, stealth_address) = crypto::jubjub::create_stealth_address_with_private(
+            &ephemeral_keypair.secret,
+            recipient_pubkey
+        );
+        
+        // Convert the stealth address to bytes
+        let one_time_address = stealth_address.to_bytes().to_vec();
 
         // Store mapping
         self.one_time_addresses
@@ -240,44 +232,48 @@ impl StealthAddressing {
         ephemeral_pubkey: &JubjubPoint,
         recipient_secret: &JubjubScalar,
     ) -> Vec<u8> {
-        // Use the proper Diffie-Hellman implementation
-        let shared_secret = crypto::jubjub::diffie_hellman(recipient_secret, ephemeral_pubkey);
-        let shared_secret_bytes = shared_secret.to_bytes();
-
-        // Hash the shared secret
-        let mut hasher = Sha256::new();
-        hasher.update(&shared_secret_bytes);
-
-        // Add public key to the hash
-        let recipient_pubkey = <JubjubPoint as JubjubPointExt>::generator() * recipient_secret;
-        hasher.update(&recipient_pubkey.to_bytes());
-
-        // Return the final address
-        hasher.finalize().to_vec()
+        // Use the recover_stealth_private_key function from the Jubjub implementation
+        let stealth_private_key = crypto::jubjub::recover_stealth_private_key(
+            recipient_secret,
+            ephemeral_pubkey,
+            None // No timestamp for backward compatibility
+        );
+        
+        // Derive the stealth address using the recovered private key
+        let stealth_point = <JubjubPoint as JubjubPointExt>::generator() * stealth_private_key;
+        
+        // Return as bytes
+        stealth_point.to_bytes().to_vec()
     }
 
-    /// Scan transactions for outputs sent to this wallet
+    /// Scan transactions for payments to stealth addresses
     pub fn scan_transactions(
         &self,
         transactions: &[Transaction],
         secret_key: &JubjubScalar,
     ) -> Vec<TransactionOutput> {
         let mut received_outputs = Vec::new();
-        let recipient_pubkey = <JubjubPoint as JubjubPointExt>::generator() * secret_key;
 
-        // For each transaction
         for tx in transactions {
             // Check if this transaction has an ephemeral public key
             if let Some(ephemeral_pubkey_bytes) = &tx.ephemeral_pubkey {
                 // Convert bytes to JubjubPoint
                 if let Some(ephemeral_pubkey) = JubjubPoint::from_bytes(ephemeral_pubkey_bytes) {
-                    // Derive the one-time address
-                    let one_time_address = self.derive_address(&ephemeral_pubkey, secret_key);
+                    // Use the Jubjub recover_stealth_private_key function to get the stealth private key
+                    let stealth_private_key = crypto::jubjub::recover_stealth_private_key(
+                        secret_key,
+                        &ephemeral_pubkey,
+                        None // No timestamp for backward compatibility
+                    );
+                    
+                    // Derive the stealth address (public key) from the private key
+                    let stealth_public = <JubjubPoint as JubjubPointExt>::generator() * stealth_private_key;
+                    let stealth_address = stealth_public.to_bytes().to_vec();
 
                     // Check each output
                     for output in &tx.outputs {
-                        // If the output is sent to our one-time address
-                        if output.public_key_script == one_time_address.as_slice() {
+                        // If the output is sent to our stealth address
+                        if output.public_key_script == stealth_address.as_slice() {
                             received_outputs.push(output.clone());
                         }
                     }

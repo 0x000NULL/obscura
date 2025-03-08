@@ -484,11 +484,23 @@ impl Transaction {
 
         // Create new outputs with stealth addresses
         let mut new_outputs = Vec::with_capacity(self.outputs.len());
+        
+        // Generate a single ephemeral keypair for all recipients
+        let (ephemeral_secret, ephemeral_public) = crate::crypto::jubjub::generate_secure_ephemeral_key();
+        
+        // Store the ephemeral public key in the transaction
+        self.ephemeral_pubkey = Some(crate::crypto::jubjub::JubjubPointExt::to_bytes(&ephemeral_public).try_into().unwrap());
 
         for (i, output) in self.outputs.iter().enumerate() {
             if i < recipient_pubkeys.len() {
-                // Generate one-time address for recipient
-                let one_time_address = stealth.generate_one_time_address(&recipient_pubkeys[i]);
+                // Use the Jubjub stealth address creation function
+                let (_, stealth_address) = crate::crypto::jubjub::create_stealth_address_with_private(
+                    &ephemeral_secret,
+                    &recipient_pubkeys[i]
+                );
+                
+                // Convert the stealth address to bytes
+                let one_time_address = crate::crypto::jubjub::JubjubPointExt::to_bytes(&stealth_address).to_vec();
 
                 // Create new output with stealth address
                 let mut new_output = output.clone();
@@ -499,47 +511,32 @@ impl Transaction {
             }
         }
 
+        // Update the transaction outputs
         self.outputs = new_outputs;
 
-        // Store ephemeral public key in transaction
-        if let Some(ephemeral_pubkey) = stealth.get_ephemeral_pubkey() {
-            // Convert Vec<u8> to [u8; 32]
-            if ephemeral_pubkey.len() == 32 {
-                let mut key_array = [0u8; 32];
-                key_array.copy_from_slice(&ephemeral_pubkey);
-                self.ephemeral_pubkey = Some(key_array);
-            }
-        }
-
-        // Set privacy flags
+        // Set the stealth addressing flag
         self.privacy_flags |= 0x02; // Stealth addressing enabled
     }
 
     /// Apply confidential transactions to hide amounts
-    pub fn apply_confidential_transactions(
-        &mut self,
-        confidential: &mut crate::crypto::privacy::ConfidentialTransactions,
-    ) {
+    pub fn apply_confidential_transactions(&mut self, confidential: &mut crate::crypto::privacy::ConfidentialTransactions) -> &mut Self {
+        // Apply confidential transactions to each output
         let mut commitments = Vec::new();
         let mut range_proofs = Vec::new();
 
-        for (i, output) in self.outputs.iter().enumerate() {
+        for output in &self.outputs {
+            // Create commitment for the output value
             let commitment = confidential.create_commitment(output.value);
-            let range_proof = confidential.create_range_proof(output.value);
+            commitments.push(commitment);
 
-            commitments.push(commitment.to_vec());
+            // Create range proof for the output value
+            let range_proof = confidential.create_range_proof(output.value);
             range_proofs.push(range_proof);
         }
 
         self.amount_commitments = Some(commitments);
         self.range_proofs = Some(range_proofs);
-
-        // Apply output value obfuscation
-        let obfuscated_tx = confidential.obfuscate_output_value(self);
-        self.outputs = obfuscated_tx.outputs;
-
-        // Set privacy flags
-        self.privacy_flags |= 0x04; // Confidential transactions enabled
+        self
     }
 
     pub fn serialize(&self) -> Vec<u8> {

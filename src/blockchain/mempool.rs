@@ -954,6 +954,11 @@ impl Mempool {
         self.transactions.iter()
     }
 
+    /// Get all transactions as a Vec
+    pub fn get_transactions(&self) -> Vec<Transaction> {
+        self.transactions.values().cloned().collect()
+    }
+
     /// Get the number of transactions in the mempool
     pub fn size(&self) -> usize {
         self.transactions.len() + self.sponsored_transactions.len()

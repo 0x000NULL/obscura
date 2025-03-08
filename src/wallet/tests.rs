@@ -1,9 +1,6 @@
 use crate::blockchain::{OutPoint, TransactionOutput};
-use crate::crypto::jubjub::{
-    generate_keypair, JubjubKeypair, JubjubPoint, JubjubPointExt, JubjubScalarExt,
-};
-use crate::wallet::{jubjub_point_to_bytes, Wallet};
-use ark_std::UniformRand;
+use crate::crypto::jubjub;
+use crate::wallet::Wallet;
 use std::collections::HashMap;
 
 #[test]
@@ -39,11 +36,11 @@ fn test_wallet_balance_calculation() {
 fn test_utxo_selection() {
     // Initialize wallet and keypair
     let mut wallet = Wallet::new();
-    let keypair = generate_keypair();
+    let keypair = crate::crypto::jubjub::generate_keypair();
     wallet.keypair = Some(keypair.clone());
 
     // Create two UTXOs
-    let public_key_bytes = jubjub_point_to_bytes(&keypair.public);
+    let public_key_bytes = crate::wallet::jubjub_point_to_bytes(&keypair.public);
     println!("Public key bytes length: {}", public_key_bytes.len());
 
     // Create two UTXOs with different values
@@ -79,7 +76,7 @@ fn test_utxo_selection() {
     println!("Wallet balance: {}", wallet.get_available_balance());
 
     // Try to create a transaction with a lower fee rate (50 instead of 300)
-    let recipient_keypair = generate_keypair();
+    let recipient_keypair = crate::crypto::jubjub::generate_keypair();
     let tx = wallet.create_transaction_with_fee(&recipient_keypair.public, 75, 50);
 
     // Assert that transaction creation was successful
@@ -184,7 +181,7 @@ fn test_pending_transactions() {
 
     // Create a recipient
     let mut rng = rand::rngs::OsRng;
-    let recipient_keypair = generate_keypair();
+    let recipient_keypair = crate::crypto::jubjub::generate_keypair();
 
     // Create a custom transaction that uses our actual UTXO
     let mut tx = crate::blockchain::Transaction::default();
@@ -203,7 +200,7 @@ fn test_pending_transactions() {
     tx.inputs.push(input);
 
     // Add recipient output
-    let recipient_bytes = jubjub_point_to_bytes(&recipient_keypair.public);
+    let recipient_bytes = crate::wallet::jubjub_point_to_bytes(&recipient_keypair.public);
     let payment_output = crate::blockchain::TransactionOutput {
         value: 50,
         public_key_script: recipient_bytes,
@@ -213,7 +210,7 @@ fn test_pending_transactions() {
     // Add change output
     let change_output = crate::blockchain::TransactionOutput {
         value: 50,
-        public_key_script: jubjub_point_to_bytes(&keypair.public),
+        public_key_script: crate::wallet::jubjub_point_to_bytes(&keypair.public),
     };
     tx.outputs.push(change_output);
 
@@ -305,7 +302,7 @@ fn test_transaction_create_with_privacy() {
 
     // Create a recipient keypair
     let mut rng = rand::rngs::OsRng;
-    let recipient_keypair = generate_keypair();
+    let recipient_keypair = crate::crypto::jubjub::generate_keypair();
 
     // Enable privacy
     wallet.enable_privacy();
@@ -328,7 +325,7 @@ fn test_process_block() {
     let keypair = wallet.keypair.as_ref().unwrap();
 
     // Use the wallet's actual public key instead of the generator point
-    let pubkey_bytes = jubjub_point_to_bytes(&keypair.public);
+    let pubkey_bytes = crate::wallet::jubjub_point_to_bytes(&keypair.public);
 
     // Create a transaction to us
     let mut tx = crate::blockchain::Transaction::default();

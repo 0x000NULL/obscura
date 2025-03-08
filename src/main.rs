@@ -1,3 +1,11 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+#![allow(unused_imports)]
+#![allow(private_interfaces)]
+#![allow(unused_mut)]
+#![allow(non_snake_case)]
+#![allow(unused_assignments)]
+#![allow(unused_attributes)]
 mod blockchain;
 mod consensus;
 mod crypto;
@@ -11,7 +19,8 @@ use crate::consensus::HybridConsensus;
 use crate::crypto::jubjub::JubjubKeypair;
 use crate::networking::Node;
 use crate::utils::{current_time, format_time_diff, is_timestamp_valid, time_since};
-use log::{debug, error, info};
+use crate::wallet::integration::WalletIntegration;
+use log::{debug, error, info, warn};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -103,7 +112,12 @@ fn process_mempool(mempool: &Arc<Mutex<blockchain::mempool::Mempool>>) -> usize 
 }
 
 // Main application loop
-fn run_main_loop(mempool: Arc<Mutex<blockchain::mempool::Mempool>>) {
+fn run_main_loop(
+    mempool: Arc<Mutex<blockchain::mempool::Mempool>>,
+    utxo_set: Arc<Mutex<blockchain::UTXOSet>>,
+    node: Arc<Mutex<Node>>,
+    wallet_integration: Arc<Mutex<WalletIntegration>>,
+) {
     info!("Entering main application loop...");
 
     let start_time = current_time();
@@ -127,18 +141,29 @@ fn run_main_loop(mempool: Arc<Mutex<blockchain::mempool::Mempool>>) {
                 "Node has been running for {}",
                 format_time_diff(start_time, false)
             );
+            
+            // Log mempool size
             info!("Current mempool size: {}", mempool.lock().unwrap().size());
+            
+            // Log available balance
+            if let Ok(integration) = wallet_integration.lock() {
+                info!("Available balance: {}", integration.get_balance());
+                info!("Pending balance: {}", integration.get_pending_balance());
+            }
         }
 
         // Check if we need to perform hourly maintenance tasks
         if uptime % 3600 == 0 && uptime > 0 {
-            perform_maintenance_tasks();
+            perform_maintenance_tasks(&wallet_integration, &node);
         }
     }
 }
 
 // Perform periodic maintenance tasks
-fn perform_maintenance_tasks() {
+fn perform_maintenance_tasks(
+    wallet_integration: &Arc<Mutex<WalletIntegration>>,
+    node: &Arc<Mutex<Node>>,
+) {
     debug!("Performing maintenance tasks...");
 
     // Record the timestamp for this maintenance run
@@ -149,8 +174,29 @@ fn perform_maintenance_tasks() {
     if !is_timestamp_valid(maintenance_timestamp, 60, 60) {
         error!("System clock may have changed unexpectedly!");
     }
-
-    // Perform various maintenance tasks here...
+    
+    // Wallet maintenance tasks
+    debug!("Performing wallet maintenance");
+    
+    // Create a backup of the wallet
+    if let Ok(mut integration) = wallet_integration.lock() {
+        match integration.create_backup() {
+            Ok(message) => debug!("{}", message),
+            Err(e) => error!("Error creating wallet backup: {}", e),
+        }
+    }
+    
+    // Node maintenance
+    debug!("Performing node maintenance");
+    if let Ok(mut node_lock) = node.lock() {
+        if let Err(e) = node_lock.maintain_dandelion() {
+            error!("Error maintaining Dandelion: {:?}", e);
+        }
+        
+        if let Err(e) = node_lock.process_fluff_queue() {
+            error!("Error processing fluff queue: {:?}", e);
+        }
+    }
 
     debug!("Maintenance tasks completed");
 }
@@ -168,15 +214,72 @@ fn main() {
     let consensus_engine = init_consensus();
     let node = init_networking();
 
+    // Create shared components
+    let node_arc = Arc::new(Mutex::new(node));
+    
+    // Create wallet integration
+    let wallet_integration = WalletIntegration::new(
+        wallet, 
+        Arc::clone(&node_arc), 
+        Arc::clone(&mempool), 
+        Arc::clone(&utxo_set)
+    );
+
     // Start network services in a background thread
     let network_handle = start_network_services(Arc::clone(&mempool));
 
+    // Start wallet interface thread
+    let wallet_integration_arc = Arc::new(Mutex::new(wallet_integration));
+    let wallet_handle = start_wallet_services(Arc::clone(&wallet_integration_arc));
+
     // Enter the main application loop
-    run_main_loop(mempool);
+    run_main_loop(mempool, utxo_set, node_arc, wallet_integration_arc);
 
     // We'll never reach this point in the current implementation
     // But in a real app we would join the network thread before exiting
     // network_handle.join().unwrap();
+    // wallet_handle.join().unwrap();
 
     info!("Obscura node shutting down...");
+}
+
+// Start wallet services
+fn start_wallet_services(
+    wallet_integration: Arc<Mutex<WalletIntegration>>,
+) -> thread::JoinHandle<()> {
+    info!("Starting wallet services...");
+    
+    let handle = thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_secs(30));
+            
+            // Scan for transactions periodically
+            let scan_result = {
+                let mut integration = wallet_integration.lock().unwrap();
+                match integration.scan_mempool_for_stealth_transactions() {
+                    Ok(count) => {
+                        if count > 0 {
+                            info!("Found {} new transactions belonging to this wallet", count);
+                        }
+                        true
+                    },
+                    Err(e) => {
+                        error!("Error scanning mempool: {}", e);
+                        false
+                    }
+                }
+            };
+            
+            // Generate a report every hour
+            let current_time = current_time();
+            if current_time % 3600 == 0 {
+                if let Ok(integration) = wallet_integration.lock() {
+                    let report = integration.generate_activity_report();
+                    info!("Wallet Activity Report:\n{}", report);
+                }
+            }
+        }
+    });
+    
+    handle
 }

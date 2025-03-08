@@ -2,11 +2,7 @@ use crate::crypto::bls12_381::{BlsKeypair, BlsPublicKey, BlsSignature, verify_si
 use crate::crypto::jubjub::{JubjubPoint, JubjubPointExt, JubjubScalar};
 use crate::crypto::pedersen::{DualCurveCommitment, PedersenCommitment, BlsPedersenCommitment, initialize_blinding_store};
 use crate::crypto::blinding_store::BlindingStore;
-use ark_ed_on_bls12_381::{EdwardsProjective, Fr as JubjubFr};
-use blstrs::{G1Projective as BlsG1, Scalar as BlsScalar};
-use ff::Field;
-use group::{Curve, Group};
-use ark_ec::{CurveGroup, AffineRepr};
+use ark_ec::CurveGroup;
 use merlin::Transcript;
 use rand::rngs::OsRng;
 use sha2::{Digest, Sha256};

@@ -7,6 +7,7 @@ This document serves as an index for all documentation related to transactions i
 - [Transaction Structure](../transactions.md): Information about the structure of transactions in Obscura.
 - [Transaction Validation](../consensus/transaction_validation.md): Information about how transactions are validated.
 - [Transaction Lifecycle](transaction_lifecycle.md): Overview of the lifecycle of a transaction in Obscura.
+- [Wallet Transaction Submission](wallet_transaction_submission.md): Detailed process of transaction submission from wallet to network.
 
 ## Transaction Features
 

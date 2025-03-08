@@ -1,5 +1,6 @@
 use crate::blockchain::{Block, Transaction};
 use crate::consensus::difficulty::TARGET_BLOCK_TIME;
+use crate::crypto::bls12_381::{BlsPublicKey, BlsSignature, verify_signature};
 use log::{debug, error, warn};
 use sha2::{Digest, Sha256};
 use std::collections::VecDeque;
@@ -27,6 +28,10 @@ const TX_BATCH_MIN_SIZE: usize = 5; // Minimum transactions in a privacy batch
 const MERKLE_SALT_SIZE: usize = 32; // Size of salt for privacy-enhanced commitments
 const ZK_FRIENDLY_HASH_ITERATIONS: usize = 2; // Number of hash iterations for ZK-friendly structure
 
+// Add constants for BLS signatures
+const MAX_VALIDATORS_PER_BLOCK: usize = 100;
+const VALIDATOR_SIGNATURE_THRESHOLD: usize = 67; // 67% for 2/3 majority
+
 /// Manages block structure including timestamp validation, block size adjustment, and merkle tree
 pub struct BlockStructureManager {
     // Timestamp validation
@@ -40,6 +45,10 @@ pub struct BlockStructureManager {
 
     // Transaction merkle tree
     pub merkle_salt: [u8; MERKLE_SALT_SIZE],
+    
+    // BLS signature validation
+    pub validator_public_keys: Vec<BlsPublicKey>,
+    pub signature_threshold: usize,
 }
 
 impl BlockStructureManager {
@@ -62,13 +71,16 @@ impl BlockStructureManager {
             merkle_salt[i] = (current_time % 256) as u8;
         }
 
-        Self {
+        // Create a new BlockStructureManager with defaults
+        BlockStructureManager {
             time_samples,
             network_time_offset: 0,
             time_correlation_samples: VecDeque::with_capacity(TIME_CORRELATION_WINDOW),
             current_max_block_size: INITIAL_BLOCK_SIZE,
             block_sizes: VecDeque::with_capacity(BLOCK_SIZE_WINDOW),
             merkle_salt,
+            validator_public_keys: Vec::new(),
+            signature_threshold: VALIDATOR_SIGNATURE_THRESHOLD,
         }
     }
 
@@ -464,6 +476,69 @@ impl BlockStructureManager {
         let mut hash = [0u8; 32];
         hash.copy_from_slice(&result);
         hash
+    }
+
+    /// Set the validator public keys for BLS signature verification
+    pub fn set_validators(&mut self, validator_keys: Vec<BlsPublicKey>) {
+        if validator_keys.len() > MAX_VALIDATORS_PER_BLOCK {
+            warn!("Too many validators provided. Limiting to {}", MAX_VALIDATORS_PER_BLOCK);
+            self.validator_public_keys = validator_keys[0..MAX_VALIDATORS_PER_BLOCK].to_vec();
+        } else {
+            self.validator_public_keys = validator_keys;
+        }
+    }
+
+    /// Set the signature threshold (percentage as integer, e.g., 67 for 67%)
+    pub fn set_signature_threshold(&mut self, threshold_percentage: usize) {
+        if threshold_percentage > 0 && threshold_percentage <= 100 {
+            self.signature_threshold = threshold_percentage;
+        } else {
+            warn!("Invalid threshold percentage. Using default 67%");
+            self.signature_threshold = VALIDATOR_SIGNATURE_THRESHOLD;
+        }
+    }
+
+    /// Validate block signatures using BLS signature verification
+    pub fn validate_block_signatures(&self, block: &Block, signatures: &[BlsSignature]) -> bool {
+        if self.validator_public_keys.is_empty() {
+            warn!("No validator public keys set. Skipping signature validation.");
+            return true;
+        }
+
+        // Calculate minimum number of signatures needed
+        let min_signatures_needed = (self.validator_public_keys.len() * self.signature_threshold) / 100;
+        
+        if signatures.len() < min_signatures_needed {
+            error!("Not enough signatures. Got {} but need at least {}", 
+                   signatures.len(), min_signatures_needed);
+            return false;
+        }
+
+        // Get the block hash that was signed
+        let block_hash = block.header.hash();
+        
+        // Validate each signature
+        let mut valid_count = 0;
+        for (i, signature) in signatures.iter().enumerate() {
+            if i >= self.validator_public_keys.len() {
+                // More signatures than validators (shouldn't happen)
+                continue;
+            }
+            
+            let validator_key = &self.validator_public_keys[i];
+            if verify_signature(&block_hash, validator_key, signature) {
+                valid_count += 1;
+            }
+        }
+        
+        // Check if we have enough valid signatures
+        if valid_count >= min_signatures_needed {
+            debug!("Block validated with {}/{} valid signatures", valid_count, signatures.len());
+            return true;
+        } else {
+            error!("Insufficient valid signatures. Only {}/{} were valid", valid_count, signatures.len());
+            return false;
+        }
     }
 }
 

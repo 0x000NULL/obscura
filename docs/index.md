@@ -16,6 +16,7 @@ Welcome to the official documentation for the Obscura blockchain project. This d
 - [Transaction Pool](./transaction_pool.md) - How the mempool works with privacy features
 - [Privacy Features](./privacy_features.md) - Overview of all privacy-enhancing technologies
 - [Cryptography](./cryptography.md) - Cryptographic primitives used in Obscura
+- [Wallet Integration](./wallet/integration.md) - How the wallet integrates with blockchain components
 
 ## Technical Reference
 
@@ -41,6 +42,7 @@ Welcome to the official documentation for the Obscura blockchain project. This d
 - [Transaction Validation](./transactions/validation.md) - Transaction validation rules
 - [Fee Calculation](./transactions/fees.md) - How transaction fees are calculated
 - [Signature Verification](./transactions/signatures.md) - Implementation of signature verification
+- [Wallet Transaction Submission](./transactions/wallet_transaction_submission.md) - Process of submitting transactions from wallet to network
 
 ### Networking
 

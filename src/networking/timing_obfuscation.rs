@@ -49,7 +49,9 @@ impl TimingObfuscation {
         
         // Add randomization
         let jitter = rng.gen_range(-(base_delay as i64 / 4)..(base_delay as i64 / 4));
-        let delay = (base_delay as i64 + jitter).max(MIN_DELAY_MS as i64) as u64;
+        let delay = (base_delay as i64 + jitter)
+            .max(MIN_DELAY_MS as i64)
+            .min(MAX_DELAY_MS as i64) as u64;
         
         Duration::from_millis(delay)
     }

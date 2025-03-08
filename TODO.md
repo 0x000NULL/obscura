@@ -434,22 +434,97 @@
     - [ ] Create full node sync
     - [ ] Add privacy-preserving sync mechanism
     - [ ] Implement Tor/proxy support for connections
+  - [ ] Add validator functionality
+    - [ ] Implement stake management
+    - [ ] Create validator node setup
+    - [ ] Add delegation management
+    - [ ] Implement validator status monitoring
+    - [ ] Create slashing protection alerts
+    - [ ] Add validator performance analytics
+  - [ ] Add mining functionality
+    - [ ] Implement mining pool configuration
+    - [ ] Create solo mining setup
+    - [ ] Add mining rewards tracking
+    - [ ] Implement hashrate monitoring
+    - [ ] Create mining profitability calculator
+    - [ ] Add mining optimization settings
+  - [ ] Integrate block explorer features
+    - [ ] Implement transaction lookup
+    - [ ] Create block browsing functionality
+    - [ ] Add address history viewing
+    - [ ] Implement network statistics
+    - [ ] Create mempool visualization
+    - [ ] Add custom transaction tracing
+
+- [ ] CLI Validator Tools
+  - [ ] Create validator setup wizard
+    - [ ] Implement key generation for validator
+    - [ ] Add node configuration automation
+    - [ ] Create security configuration checklist
+    - [ ] Implement connection testing utilities
+  - [ ] Add validator management commands
+    - [ ] Implement stake delegation commands
+    - [ ] Create validator status queries
+    - [ ] Add reward claim functionality
+    - [ ] Implement validator metrics reporting
+  - [ ] Create validator security tools
+    - [ ] Implement key backup/restore
+    - [ ] Add slashing protection monitoring
+    - [ ] Create offline signing capabilities
+    - [ ] Implement multi-signature controls
+
+- [ ] CLI Mining Tools
+  - [ ] Create mining setup wizard
+    - [ ] Implement CPU configuration options
+    - [ ] Add GPU mining support
+    - [ ] Create mining pool integration
+    - [ ] Implement benchmarking tools
+  - [ ] Add mining control commands
+    - [ ] Implement start/stop/pause functionality
+    - [ ] Create throttling controls
+    - [ ] Add power management options
+    - [ ] Implement auto-switching based on profitability
+  - [ ] Create mining statistics tools
+    - [ ] Implement hashrate monitoring
+    - [ ] Add earnings calculator
+    - [ ] Create historical performance tracking
+    - [ ] Implement network difficulty monitoring
+
+- [ ] CLI Block Explorer
+  - [ ] Implement basic lookup commands
+    - [ ] Create transaction lookup by hash
+    - [ ] Add block lookup by height or hash
+    - [ ] Implement address balance and history
+    - [ ] Create mempool inspection tools
+  - [ ] Add advanced query capabilities
+    - [ ] Implement rich query language
+    - [ ] Create export functionality
+    - [ ] Add statistical analysis tools
+    - [ ] Implement custom filters and sorting
+  - [ ] Create monitoring commands
+    - [ ] Implement network health checks
+    - [ ] Add new block notifications
+    - [ ] Create custom alert configuration
+    - [ ] Implement scheduled report generation
+
 - [ ] GUI Wallet
   - [ ] Create cross-platform UI framework
-    - [ ] Implement Tauri/Rust frontend
-    - [ ] Add responsive design
-    - [ ] Create theme system
+    - [ ] Implement SLINT UI toolkit
+    - [ ] Create responsive SLINT components
+    - [ ] Implement SLINT component library
+    - [ ] Add native platform integrations
+    - [ ] Create theme system with SLINT stylesheets
     - [ ] Implement privacy mode UI elements
     - [ ] Add privacy status indicators
   - [ ] Implement wallet functionality
-    - [ ] Add transaction visualization
-    - [ ] Create address management
+    - [ ] Add transaction visualization with SLINT charts
+    - [ ] Create address management interface
     - [ ] Implement backup system
     - [ ] Add privacy settings management
     - [ ] Create privacy level configuration
   - [ ] Add backup/restore features
     - [ ] Create encrypted backup
-    - [ ] Add seed phrase recovery
+    - [ ] Add seed phrase recovery interface
     - [ ] Implement state recovery
     - [ ] Add privacy-preserving backup mechanism
     - [ ] Create secure recovery process
@@ -459,6 +534,27 @@
     - [ ] Create address validation
     - [ ] Add private contact management
     - [ ] Implement encrypted address book
+  - [ ] Add validator functionality in GUI
+    - [ ] Create validator dashboard using SLINT
+    - [ ] Implement visual stake management
+    - [ ] Add delegation visualization
+    - [ ] Create performance charts with SLINT
+    - [ ] Implement earnings projections
+    - [ ] Add alert configuration panel
+  - [ ] Add mining functionality in GUI
+    - [ ] Create mining control panel with SLINT
+    - [ ] Implement visual hashrate monitoring
+    - [ ] Add power/efficiency controls
+    - [ ] Create mining pool selection interface
+    - [ ] Implement profitability calculator with SLINT charts
+    - [ ] Add hardware monitoring integration
+  - [ ] Integrate block explorer features in GUI
+    - [ ] Create SLINT-based block explorer interface
+    - [ ] Implement block visualization
+    - [ ] Add transaction browsing UI
+    - [ ] Create address lookup and tracking
+    - [ ] Implement visual mempool explorer
+    - [ ] Add rich search functionality
 
 ### Testing Infrastructure
 - [ ] Testnet Setup
@@ -1126,7 +1222,7 @@
 - [ ] Wallet integrations
   - [ ] Hardware wallets
   - [ ] Mobile wallets
-  - [ ] Web wallets
+  - [ ] Web wallets with SLINT WebAssembly support
 - [ ] Payment processors
   - [ ] Merchant tools
   - [ ] Payment gateways
@@ -1251,10 +1347,10 @@
 
 ### Additional Documentation Tasks
 - [ ] Create interactive documentation
-  - [ ] Add interactive code examples
-  - [ ] Create live documentation playground
-  - [ ] Add interactive architecture diagrams
-  - [ ] Create interactive security demos
+  - [ ] Add interactive code examples using SLINT
+  - [ ] Create live documentation playground with SLINT components
+  - [ ] Add interactive architecture diagrams using SLINT visualizations
+  - [ ] Create interactive security demos with SLINT UI
 - [ ] Add video tutorials
   - [ ] Create implementation walkthrough videos
   - [ ] Add security best practices videos

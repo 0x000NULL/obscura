@@ -1,14 +1,9 @@
 use crate::blockchain::{Transaction, TransactionOutput};
 use crate::crypto::jubjub::{JubjubKeypair, JubjubPoint, JubjubPointExt, JubjubScalar, JubjubScalarExt};
-use ark_ec::{CurveGroup, Group};
-use ark_ed_on_bls12_381::{EdwardsAffine, EdwardsProjective, Fr};
-use ark_serialize::{CanonicalSerialize, CanonicalDeserialize};
-use sha2::{Digest, Sha256};
+use ark_ec::CurveGroup;
 use std::collections::{HashMap, HashSet};
-use rand::{rngs::OsRng, Rng};
 use ark_std::Zero;
 use blake2b_simd;
-use ark_ec;
 
 /// ViewKey provides the ability to view incoming transactions without spending capability
 #[derive(Debug, Clone)]
@@ -84,8 +79,7 @@ impl ViewKey {
         let view_scalar = JubjubScalar::from_bytes(&hash_result[0..32]).unwrap_or_else(|| JubjubScalar::zero());
         
         // Create the view public key by multiplying the generator by the view scalar
-        // Use fully-qualified syntax to disambiguate between implementations
-        let view_point = <JubjubPoint as ark_ec::Group>::generator() * view_scalar;
+        let view_point = JubjubPoint::generator() * view_scalar;
         
         // Return the view key with specified permissions
         Self {

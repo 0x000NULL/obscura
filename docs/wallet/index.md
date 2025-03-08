@@ -7,6 +7,7 @@ This document serves as an index for all documentation related to wallet functio
 - [Wallet Architecture](wallet_architecture.md): Overview of Obscura's wallet architecture.
 - [Wallet Features](wallet_features.md): Information about Obscura's wallet features.
 - [Wallet Security](wallet_security.md): Information about wallet security in Obscura.
+- [Wallet Integration](integration.md): Comprehensive documentation about wallet integration with blockchain components.
 
 ## Key Management
 

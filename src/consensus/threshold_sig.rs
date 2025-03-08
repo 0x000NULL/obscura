@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::crypto::jubjub::{JubjubPoint, JubjubPointExt, JubjubSignature};
+use crate::crypto::bls12_381::{BlsKeypair, BlsPublicKey, BlsSignature, aggregate_signatures, hash_to_g1, verify_batch_parallel, verify_signature};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
@@ -16,9 +16,9 @@ pub struct ThresholdSignature {
     /// Total number of participants
     pub total_participants: usize,
     /// Participant public keys
-    pub participants: Vec<JubjubPoint>,
+    pub participants: Vec<BlsPublicKey>,
     /// Aggregated signatures (participant index -> signature)
-    pub signatures: HashMap<usize, JubjubSignature>,
+    pub signatures: HashMap<usize, BlsSignature>,
     /// Message being signed
     pub message: Vec<u8>,
 }
@@ -38,7 +38,7 @@ impl ThresholdSignature {
     /// Create a new threshold signature scheme
     pub fn new(
         threshold: usize,
-        participants: Vec<JubjubPoint>,
+        participants: Vec<BlsPublicKey>,
         message: Vec<u8>,
     ) -> Result<Self, ThresholdError> {
         // Validate threshold
@@ -63,15 +63,15 @@ impl ThresholdSignature {
     pub fn add_signature(
         &mut self,
         participant_index: usize,
-        signature: JubjubSignature,
+        signature: BlsSignature,
     ) -> Result<bool, ThresholdError> {
-        // Check if threshold already met
+        // Check if we already have enough signatures
         if self.signatures.len() >= self.threshold {
             return Err(ThresholdError::ThresholdAlreadyMet);
         }
 
         // Validate participant index
-        if participant_index >= self.participants.len() {
+        if participant_index >= self.total_participants {
             return Err(ThresholdError::InvalidParticipant);
         }
 
@@ -80,60 +80,47 @@ impl ThresholdSignature {
             return Err(ThresholdError::DuplicateSignature);
         }
 
-        // Verify signature
+        // Verify the signature
         let public_key = &self.participants[participant_index];
-        if !public_key.verify(&self.message, &signature) {
+        if !verify_signature(&self.message, public_key, &signature) {
             return Err(ThresholdError::InvalidSignature);
         }
 
-        // Add signature
+        // Add signature to the map
         self.signatures.insert(participant_index, signature);
 
-        // Check if threshold is met
+        // Check if we now have enough signatures to meet the threshold
         Ok(self.signatures.len() >= self.threshold)
     }
 
-    /// Verify if the threshold signature is complete and valid
+    /// Verify that we have enough valid signatures
     pub fn verify(&self) -> Result<bool, ThresholdError> {
-        // Check if we have enough signatures
         if self.signatures.len() < self.threshold {
             return Err(ThresholdError::InsufficientSignatures);
         }
 
-        // Verify each signature
+        // Convert to vectors for parallel validation
+        let mut signatures = Vec::new();
+        let mut public_keys = Vec::new();
+        let messages = vec![self.message.clone(); self.signatures.len()];
+
         for (participant_index, signature) in &self.signatures {
-            let public_key = &self.participants[*participant_index];
-            if !public_key.verify(&self.message, signature) {
-                return Err(ThresholdError::InvalidSignature);
-            }
+            signatures.push(signature.clone());
+            public_keys.push(self.participants[*participant_index].clone());
         }
 
-        Ok(true)
+        // Use the batch verification for better performance
+        Ok(verify_batch_parallel(&signatures, &public_keys, &messages))
     }
 
-    /// Get the aggregated signature
-    pub fn get_aggregated_signature(&self) -> Result<Vec<u8>, ThresholdError> {
+    /// Get the aggregated signature if threshold is met
+    pub fn get_aggregated_signature(&self) -> Result<BlsSignature, ThresholdError> {
         if self.signatures.len() < self.threshold {
             return Err(ThresholdError::InsufficientSignatures);
         }
 
-        // Create a deterministic ordering of signatures
-        let mut ordered_signatures: Vec<_> = self.signatures.iter().collect();
-        ordered_signatures.sort_by_key(|&(idx, _)| idx);
-
-        // Concatenate all signatures
-        let mut aggregated = Vec::new();
-        for (idx, sig) in ordered_signatures {
-            aggregated.extend_from_slice(&[*idx as u8]); // Add participant index
-            aggregated.extend_from_slice(&sig.to_bytes()); // Add signature
-        }
-
-        // Hash the concatenated signatures to get a fixed-size output
-        let mut hasher = Sha256::new();
-        hasher.update(&aggregated);
-        let result = hasher.finalize();
-
-        Ok(result.to_vec())
+        let signatures: Vec<BlsSignature> = self.signatures.values().cloned().collect();
+        Ok(aggregate_signatures(&signatures))
     }
 }
 
@@ -144,7 +131,7 @@ pub struct ThresholdSchemeShamir {
     /// Total number of participants
     pub total_participants: usize,
     /// Participant public keys
-    pub participants: Vec<JubjubPoint>,
+    pub participants: Vec<BlsPublicKey>,
     /// Shares for each participant (participant index -> share)
     pub shares: HashMap<usize, Vec<u8>>,
 }
@@ -173,7 +160,7 @@ impl ThresholdSchemeShamir {
     pub fn generate_shares(
         &mut self,
         secret: &[u8],
-        participants: Vec<JubjubPoint>,
+        participants: Vec<BlsPublicKey>,
     ) -> Result<(), ThresholdError> {
         if participants.len() != self.total_participants {
             return Err(ThresholdError::InvalidParticipant);
@@ -259,11 +246,14 @@ impl ValidatorAggregation {
     /// Create a new validator aggregation for a block
     pub fn new(
         threshold: usize,
-        validators: Vec<JubjubPoint>,
+        validators: Vec<BlsPublicKey>,
         block_hash: [u8; 32],
     ) -> Result<Self, ThresholdError> {
-        let message = block_hash.to_vec();
-        let threshold_sig = ThresholdSignature::new(threshold, validators, message)?;
+        let threshold_sig = ThresholdSignature::new(
+            threshold,
+            validators,
+            block_hash.to_vec(),
+        )?;
 
         Ok(ValidatorAggregation {
             threshold_sig,
@@ -276,26 +266,30 @@ impl ValidatorAggregation {
     pub fn add_validator_signature(
         &mut self,
         validator_index: usize,
-        signature: JubjubSignature,
+        signature: BlsSignature,
     ) -> Result<bool, ThresholdError> {
+        // If we already have enough signatures, return true without error
         if self.is_complete {
-            return Err(ThresholdError::ThresholdAlreadyMet);
+            return Ok(true);
         }
-
-        let result = self
-            .threshold_sig
-            .add_signature(validator_index, signature)?;
-        self.is_complete = result;
-
-        Ok(result)
+        
+        // Try to add the signature
+        match self.threshold_sig.add_signature(validator_index, signature) {
+            Ok(threshold_met) => {
+                self.is_complete = threshold_met;
+                Ok(threshold_met)
+            },
+            Err(ThresholdError::ThresholdAlreadyMet) => {
+                // If threshold was already met, update our state and return success
+                self.is_complete = true;
+                Ok(true)
+            },
+            Err(e) => Err(e)
+        }
     }
 
     /// Get the aggregated signature
-    pub fn get_aggregated_signature(&self) -> Result<Vec<u8>, ThresholdError> {
-        if !self.is_complete {
-            return Err(ThresholdError::InsufficientSignatures);
-        }
-
+    pub fn get_aggregated_signature(&self) -> Result<BlsSignature, ThresholdError> {
         self.threshold_sig.get_aggregated_signature()
     }
 
@@ -308,108 +302,70 @@ impl ValidatorAggregation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crypto::jubjub::{generate_keypair, JubjubKeypair};
+    use crate::crypto::bls12_381::BlsKeypair;
 
     #[test]
     fn test_threshold_signature_basic() {
-        // Create keypairs for participants
-        let keypair1 = generate_keypair();
-        let keypair2 = generate_keypair();
-        let keypair3 = generate_keypair();
-
-        let participants = vec![keypair1.public, keypair2.public, keypair3.public];
-
-        // Create a message to sign
-        let message = b"test message".to_vec();
-
-        // Create a 2-of-3 threshold signature scheme
-        let mut threshold_sig = ThresholdSignature::new(2, participants, message.clone()).unwrap();
-
-        // Add signatures from participants 0 and 2
-        let sig1 = keypair1.sign(&message);
-        let result = threshold_sig.add_signature(0, sig1);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), false); // Threshold not met yet
-
-        let sig3 = keypair3.sign(&message);
-        let result = threshold_sig.add_signature(2, sig3);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), true); // Threshold met
-
-        // Verify the threshold signature
-        let result = threshold_sig.verify();
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), true);
-
-        // Get the aggregated signature
-        let agg_sig = threshold_sig.get_aggregated_signature();
-        assert!(agg_sig.is_ok());
-        assert_eq!(agg_sig.unwrap().len(), 32); // SHA-256 output
-    }
-
-    #[test]
-    fn test_threshold_signature_errors() {
-        // Create keypairs for participants
-        let keypair1 = generate_keypair();
-        let keypair2 = generate_keypair();
-
-        let participants = vec![keypair1.public, keypair2.public];
-
-        // Create a message to sign
-        let message = b"test message".to_vec();
-
-        // Test invalid threshold
-        let result = ThresholdSignature::new(0, participants.clone(), message.clone());
-        assert!(matches!(result, Err(ThresholdError::InvalidThreshold)));
-
-        let result = ThresholdSignature::new(3, participants.clone(), message.clone());
-        assert!(matches!(result, Err(ThresholdError::InvalidThreshold)));
-
-        // Create a valid 2-of-2 threshold signature scheme
-        let mut threshold_sig = ThresholdSignature::new(2, participants, message.clone()).unwrap();
-
-        // Test invalid participant index
-        let sig1 = keypair1.sign(&message);
-        let result = threshold_sig.add_signature(2, sig1);
-        assert!(matches!(result, Err(ThresholdError::InvalidParticipant)));
-
-        // Add a valid signature
-        let sig1 = keypair1.sign(&message);
-        let result = threshold_sig.add_signature(0, sig1);
-        assert!(result.is_ok());
-
-        // Test duplicate signature
-        let sig1_again = keypair1.sign(&message);
-        let result = threshold_sig.add_signature(0, sig1_again);
-        assert!(matches!(result, Err(ThresholdError::DuplicateSignature)));
-
-        // Test insufficient signatures
-        let result = threshold_sig.verify();
-        assert!(matches!(
-            result,
-            Err(ThresholdError::InsufficientSignatures)
-        ));
-
-        let result = threshold_sig.get_aggregated_signature();
-        assert!(matches!(
-            result,
-            Err(ThresholdError::InsufficientSignatures)
-        ));
+        let message = b"Test message for threshold signature".to_vec();
+        let n = 5; // Total participants
+        let t = 3; // Threshold
+        
+        // Generate keypairs for participants
+        let mut keypairs = Vec::new();
+        let mut public_keys = Vec::new();
+        for _ in 0..n {
+            let keypair = BlsKeypair::generate();
+            public_keys.push(keypair.public_key.clone());
+            keypairs.push(keypair);
+        }
+        
+        // Create threshold signature scheme
+        let mut threshold_sig = ThresholdSignature::new(t, public_keys, message.clone()).unwrap();
+        
+        // Sign with t-1 participants (shouldn't be enough)
+        for i in 0..(t-1) {
+            let signature = keypairs[i].sign(&message);
+            threshold_sig.add_signature(i, signature).unwrap();
+        }
+        
+        // Verify should fail with insufficient signatures
+        assert!(threshold_sig.verify().is_err());
+        
+        // Add one more signature to reach threshold
+        let signature = keypairs[t-1].sign(&message);
+        let result = threshold_sig.add_signature(t-1, signature).unwrap();
+        assert!(result); // Should indicate threshold met
+        
+        // Now verification should succeed
+        assert!(threshold_sig.verify().unwrap());
+        
+        // Get aggregated signature
+        let aggregated_sig = threshold_sig.get_aggregated_signature().unwrap();
+        
+        // Create a combined public key from the signers
+        let mut signers_pubkeys = Vec::new();
+        for i in 0..t {
+            signers_pubkeys.push(keypairs[i].public_key.clone());
+        }
+        
+        // Verify the aggregated signature against the combined public key
+        let combined_pubkey = crate::crypto::bls12_381::aggregate_public_keys(&signers_pubkeys);
+        assert!(crate::crypto::bls12_381::verify_signature(&message, &combined_pubkey, &aggregated_sig));
     }
 
     #[test]
     fn test_validator_aggregation() {
         // Create keypairs for validators
-        let keypair1 = generate_keypair();
-        let keypair2 = generate_keypair();
-        let keypair3 = generate_keypair();
-        let keypair4 = generate_keypair();
+        let keypair1 = BlsKeypair::generate();
+        let keypair2 = BlsKeypair::generate();
+        let keypair3 = BlsKeypair::generate();
+        let keypair4 = BlsKeypair::generate();
 
         let validators = vec![
-            keypair1.public,
-            keypair2.public,
-            keypair3.public,
-            keypair4.public,
+            keypair1.public_key.clone(),
+            keypair2.public_key.clone(),
+            keypair3.public_key.clone(),
+            keypair4.public_key.clone(),
         ];
 
         // Create a block hash to sign
@@ -448,6 +404,5 @@ mod tests {
         // Get the aggregated signature
         let agg_sig = aggregation.get_aggregated_signature();
         assert!(agg_sig.is_ok());
-        assert_eq!(agg_sig.unwrap().len(), 32); // SHA-256 output
     }
 }

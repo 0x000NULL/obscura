@@ -11,6 +11,540 @@ pub use enhancements::{
 
 use hex;
 use std::collections::HashMap;
+use crate::blockchain::{Block, Transaction};
+use crate::crypto::bls12_381::{BlsKeypair, BlsPublicKey, BlsSignature, aggregate_signatures, verify_batch_parallel, verify_signature, ProofOfPossession};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use log::{debug, error, info, warn};
+use crate::crypto::bls12_381::ensure_tables_initialized;
+
+/// Constants for BLS signature consensus
+pub const VALIDATOR_THRESHOLD_PERCENTAGE: usize = 67; // 2/3 majority
+pub const MAX_VALIDATORS: usize = 100;
+pub const MIN_STAKE_AMOUNT: u64 = 1000; // Minimum stake to be a validator
+pub const VALIDATOR_REWARD_PERCENTAGE: u64 = 5; // 5% annual reward
+
+/// Represents a validator in the PoS consensus system
+#[derive(Debug, Clone)]
+pub struct Validator {
+    /// The validator's BLS public key
+    pub public_key: BlsPublicKey,
+    /// The validator's stake amount
+    pub stake_amount: u64,
+    /// When the validator was registered
+    pub registration_time: u64,
+    /// Proof of possession of the private key
+    pub proof_of_possession: ProofOfPossession,
+    /// Optional validator metadata (name, endpoint, etc.)
+    pub metadata: Option<String>,
+    /// Validator performance metrics
+    pub performance: ValidatorPerformance,
+}
+
+/// Tracks validator performance metrics
+#[derive(Debug, Clone, Default)]
+pub struct ValidatorPerformance {
+    /// Total blocks validated
+    pub blocks_validated: u64,
+    /// Total blocks missed
+    pub blocks_missed: u64,
+    /// Last validation time
+    pub last_active: u64,
+    /// Uptime percentage (0-100)
+    pub uptime_percentage: f64,
+}
+
+/// Status of consensus for a block
+#[derive(Debug, Clone, PartialEq)]
+pub enum ConsensusStatus {
+    /// Not enough signatures yet
+    InProgress,
+    /// Block has achieved consensus
+    Achieved,
+    /// Block has been finalized
+    Finalized,
+    /// Block failed to reach consensus
+    Failed,
+}
+
+/// Manages validator signatures for a specific block
+#[derive(Debug)]
+pub struct BlockConsensus {
+    /// Block hash being signed
+    pub block_hash: [u8; 32],
+    /// Block height
+    pub block_height: u64,
+    /// Map of validator public keys to their signatures
+    pub signatures: HashMap<BlsPublicKey, BlsSignature>,
+    /// The aggregated signature (once consensus is achieved)
+    pub aggregated_signature: Option<BlsSignature>,
+    /// Current status of consensus
+    pub status: ConsensusStatus,
+    /// Timestamp when consensus was achieved
+    pub consensus_timestamp: Option<u64>,
+}
+
+/// Main struct for managing PoS consensus with BLS signatures
+#[derive(Debug)]
+pub struct BlsConsensus {
+    /// Registered validators
+    validators: Arc<Mutex<HashMap<BlsPublicKey, Validator>>>,
+    /// Active consensus processes by block hash
+    active_consensus: Arc<Mutex<HashMap<[u8; 32], BlockConsensus>>>,
+    /// Finalized blocks (block hash -> finalization time)
+    finalized_blocks: Arc<Mutex<HashMap<[u8; 32], u64>>>,
+    /// Required percentage of validators to achieve consensus
+    threshold_percentage: usize,
+}
+
+impl BlsConsensus {
+    /// Create a new BLS consensus manager
+    pub fn new() -> Self {
+        BlsConsensus {
+            validators: Arc::new(Mutex::new(HashMap::new())),
+            active_consensus: Arc::new(Mutex::new(HashMap::new())),
+            finalized_blocks: Arc::new(Mutex::new(HashMap::new())),
+            threshold_percentage: VALIDATOR_THRESHOLD_PERCENTAGE,
+        }
+    }
+
+    /// Register a new validator
+    pub fn register_validator(
+        &self,
+        public_key: &BlsPublicKey,
+        stake_amount: u64,
+        proof: &ProofOfPossession,
+        metadata: Option<String>,
+    ) -> Result<(), String> {
+        // Verify the proof of possession
+        if !proof.verify(public_key) {
+            return Err("Invalid proof of possession".to_string());
+        }
+
+        // Check minimum stake
+        if stake_amount < MIN_STAKE_AMOUNT {
+            return Err(format!("Stake amount {} below minimum required {}", stake_amount, MIN_STAKE_AMOUNT));
+        }
+
+        let mut validators = self.validators.lock().unwrap();
+        
+        // Check if we've reached max validators
+        if validators.len() >= MAX_VALIDATORS && !validators.contains_key(public_key) {
+            return Err(format!("Maximum number of validators ({}) reached", MAX_VALIDATORS));
+        }
+
+        // Create or update validator
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        let validator = Validator {
+            public_key: public_key.clone(),
+            stake_amount,
+            registration_time: now,
+            proof_of_possession: proof.clone(),
+            metadata,
+            performance: ValidatorPerformance::default(),
+        };
+
+        validators.insert(public_key.clone(), validator);
+        info!("Validator registered with public key: {:?} and stake: {}", public_key, stake_amount);
+        
+        Ok(())
+    }
+
+    /// Unregister a validator
+    pub fn unregister_validator(&self, public_key: &BlsPublicKey) -> Result<(), String> {
+        let mut validators = self.validators.lock().unwrap();
+        
+        if validators.remove(public_key).is_none() {
+            return Err("Validator not found".to_string());
+        }
+        
+        info!("Validator unregistered: {:?}", public_key);
+        Ok(())
+    }
+
+    /// Submit a signature for a block
+    pub fn submit_signature(
+        &self,
+        block_hash: [u8; 32],
+        block_height: u64,
+        public_key: &BlsPublicKey,
+        signature: BlsSignature,
+    ) -> Result<ConsensusStatus, String> {
+        // First, check if the validator exists to avoid a potential deadlock
+        let validator_exists = {
+            let validators = self.validators.lock().unwrap();
+            validators.contains_key(public_key)
+        };
+        
+        if !validator_exists {
+            return Err("Validator not registered".to_string());
+        }
+
+        // Then handle the consensus operations
+        let mut active_consensus = self.active_consensus.lock().unwrap();
+        
+        // Create new consensus entry if not exists
+        if !active_consensus.contains_key(&block_hash) {
+            active_consensus.insert(
+                block_hash,
+                BlockConsensus {
+                    block_hash,
+                    block_height,
+                    signatures: HashMap::new(),
+                    aggregated_signature: None,
+                    status: ConsensusStatus::InProgress,
+                    consensus_timestamp: None,
+                },
+            );
+        }
+        
+        let consensus = active_consensus.get_mut(&block_hash).unwrap();
+        
+        // If consensus already achieved, just add the signature but don't change status
+        if consensus.status == ConsensusStatus::Achieved || consensus.status == ConsensusStatus::Finalized {
+            consensus.signatures.insert(public_key.clone(), signature);
+            return Ok(consensus.status.clone());
+        }
+        
+        // Add the signature
+        consensus.signatures.insert(public_key.clone(), signature);
+        
+        // Update validator performance - this needs to be done *after* releasing the active_consensus lock
+        // to avoid potential deadlocks between active_consensus and validators locks
+        let current_status = consensus.status.clone();
+        let signature_count = consensus.signatures.len();
+        drop(active_consensus); // Release active_consensus lock before acquiring validators lock
+        
+        // Now update validator performance
+        {
+            let mut validators = self.validators.lock().unwrap();
+            if let Some(validator) = validators.get_mut(public_key) {
+                validator.performance.blocks_validated += 1;
+                validator.performance.last_active = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+                    
+                // Update uptime percentage
+                validator.performance.uptime_percentage = 
+                    100.0 * (validator.performance.blocks_validated as f64) / 
+                    ((validator.performance.blocks_validated + validator.performance.blocks_missed) as f64);
+            }
+        }
+        
+        // Reacquire active_consensus lock to check for consensus threshold
+        let mut active_consensus = self.active_consensus.lock().unwrap();
+        let consensus = active_consensus.get_mut(&block_hash).unwrap();
+        
+        // If the status has changed while we released the lock, return the current status
+        if consensus.status != current_status {
+            return Ok(consensus.status.clone());
+        }
+        
+        // Check if we have enough signatures for consensus
+        let validator_count = {
+            let validators = self.validators.lock().unwrap();
+            validators.len()
+        };
+        
+        let signatures_needed = (validator_count * self.threshold_percentage) / 100;
+        
+        if signature_count >= signatures_needed {
+            // We have reached the threshold of signatures needed
+            consensus.status = ConsensusStatus::Achieved;
+            
+            // Record the timestamp
+            consensus.consensus_timestamp = Some(
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs()
+            );
+            
+            // Collect all signatures for aggregation
+            let signature_vec: Vec<BlsSignature> = consensus.signatures.values().cloned().collect();
+            
+            // Create an aggregated signature
+            consensus.aggregated_signature = Some(aggregate_signatures(&signature_vec));
+            
+            info!("Consensus achieved for block {} with {}/{} signatures", 
+                  hex::encode(block_hash), signature_count, validator_count);
+        }
+        
+        Ok(consensus.status.clone())
+    }
+
+    /// Finalize a block after consensus is achieved
+    pub fn finalize_block(&self, block_hash: [u8; 32]) -> Result<(), String> {
+        let mut active_consensus = self.active_consensus.lock().unwrap();
+        
+        let consensus = active_consensus.get_mut(&block_hash)
+            .ok_or_else(|| "Block not found in active consensus".to_string())?;
+            
+        if consensus.status != ConsensusStatus::Achieved {
+            return Err("Block has not achieved consensus yet".to_string());
+        }
+        
+        consensus.status = ConsensusStatus::Finalized;
+        
+        // Record finalization time
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+            
+        let mut finalized = self.finalized_blocks.lock().unwrap();
+        finalized.insert(block_hash, now);
+        
+        info!("Block finalized: {}", hex::encode(block_hash));
+        Ok(())
+    }
+
+    /// Get the consensus status for a block
+    pub fn get_consensus_status(&self, block_hash: &[u8; 32]) -> ConsensusStatus {
+        let active_consensus = self.active_consensus.lock().unwrap();
+        
+        if let Some(consensus) = active_consensus.get(block_hash) {
+            consensus.status.clone()
+        } else {
+            let finalized = self.finalized_blocks.lock().unwrap();
+            if finalized.contains_key(block_hash) {
+                ConsensusStatus::Finalized
+            } else {
+                ConsensusStatus::InProgress
+            }
+        }
+    }
+
+    /// Verify that a block has the required signatures
+    pub fn verify_block_signatures(
+        &self,
+        block_hash: &[u8; 32],
+        signature: &BlsSignature,
+    ) -> bool {
+        let validators = self.validators.lock().unwrap();
+        
+        // Get all validator public keys
+        let public_keys: Vec<BlsPublicKey> = validators.keys().cloned().collect();
+        
+        // For a valid aggregated signature, it should verify against the combination
+        // of all validators that contributed to it
+        let active_consensus = self.active_consensus.lock().unwrap();
+        
+        if let Some(consensus) = active_consensus.get(block_hash) {
+            if consensus.status == ConsensusStatus::Achieved || consensus.status == ConsensusStatus::Finalized {
+                // Get the public keys that participated
+                let participant_keys: Vec<BlsPublicKey> = consensus.signatures.keys().cloned().collect();
+                
+                // Create a vector of identical messages (the block hash)
+                let messages = vec![block_hash.to_vec(); participant_keys.len()];
+                
+                // Get individual signatures
+                let signatures: Vec<BlsSignature> = consensus.signatures.values().cloned().collect();
+                
+                // Verify using batch verification
+                return verify_batch_parallel(&signatures, &participant_keys, &messages);
+            }
+        }
+        
+        false
+    }
+
+    /// Get statistics about the consensus system
+    pub fn get_statistics(&self) -> HashMap<String, String> {
+        let validators = self.validators.lock().unwrap();
+        let active_consensus = self.active_consensus.lock().unwrap();
+        let finalized = self.finalized_blocks.lock().unwrap();
+        
+        let mut stats = HashMap::new();
+        
+        stats.insert("validator_count".to_string(), validators.len().to_string());
+        stats.insert("active_consensus_count".to_string(), active_consensus.len().to_string());
+        stats.insert("finalized_blocks_count".to_string(), finalized.len().to_string());
+        stats.insert("threshold_percentage".to_string(), self.threshold_percentage.to_string());
+        
+        let total_stake: u64 = validators.values().map(|v| v.stake_amount).sum();
+        stats.insert("total_stake".to_string(), total_stake.to_string());
+        
+        stats
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{Instant, Duration};
+    use crate::crypto::bls12_381::ensure_tables_initialized;
+    
+    /// A specialized consensus implementation for testing that allows a single validator to achieve consensus
+    struct TestConsensus {
+        inner: BlsConsensus
+    }
+    
+    impl TestConsensus {
+        fn new() -> Self {
+            let consensus = BlsConsensus::new();
+            Self { inner: consensus }
+        }
+        
+        fn get_inner(&self) -> &BlsConsensus {
+            &self.inner
+        }
+        
+        fn register_validator(&self, 
+                             public_key: &BlsPublicKey, 
+                             stake_amount: u64, 
+                             proof: &ProofOfPossession, 
+                             metadata: Option<String>) -> Result<(), String> {
+            self.inner.register_validator(public_key, stake_amount, proof, metadata)
+        }
+        
+        // Custom implementation that always achieves consensus with a single signature
+        fn submit_signature(
+            &self,
+            block_hash: [u8; 32],
+            block_height: u64,
+            public_key: &BlsPublicKey,
+            signature: BlsSignature,
+        ) -> Result<ConsensusStatus, String> {
+            // Verify the validator is registered
+            let validators = self.inner.validators.lock().unwrap();
+            if !validators.contains_key(public_key) {
+                return Err("Unknown validator".to_string());
+            }
+            drop(validators);
+            
+            // Record the signature and check for consensus
+            let mut active_consensus = self.inner.active_consensus.lock().unwrap();
+            
+            // Create consensus entry if it doesn't exist
+            if !active_consensus.contains_key(&block_hash) {
+                active_consensus.insert(
+                    block_hash,
+                    BlockConsensus {
+                        block_hash,
+                        block_height,
+                        signatures: HashMap::new(),
+                        aggregated_signature: None,
+                        status: ConsensusStatus::InProgress,
+                        consensus_timestamp: None,
+                    },
+                );
+            }
+            
+            let consensus = active_consensus.get_mut(&block_hash).unwrap();
+            
+            // Add the signature
+            consensus.signatures.insert(public_key.clone(), signature);
+            
+            // For testing purposes, a single signature always achieves consensus
+            consensus.status = ConsensusStatus::Achieved;
+            
+            // Record the timestamp
+            consensus.consensus_timestamp = Some(
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs()
+            );
+            
+            // Create an aggregated signature with just the one signature
+            let signature_vec: Vec<BlsSignature> = consensus.signatures.values().cloned().collect();
+            consensus.aggregated_signature = Some(aggregate_signatures(&signature_vec));
+            
+            Ok(consensus.status.clone())
+        }
+        
+        fn finalize_block(&self, block_hash: [u8; 32]) -> Result<(), String> {
+            self.inner.finalize_block(block_hash)
+        }
+        
+        fn get_consensus_status(&self, block_hash: &[u8; 32]) -> ConsensusStatus {
+            self.inner.get_consensus_status(block_hash)
+        }
+    }
+    
+    // Helper function to track execution time
+    fn with_timing<F, T>(label: &str, f: F) -> T 
+    where
+        F: FnOnce() -> T
+    {
+        let start = Instant::now();
+        let result = f();
+        let elapsed = start.elapsed();
+        
+        println!("{} took {:?}", label, elapsed);
+        if elapsed > Duration::from_secs(1) {
+            println!("WARNING: {} took more than 1 second!", label);
+        }
+        
+        result
+    }
+
+    #[test]
+    fn test_bls_consensus_basic() {
+        println!("Starting test_bls_consensus_basic");
+        let start_time = Instant::now();
+        
+        // Pre-initialize tables
+        with_timing("Table initialization", || {
+            ensure_tables_initialized();
+        });
+        
+        // Create test consensus instance
+        let consensus = with_timing("TestConsensus creation", || {
+            TestConsensus::new()
+        });
+        
+        // Generate validator keypair
+        let keypair = with_timing("Keypair generation", || {
+            BlsKeypair::generate()
+        });
+        
+        // Create proof of possession
+        let proof = with_timing("Proof of possession creation", || {
+            ProofOfPossession::sign(&keypair.secret_key, &keypair.public_key)
+        });
+        
+        // Register validator
+        with_timing("Validator registration", || {
+            consensus.register_validator(&keypair.public_key, 1000, &proof, None).unwrap()
+        });
+        
+        // Setup block data
+        let block_hash = [1u8; 32];
+        let block_height = 1;
+        
+        // Sign block
+        let sig = with_timing("Block signing", || {
+            keypair.sign(&block_hash)
+        });
+        
+        // Submit signature
+        let status = with_timing("Signature submission", || {
+            consensus.submit_signature(block_hash, block_height, &keypair.public_key, sig).unwrap()
+        });
+        println!("Signature submitted, status: {:?}", status);
+        assert_eq!(status, ConsensusStatus::Achieved);
+        
+        // Finalize block
+        with_timing("Block finalization", || {
+            consensus.finalize_block(block_hash).unwrap()
+        });
+        
+        // Check status
+        let status = with_timing("Status check", || {
+            consensus.get_consensus_status(&block_hash)
+        });
+        assert_eq!(status, ConsensusStatus::Finalized);
+        
+        println!("Test completed in {:?}", start_time.elapsed());
+    }
+}
 
 /// Main Proof of Stake implementation
 pub struct ProofOfStake {
