@@ -1,8 +1,3 @@
-use crate::blockchain::{OutPoint, TransactionOutput};
-use crate::crypto::jubjub;
-use crate::wallet::Wallet;
-use std::collections::HashMap;
-
 #[test]
 fn test_wallet_creation() {
     let wallet = crate::wallet::Wallet::new_with_keypair();
@@ -35,7 +30,7 @@ fn test_wallet_balance_calculation() {
 #[test]
 fn test_utxo_selection() {
     // Initialize wallet and keypair
-    let mut wallet = Wallet::new();
+    let mut wallet = crate::wallet::Wallet::new();
     let keypair = crate::crypto::jubjub::generate_keypair();
     wallet.keypair = Some(keypair.clone());
 
@@ -44,29 +39,29 @@ fn test_utxo_selection() {
     println!("Public key bytes length: {}", public_key_bytes.len());
 
     // Create two UTXOs with different values
-    let utxo1 = TransactionOutput {
+    let utxo1 = crate::blockchain::TransactionOutput {
         value: 100,
         public_key_script: public_key_bytes.clone(),
     };
 
-    let utxo2 = TransactionOutput {
+    let utxo2 = crate::blockchain::TransactionOutput {
         value: 50,
         public_key_script: public_key_bytes.clone(),
     };
 
     // Create outpoints for the UTXOs
-    let outpoint1 = OutPoint {
+    let outpoint1 = crate::blockchain::OutPoint {
         transaction_hash: [1u8; 32],
         index: 0,
     };
 
-    let outpoint2 = OutPoint {
+    let outpoint2 = crate::blockchain::OutPoint {
         transaction_hash: [2u8; 32],
         index: 0,
     };
 
     // Set UTXOs in the wallet
-    let mut utxos = HashMap::new();
+    let mut utxos = std::collections::HashMap::new();
     utxos.insert(outpoint1, utxo1);
     utxos.insert(outpoint2, utxo2);
     wallet.set_utxos_for_testing(utxos);

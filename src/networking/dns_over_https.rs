@@ -180,8 +180,10 @@ impl CacheEntry {
 #[derive(Debug, Deserialize, Serialize)]
 struct DoHResponse {
     #[serde(default)]
-    Answer: Vec<DoHAnswer>,
-    Status: Option<u32>,
+    #[serde(rename = "Answer")]
+    answer: Vec<DoHAnswer>,
+    #[serde(rename = "Status")]
+    status: Option<u32>,
     #[serde(rename = "Question")]
     #[serde(default)]
     questions: Vec<DoHQuestion>,
@@ -192,7 +194,8 @@ struct DoHAnswer {
     name: String,
     #[serde(rename = "type")]
     record_type: u32,
-    TTL: u32,
+    #[serde(rename = "TTL")]
+    ttl: u32,
     data: String,
 }
 
@@ -365,7 +368,7 @@ impl DoHService {
             .map_err(|e| DoHError::InvalidResponse(format!("Invalid response format: {}", e)))?;
         
         // Check for DNS error codes
-        if let Some(status) = dns_response.Status {
+        if let Some(status) = dns_response.status {
             if status != 0 {
                 return Err(DoHError::ResolutionFailed(format!(
                     "DNS resolution failed with status: {}", status
@@ -373,7 +376,7 @@ impl DoHService {
             }
         }
         
-        if dns_response.Answer.is_empty() {
+        if dns_response.answer.is_empty() {
             return Err(DoHError::ResolutionFailed(format!(
                 "No DNS records found for {}", hostname
             )));
@@ -383,7 +386,7 @@ impl DoHService {
         let mut addresses = Vec::new();
         let mut min_ttl = u64::MAX;
         
-        for answer in dns_response.Answer {
+        for answer in dns_response.answer {
             // Check if the record type matches what we requested
             let answer_type = match answer.record_type {
                 1 => RecordType::A,
@@ -409,7 +412,7 @@ impl DoHService {
             }
             
             // Track minimum TTL
-            min_ttl = min_ttl.min(answer.TTL as u64);
+            min_ttl = min_ttl.min(answer.ttl as u64);
         }
         
         if addresses.is_empty() {

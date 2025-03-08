@@ -1,9 +1,6 @@
 use rand::rngs::OsRng;
 use rand_core::{Error, RngCore};
 
-// Directly specify the import to see which version we get
-use rand_core::impls::fill_bytes_via_next;
-
 // Create an adapter using the same pattern as in your actual code
 struct RngAdapter(OsRng);
 

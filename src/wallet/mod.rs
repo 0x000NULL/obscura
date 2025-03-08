@@ -9,7 +9,6 @@ use crate::crypto::jubjub::{
 use crate::crypto::view_key::{ViewKey, ViewKeyPermissions, ViewKeyManager};
 use crate::utils::{current_time, format_time_diff};
 use ark_ec::CurveGroup;
-use chrono::Utc;
 use crypto::jubjub;
 use rand::rngs::OsRng;
 use sha2::{Digest, Sha256};
@@ -658,7 +657,7 @@ impl Wallet {
 
         // 2. Verify signatures using Jubjub's verification functionality
         for input in &tx.inputs {
-            let output = match utxo_set.get(&input.previous_output) {
+            let _output = match utxo_set.get(&input.previous_output) {
                 Some(out) => out,
                 None => {
                     debug!("UTXO not found for input");
@@ -675,7 +674,7 @@ impl Wallet {
             let r_bytes = &input.signature_script[0..32];
             let s_bytes = &input.signature_script[32..64];
             
-            if let Some(r) = jubjub::JubjubScalar::from_bytes(r_bytes) {
+            if let Some(_r) = jubjub::JubjubScalar::from_bytes(r_bytes) {
                 // Extract the public key from the output script (simplified)
                 if let Some(_s_scalar) = jubjub::JubjubScalar::from_bytes(s_bytes) {
                     // In a real implementation, we would verify the signature
