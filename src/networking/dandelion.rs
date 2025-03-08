@@ -11,6 +11,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::{IpAddr, SocketAddr, Ipv4Addr};
 use std::time::{Duration, Instant, SystemTime};
 use twox_hash::XxHash64;
+use std::hash::Hasher;
 
 use crate::networking::timing_obfuscation::TimingObfuscation;
 
@@ -79,6 +80,7 @@ pub const POST_QUANTUM_ENCRYPTION_ENABLED: bool = false; // Enable post-quantum 
 
 pub const ECLIPSE_DEFENSE_IP_DIVERSITY_THRESHOLD: usize = 3; // Minimum number of distinct IP subnets required
 pub const ECLIPSE_DEFENSE_PEER_ROTATION_PERCENT: f64 = 0.2; // Percent of peers to rotate when eclipse detected
+pub const ECLIPSE_ATTACK_THRESHOLD: f64 = 0.6; // Threshold for detecting eclipse attacks (60% from same subnet)
 pub const AUTOMATIC_ATTACK_RESPONSE_ENABLED: bool = true; // Enable automatic attack responses
 pub const SYBIL_DETECTION_CLUSTER_THRESHOLD: usize = 3; // Minimum cluster size for Sybil detection
 
@@ -344,7 +346,7 @@ pub struct DandelionManager {
     recent_transactions: VecDeque<([u8; 32], Instant)>,
 
     // Recently used paths to ensure diversity
-    recent_paths: VecDeque<Vec<SocketAddr>>,
+    recent_paths: VecDeque<RouteMetrics>,
 
     // Anonymity sets
     anonymity_sets: HashMap<u64, AnonymitySet>,
@@ -356,7 +358,7 @@ pub struct DandelionManager {
     last_anonymity_set_rotation: Instant,
 
     // Detected Sybil clusters
-    sybil_clusters: HashSet<[u8; 4]>,
+    sybil_clusters: HashMap<usize, SybilCluster>,
 
     // Next Sybil cluster ID
     next_sybil_cluster_id: usize,
@@ -400,7 +402,6 @@ pub struct DandelionManager {
     last_entropy_refresh: Instant,
 
     // Add route diversity tracking
-    recent_paths: VecDeque<RouteMetrics>,
     peer_info: HashMap<SocketAddr, PeerInfo>,
 
     // Add path pattern tracking for anti-fingerprinting
@@ -545,44 +546,39 @@ impl PathPattern {
         for (subnet, count) in &pattern.subnet_distribution {
             hasher.write(&[subnet[0], subnet[1], *count as u8]);
         }
-        pattern.pattern_hash = hasher.finish();
+        pattern.pattern_hash = std::hash::Hasher::finish(&hasher);
 
         pattern
     }
 
     fn similarity_score(&self, other: &PathPattern) -> f64 {
-        let mut score = 0.0;
-        
-        // Compare path lengths (20% weight)
-        let length_similarity = 1.0 - (self.path_length as f64 - other.path_length as f64).abs() 
-            / (MAX_ROUTING_PATH_LENGTH as f64);
-        score += 0.2 * length_similarity;
-
-        // Compare subnet distributions (50% weight)
+        // Compare subnet distributions
         let mut subnet_similarity = 0.0;
-        let total_subnets: HashSet<_> = self.subnet_distribution.keys()
-            .chain(other.subnet_distribution.keys())
-            .collect();
+        let mut total_subnets = 0;
         
-        for subnet in &total_subnets {
-            let self_count = self.subnet_distribution.get(subnet).copied().unwrap_or(0);
+        for (subnet, count) in &self.subnet_distribution {
             let other_count = other.subnet_distribution.get(subnet).copied().unwrap_or(0);
-            subnet_similarity += 1.0 - (self_count as f64 - other_count as f64).abs() 
-                / (self.path_length.max(other.path_length) as f64);
+            subnet_similarity += (*count.min(&other_count) as f64) / (*count.max(&other_count) as f64);
+            total_subnets += 1;
         }
-        score += 0.5 * (subnet_similarity / total_subnets.len() as f64);
+        
+        for subnet in other.subnet_distribution.keys() {
+            if !self.subnet_distribution.contains_key(subnet) {
+                total_subnets += 1;
+            }
+        }
 
-        // Compare timing characteristics (30% weight)
+        // Compare timing characteristics
         if !self.timing_characteristics.is_empty() && !other.timing_characteristics.is_empty() {
             let self_avg = self.timing_characteristics.iter().sum::<Duration>().as_millis() as f64
                 / self.timing_characteristics.len() as f64;
             let other_avg = other.timing_characteristics.iter().sum::<Duration>().as_millis() as f64
                 / other.timing_characteristics.len() as f64;
             let timing_similarity = 1.0 - (self_avg - other_avg).abs() / 1000.0;
-            score += 0.3 * timing_similarity;
+            subnet_similarity += 0.3 * timing_similarity;
         }
 
-        score
+        subnet_similarity / total_subnets as f64
     }
 }
 
@@ -828,11 +824,6 @@ impl DandelionManager {
         let trusted_peers: Vec<SocketAddr> = self
             .get_peers_by_reputation(Some(REPUTATION_THRESHOLD_STEM))
             .into_iter()
-            .filter(|(peer, _)| {
-                // Avoid peers that are part of a sybil cluster
-                !self.detect_sybil_peer(*peer)
-            })
-            .map(|(peer, _)| peer)
             .collect();
 
         // Make sure we have enough trusted peers
@@ -861,7 +852,7 @@ impl DandelionManager {
             }
             
             // Use adaptive path selection to create a path
-            let path = self.select_adaptive_path(&dummy_tx_hash, &trusted_peers);
+            let path = self.select_diverse_path(&dummy_tx_hash, &trusted_peers, 0.8);
             
             // Store the path if it meets minimum requirements
             if path.len() >= MIN_ROUTING_PATH_LENGTH {
@@ -962,7 +953,7 @@ impl DandelionManager {
     }
 
     /// Update overall network traffic level
-    fn update_network_traffic(&mut self) {
+    pub fn update_network_traffic(&mut self) {
         if self.network_conditions.is_empty() {
             self.current_network_traffic = 0.5; // Default moderate traffic
             return;
@@ -1092,7 +1083,8 @@ impl DandelionManager {
             PrivacyRoutingMode::Standard => {
                 // For standard mode, use reputation-based multi-hop routing
                 if !self.outbound_peers.is_empty() {
-                    relay_path = self.select_reputation_based_path(&tx_hash, &self.outbound_peers, privacy_level);
+                    let outbound_peers_vec: Vec<SocketAddr> = self.outbound_peers.iter().cloned().collect();
+                    relay_path = self.select_reputation_based_path(&tx_hash, &outbound_peers_vec, privacy_level);
                     
                     if !relay_path.is_empty() {
                         state = PropagationState::MultiHopStem(relay_path.len());
@@ -1381,7 +1373,7 @@ impl DandelionManager {
     }
 
     /// Update a peer's reputation score
-    pub fn update_peer_reputation(&mut self, peer: SocketAddr, adjustment: f64, _reason: &str) {
+    pub fn update_peer_reputation(&mut self, peer: SocketAddr, adjustment: f64, _reason: &str, relay_success: Option<bool>, relay_time: Option<Duration>) {
         if !DYNAMIC_PEER_SCORING_ENABLED {
             return;
         }
@@ -1392,16 +1384,18 @@ impl DandelionManager {
         if let Some(reputation) = self.peer_reputation.get_mut(&peer) {
             // Apply decay first
             // Update success/failure counters
-            if relay_success {
-                reputation.successful_relays += 1;
-            } else {
-                reputation.failed_relays += 1;
-            }
-            
-            // Update relay success rate
-            let total_relays = reputation.successful_relays + reputation.failed_relays;
-            if total_relays > 0 {
-                reputation.relay_success_rate = reputation.successful_relays as f64 / total_relays as f64;
+            if let Some(success) = relay_success {
+                if success {
+                    reputation.successful_relays += 1;
+                } else {
+                    reputation.failed_relays += 1;
+                }
+                
+                // Update relay success rate
+                let total_relays = reputation.successful_relays + reputation.failed_relays;
+                if total_relays > 0 {
+                    reputation.relay_success_rate = reputation.successful_relays as f64 / total_relays as f64;
+                }
             }
             
             // Update relay time if provided
@@ -1436,6 +1430,7 @@ impl DandelionManager {
             };
             
             // Reputation stability factor
+            let total_relays = reputation.successful_relays + reputation.failed_relays;
             let stability_factor = if total_relays > 10 {
                 // More relays = more stable data
                 (total_relays.min(100) as f64) / 100.0
@@ -1456,7 +1451,7 @@ impl DandelionManager {
             
             // Apply bonus to reputation score for consistent performance
             if total_relays > 20 && reputation.routing_reliability > 0.8 {
-                self.update_peer_reputation(peer, REPUTATION_RELIABILITY_BONUS * 0.05, "Consistent routing reliability");
+                self.update_peer_reputation(peer, REPUTATION_RELIABILITY_BONUS * 0.05, "Consistent routing reliability", None, None);
             }
         }
     }
@@ -1477,7 +1472,6 @@ impl DandelionManager {
         // Get peers that meet the reputation threshold
         let reputable_peers: Vec<SocketAddr> = self.get_peers_by_reputation(Some(min_reputation))
             .into_iter()
-            .map(|(addr, _)| addr)
             .filter(|addr| available_peers.contains(addr))
             .collect();
         
@@ -1494,7 +1488,6 @@ impl DandelionManager {
             // Always include some high-reputation peers
             let high_rep_peers: Vec<SocketAddr> = self.get_peers_by_reputation(Some(REPUTATION_CRITICAL_PATH_THRESHOLD))
                 .into_iter()
-                .map(|(addr, _)| addr)
                 .filter(|addr| available_peers.contains(addr))
                 .take(2) // Always include up to 2 high-reputation peers
                 .collect();
@@ -1622,12 +1615,13 @@ impl DandelionManager {
         
         // If we don't have enough reputable peers, fall back to entropy-based path
         if reputable_count < min_reputable {
-            return self.select_adaptive_path(tx_hash, available_peers);
+            return self.select_diverse_path(tx_hash, available_peers, privacy_level);
         }
         
         // For the path metrics
         if !path.is_empty() {
-            self.recent_paths.push_back(path.clone());
+            let metrics = RouteMetrics::new(&path, &self.peer_info);
+            self.recent_paths.push_back(metrics);
             
             // Maintain limited history
             while self.recent_paths.len() > 20 {
@@ -1746,7 +1740,7 @@ impl DandelionManager {
             anonymity_sets: HashMap::new(),
             next_anonymity_set_id: 0,
             last_anonymity_set_rotation: now,
-            sybil_clusters: HashSet::new(),
+            sybil_clusters: HashMap::new(),
             next_sybil_cluster_id: 0,
             last_eclipse_check: now,
             eclipse_defense_active: false,
@@ -1784,6 +1778,10 @@ impl DandelionManager {
             fluff_entry_points: Vec::new(),
             last_routing_table_refresh: now,
             routing_table_entropy: 1.0,
+            peer_info: HashMap::new(),
+            recent_patterns: VecDeque::new(),
+            pattern_frequency_cache: HashMap::new(),
+            last_pattern_cleanup: now,
         }
     }
 
@@ -1795,78 +1793,127 @@ impl DandelionManager {
     }
 
     pub fn detect_sybil_clusters(&mut self) {
-        // Implement Sybil detection clustering logic
-        // This is a placeholder implementation
-        // In a real implementation, you would use a clustering algorithm
-        // to identify groups of Sybil peers
-        // For now, we'll just create a simple cluster for demonstration
-        let mut cluster_id = 0;
-        let mut clusters = HashMap::new();
-        let mut unassigned_peers = HashSet::new();
+        let mut clusters: Vec<HashSet<SocketAddr>> = Vec::new();
+        let mut processed: HashSet<SocketAddr> = HashSet::new();
 
-        for (peer, behavior) in &self.peer_reputation {
-            if behavior.sybil_indicators >= 1 {
-                clusters.entry(cluster_id).or_insert_with(HashSet::new).insert(*peer);
-                cluster_id += 1;
-            } else {
-                unassigned_peers.insert(*peer);
+        // First collect all peer data to avoid borrow checker issues
+        let peer_data: Vec<(SocketAddr, f64)> = self.peer_reputation
+            .iter()
+            .map(|(peer, rep)| (*peer, rep.reputation_score))
+            .collect();
+
+        // Group peers by subnet patterns
+        for (peer, rep_score) in &peer_data {
+            if processed.contains(peer) || *rep_score > REPUTATION_PENALTY_SYBIL {
+                continue;
             }
-        }
 
-        for peer in unassigned_peers {
-            let mut closest_cluster = 0;
-            let mut min_distance = f64::INFINITY;
+            let mut cluster = HashSet::new();
+            cluster.insert(*peer);
+            processed.insert(*peer);
 
-            for (id, cluster) in &clusters {
-                let distance = self.calculate_distance(peer, *id);
-                if distance < min_distance {
-                    min_distance = distance;
-                    closest_cluster = *id;
+            // Find other peers with similar characteristics
+            for (other_peer, other_score) in &peer_data {
+                if processed.contains(other_peer) || 
+                   *other_score > REPUTATION_PENALTY_SYBIL {
+                    continue;
                 }
             }
-
-            clusters.entry(closest_cluster).or_insert_with(HashSet::new).insert(peer);
-        }
-
-        self.sybil_clusters.clear();
-        for (id, cluster) in clusters {
-            self.sybil_clusters.insert(id, SybilCluster {
-                cluster_id: id,
-                peers: cluster,
-                subnet_pattern: [0, 0], // This should be replaced with actual subnet pattern
-                detection_time: Instant::now(),
-                confidence_score: 0.0,
-            });
         }
     }
 
-    pub fn update_outbound_peers(&mut self, peers: Vec<SocketAddr>) {
-        self.outbound_peers = peers.into();
-    }
+    pub fn check_for_eclipse_attack(&mut self) -> EclipseAttackResult {
+        let mut subnet_counts = HashMap::new();
+        let mut subnet_peers = HashMap::new();
+        let mut total_peers = 0;
 
-    pub fn check_for_eclipse_attack(&mut self) -> bool {
-        // Implement Eclipse attack detection logic
-        // This is a placeholder implementation
-        // In a real implementation, you would check for patterns
-        // that suggest an Eclipse attack is in progress
-        // For now, we'll just return false
-        false
+        // Count peers per subnet and build subnet -> peers mapping
+        for peer in self.outbound_peers.iter() {
+            if let IpAddr::V4(ipv4) = peer.ip() {
+                let octets = ipv4.octets();
+                let subnet = [octets[0], octets[1], octets[2], octets[3]];
+                *subnet_counts.entry(subnet).or_insert(0) += 1;
+                subnet_peers.entry(subnet).or_insert_with(HashSet::new).insert(*peer);
+                total_peers += 1;
+            }
+        }
+
+        if total_peers == 0 {
+            return EclipseAttackResult {
+                is_eclipse_detected: false,
+                overrepresented_subnet: None,
+                peers_to_drop: Vec::new(),
+            };
+        }
+
+        // Find the most represented subnet
+        let mut max_subnet = None;
+        let mut max_count = 0;
+        for (subnet, count) in &subnet_counts {
+            if *count > max_count {
+                max_count = *count;
+                max_subnet = Some(*subnet);
+            }
+        }
+
+        // Calculate the percentage of peers in the most represented subnet
+        let max_subnet_percentage = max_count as f64 / total_peers as f64;
+
+        // Check if the subnet distribution is suspicious
+        let is_eclipse_detected = max_subnet_percentage > ECLIPSE_ATTACK_THRESHOLD;
+        let mut peers_to_drop = HashSet::new();
+
+        if is_eclipse_detected {
+            if let Some(subnet) = max_subnet {
+                // Mark this as a detected eclipse attack
+                self.eclipse_defense_active = true;
+                self.eclipse_attack_last_detected = Some(Instant::now());
+
+                // Get peers from the overrepresented subnet
+                if let Some(subnet_peer_set) = subnet_peers.get(&subnet) {
+                    // Calculate how many peers we need to drop to get below the threshold
+                    let target_count = (total_peers as f64 * ECLIPSE_ATTACK_THRESHOLD) as usize;
+                    let peers_to_remove = max_count - target_count;
+
+                    // Select peers to drop based on reputation and behavior
+                    let mut peer_scores: Vec<(SocketAddr, f64)> = subnet_peer_set
+                        .iter()
+                        .map(|peer| {
+                            let reputation = self.peer_reputation.get(peer).map_or(0.0, |rep| {
+                                let behavior_score = rep.suspicious_actions as f64 * 0.3
+                                    + rep.eclipse_indicators as f64 * 0.5
+                                    + rep.sybil_indicators as f64 * 0.2;
+                                behavior_score + (1.0 - rep.reputation_score)
+                            });
+                            (*peer, reputation)
+                        })
+                        .collect();
+
+                    // Sort by score (higher score = more suspicious)
+                    peer_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+                    // Take the most suspicious peers
+                    for (peer, _) in peer_scores.into_iter().take(peers_to_remove) {
+                        peers_to_drop.insert(peer);
+                    }
+                }
+            }
+        }
+
+        EclipseAttackResult {
+            is_eclipse_detected,
+            overrepresented_subnet: max_subnet,
+            peers_to_drop: peers_to_drop.into_iter().collect(), // Convert HashSet to Vec
+        }
     }
 
     pub fn setup_layered_encryption(&mut self, tx_hash: &[u8; 32], path: &[SocketAddr]) -> u64 {
-        // Implement layered encryption setup logic
-        // This is a placeholder implementation
-        // In a real implementation, you would use a cryptographic library
-        // to generate session keys and encrypt the transaction data
-        // For now, we'll just return a dummy set ID
+        // TODO: Implement layered encryption setup
         0
     }
 
     pub fn process_transaction_batch(&mut self, peer: &SocketAddr) -> Option<TransactionBatch> {
-        // Implement transaction batch processing logic
-        // This is a placeholder implementation
-        // In a real implementation, you would process transactions
-        // based on the batch ID and return the corresponding batch
+        // TODO: Implement batch processing
         None
     }
 
@@ -1898,12 +1945,19 @@ impl DandelionManager {
     }
 
     pub fn calculate_distance(&mut self, peer: SocketAddr, id: u64) -> f64 {
-        // Simple Euclidean distance between peer IPs
-        if let Some(behavior) = self.peer_reputation.get(&peer) {
-            let subnet = behavior.subnet;
-            let mut distance = 0.0;
+        if let Some(info) = self.peer_info.get(&peer) {
+            let subnet = match peer.ip() {
+                IpAddr::V4(ipv4) => {
+                    let octets = ipv4.octets();
+                    [octets[0], octets[1]]
+                },
+                IpAddr::V6(ipv6) => {
+                    let segments = ipv6.segments();
+                    [(segments[0] >> 8) as u8, segments[0] as u8]
+                }
+            };
             
-            // Use subnet as a simple distance metric
+            let mut distance: f64 = 0.0;
             distance += (subnet[0] as f64 - ((id >> 8) & 0xFF) as f64).powi(2);
             distance += (subnet[1] as f64 - (id & 0xFF) as f64).powi(2);
             
@@ -1936,10 +1990,6 @@ impl DandelionManager {
         self.add_transaction_with_privacy(tx_hash, source_addr, PrivacyRoutingMode::Standard)
     }
 
-    pub fn cleanup_old_anonymity_sets(&mut self) {
-        self.cleanup_anonymity_sets(Duration::from_secs(3600))
-    }
-
     pub fn calculate_stem_paths(&mut self, peers: &[SocketAddr], include_all: bool) {
         let mut rng = thread_rng();
         for peer in peers {
@@ -1953,7 +2003,19 @@ impl DandelionManager {
     }
 
     pub fn check_transition(&mut self, tx_hash: &[u8; 32]) -> Option<PropagationState> {
-        self.transactions.get(tx_hash).map(|metadata| metadata.state.clone())
+        let now = Instant::now();
+
+        if let Some(metadata) = self.transactions.get_mut(tx_hash) {
+            // Check if it's time to transition from stem to fluff
+            if metadata.state == PropagationState::Stem && now >= metadata.transition_time {
+                metadata.state = PropagationState::Fluff;
+                return Some(PropagationState::Fluff);
+            }
+            
+            return Some(metadata.state.clone());
+        }
+
+        None
     }
 
     pub fn mark_relayed(&mut self, tx_hash: &[u8; 32]) {
@@ -1964,22 +2026,41 @@ impl DandelionManager {
 
     /// Calculate subnet similarity score
     fn calculate_subnet_similarity(&self) -> f64 {
-        let mut score = 0.0;
-        let mut subnet_similarity = 0.0;
+        let mut subnet_distribution: HashMap<[u8; 2], usize> = HashMap::new();
+        
+        // Build subnet distribution from peer_info
+        for (peer, _info) in &self.peer_info {
+            let subnet = match peer.ip() {
+                std::net::IpAddr::V4(ipv4) => {
+                    let octets = ipv4.octets();
+                    [octets[0], octets[1]]
+                },
+                std::net::IpAddr::V6(ipv6) => {
+                    let segments = ipv6.segments();
+                    // Use first two bytes of IPv6 address for subnet grouping
+                    [(segments[0] >> 8) as u8, segments[0] as u8]
+                }
+            };
+            *subnet_distribution.entry(subnet).or_insert(0) += 1;
+        }
 
-        let total_subnets: HashSet<_> = self.subnet_distribution.keys().cloned().collect();
+        let total_subnets: HashSet<_> = subnet_distribution.keys().cloned().collect();
         if total_subnets.is_empty() {
             return 0.0;
         }
 
+        let mut subnet_similarity = 0.0;
+        let total_peers = self.peer_info.len() as f64;
+
         for subnet in &total_subnets {
-            if let Some(count) = self.subnet_distribution.get(subnet) {
-                subnet_similarity += *count as f64 / total_subnets.len() as f64;
+            if let Some(count) = subnet_distribution.get(subnet) {
+                // Calculate how dominant this subnet is in the peer set
+                subnet_similarity += (*count as f64 / total_peers).powi(2);
             }
         }
 
-        score += 0.5 * (subnet_similarity / total_subnets.len() as f64);
-        score
+        // Return inverse of similarity - higher score means more diversity
+        1.0 - (subnet_similarity / total_subnets.len() as f64)
     }
 
     /// Get the number of anonymity sets
@@ -2022,11 +2103,11 @@ impl DandelionManager {
         }
 
         self.record_suspicious_behavior(tx_hash, peer, behavior_type);
-        self.update_peer_reputation(peer, REPUTATION_PENALTY_SUSPICIOUS, behavior_type);
+        self.update_peer_reputation(peer, REPUTATION_PENALTY_SUSPICIOUS, behavior_type, None, None);
 
         // Additional penalties for specific behaviors
         if behavior_type == "sybil_indicator" {
-            self.update_peer_reputation(peer, REPUTATION_PENALTY_SYBIL, "sybil_indicator");
+            self.update_peer_reputation(peer, REPUTATION_PENALTY_SYBIL, "sybil_indicator", None, None);
 
             if let Some(reputation) = self.peer_reputation.get_mut(&peer) {
                 reputation.sybil_indicators += 1;
@@ -2137,73 +2218,33 @@ impl DandelionManager {
 
     /// Calculate the optimal anonymity set size based on network conditions
     pub fn calculate_dynamic_anonymity_set_size(&mut self) -> usize {
-        if !ANONYMITY_SET_DYNAMIC_SIZING_ENABLED {
-            return ANONYMITY_SET_MIN_SIZE;
-        }
+        // Get weighted scores for all peers
+        let mut peer_scores: Vec<(SocketAddr, f64)> = self.peer_reputation
+            .iter()
+            .map(|(addr, rep)| (*addr, rep.reputation_score))
+            .collect();
 
-        let now = Instant::now();
-        
-        // Only recalculate every few minutes to avoid frequent changes
-        if now.duration_since(self.last_set_size_adjustment).as_secs() < 300 {
-            // Return the current value from history if available
-            if let Some((_, size)) = self.anonymity_set_size_history.back() {
-                return *size;
-            }
-            return ANONYMITY_SET_MIN_SIZE;
-        }
-        
-        // Factors influencing set size:
-        // 1. Current network traffic (higher traffic = larger sets)
-        // 2. Number of available high-reputation peers
-        // 3. Recent detected threats (Sybil/Eclipse)
-        // 4. Current graph entropy
-        
-        // Base size starts at minimum
-        let mut optimal_size = ANONYMITY_SET_MIN_SIZE;
-        
-        // Adjust based on network traffic (0-30% increase)
-        optimal_size = (optimal_size as f64 * (1.0 + (self.current_network_traffic * 0.3))) as usize;
-        
-        // Adjust based on available high-reputation peers
-        let high_rep_peers = self.get_peers_by_reputation(Some(REPUTATION_THRESHOLD_STEM)).len();
-        let peer_factor = (high_rep_peers as f64 / 10.0).min(3.0).max(0.5);
-        optimal_size = (optimal_size as f64 * peer_factor) as usize;
-        
-        // Increase if Sybil/Eclipse attack detected recently
-        if self.eclipse_defense_active || !self.sybil_clusters.is_empty() {
-            optimal_size = (optimal_size as f64 * 1.5) as usize;
-        }
-        
-        // Adjust based on graph entropy (lower entropy needs larger sets)
-        if let Some((_, entropy)) = self.entropy_history.back() {
-            let entropy_factor = (1.0 / entropy).min(2.0).max(0.8);
-            optimal_size = (optimal_size as f64 * entropy_factor) as usize;
-        }
-        
-        // Adjust if we've had k-anonymity violations
-        if self.k_anonymity_violations > 0 {
-            let violation_factor = 1.0 + (self.k_anonymity_violations as f64 * 0.1);
-            optimal_size = (optimal_size as f64 * violation_factor) as usize;
-            
-            // Reset violation counter periodically
-            if self.k_anonymity_violations > 10 || now.duration_since(self.last_set_size_adjustment).as_secs() > 3600 {
-                self.k_anonymity_violations = 0;
-            }
-        }
-        
-        // Enforce min/max bounds
-        let result = optimal_size.max(ANONYMITY_SET_MIN_SIZE).min(ANONYMITY_SET_MAX_SIZE);
-        
-        // Update state
-        self.last_set_size_adjustment = now;
-        self.anonymity_set_size_history.push_back((now, result));
-        
-        // Keep history manageable
-        while self.anonymity_set_size_history.len() > 24 {
-            self.anonymity_set_size_history.pop_front();
-        }
-        
-        result
+        // Sort by score descending
+        peer_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        // Take top peers based on reputation
+        let high_rep_peers: Vec<SocketAddr> = peer_scores
+            .into_iter()
+            .take(ANONYMITY_SET_MAX_SIZE)
+            .map(|(addr, _score)| addr)
+            .collect();
+
+        // Calculate size based on network conditions
+        let base_size = std::cmp::min(
+            high_rep_peers.len(),
+            ANONYMITY_SET_MAX_SIZE
+        );
+
+        // Adjust for network traffic
+        let traffic_factor = 1.0 + self.current_network_traffic;
+        let size = (base_size as f64 * traffic_factor) as usize;
+
+        std::cmp::min(size, ANONYMITY_SET_MAX_SIZE)
     }
 
     /// Create a new anonymity set with dynamic sizing and k-anonymity guarantees
@@ -2222,7 +2263,6 @@ impl DandelionManager {
         let trusted_peers: Vec<SocketAddr> = self
             .get_peers_by_reputation(Some(REPUTATION_THRESHOLD_STEM))
             .into_iter()
-            .map(|(addr, _)| addr)
             .collect();
 
         // Ensure diversity by IP subnet
@@ -2460,7 +2500,7 @@ impl DandelionManager {
     }
 
     /// Detect potential eclipse attacks based on subnet distribution and behavior patterns
-    pub fn detect_eclipse_attack(&mut self) -> EclipseDetectionResult {
+    pub fn detect_eclipse_attack(&mut self) -> EclipseAttackResult {
         let mut subnet_counts = HashMap::new();
         let mut subnet_peers = HashMap::new();
         let mut total_peers = 0;
@@ -2477,10 +2517,10 @@ impl DandelionManager {
         }
 
         if total_peers == 0 {
-            return EclipseDetectionResult {
+            return EclipseAttackResult {
                 is_eclipse_detected: false,
                 overrepresented_subnet: None,
-                peers_to_drop: HashSet::new(),
+                peers_to_drop: Vec::new(),
             };
         }
 
@@ -2538,10 +2578,10 @@ impl DandelionManager {
             }
         }
 
-        EclipseDetectionResult {
+        EclipseAttackResult {
             is_eclipse_detected,
             overrepresented_subnet: max_subnet,
-            peers_to_drop,
+            peers_to_drop: peers_to_drop.into_iter().collect(), // Convert HashSet to Vec
         }
     }
 
@@ -2581,120 +2621,9 @@ impl DandelionManager {
     /// Clean up old anonymity sets
     pub fn cleanup_old_anonymity_sets(&mut self, max_age: Duration) {
         let now = Instant::now();
-        
-        // Remove old sets
         self.anonymity_sets.retain(|_, set| {
             now.duration_since(set.creation_time) < max_age
         });
-        
-        // Check if we need to rotate sets based on entropy or usage
-        let need_rotation = self.anonymity_sets.values().any(|set| {
-            // Rotate if entropy is too low or set has been used too many times
-            set.entropy_score < GRAPH_ENTROPY_THRESHOLD || 
-            set.usage_count > 20 ||
-            now.duration_since(set.creation_time) > ANONYMITY_SET_ROTATION_INTERVAL
-        });
-        
-        if need_rotation || self.anonymity_sets.is_empty() {
-            // Create a new set to replace aging ones
-            self.create_anonymity_set(None);
-            self.last_anonymity_set_rotation = now;
-        }
-        
-        // Clean up transaction correlation data periodically
-        if now.duration_since(self.last_graph_analysis).as_secs() > 3600 {
-            // Keep only recent correlations
-            for values in self.transaction_correlation_matrix.values_mut() {
-                // In a real implementation, we'd filter by age
-                if values.len() > 100 {
-                    // Remove some random entries to keep size manageable
-                    let mut to_remove = Vec::new();
-                    let mut rng = thread_rng();
-                    let remove_count = values.len() - 100;
-                    
-                    for _ in 0..remove_count {
-                        if let Some(tx) = values.iter().nth(rng.gen_range(0..values.len())) {
-                            to_remove.push(*tx);
-                        }
-                    }
-                    
-                    for tx in to_remove {
-                        values.remove(&tx);
-                    }
-                }
-            }
-            
-            // Remove empty entries
-            self.transaction_correlation_matrix.retain(|_, v| !v.is_empty());
-        }
-    }
-
-    /// Record suspicious behavior for a peer
-    pub fn record_suspicious_behavior(&mut self, tx_hash: &[u8; 32], peer: SocketAddr, behavior_type: &str) {
-        if !DYNAMIC_PEER_SCORING_ENABLED {
-            return;
-        }
-
-        self.initialize_peer_reputation_with_score(peer, 0.0);
-
-        if let Some(reputation) = self.peer_reputation.get_mut(&peer) {
-            reputation.suspicious_actions += 1;
-
-            // Additional penalties for specific behaviors
-            match behavior_type {
-                "sybil_indicator" => reputation.sybil_indicators += 1,
-                "eclipse_indicator" => reputation.eclipse_indicators += 1,
-                _ => {}
-            }
-        }
-
-        // Update peer reputation
-        self.update_peer_reputation(peer, REPUTATION_PENALTY_SUSPICIOUS, behavior_type);
-    }
-
-    /// Update peer reputation
-    pub fn update_peer_reputation(&mut self, peer: SocketAddr, adjustment: f64, _reason: &str) {
-        if !DYNAMIC_PEER_SCORING_ENABLED {
-            return;
-        }
-
-        let now = Instant::now();
-        self.initialize_peer_reputation_with_score(peer, 0.0);
-
-        if let Some(reputation) = self.peer_reputation.get_mut(&peer) {
-            // Apply decay first
-            let hours_since_update = now
-                .duration_since(reputation.last_reputation_update)
-                .as_secs_f64()
-                / 3600.0;
-            if hours_since_update > 0.0 {
-                reputation.reputation_score *= REPUTATION_DECAY_FACTOR.powf(hours_since_update);
-            }
-
-            // Apply the adjustment
-            reputation.reputation_score += adjustment;
-
-            // Clamp to allowed range
-            reputation.reputation_score = reputation
-                .reputation_score
-                .max(REPUTATION_SCORE_MIN)
-                .min(REPUTATION_SCORE_MAX);
-
-            // Update timestamp
-            reputation.last_reputation_update = now;
-
-            // If this is a penalty, record the time
-            if adjustment < 0.0 {
-                reputation.last_penalized = Some(now);
-            }
-
-            // Log the update if privacy logging is enabled
-            if PRIVACY_LOGGING_ENABLED {
-                // In a real implementation, this would log to a secure, privacy-focused logger
-                // println!("Updated peer reputation for {}: {} ({}) - now {}",
-                //          peer, adjustment, reason, reputation.reputation_score);
-            }
-        }
     }
 
     /// Update outbound peers
@@ -3095,6 +3024,126 @@ impl DandelionManager {
             .filter(|(_, rep)| rep.reputation_score >= threshold)
             .map(|(addr, _)| *addr)
             .collect()
+    }
+
+    /// Generate weights for path selection based on entropy and network conditions
+    fn generate_path_selection_weights(&mut self, tx_hash: &[u8; 32], peers: &[SocketAddr]) -> HashMap<SocketAddr, f64> {
+        let mut weights = HashMap::new();
+        
+        // Base entropy from routing table
+        let base_entropy = self.calculate_overall_routing_entropy();
+        
+        for &peer in peers {
+            let mut weight = 1.0;
+            
+            // Factor in network conditions
+            if let Some(condition) = self.network_conditions.get(&peer) {
+                // Lower latency = higher weight
+                let latency_factor = 1.0 / (1.0 + condition.avg_latency.as_secs_f64());
+                // Lower congestion = higher weight
+                let congestion_factor = 1.0 - condition.congestion_level;
+                
+                weight *= latency_factor * congestion_factor;
+            }
+            
+            // Factor in peer reputation
+            if let Some(rep) = self.peer_reputation.get(&peer) {
+                // Scale reputation from -100..100 to 0.1..1.0 range
+                let reputation_factor = (rep.reputation_score + 100.0) / 200.0 * 0.9 + 0.1;
+                weight *= reputation_factor;
+                
+                // Consider routing reliability
+                weight *= rep.routing_reliability;
+                
+                // Penalize recently used peers to promote path diversity
+                if let Some(last_used) = rep.last_used_for_stem {
+                    let elapsed = last_used.elapsed().as_secs_f64();
+                    if elapsed < 60.0 { // If used in last minute
+                        weight *= 0.5; // 50% penalty
+                    }
+                }
+            }
+            
+            // Factor in subnet diversity
+            let mut subnet_penalty = 1.0;
+            if let IpAddr::V4(ipv4) = peer.ip() {
+                let octets = ipv4.octets();
+                let subnet = [octets[0], octets[1]];
+                
+                // Count peers in same subnet
+                let subnet_count = peers.iter()
+                    .filter(|p| {
+                        if let IpAddr::V4(other_ip) = p.ip() {
+                            let other_octets = other_ip.octets();
+                            subnet == [other_octets[0], other_octets[1]]
+                        } else {
+                            false
+                        }
+                    })
+                    .count();
+                
+                // Apply penalty for subnet concentration
+                subnet_penalty = 1.0 / (1.0 + (subnet_count as f64 - 1.0) * 0.2);
+            }
+            weight *= subnet_penalty;
+            
+            // Factor in historical path diversity
+            if let Some(historical) = self.historical_paths.get(tx_hash) {
+                if historical.contains(&peer) {
+                    weight *= 0.7; // 30% penalty for reuse
+                }
+            }
+            
+            // Add some randomness for unpredictability
+            let noise = self.secure_rng.gen_range(0.9..1.1);
+            weight *= noise;
+            
+            // Ensure weight stays positive
+            weight = weight.max(0.1);
+            
+            weights.insert(peer, weight * base_entropy);
+        }
+        
+        weights
+    }
+
+    /// Refresh the entropy pool used for randomization
+    fn refresh_entropy_pool(&mut self) {
+        let now = Instant::now();
+        
+        // Only refresh if enough time has passed
+        if now.duration_since(self.last_entropy_refresh) < ENTROPY_SOURCE_REFRESH_INTERVAL {
+            return;
+        }
+
+        // Clear existing pool and ensure capacity
+        self.entropy_pool.clear();
+        self.entropy_pool.reserve(64);
+
+        // 1. System entropy (32 bytes)
+        let mut system_entropy = [0u8; 32];
+        self.secure_rng.fill_bytes(&mut system_entropy);
+        self.entropy_pool.extend_from_slice(&system_entropy);
+
+        // 2. Time-based entropy (16 bytes)
+        let time_entropy = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_else(|_| Duration::from_secs(0))
+            .as_nanos()
+            .to_le_bytes();
+        self.entropy_pool.extend_from_slice(&time_entropy);
+
+        // 3. Network state entropy (16 bytes)
+        let network_entropy = (self.current_network_traffic * f64::MAX) as u64;
+        let network_bytes = network_entropy.to_le_bytes();
+        self.entropy_pool.extend_from_slice(&network_bytes);
+        
+        let connection_count = self.outbound_peers.len() as u64;
+        let connection_bytes = connection_count.to_le_bytes();
+        self.entropy_pool.extend_from_slice(&connection_bytes);
+
+        // Update last refresh time
+        self.last_entropy_refresh = now;
     }
 }
 

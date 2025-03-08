@@ -274,7 +274,7 @@ fn test_peer_reputation_decay_over_time() {
     manager.initialize_peer_reputation(peer);
     
     // Add positive reputation
-    manager.update_peer_reputation(peer, REPUTATION_REWARD_SUCCESSFUL_RELAY * 10.0, "test");
+    manager.update_peer_reputation(peer, REPUTATION_REWARD_SUCCESSFUL_RELAY * 10.0, "test", None, None);
     
     // Get initial reputation
     let initial_rep = manager.get_peer_reputation(&peer)
@@ -324,14 +324,14 @@ fn test_sybil_behavior_pattern_detection() {
         manager.record_suspicious_behavior(&tx_hash, *peer, "tx_probe");
         
         // Add negative reputation directly
-        manager.update_peer_reputation(*peer, REPUTATION_PENALTY_SUSPICIOUS * 3.0, "suspicious");
+        manager.update_peer_reputation(*peer, REPUTATION_PENALTY_SUSPICIOUS * 3.0, "suspicious", None, None);
     }
     
     // Make legit peers behave normally
     for peer in &legit_peers {
         // Random legitimate actions
         if thread_rng().gen_bool(0.3) { // 30% chance
-            manager.update_peer_reputation(*peer, REPUTATION_REWARD_SUCCESSFUL_RELAY, "good_relay");
+            manager.update_peer_reputation(*peer, REPUTATION_REWARD_SUCCESSFUL_RELAY, "good_relay", None, None);
         }
     }
     
@@ -545,7 +545,7 @@ fn test_adversary_resistance_integrated() {
     for peer in &peers {
         // Add some reputation variations
         let score = thread_rng().gen_range(-5.0, 5.0);
-        manager.update_peer_reputation(*peer, score, "test");
+        manager.update_peer_reputation(*peer, score, "test", None, None);
         
         // Update network condition with random latency
         let latency = Duration::from_millis(thread_rng().gen_range(50, 200));

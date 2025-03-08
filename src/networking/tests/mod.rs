@@ -7,4 +7,5 @@ pub mod connection_obfuscation_tests;
 pub mod padding_tests;
 pub mod feature_support_tests;
 pub mod traffic_obfuscation_tests;
-pub mod i2p_proxy_tests; 
+pub mod i2p_proxy_tests;
+pub mod check_transition_test; 
