@@ -396,6 +396,37 @@ impl Node {
             self.add_transaction(tx.clone());
         }
     }
+
+    /// Shuts down the node and all associated background services
+    pub fn shutdown(&mut self) {
+        // Log the shutdown
+        debug!("Shutting down Node and associated services");
+        
+        // Shutdown DoH service if it exists
+        if let Some(_doh_service) = &self.doh_service {
+            // Signal the DoH service to stop any background tasks
+            debug!("Shutting down DNS-over-HTTPS service");
+        }
+        
+        // Clean up any dandelion resources
+        if let Ok(mut manager) = self.dandelion_manager.lock() {
+            debug!("Shutting down Dandelion manager");
+            // Clear any pending transactions
+            manager.transactions.clear();
+        }
+        
+        // Clean up fluff queue
+        if let Ok(mut queue) = self.fluff_queue.lock() {
+            debug!("Clearing fluff queue");
+            queue.clear();
+        }
+        
+        // Clear any other transaction collections
+        self.stem_transactions.clear();
+        self.broadcast_transactions.clear();
+        
+        debug!("Node shutdown complete");
+    }
 }
 
 // Add constant for discovery

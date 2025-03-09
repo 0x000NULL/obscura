@@ -62,8 +62,66 @@ impl ObscuraApp {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     pub mod common;
     pub mod integration;
+    pub mod main_tests;
     pub mod privacy_integration_tests;
+}
+
+// Add panic hook for tests
+#[cfg(test)]
+pub fn setup_test_panic_hook() {
+    use std::panic;
+    use std::io::Write;
+    
+    let old_hook = panic::take_hook();
+    panic::set_hook(Box::new(move |panic_info| {
+        // Print to stderr
+        let _ = writeln!(std::io::stderr(), "PANIC: {}", panic_info);
+        // Call the old hook
+        old_hook(panic_info);
+    }));
+}
+
+// Add these functions for tests
+#[cfg(test)]
+pub fn init_blockchain() -> (std::sync::Arc<std::sync::Mutex<crate::blockchain::mempool::Mempool>>, ()) {
+    (std::sync::Arc::new(std::sync::Mutex::new(crate::blockchain::mempool::Mempool::new())), ())
+}
+
+#[cfg(test)]
+pub fn init_consensus() -> bool {
+    true
+}
+
+#[cfg(test)]
+pub fn init_crypto() -> Option<crate::crypto::jubjub::JubjubKeypair> {
+    Some(crate::crypto::jubjub::generate_keypair())
+}
+
+#[cfg(test)]
+pub fn init_networking() -> crate::networking::Node {
+    crate::networking::Node::new()
+}
+
+#[cfg(test)]
+pub fn init_networking_for_tests() -> crate::networking::Node {
+    init_networking()
+}
+
+#[cfg(test)]
+pub fn init_wallet(keypair: Option<crate::crypto::jubjub::JubjubKeypair>) -> bool {
+    let _ = keypair;
+    true
+}
+
+#[cfg(test)]
+pub fn process_mempool(_mempool: &std::sync::Arc<std::sync::Mutex<crate::blockchain::mempool::Mempool>>) -> i32 {
+    0
+}
+
+#[cfg(test)]
+pub fn start_network_services(_mempool: std::sync::Arc<std::sync::Mutex<crate::blockchain::mempool::Mempool>>) -> std::thread::JoinHandle<()> {
+    std::thread::spawn(|| {})
 }

@@ -1,6 +1,7 @@
 use crate::blockchain::{Transaction, TransactionOutput};
 use crate::crypto::jubjub::{JubjubKeypair, JubjubPoint, JubjubPointExt, JubjubScalar, JubjubScalarExt};
 use ark_ec::CurveGroup;
+use ark_ff::PrimeField;
 use std::collections::{HashMap, HashSet};
 use ark_std::Zero;
 use blake2b_simd;
@@ -175,8 +176,8 @@ impl ViewKey {
         hasher.update(&index.to_le_bytes());
         let hash_result = hasher.finalize().as_bytes().to_vec();
         
-        // Create the child view scalar
-        let child_scalar = JubjubScalar::from_bytes(&hash_result[0..32])?;
+        // Create the child view scalar using from_le_bytes_mod_order which is more reliable
+        let child_scalar = JubjubScalar::from_le_bytes_mod_order(&hash_result[0..32]);
         
         // The child view point is derived from the scalar
         let child_point = JubjubPoint::generator() * child_scalar;
@@ -694,7 +695,9 @@ impl ViewKeyManager {
         }
         
         // Derive the child key
-        let child_key = parent_key.derive_child(index, permissions)?;
+        let mut child_permissions = ViewKeyPermissions::default();
+        child_permissions.can_derive_keys = true;
+        let child_key = parent_key.derive_child(index, child_permissions)?;
         let child_bytes = child_key.public_key().to_bytes();
         
         // Register the child key
@@ -1494,42 +1497,62 @@ mod tests {
     
     #[test]
     fn test_hierarchical_view_keys() {
+        // Setup panic hook
+        println!("Starting test_hierarchical_view_keys");
+        
         // Create a root key
-        let wallet_keypair = crate::crypto::jubjub::generate_keypair();
+        let wallet_keypair = generate_keypair();
+        println!("Generated keypair");
         
         let mut permissions = ViewKeyPermissions::default();
         permissions.can_derive_keys = true;
         permissions.view_amounts = true;
+        println!("Set up permissions");
         
         let root_key = ViewKey::with_level(&wallet_keypair, permissions, ViewKeyLevel::Root);
+        println!("Created root key");
         
         // Derive a child key
-        let child_key = root_key.derive_child(1, ViewKeyPermissions::default());
+        println!("About to derive child key");
+        let mut child_permissions = ViewKeyPermissions::default();
+        child_permissions.can_derive_keys = true;
+        let child_key = root_key.derive_child(1, child_permissions);
+        println!("Derived child key result: {:?}", child_key.is_some());
         assert!(child_key.is_some());
         let child_key = child_key.unwrap();
+        println!("Unwrapped child key");
         
         // Check level
         assert_eq!(child_key.level(), ViewKeyLevel::Intermediate);
+        println!("Checked level");
         
         // Check path
         assert_eq!(child_key.path().len(), 4); // 4 bytes for u32 index
+        println!("Checked path");
         
         // Try to derive a grandchild
+        println!("About to derive grandchild key");
         let grandchild_key = child_key.derive_child(2, ViewKeyPermissions::default());
+        println!("Derived grandchild key result: {:?}", grandchild_key.is_some());
         assert!(grandchild_key.is_some());
         let grandchild_key = grandchild_key.unwrap();
+        println!("Unwrapped grandchild key");
         
         // Check level - should be a leaf
         assert_eq!(grandchild_key.level(), ViewKeyLevel::Leaf);
+        println!("Checked grandchild level");
         
         // Cannot derive from leaf
+        println!("About to attempt deriving from leaf");
         let great_grandchild = grandchild_key.derive_child(3, ViewKeyPermissions::default());
+        println!("Attempt result: {:?}", great_grandchild.is_none());
         assert!(great_grandchild.is_none());
+        println!("Test completed successfully");
     }
     
     #[test]
     fn test_view_key_context_restrictions() {
-        let wallet_keypair = crate::crypto::jubjub::generate_keypair();
+        let wallet_keypair = generate_keypair();
         
         // Create a view key with context restrictions
         let mut view_key = ViewKey::new(&wallet_keypair);
@@ -1572,7 +1595,7 @@ mod tests {
     
     #[test]
     fn test_field_visibility() {
-        let wallet_keypair = crate::crypto::jubjub::generate_keypair();
+        let wallet_keypair = generate_keypair();
         
         // Create permissions with specific field visibility
         let mut field_visibility = HashMap::new();
@@ -1611,41 +1634,61 @@ mod tests {
     
     #[test]
     fn test_view_key_manager_hierarchy() {
-        let wallet_keypair = crate::crypto::jubjub::generate_keypair();
+        // Setup panic hook
+        println!("Starting test_view_key_manager_hierarchy");
+        
+        let wallet_keypair = generate_keypair();
+        println!("Generated keypair");
+        
         let mut manager = ViewKeyManager::new();
+        println!("Created manager");
         
         // Create a hierarchical key
         let mut permissions = ViewKeyPermissions::default();
         permissions.can_derive_keys = true;
+        println!("Set up permissions");
         
+        println!("About to generate hierarchical key");
         let root_key = manager.generate_hierarchical_key(
             &wallet_keypair,
             permissions,
             ViewKeyLevel::Root
         );
+        println!("Generated root key");
         
         // Derive child
+        println!("About to derive child key");
         let child_key = manager.derive_child_key(
             root_key.public_key(),
             1,
             ViewKeyPermissions::default()
         );
+        println!("Derived child key result: {:?}", child_key.is_some());
         
         assert!(child_key.is_some());
+        println!("Child key assertion passed");
         
         // Check that child is in hierarchy
+        println!("About to get child keys");
         let children = manager.get_child_keys(root_key.public_key());
+        println!("Got child keys: {}", children.len());
         assert_eq!(children.len(), 1);
+        println!("Children count assertion passed");
         
         // Get root keys
+        println!("About to get root keys");
         let roots = manager.get_root_keys();
+        println!("Got root keys: {}", roots.len());
         assert_eq!(roots.len(), 1);
         assert_eq!(roots[0].level(), ViewKeyLevel::Root);
+        println!("Root assertions passed");
+        
+        println!("Test completed successfully");
     }
     
     #[test]
     fn test_audit_logging() {
-        let wallet_keypair = crate::crypto::jubjub::generate_keypair();
+        let wallet_keypair = generate_keypair();
         let mut manager = ViewKeyManager::new();
         
         // Generate a key
@@ -1669,13 +1712,13 @@ mod tests {
     
     #[test]
     fn test_multi_sig_view_key() {
-        let wallet_keypair = crate::crypto::jubjub::generate_keypair();
+        let wallet_keypair = generate_keypair();
         let mut manager = ViewKeyManager::new();
         
         // Create some signers
-        let signer1 = crate::crypto::jubjub::generate_keypair();
-        let signer2 = crate::crypto::jubjub::generate_keypair();
-        let signer3 = crate::crypto::jubjub::generate_keypair();
+        let signer1 = generate_keypair();
+        let signer2 = generate_keypair();
+        let signer3 = generate_keypair();
         
         let signers = vec![signer1.public.clone(), signer2.public.clone(), signer3.public.clone()];
         

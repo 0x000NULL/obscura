@@ -410,7 +410,9 @@ pub fn get_jubjub_params() -> JubjubParams {
 pub fn generate_keypair() -> JubjubKeypair {
     let mut rng = OsRng;
     let secret = Fr::rand(&mut rng);
-    JubjubKeypair::generate()
+    let public = <EdwardsProjective as ark_ec::Group>::generator() * secret;
+    
+    JubjubKeypair { secret, public }
 }
 
 /// Sign a message using a Jubjub-based signing scheme (Schnorr signature)

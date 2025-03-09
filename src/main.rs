@@ -70,6 +70,28 @@ fn init_networking() -> Node {
     Node::new_with_config(config)
 }
 
+// Test-specific networking initialization that disables background tasks
+#[cfg(test)]
+fn init_networking_for_tests() -> Node {
+    info!("Initializing networking components for testing...");
+    let mut config = networking::NetworkConfig::default();
+    
+    // Disable features that might start background tasks
+    if let Some(ref mut doh_config) = config.doh_config {
+        doh_config.enabled = false;
+        doh_config.rotate_resolvers = false;
+        doh_config.verify_with_multiple_resolvers = false;
+    }
+    
+    // Disable any other long-running tasks or background services
+    if let Some(ref mut fps_config) = config.fingerprinting_protection_config {
+        fps_config.enabled = false;
+    }
+    
+    // Create a Node with the test-specific configuration
+    Node::new_with_config(config)
+}
+
 // Start network services
 fn start_network_services(
     mempool: Arc<Mutex<blockchain::mempool::Mempool>>,

@@ -6,7 +6,7 @@ mod main_tests {
     use crate::crypto::jubjub::JubjubKeypair;
     use crate::networking::Node;
     use crate::{
-        init_blockchain, init_consensus, init_crypto, init_networking, init_wallet,
+        init_blockchain, init_consensus, init_crypto, init_networking, init_networking_for_tests, init_wallet,
         process_mempool, start_network_services,
     };
     use log::{debug, error};
@@ -136,37 +136,62 @@ mod main_tests {
         let wallet = init_wallet(Some(keypair));
         let (mempool, utxo_set) = init_blockchain();
         let consensus = init_consensus();
-        let node = init_networking();
+        
+        // Use the test-specific network initialization function
+        let mut node = init_networking_for_tests();
 
-        // Start network services with a custom function that returns quickly for testing
-        fn start_test_network_services(
-            _mempool: Arc<Mutex<Mempool>>,
-        ) -> std::thread::JoinHandle<()> {
-            std::thread::spawn(move || {
-                debug!("Test network service thread started");
-                // Just run once and exit for testing
-                std::thread::sleep(Duration::from_millis(10));
-                debug!("Test network heartbeat completed");
-            })
-        }
+        // Set up a timeout for the entire test
+        let test_timeout = tokio::time::Duration::from_secs(5);
+        let test_result = tokio::time::timeout(test_timeout, async {
+            // Start network services with a custom function that returns quickly for testing
+            fn start_test_network_services(
+                _mempool: Arc<Mutex<Mempool>>,
+            ) -> std::thread::JoinHandle<()> {
+                std::thread::spawn(move || {
+                    debug!("Test network service thread started");
+                    // Just run once and exit for testing
+                    std::thread::sleep(Duration::from_millis(10));
+                    debug!("Test network heartbeat completed");
+                })
+            }
 
-        let network_handle = start_test_network_services(Arc::clone(&mempool));
+            let network_handle = start_test_network_services(Arc::clone(&mempool));
 
-        // Run main loop with a limited duration version
-        fn run_test_main_loop(mempool: Arc<Mutex<Mempool>>, iterations: usize) {
-            for _i in 0..iterations {
-                process_mempool(&mempool);
-                std::thread::sleep(Duration::from_millis(10));
+            // Run main loop with a limited duration version
+            fn run_test_main_loop(mempool: Arc<Mutex<Mempool>>, iterations: usize) {
+                for _i in 0..iterations {
+                    process_mempool(&mempool);
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+            }
+
+            run_test_main_loop(mempool, 3);
+
+            // Wait for network thread to complete
+            network_handle
+                .join()
+                .expect("Network thread should complete without panicking");
+
+            // Return success
+            true
+        }).await;
+
+        // Check if the test completed within the timeout
+        match test_result {
+            Ok(success) => {
+                // Shut down the node properly
+                node.shutdown();
+                debug!("Test completed successfully within timeout");
+            },
+            Err(_) => {
+                // The test timed out
+                panic!("Test timed out after {} seconds", test_timeout.as_secs());
             }
         }
 
-        run_test_main_loop(mempool, 3);
-
-        // Wait for network thread to complete
-        network_handle
-            .join()
-            .expect("Network thread should complete without panicking");
-
+        // Force any remaining tokio tasks to complete
+        tokio::task::yield_now().await;
+        
         assert!(
             true,
             "Full node initialization and limited run should succeed"

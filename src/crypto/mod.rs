@@ -198,4 +198,5 @@ mod tests {
     use super::*;
     mod hash_tests;
     mod key_tests;
+    pub mod vss_test;
 }
