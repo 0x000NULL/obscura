@@ -1300,8 +1300,11 @@ impl Wallet {
                 view_amounts: true,
                 view_timestamps: true,
                 full_audit: false,
+                can_derive_keys: false,
+                field_visibility: HashMap::new(),
                 valid_from: 0,
                 valid_until: 0,
+                valid_block_range: (0, 0),
             };
             
             Some(self.view_key_manager.generate_view_key(keypair, default_permissions))
@@ -1348,7 +1351,7 @@ impl Wallet {
 
     /// Scan transactions with registered view keys
     pub fn scan_with_view_keys(&self, transactions: &[Transaction]) -> HashMap<Vec<u8>, Vec<TransactionOutput>> {
-        self.view_key_manager.scan_transactions(transactions, current_time())
+        self.view_key_manager.scan_transactions(transactions, current_time(), None)
     }
 
     /// Create a time-limited view key (valid for specified duration in seconds)
@@ -1361,8 +1364,11 @@ impl Wallet {
                 view_amounts: true,
                 view_timestamps: true,
                 full_audit: false,
+                can_derive_keys: false,
+                field_visibility: HashMap::new(),
                 valid_from: now,
                 valid_until: now + duration_seconds,
+                valid_block_range: (0, 0),
             };
             
             Some(self.view_key_manager.generate_view_key(keypair, permissions))
@@ -1380,8 +1386,11 @@ impl Wallet {
                 view_amounts: true,
                 view_timestamps: true,
                 full_audit: true,
-                valid_from: 0,
-                valid_until: 0,
+                can_derive_keys: true,
+                field_visibility: HashMap::new(), 
+                valid_from: current_time(),
+                valid_until: u64::MAX, // Never expires
+                valid_block_range: (0, 0),
             };
             
             Some(self.view_key_manager.generate_view_key(keypair, permissions))

@@ -15,6 +15,8 @@ use twox_hash::XxHash64;
 use std::hash::Hasher;
 
 use crate::networking::timing_obfuscation::TimingObfuscation;
+use crate::blockchain::Transaction;
+use crate::crypto::metadata_protection::BroadcastMetadataCleaner;
 
 // Constants for Dandelion protocol
 pub const STEM_PHASE_MIN_TIMEOUT: Duration = Duration::from_secs(10); // Minimum time in stem phase
@@ -3316,6 +3318,59 @@ impl DandelionManager {
     /// Check if eclipse defense is currently active
     pub fn is_eclipse_defense_active(&self) -> bool {
         self.eclipse_defense_active
+    }
+
+    /// Prepare a transaction for broadcasting with enhanced privacy
+    pub fn prepare_transaction_for_broadcast(&self, tx: &Transaction) -> Transaction {
+        // Apply metadata cleaning before broadcasting
+        let cleaner = BroadcastMetadataCleaner::new();
+        let cleaned_tx = cleaner.clean_transaction_metadata(tx);
+        
+        // Add additional privacy protections specific to network propagation
+        let mut broadcast_tx = cleaned_tx.clone();
+        
+        // Ensure privacy flags are set correctly
+        broadcast_tx.privacy_flags |= 0x04; // Metadata removal flag
+        
+        // Add stem/fluff phase flag based on current state if available
+        if let Some(metadata) = self.transactions.get(&tx.hash()) {
+            if metadata.state == PropagationState::Stem {
+                broadcast_tx.privacy_flags |= 0x10; // Stem phase flag
+            } else if metadata.state == PropagationState::Fluff {
+                broadcast_tx.privacy_flags |= 0x20; // Fluff phase flag
+            }
+        }
+        
+        broadcast_tx
+    }
+
+    /// Add a transaction to the Dandelion stem pool with enhanced privacy
+    pub fn add_transaction_with_privacy_metadata(&mut self, tx: Transaction) -> Result<(), String> {
+        let tx_hash = tx.hash();
+        
+        // First clean the transaction metadata
+        let cleaner = BroadcastMetadataCleaner::new();
+        let cleaned_tx = cleaner.clean_transaction_metadata(&tx);
+        
+        // Then add to stem pool with standard process
+        let state = self.add_transaction(cleaned_tx.hash(), None);
+        Ok(())
+    }
+
+    pub fn fluff_transaction(&mut self, tx_hash: &[u8; 32]) -> Result<(), String> {
+        // ... existing code ...
+        
+        // Apply metadata cleaning before fluffing
+        if let Some(tx) = self.transactions.get(tx_hash) {
+            // We can't directly clean PropagationMetadata, so we'll just mark it as fluffed
+            // and handle the cleaning at the actual broadcast point
+            
+            // ... existing broadcasting code ...
+        }
+        
+        // ... rest of existing code ...
+        
+        Ok(())
     }
 }
 

@@ -29,6 +29,38 @@ pub use crypto::bls12_381::{
 // Re-export BLS consensus
 pub use consensus::pos::{BlsConsensus, Validator, ConsensusStatus};
 
+use std::sync::{Arc, RwLock};
+use crate::crypto::metadata_protection::AdvancedMetadataProtection;
+
+// Core application state struct
+pub struct ObscuraApp {
+    // Existing fields...
+    
+    // Add the advanced metadata protection service
+    pub metadata_protection: Arc<RwLock<AdvancedMetadataProtection>>,
+}
+
+impl ObscuraApp {
+    // Initialize application with all components
+    pub fn new() -> Self {
+        // Initialize advanced metadata protection
+        let metadata_protection = Arc::new(RwLock::new(AdvancedMetadataProtection::new()));
+        
+        ObscuraApp {
+            // Existing fields initialization...
+            
+            metadata_protection,
+        }
+    }
+    
+    // Method to access the metadata protection service
+    pub fn get_metadata_protection(&self) -> Arc<RwLock<AdvancedMetadataProtection>> {
+        self.metadata_protection.clone()
+    }
+    
+    // ... existing methods...
+}
+
 #[cfg(test)]
 mod tests {
     pub mod common;

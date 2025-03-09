@@ -28,9 +28,66 @@ pub use commitment_verification::{VerificationContext, VerificationError, Verifi
 // Re-export commonly used types
 pub use atomic_swap::{CrossCurveSwap, SwapState};
 pub use bls12_381::{BlsKeypair, BlsPublicKey, BlsSignature};
-pub use jubjub::{JubjubPoint, JubjubScalar};
 pub use pedersen::{DualCurveCommitment, PedersenCommitment, BlsPedersenCommitment};
-pub use view_key::{ViewKey, ViewKeyPermissions, ViewKeyManager};
+pub use view_key::{
+    ViewKey, ViewKeyPermissions, ViewKeyManager, ViewKeyLevel, ViewKeyContext,
+    MultiSigViewKey, AuthorizationStatus, TransactionFieldVisibility, 
+    ViewKeyOperation, ViewKeyAuditEntry
+};
+
+// Add new module for advanced metadata protection
+pub mod metadata_protection;
+pub mod zk_key_management;
+pub mod threshold_signatures;
+pub mod verifiable_secret_sharing;
+pub mod secure_mpc;
+pub mod homomorphic_derivation;
+
+// Re-export types that will be commonly used
+pub use self::jubjub::JubjubKeypair;
+
+// Re-export metadata protection types
+pub use self::metadata_protection::ForwardSecrecyProvider;
+pub use self::metadata_protection::MetadataMinimizer;
+pub use self::metadata_protection::EncryptedStorageProvider;
+pub use self::metadata_protection::AdvancedMetadataProtection;
+pub use self::metadata_protection::ZkStateUpdateProvider;
+pub use self::metadata_protection::BroadcastMetadataCleaner;
+
+// Re-export zero-knowledge key management types
+pub use self::zk_key_management::DistributedKeyGeneration;
+pub use self::zk_key_management::DkgManager;
+pub use self::zk_key_management::DkgConfig;
+pub use self::zk_key_management::Participant;
+pub use self::zk_key_management::Share;
+pub use self::zk_key_management::Commitment;
+pub use self::zk_key_management::SessionId;
+
+// Re-export types for ease of use
+pub use self::jubjub::JubjubSignature;
+pub use self::metadata_protection::{
+    MetadataProtection, ProtectionConfig, MessageTag, PerfectForwardSecrecy,
+    EncryptedMessage, MessageProtection, ProtectedMetadata
+};
+pub use self::zk_key_management::{
+    DkgResult, DkgState
+};
+pub use self::threshold_signatures::{
+    ThresholdSignatureSession, ThresholdSignatureManager, SignatureConfig, SignatureShare,
+    SignatureSessionId, SignatureResult, SignatureState
+};
+pub use self::verifiable_secret_sharing::{
+    VerifiableSecretSharingSession, VssManager, VssConfig, VssState, VerifiableShare,
+    PolynomialCommitment, VssSessionId, VssResult
+};
+pub use self::secure_mpc::{
+    MpcSession, MpcManager, MpcConfig, MpcState, MpcInput, MpcSessionId, MpcResult,
+    MpcComputationType
+};
+pub use self::homomorphic_derivation::{
+    HomomorphicKeyDerivation, DerivationConfig, DerivationPath, DerivationSegment,
+    DerivationResult
+};
 
 // Key management functions
 // These functions are intended for use in the wallet implementation

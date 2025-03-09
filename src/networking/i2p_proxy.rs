@@ -3,9 +3,11 @@ use std::io::{self, Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, TcpListener, ToSocketAddrs};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use std::error::Error as StdError;
 #[macro_use]
 use log::{error, info, warn, debug};
 use rand::{thread_rng, Rng};
+use serde::{Serialize, Deserialize};
 use crate::networking::p2p::{FeatureFlag, PrivacyFeatureFlag};
 
 /// Error types for I2P proxy operations
@@ -49,8 +51,17 @@ impl std::fmt::Display for I2PProxyError {
     }
 }
 
+impl StdError for I2PProxyError {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        match self {
+            I2PProxyError::IoError(err) => Some(err),
+            _ => None,
+        }
+    }
+}
+
 /// I2P destination address (like b32.i2p addresses)
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct I2PDestination {
     /// The full I2P destination address (typically ends with .b32.i2p)
     pub address: String,
@@ -102,7 +113,7 @@ impl I2PDestination {
 }
 
 /// Configuration for I2P proxy
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct I2PProxyConfig {
     /// Whether I2P support is enabled
     pub enabled: bool,

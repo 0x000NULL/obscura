@@ -7,9 +7,10 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use log::{debug, trace};
+use serde::{Serialize, Deserialize};
 
 /// Configuration for message padding
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MessagePaddingConfig {
     /// Whether message padding is enabled
     pub enabled: bool,

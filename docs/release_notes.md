@@ -1,5 +1,152 @@
 # Release Notes
 
+## [0.7.8] - 2025-03-08
+
+### Advanced Metadata Protection
+
+This release introduces a comprehensive Advanced Metadata Protection framework, significantly enhancing Obscura's privacy capabilities. These features provide multi-layered protection for sensitive user and transaction metadata, ensuring that privacy is preserved throughout the entire transaction lifecycle.
+
+#### Perfect Forward Secrecy
+
+Perfect Forward Secrecy (PFS) ensures that session keys used for encryption are ephemeral and not compromised even if long-term keys are exposed.
+
+**Key Features:**
+- **Ephemeral Key Pairs:** Automatically generated for each session with built-in expiration
+- **ECDH Key Exchange:** Secure key derivation using P-256 curve with rigorous validation
+- **Automatic Key Rotation:** Regular invalidation of old keys to maintain security
+- **ChaCha20-Poly1305 Encryption:** Fast, secure authenticated encryption for all protected communications
+
+**Privacy Benefits:**
+- Prevents retroactive decryption of communications
+- Limits exposure window if keys are compromised
+- Ensures that each communication session uses unique encryption keys
+- Provides 256-bit security level for all encrypted communications
+
+**Technical Implementation:**
+- Ring-based cryptography with formalized security properties
+- Automatic key pruning with configurable time windows
+- HKDF-based key derivation with domain separation
+- Thread-safe implementation with concurrent access support
+
+#### Metadata Minimization
+
+Metadata minimization reduces the amount of sensitive information stored and transmitted in blockchain operations.
+
+**Key Features:**
+- **Selective Field Anonymization:** Replaces sensitive fields with anonymized values
+- **Customizable Replacement Patterns:** Configurable patterns for different types of sensitive data
+- **Field Sensitivity Management:** Fine-grained control over which fields are protected
+
+**Privacy Benefits:**
+- Reduces metadata footprint in transactions
+- Prevents correlation of transactions based on metadata
+- Limits personally identifiable information exposure
+- Allows privacy-preserving analytics while protecting individual data
+
+**Technical Implementation:**
+- Pattern-based field detection and replacement
+- Context-aware replacement strategies
+- Efficiently handles high transaction volumes
+- Minimal performance impact on transaction processing
+
+#### Encrypted Storage for Sensitive Blockchain Data
+
+Provides secure storage for sensitive blockchain data with strong encryption and access controls.
+
+**Key Features:**
+- **Type-Specific Encryption:** Different keys for different categories of data
+- **Secure Key Management:** Proper key derivation and secure storage
+- **Automatic Cache Management:** Memory-efficient storage with privacy-preserving pruning
+- **Access Controls:** Fine-grained permissions for data access
+
+**Privacy Benefits:**
+- Protects sensitive data at rest
+- Prevents unauthorized access to private information
+- Enables secure data recovery with proper authorization
+- Supports compliance with data protection regulations
+
+**Technical Implementation:**
+- ChaCha20-Poly1305 authenticated encryption
+- Automatic memory-safe key handling
+- Thread-safe concurrent access design
+- Efficient caching with privacy-preserving eviction policies
+
+#### Zero-Knowledge State Updates
+
+Allows proving that a state transition is valid without revealing the private data that justifies the transition.
+
+**Key Features:**
+- **Minimal Information Disclosure:** Only proves state change validity without revealing data
+- **State Transition Verification:** Validates changes without exposing private information
+- **Proof Generation and Verification:** Efficient creation and checking of proofs
+- **Tamper-Evident Verification:** Detects any modifications to proofs
+
+**Privacy Benefits:**
+- Enables verification without revealing sensitive data
+- Supports privacy-preserving auditing
+- Allows selective disclosure of information
+- Prevents metadata leakage during validation
+
+**Technical Implementation:**
+- Blake2b-based privacy-preserving proofs
+- Efficient verification with minimal overhead
+- Support for complex state transitions
+- Designed for future zkSNARK integration
+
+#### Metadata Removal Before Broadcasting
+
+Ensures that sensitive information is stripped from transactions and messages before network transmission.
+
+**Key Features:**
+- **Comprehensive Field Removal:** Removes specified sensitive fields
+- **Field Redaction:** Replaces semi-sensitive fields with generic values
+- **Transaction, Message, and Block Cleaning:** Privacy protection at all levels
+- **Configurable Protection:** Adaptable to different privacy requirements
+
+**Privacy Benefits:**
+- Prevents network observers from collecting sensitive metadata
+- Reduces transaction graph analysis effectiveness
+- Protects user identity and behavior patterns
+- Limits correlation between transactions and real-world identities
+
+**Technical Implementation:**
+- Deep recursive cleaning of nested data structures
+- Efficient processing with minimal overhead
+- Integration with transaction propagation
+- Privacy flags to track applied protections
+
+#### Integration with Existing Privacy Features
+
+The Advanced Metadata Protection system integrates seamlessly with Obscura's existing privacy features:
+
+**Dandelion++ Integration:**
+- Enhanced stem phase with metadata protection
+- Privacy-preserving transaction aggregation
+- Metadata-stripped fluff phase broadcasting
+- Comprehensive transaction privacy throughout propagation
+
+**Application-Level Integration:**
+- System-wide privacy service accessible to all components
+- Consistent privacy protection across the platform
+- Privacy-by-design approach for new features
+- Extensible framework for future privacy enhancements
+
+#### Documentation and Usability
+
+- **Comprehensive Documentation:** Detailed guides for all privacy features
+- **Usage Examples:** Code samples for integrating privacy protections
+- **Best Practices:** Guidelines for maximizing privacy protection
+- **Configuration Options:** Flexible settings for different privacy requirements
+
+#### Performance and Compatibility
+
+The Advanced Metadata Protection system has been carefully designed for:
+
+- **Minimal Performance Impact:** Efficient implementation with low overhead
+- **Backward Compatibility:** Works with existing blockchain data
+- **Scalability:** Handles high transaction volumes without degradation
+- **Future Extensibility:** Designed for integration with upcoming privacy features
+
 ## [0.7.7] - 2025-03-08
 
 ### Advanced Traffic Obfuscation Techniques

@@ -1,5 +1,90 @@
 # Changelog
 
+## [0.7.8] - 2025-03-08
+
+### Added
+- **Advanced Metadata Protection**
+  - Implemented comprehensive privacy framework for protecting metadata:
+    - Created perfect forward secrecy for all communications
+      - Implemented ephemeral key pair generation with automatic expiration
+      - Added ECDH key exchange using P-256 curve for secure key derivation
+      - Created automatic key rotation and pruning mechanisms
+      - Implemented ChaCha20-Poly1305 authenticated encryption
+    - Added metadata minimization techniques
+      - Created selective field anonymization for sensitive data
+      - Implemented customizable replacement patterns
+      - Added configurable field sensitivity management
+    - Implemented encrypted storage for sensitive blockchain data
+      - Added type-specific encryption keys with secure generation
+      - Created automatic cache management with privacy-preserving pruning
+      - Implemented secure key derivation and management
+    - Created zero-knowledge state updates
+      - Implemented minimal information disclosure mechanisms
+      - Added state transition verification without revealing private data
+- **Zero-Knowledge Key Management**
+  - Added Threshold Signature Schemes (TSS)
+    - Implemented distributed signing protocol with t-of-n security model
+    - Created secure signature share generation and verification
+    - Added signature aggregation with Lagrange interpolation
+    - Implemented robust error handling for partial signing failures
+  - Implemented Verifiable Secret Sharing (VSS)
+    - Created polynomial commitment-based share verification
+    - Implemented dealer/participant protocol for secure distribution
+    - Added threshold secret reconstruction with verification
+    - Created comprehensive state management for sharing sessions
+  - Added Secure Multi-Party Computation (MPC)
+    - Implemented private input submission with zero-knowledge
+    - Created framework for collaborative computation
+    - Added support for key derivation, signing, and encryption operations
+    - Implemented multiple computation types with threshold security
+  - Created Homomorphic Key Derivation
+    - Implemented hierarchical path-based derivation
+    - Added hardened and non-hardened derivation modes
+    - Created efficient caching for derived keys
+    - Implemented comprehensive error handling for derivation operations
+- **Comprehensive View Key System**
+  - Implemented hierarchical view key structure
+    - Created root, intermediate, and leaf key levels
+    - Added secure parent-child key derivation
+    - Implemented permission inheritance for derived keys
+    - Created comprehensive key path management
+  - Added granular disclosure controls
+    - Implemented field-level transaction visibility
+    - Created selective output filtering
+    - Added transaction data redaction capabilities
+    - Implemented structured visibility configuration
+  - Created time-bound view key capabilities
+    - Added configurable validity periods for keys
+    - Implemented automatic expiration
+    - Created time-based validation for key usage
+    - Added timezone-aware time restrictions
+  - Implemented context-restricted view keys
+    - Added network-specific view key restrictions
+    - Created application-bound view keys
+    - Implemented IP-based usage restrictions
+    - Added custom context parameters for flexible restrictions
+  - Added cryptographic audit logging
+    - Created tamper-evident operation records
+    - Implemented comprehensive event tracking
+    - Added key-specific audit trails
+    - Created secure log storage and retrieval
+  - Implemented robust revocation mechanisms
+    - Added cascading revocation for hierarchical keys
+    - Created efficient revocation checking
+    - Implemented revocation status tracking
+    - Added permanent revocation records
+  - Created multi-signature view key authorization
+    - Implemented threshold-based key activation
+    - Added time-limited authorization windows
+    - Created authorization tracking for signers
+    - Implemented comprehensive security measures
+
+### Improved
+- Enhanced transaction privacy with comprehensive metadata protection
+- Improved network communication security through perfect forward secrecy
+- Strengthened data storage with encrypted storage mechanisms
+- Added extensive test suite for privacy features
+
 ## [0.7.7] - 2025-03-08
 
 ### Added

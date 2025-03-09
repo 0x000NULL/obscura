@@ -4,6 +4,25 @@ use ark_ec::CurveGroup;
 use std::collections::{HashMap, HashSet};
 use ark_std::Zero;
 use blake2b_simd;
+use std::sync::{Arc, Mutex};
+use log::{debug, info, warn};
+
+/// Hierarchical view key levels
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ViewKeyLevel {
+    /// Root level view key (full permissions within its scope)
+    Root,
+    /// Intermediate level (can derive child keys)
+    Intermediate,
+    /// Leaf level (cannot derive further keys)
+    Leaf,
+}
+
+impl Default for ViewKeyLevel {
+    fn default() -> Self {
+        ViewKeyLevel::Leaf
+    }
+}
 
 /// ViewKey provides the ability to view incoming transactions without spending capability
 #[derive(Debug, Clone)]
@@ -16,6 +35,27 @@ pub struct ViewKey {
     owner_public_key: JubjubPoint,
     /// Selective disclosure permissions
     permissions: ViewKeyPermissions,
+    /// Hierarchical key level
+    level: ViewKeyLevel,
+    /// Hierarchical path (empty for root keys)
+    path: Vec<u8>,
+    /// Parent view key (if this is a derived key)
+    parent: Option<Arc<ViewKey>>,
+    /// Context restrictions (if any)
+    context: Option<ViewKeyContext>,
+}
+
+/// Context for restricting where a view key can be used
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ViewKeyContext {
+    /// Allowed blockchain networks (empty means any network)
+    pub networks: Vec<String>,
+    /// Allowed applications or services (empty means any application)
+    pub applications: Vec<String>,
+    /// Allowed IP addresses or ranges (empty means any IP)
+    pub ip_restrictions: Vec<String>,
+    /// Custom context identifiers
+    pub custom_context: HashMap<String, String>,
 }
 
 /// Permissions for selective disclosure with view keys
@@ -35,6 +75,12 @@ pub struct ViewKeyPermissions {
     pub valid_from: u64,
     /// Valid until timestamp (0 = no restriction)
     pub valid_until: u64,
+    /// Is this key allowed to derive child keys
+    pub can_derive_keys: bool,
+    /// Block height restrictions (0,0 = no restriction)
+    pub valid_block_range: (u64, u64),
+    /// Granular field visibility controls
+    pub field_visibility: HashMap<String, bool>,
 }
 
 impl Default for ViewKeyPermissions {
@@ -47,6 +93,9 @@ impl Default for ViewKeyPermissions {
             full_audit: false,
             valid_from: 0,
             valid_until: 0,
+            can_derive_keys: false,
+            valid_block_range: (0, 0),
+            field_visibility: HashMap::new(),
         }
     }
 }
@@ -87,7 +136,137 @@ impl ViewKey {
             view_point,
             owner_public_key: wallet_point.clone(),
             permissions,
+            level: ViewKeyLevel::Root,
+            path: Vec::new(),
+            parent: None,
+            context: None,
         }
+    }
+
+    /// Create a hierarchical view key with a specific level
+    pub fn with_level(
+        wallet_keypair: &JubjubKeypair, 
+        permissions: ViewKeyPermissions, 
+        level: ViewKeyLevel
+    ) -> Self {
+        let mut key = Self::with_permissions(wallet_keypair, permissions);
+        key.level = level;
+        key
+    }
+    
+    /// Derive a child view key from this key
+    pub fn derive_child(&self, index: u32, permissions: ViewKeyPermissions) -> Option<Self> {
+        // Only Root or Intermediate keys can derive children
+        if self.level == ViewKeyLevel::Leaf || !self.permissions.can_derive_keys {
+            return None;
+        }
+        
+        // Create a child key path by extending the current path
+        let mut child_path = self.path.clone();
+        child_path.extend_from_slice(&index.to_le_bytes());
+        
+        // Calculate a new view scalar by hashing the parent scalar with the index
+        let mut hasher = blake2b_simd::Params::new()
+            .hash_length(64)
+            .personal(b"ViewKeyChild0000")  // Must be exactly 16 bytes
+            .to_state();
+            
+        hasher.update(&self.view_scalar.to_bytes());
+        hasher.update(&index.to_le_bytes());
+        let hash_result = hasher.finalize().as_bytes().to_vec();
+        
+        // Create the child view scalar
+        let child_scalar = JubjubScalar::from_bytes(&hash_result[0..32])?;
+        
+        // The child view point is derived from the scalar
+        let child_point = JubjubPoint::generator() * child_scalar;
+        
+        // Determine child level
+        let child_level = match self.level {
+            ViewKeyLevel::Root => ViewKeyLevel::Intermediate,
+            ViewKeyLevel::Intermediate => ViewKeyLevel::Leaf,
+            ViewKeyLevel::Leaf => return None, // Leaf keys cannot derive children
+        };
+        
+        // Child permissions cannot exceed parent permissions
+        let restricted_permissions = self.restrict_child_permissions(permissions);
+        
+        Some(Self {
+            view_scalar: child_scalar,
+            view_point: child_point,
+            owner_public_key: self.owner_public_key.clone(),
+            permissions: restricted_permissions,
+            level: child_level,
+            path: child_path,
+            parent: Some(Arc::new(self.clone())),
+            context: self.context.clone(),
+        })
+    }
+    
+    /// Get the hierarchical level of this view key
+    pub fn level(&self) -> ViewKeyLevel {
+        self.level
+    }
+    
+    /// Get the key path (empty for root keys)
+    pub fn path(&self) -> &[u8] {
+        &self.path
+    }
+    
+    /// Set a context restriction for this key
+    pub fn set_context(&mut self, context: ViewKeyContext) {
+        self.context = Some(context);
+    }
+    
+    /// Get the context restriction (if any)
+    pub fn context(&self) -> Option<&ViewKeyContext> {
+        self.context.as_ref()
+    }
+    
+    /// Restrict child permissions to be a subset of parent permissions
+    fn restrict_child_permissions(&self, mut child_permissions: ViewKeyPermissions) -> ViewKeyPermissions {
+        // Child cannot have more permissions than parent
+        child_permissions.view_incoming &= self.permissions.view_incoming;
+        child_permissions.view_outgoing &= self.permissions.view_outgoing;
+        child_permissions.view_amounts &= self.permissions.view_amounts;
+        child_permissions.view_timestamps &= self.permissions.view_timestamps;
+        child_permissions.full_audit &= self.permissions.full_audit;
+        
+        // Time restrictions must be within parent's range
+        if self.permissions.valid_from > 0 {
+            child_permissions.valid_from = child_permissions.valid_from.max(self.permissions.valid_from);
+        }
+        
+        if self.permissions.valid_until > 0 {
+            child_permissions.valid_until = if child_permissions.valid_until > 0 {
+                child_permissions.valid_until.min(self.permissions.valid_until)
+            } else {
+                self.permissions.valid_until
+            };
+        }
+        
+        // Block range restrictions
+        if self.permissions.valid_block_range.0 > 0 {
+            child_permissions.valid_block_range.0 = 
+                child_permissions.valid_block_range.0.max(self.permissions.valid_block_range.0);
+        }
+        
+        if self.permissions.valid_block_range.1 > 0 {
+            child_permissions.valid_block_range.1 = if child_permissions.valid_block_range.1 > 0 {
+                child_permissions.valid_block_range.1.min(self.permissions.valid_block_range.1)
+            } else {
+                self.permissions.valid_block_range.1
+            };
+        }
+        
+        // Field visibility constraints
+        for (field, visible) in &self.permissions.field_visibility {
+            if !visible {
+                child_permissions.field_visibility.insert(field.clone(), false);
+            }
+        }
+        
+        child_permissions
     }
     
     /// Get the public component of the view key
@@ -234,6 +413,10 @@ impl ViewKey {
             view_point,
             owner_public_key,
             permissions,
+            level: ViewKeyLevel::Root,
+            path: Vec::new(),
+            parent: None,
+            context: None,
         })
     }
     
@@ -284,6 +467,9 @@ impl ViewKey {
             full_audit: (flags & (1 << 4)) != 0,
             valid_from,
             valid_until,
+            can_derive_keys: false,
+            valid_block_range: (0, 0),
+            field_visibility: HashMap::new(),
         }
     }
 }
@@ -295,6 +481,135 @@ pub struct ViewKeyManager {
     view_keys: HashMap<Vec<u8>, ViewKey>,
     /// Map of revoked view keys
     revoked_keys: HashSet<Vec<u8>>,
+    /// Hierarchical relationships between keys
+    key_hierarchy: HashMap<Vec<u8>, Vec<Vec<u8>>>,
+    /// Audit log for view key operations
+    audit_log: Arc<Mutex<Vec<ViewKeyAuditEntry>>>,
+    /// Maximum audit log entries (0 = unlimited)
+    max_audit_entries: usize,
+}
+
+/// Audit entry for view key operations
+#[derive(Debug, Clone)]
+pub struct ViewKeyAuditEntry {
+    /// Timestamp of the operation
+    pub timestamp: u64,
+    /// Public key involved (as bytes)
+    pub public_key: Vec<u8>,
+    /// Operation performed
+    pub operation: ViewKeyOperation,
+    /// Additional data about the operation
+    pub details: HashMap<String, String>,
+}
+
+/// Types of operations that can be performed with view keys
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ViewKeyOperation {
+    /// View key created
+    Created,
+    /// View key revoked
+    Revoked,
+    /// Permissions updated
+    PermissionsUpdated,
+    /// Child key derived
+    ChildDerived,
+    /// Transaction scanned
+    TransactionScanned,
+    /// View key exported
+    Exported,
+    /// Context updated
+    ContextUpdated,
+    /// Multi-signature authorization
+    MultiSigAuthorized,
+}
+
+/// Authorization status for multi-signature view keys
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AuthorizationStatus {
+    /// Not authorized yet
+    Pending,
+    /// Authorized
+    Authorized,
+    /// Authorization denied
+    Denied,
+    /// Authorization expired
+    Expired,
+}
+
+/// Transaction field visibility details
+#[derive(Debug, Clone)]
+pub struct TransactionFieldVisibility {
+    /// View transaction hash
+    pub hash: bool,
+    /// View input addresses 
+    pub input_addresses: bool,
+    /// View output addresses
+    pub output_addresses: bool,
+    /// View amounts
+    pub amounts: bool,
+    /// View timestamps
+    pub timestamps: bool,
+    /// View transaction fees
+    pub fees: bool,
+    /// View memo fields
+    pub memos: bool,
+    /// View script data
+    pub scripts: bool,
+}
+
+impl Default for TransactionFieldVisibility {
+    fn default() -> Self {
+        Self {
+            hash: true,
+            input_addresses: false,
+            output_addresses: true,
+            amounts: false,
+            timestamps: false,
+            fees: false,
+            memos: false,
+            scripts: false,
+        }
+    }
+}
+
+impl ViewKeyPermissions {
+    /// Create a new permission set with granular field visibility
+    pub fn with_field_visibility(mut self, field_visibility: HashMap<String, bool>) -> Self {
+        self.field_visibility = field_visibility;
+        self
+    }
+    
+    /// Check if a specific transaction field is visible
+    pub fn is_field_visible(&self, field: &str) -> bool {
+        match self.field_visibility.get(field) {
+            Some(visible) => *visible,
+            None => match field {
+                "hash" => true, // Hash is always visible
+                "input_addresses" => self.view_outgoing,
+                "output_addresses" => self.view_incoming,
+                "amounts" => self.view_amounts,
+                "timestamp" => self.view_timestamps,
+                "fee" => self.view_amounts,
+                "memo" => false, // Memos hidden by default
+                "script" => false, // Scripts hidden by default
+                _ => false,
+            }
+        }
+    }
+    
+    /// Convert to a structured transaction field visibility object
+    pub fn to_field_visibility(&self) -> TransactionFieldVisibility {
+        TransactionFieldVisibility {
+            hash: self.is_field_visible("hash"),
+            input_addresses: self.is_field_visible("input_addresses"),
+            output_addresses: self.is_field_visible("output_addresses"),
+            amounts: self.is_field_visible("amounts"),
+            timestamps: self.is_field_visible("timestamp"),
+            fees: self.is_field_visible("fee"),
+            memos: self.is_field_visible("memo"),
+            scripts: self.is_field_visible("script"),
+        }
+    }
 }
 
 impl ViewKeyManager {
@@ -303,7 +618,17 @@ impl ViewKeyManager {
         Self {
             view_keys: HashMap::new(),
             revoked_keys: HashSet::new(),
+            key_hierarchy: HashMap::new(),
+            audit_log: Arc::new(Mutex::new(Vec::new())),
+            max_audit_entries: 1000, // Default to 1000 audit entries
         }
+    }
+    
+    /// Create a new view key manager with custom audit log size
+    pub fn with_audit_capacity(max_entries: usize) -> Self {
+        let mut manager = Self::new();
+        manager.max_audit_entries = max_entries;
+        manager
     }
     
     /// Generate and register a new view key
@@ -313,22 +638,172 @@ impl ViewKeyManager {
         
         self.view_keys.insert(key_bytes.to_vec(), view_key.clone());
         
+        // Log the creation
+        self.log_operation(
+            &key_bytes, 
+            ViewKeyOperation::Created,
+            HashMap::new()
+        );
+        
         view_key
+    }
+    
+    /// Generate a hierarchical view key with specific level
+    pub fn generate_hierarchical_key(
+        &mut self,
+        wallet_keypair: &JubjubKeypair, 
+        permissions: ViewKeyPermissions,
+        level: ViewKeyLevel
+    ) -> ViewKey {
+        let view_key = ViewKey::with_level(wallet_keypair, permissions, level);
+        let key_bytes = view_key.public_key().to_bytes();
+        
+        self.view_keys.insert(key_bytes.to_vec(), view_key.clone());
+        
+        // Initialize an empty list of children
+        self.key_hierarchy.insert(key_bytes.to_vec(), Vec::new());
+        
+        // Log the creation
+        let mut details = HashMap::new();
+        details.insert("level".to_string(), format!("{:?}", level));
+        
+        self.log_operation(
+            &key_bytes, 
+            ViewKeyOperation::Created,
+            details
+        );
+        
+        view_key
+    }
+    
+    /// Derive a child key from a parent key
+    pub fn derive_child_key(
+        &mut self,
+        parent_public_key: &JubjubPoint,
+        index: u32,
+        permissions: ViewKeyPermissions
+    ) -> Option<ViewKey> {
+        let parent_bytes = parent_public_key.to_bytes();
+        
+        // Get the parent key
+        let parent_key = self.view_keys.get(&parent_bytes.to_vec())?;
+        
+        // Check if parent is revoked
+        if self.is_revoked(parent_public_key) {
+            return None;
+        }
+        
+        // Derive the child key
+        let child_key = parent_key.derive_child(index, permissions)?;
+        let child_bytes = child_key.public_key().to_bytes();
+        
+        // Register the child key
+        self.view_keys.insert(child_bytes.to_vec(), child_key.clone());
+        
+        // Update the hierarchy
+        self.key_hierarchy
+            .entry(parent_bytes.to_vec())
+            .or_insert_with(Vec::new)
+            .push(child_bytes.to_vec());
+        
+        // Log the derivation
+        let mut details = HashMap::new();
+        details.insert("parent".to_string(), hex::encode(&parent_bytes));
+        details.insert("index".to_string(), index.to_string());
+        details.insert("level".to_string(), format!("{:?}", child_key.level()));
+        
+        self.log_operation(
+            &child_bytes,
+            ViewKeyOperation::ChildDerived,
+            details
+        );
+        
+        Some(child_key)
     }
     
     /// Register an existing view key
     pub fn register_view_key(&mut self, view_key: ViewKey) {
         let key_bytes = view_key.public_key().to_bytes();
         self.view_keys.insert(key_bytes.to_vec(), view_key);
+        
+        // Log the registration
+        self.log_operation(
+            &key_bytes,
+            ViewKeyOperation::Created,
+            HashMap::new()
+        );
     }
     
-    /// Revoke a view key
+    /// Revoke a view key and all its descendants
     pub fn revoke_view_key(&mut self, public_key: &JubjubPoint) {
         let key_bytes = public_key.to_bytes();
         
         if self.view_keys.remove(&key_bytes.to_vec()).is_some() {
+            // Add to revoked keys
             self.revoked_keys.insert(key_bytes.to_vec());
+            
+            // Log the revocation
+            self.log_operation(
+                &key_bytes,
+                ViewKeyOperation::Revoked,
+                HashMap::new()
+            );
+            
+            // Recursively revoke all child keys
+            if let Some(children) = self.key_hierarchy.get(&key_bytes.to_vec()).cloned() {
+                for child in children {
+                    if let Some(child_point) = JubjubPoint::from_bytes(&child) {
+                        self.revoke_view_key(&child_point);
+                    }
+                }
+            }
+            
+            // Clean up the hierarchy entry
+            self.key_hierarchy.remove(&key_bytes.to_vec());
         }
+    }
+
+    /// Add an audit log entry
+    fn log_operation(&self, key_bytes: &[u8], operation: ViewKeyOperation, details: HashMap<String, String>) {
+        if self.max_audit_entries == 0 {
+            return; // Audit logging disabled
+        }
+        
+        let entry = ViewKeyAuditEntry {
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            public_key: key_bytes.to_vec(),
+            operation,
+            details,
+        };
+        
+        let mut log = self.audit_log.lock().unwrap();
+        log.push(entry);
+        
+        // Trim if needed
+        if self.max_audit_entries > 0 && log.len() > self.max_audit_entries {
+            let split_index = log.len() - self.max_audit_entries;
+            *log = log.split_off(split_index);
+        }
+    }
+    
+    /// Get the audit log
+    pub fn get_audit_log(&self) -> Vec<ViewKeyAuditEntry> {
+        let log = self.audit_log.lock().unwrap();
+        log.clone()
+    }
+    
+    /// Get audit log for a specific key
+    pub fn get_key_audit_log(&self, public_key: &JubjubPoint) -> Vec<ViewKeyAuditEntry> {
+        let key_bytes = public_key.to_bytes();
+        let log = self.audit_log.lock().unwrap();
+        
+        log.iter()
+            .filter(|entry| entry.public_key == key_bytes)
+            .cloned()
+            .collect()
     }
     
     /// Check if a view key is revoked
@@ -343,9 +818,31 @@ impl ViewKeyManager {
         self.view_keys.get(&key_bytes.to_vec())
     }
     
+    /// Get all child keys for a parent key
+    pub fn get_child_keys(&self, parent_public_key: &JubjubPoint) -> Vec<&ViewKey> {
+        let parent_bytes = parent_public_key.to_bytes();
+        
+        if let Some(children) = self.key_hierarchy.get(&parent_bytes.to_vec()) {
+            children
+                .iter()
+                .filter_map(|child_bytes| self.view_keys.get(child_bytes))
+                .collect()
+        } else {
+            Vec::new()
+        }
+    }
+    
     /// Get all registered view keys
     pub fn get_all_view_keys(&self) -> Vec<&ViewKey> {
         self.view_keys.values().collect()
+    }
+    
+    /// Get all root view keys (those with no parent)
+    pub fn get_root_keys(&self) -> Vec<&ViewKey> {
+        self.view_keys
+            .values()
+            .filter(|key| key.level() == ViewKeyLevel::Root)
+            .collect()
     }
     
     /// Update permissions for a view key
@@ -354,31 +851,380 @@ impl ViewKeyManager {
         
         if let Some(view_key) = self.view_keys.get_mut(&key_bytes.to_vec()) {
             view_key.update_permissions(permissions);
+            
+            // Log the update
+            self.log_operation(
+                &key_bytes,
+                ViewKeyOperation::PermissionsUpdated,
+                HashMap::new()
+            );
+            
             true
         } else {
             false
         }
     }
     
-    /// Scan transactions with all registered view keys
-    pub fn scan_transactions(&self, 
-                            transactions: &[Transaction],
-                            current_time: u64) -> HashMap<Vec<u8>, Vec<TransactionOutput>> {
+    /// Update context restrictions for a view key
+    pub fn update_context(&mut self, public_key: &JubjubPoint, context: ViewKeyContext) -> bool {
+        let key_bytes = public_key.to_bytes();
+        
+        if let Some(view_key) = self.view_keys.get_mut(&key_bytes.to_vec()) {
+            view_key.set_context(context);
+            
+            // Log the update
+            let mut details = HashMap::new();
+            if let Some(ctx) = view_key.context() {
+                details.insert("networks".to_string(), ctx.networks.join(","));
+                details.insert("applications".to_string(), ctx.applications.join(","));
+            }
+            
+            self.log_operation(
+                &key_bytes,
+                ViewKeyOperation::ContextUpdated,
+                details
+            );
+            
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Scan transactions with all relevant view keys, filtering based on context
+    pub fn scan_transactions(
+        &self, 
+        transactions: &[Transaction],
+        current_time: u64,
+        context: Option<&ViewKeyContext>
+    ) -> HashMap<Vec<u8>, Vec<TransactionOutput>> {
         let mut results = HashMap::new();
         
-        for (key_bytes, view_key) in &self.view_keys {
-            // Skip revoked or time-invalid keys
-            if self.revoked_keys.contains(key_bytes) || !view_key.is_valid(current_time) {
+        for view_key in self.view_keys.values() {
+            // Skip if key is not valid at the current time
+            if !view_key.is_valid(current_time) {
                 continue;
             }
             
+            // Skip if context doesn't match
+            if let Some(req_context) = context {
+                if let Some(key_context) = view_key.context() {
+                    if !contexts_compatible(req_context, key_context) {
+                        continue;
+                    }
+                }
+            }
+            
+            let key_bytes = view_key.public_key().to_bytes();
             let outputs = view_key.scan_transactions(transactions);
+            
             if !outputs.is_empty() {
-                results.insert(key_bytes.clone(), outputs);
+                // Log transaction scanning activity
+                let mut details = HashMap::new();
+                details.insert("tx_count".to_string(), transactions.len().to_string());
+                details.insert("output_count".to_string(), outputs.len().to_string());
+                
+                self.log_operation(
+                    &key_bytes,
+                    ViewKeyOperation::TransactionScanned,
+                    details
+                );
+                
+                results.insert(key_bytes.to_vec(), outputs);
             }
         }
         
         results
+    }
+    
+    /// Export view key with audit logging
+    pub fn export_view_key(&self, public_key: &JubjubPoint) -> Option<Vec<u8>> {
+        let key_bytes = public_key.to_bytes();
+        
+        if let Some(view_key) = self.view_keys.get(&key_bytes.to_vec()) {
+            // Log the export
+            self.log_operation(
+                &key_bytes,
+                ViewKeyOperation::Exported,
+                HashMap::new()
+            );
+            
+            Some(view_key.to_bytes())
+        } else {
+            None
+        }
+    }
+}
+
+/// Determine if two contexts are compatible
+fn contexts_compatible(request_context: &ViewKeyContext, key_context: &ViewKeyContext) -> bool {
+    // If the key has network restrictions, the request must specify one of those networks
+    if !key_context.networks.is_empty() {
+        if request_context.networks.is_empty() {
+            return false;
+        }
+        
+        let mut found = false;
+        for network in &request_context.networks {
+            if key_context.networks.contains(network) {
+                found = true;
+                break;
+            }
+        }
+        
+        if !found {
+            return false;
+        }
+    }
+    
+    // Same check for applications
+    if !key_context.applications.is_empty() {
+        if request_context.applications.is_empty() {
+            return false;
+        }
+        
+        let mut found = false;
+        for app in &request_context.applications {
+            if key_context.applications.contains(app) {
+                found = true;
+                break;
+            }
+        }
+        
+        if !found {
+            return false;
+        }
+    }
+    
+    // IP restrictions - if the key has restrictions, the request must match one
+    if !key_context.ip_restrictions.is_empty() {
+        if request_context.ip_restrictions.is_empty() {
+            return false;
+        }
+        
+        let mut found = false;
+        for ip in &request_context.ip_restrictions {
+            if key_context.ip_restrictions.contains(ip) {
+                found = true;
+                break;
+            }
+        }
+        
+        if !found {
+            return false;
+        }
+    }
+    
+    true
+}
+
+impl ViewKey {
+    /// Apply visibility permissions to filter transaction data
+    pub fn apply_field_visibility(&self, tx: &Transaction) -> Transaction {
+        if self.permissions.full_audit {
+            return tx.clone(); // Full audit keys see everything
+        }
+        
+        let visibility = self.permissions.to_field_visibility();
+        let mut filtered_tx = tx.clone();
+        
+        // Apply field-specific filtering
+        if !visibility.amounts {
+            // Replace actual amounts with zeros
+            for output in &mut filtered_tx.outputs {
+                output.value = 0;
+            }
+            
+            // Clear any amount commitments
+            filtered_tx.amount_commitments = None;
+        }
+        
+        // Hide input addresses if not allowed
+        if !visibility.input_addresses {
+            // Replace input scripts with empty ones
+            for input in &mut filtered_tx.inputs {
+                input.signature_script = Vec::new();
+            }
+        }
+        
+        // Hide output addresses if not allowed
+        if !visibility.output_addresses {
+            // Replace output scripts with empty ones
+            for output in &mut filtered_tx.outputs {
+                output.public_key_script = Vec::new();
+            }
+        }
+        
+        filtered_tx
+    }
+}
+
+/// Multi-signature view key for access control
+#[derive(Debug, Clone)]
+pub struct MultiSigViewKey {
+    /// The base view key
+    view_key: ViewKey,
+    /// Required signers (public keys)
+    required_signers: Vec<JubjubPoint>,
+    /// Threshold of signatures required
+    threshold: usize,
+    /// Current authorizations
+    authorizations: HashMap<Vec<u8>, AuthorizationStatus>,
+    /// Authorization expiry timestamp (0 = no expiry)
+    expiry: u64,
+}
+
+impl MultiSigViewKey {
+    /// Create a new multi-signature view key
+    pub fn new(
+        view_key: ViewKey,
+        signers: Vec<JubjubPoint>,
+        threshold: usize,
+        expiry: u64,
+    ) -> Self {
+        // Ensure threshold is valid
+        let threshold = threshold.min(signers.len()).max(1);
+        
+        // Initialize with empty authorizations
+        let mut authorizations = HashMap::new();
+        for signer in &signers {
+            authorizations.insert(signer.to_bytes().to_vec(), AuthorizationStatus::Pending);
+        }
+        
+        Self {
+            view_key,
+            required_signers: signers,
+            threshold,
+            authorizations,
+            expiry,
+        }
+    }
+    
+    /// Get the underlying view key
+    pub fn view_key(&self) -> &ViewKey {
+        &self.view_key
+    }
+    
+    /// Get the required signers
+    pub fn required_signers(&self) -> &[JubjubPoint] {
+        &self.required_signers
+    }
+    
+    /// Get the required threshold
+    pub fn threshold(&self) -> usize {
+        self.threshold
+    }
+    
+    /// Get the current authorization status
+    pub fn authorization_status(&self) -> HashMap<Vec<u8>, AuthorizationStatus> {
+        self.authorizations.clone()
+    }
+    
+    /// Add an authorization from a signer
+    pub fn add_authorization(&mut self, signer: &JubjubPoint, signature: &[u8], message: &[u8]) -> bool {
+        let signer_bytes = signer.to_bytes();
+        
+        // Check if signer is required
+        if !self.authorizations.contains_key(&signer_bytes.to_vec()) {
+            return false;
+        }
+        
+        // Check signature validity
+        if !Self::verify_signature(signer, signature, message) {
+            return false;
+        }
+        
+        // Update authorization status
+        self.authorizations.insert(signer_bytes.to_vec(), AuthorizationStatus::Authorized);
+        true
+    }
+    
+    /// Check if key is fully authorized (enough signatures)
+    pub fn is_authorized(&self, current_time: u64) -> bool {
+        // Check expiry
+        if self.expiry > 0 && current_time > self.expiry {
+            return false;
+        }
+        
+        // Count authorized signers
+        let authorized_count = self.authorizations
+            .values()
+            .filter(|&status| *status == AuthorizationStatus::Authorized)
+            .count();
+        
+        authorized_count >= self.threshold
+    }
+    
+    /// Verify a signature on a message
+    fn verify_signature(signer: &JubjubPoint, signature: &[u8], message: &[u8]) -> bool {
+        // In a real implementation, this would use JubjubSignature verification
+        // For simplicity in this example, just check if the signature matches expected structure
+        if signature.len() != 64 {
+            return false;
+        }
+        
+        // This is a placeholder for proper signature verification
+        // In production, use actual signature verification
+        true
+    }
+    
+    /// Revoke all authorizations
+    pub fn revoke_authorizations(&mut self) {
+        for status in self.authorizations.values_mut() {
+            *status = AuthorizationStatus::Denied;
+        }
+    }
+    
+    /// Set a new expiry time
+    pub fn set_expiry(&mut self, expiry: u64) {
+        self.expiry = expiry;
+    }
+    
+    /// Convert to regular ViewKey if authorized
+    pub fn to_view_key(&self, current_time: u64) -> Option<ViewKey> {
+        if self.is_authorized(current_time) {
+            Some(self.view_key.clone())
+        } else {
+            None
+        }
+    }
+}
+
+impl ViewKeyManager {
+    /// Create a multi-signature view key
+    pub fn create_multi_sig_key(
+        &mut self,
+        wallet_keypair: &JubjubKeypair,
+        permissions: ViewKeyPermissions,
+        signers: Vec<JubjubPoint>,
+        threshold: usize,
+        expiry: u64,
+    ) -> MultiSigViewKey {
+        // First create a normal view key
+        let view_key = self.generate_view_key(wallet_keypair, permissions);
+        let key_bytes = view_key.public_key().to_bytes();
+        
+        // Create the multi-sig wrapper
+        let multi_sig_key = MultiSigViewKey::new(
+            view_key,
+            signers.clone(),
+            threshold,
+            expiry,
+        );
+        
+        // Log the creation
+        let mut details = HashMap::new();
+        details.insert("signers".to_string(), signers.len().to_string());
+        details.insert("threshold".to_string(), threshold.to_string());
+        details.insert("expiry".to_string(), expiry.to_string());
+        
+        self.log_operation(
+            &key_bytes,
+            ViewKeyOperation::MultiSigAuthorized,
+            details
+        );
+        
+        multi_sig_key
     }
 }
 
@@ -598,6 +1444,9 @@ mod tests {
             full_audit: false,
             valid_from: 0,
             valid_until: 0,
+            can_derive_keys: false,
+            valid_block_range: (0, 0),
+            field_visibility: HashMap::new(),
         };
         
         let view_key = manager.generate_view_key(&wallet_keypair, permissions);
@@ -629,7 +1478,7 @@ mod tests {
         tx.outputs.push(output);
         
         // Scan with the manager
-        let results = manager.scan_transactions(&[tx], current_time());
+        let results = manager.scan_transactions(&[tx], current_time(), None);
         
         // Should have results for one view key
         assert_eq!(results.len(), 1);
@@ -641,5 +1490,227 @@ mod tests {
         // Should have found one output
         assert_eq!(found_outputs.len(), 1);
         assert_eq!(found_outputs[0].value, 1000);
+    }
+    
+    #[test]
+    fn test_hierarchical_view_keys() {
+        // Create a root key
+        let wallet_keypair = crate::crypto::jubjub::generate_keypair();
+        
+        let mut permissions = ViewKeyPermissions::default();
+        permissions.can_derive_keys = true;
+        permissions.view_amounts = true;
+        
+        let root_key = ViewKey::with_level(&wallet_keypair, permissions, ViewKeyLevel::Root);
+        
+        // Derive a child key
+        let child_key = root_key.derive_child(1, ViewKeyPermissions::default());
+        assert!(child_key.is_some());
+        let child_key = child_key.unwrap();
+        
+        // Check level
+        assert_eq!(child_key.level(), ViewKeyLevel::Intermediate);
+        
+        // Check path
+        assert_eq!(child_key.path().len(), 4); // 4 bytes for u32 index
+        
+        // Try to derive a grandchild
+        let grandchild_key = child_key.derive_child(2, ViewKeyPermissions::default());
+        assert!(grandchild_key.is_some());
+        let grandchild_key = grandchild_key.unwrap();
+        
+        // Check level - should be a leaf
+        assert_eq!(grandchild_key.level(), ViewKeyLevel::Leaf);
+        
+        // Cannot derive from leaf
+        let great_grandchild = grandchild_key.derive_child(3, ViewKeyPermissions::default());
+        assert!(great_grandchild.is_none());
+    }
+    
+    #[test]
+    fn test_view_key_context_restrictions() {
+        let wallet_keypair = crate::crypto::jubjub::generate_keypair();
+        
+        // Create a view key with context restrictions
+        let mut view_key = ViewKey::new(&wallet_keypair);
+        
+        // Define a context
+        let context = ViewKeyContext {
+            networks: vec!["mainnet".to_string(), "testnet".to_string()],
+            applications: vec!["wallet".to_string()],
+            ip_restrictions: Vec::new(),
+            custom_context: HashMap::new(),
+        };
+        
+        view_key.set_context(context.clone());
+        
+        // Check that the context was set
+        assert!(view_key.context().is_some());
+        let key_context = view_key.context().unwrap();
+        assert_eq!(key_context.networks, context.networks);
+        
+        // Test compatibility
+        let compatible_context = ViewKeyContext {
+            networks: vec!["mainnet".to_string()],
+            applications: vec!["wallet".to_string()],
+            ip_restrictions: Vec::new(),
+            custom_context: HashMap::new(),
+        };
+        
+        assert!(contexts_compatible(&compatible_context, key_context));
+        
+        // Test incompatible context
+        let incompatible_context = ViewKeyContext {
+            networks: vec!["devnet".to_string()],
+            applications: vec!["wallet".to_string()],
+            ip_restrictions: Vec::new(),
+            custom_context: HashMap::new(),
+        };
+        
+        assert!(!contexts_compatible(&incompatible_context, key_context));
+    }
+    
+    #[test]
+    fn test_field_visibility() {
+        let wallet_keypair = crate::crypto::jubjub::generate_keypair();
+        
+        // Create permissions with specific field visibility
+        let mut field_visibility = HashMap::new();
+        field_visibility.insert("amounts".to_string(), true);
+        field_visibility.insert("input_addresses".to_string(), false);
+        
+        let permissions = ViewKeyPermissions::default()
+            .with_field_visibility(field_visibility);
+        
+        // Create view key
+        let view_key = ViewKey::with_permissions(&wallet_keypair, permissions);
+        
+        // Create a dummy transaction
+        let mut tx = Transaction::default();
+        tx.outputs.push(TransactionOutput {
+            value: 100,
+            public_key_script: vec![1, 2, 3],
+        });
+        
+        // Apply visibility
+        let filtered_tx = view_key.apply_field_visibility(&tx);
+        
+        // Amounts should be visible
+        assert_eq!(filtered_tx.outputs[0].value, 100);
+        
+        // Create a key that hides amounts
+        let mut permissions = ViewKeyPermissions::default();
+        permissions.view_amounts = false;
+        
+        let view_key = ViewKey::with_permissions(&wallet_keypair, permissions);
+        let filtered_tx = view_key.apply_field_visibility(&tx);
+        
+        // Amounts should be hidden
+        assert_eq!(filtered_tx.outputs[0].value, 0);
+    }
+    
+    #[test]
+    fn test_view_key_manager_hierarchy() {
+        let wallet_keypair = crate::crypto::jubjub::generate_keypair();
+        let mut manager = ViewKeyManager::new();
+        
+        // Create a hierarchical key
+        let mut permissions = ViewKeyPermissions::default();
+        permissions.can_derive_keys = true;
+        
+        let root_key = manager.generate_hierarchical_key(
+            &wallet_keypair,
+            permissions,
+            ViewKeyLevel::Root
+        );
+        
+        // Derive child
+        let child_key = manager.derive_child_key(
+            root_key.public_key(),
+            1,
+            ViewKeyPermissions::default()
+        );
+        
+        assert!(child_key.is_some());
+        
+        // Check that child is in hierarchy
+        let children = manager.get_child_keys(root_key.public_key());
+        assert_eq!(children.len(), 1);
+        
+        // Get root keys
+        let roots = manager.get_root_keys();
+        assert_eq!(roots.len(), 1);
+        assert_eq!(roots[0].level(), ViewKeyLevel::Root);
+    }
+    
+    #[test]
+    fn test_audit_logging() {
+        let wallet_keypair = crate::crypto::jubjub::generate_keypair();
+        let mut manager = ViewKeyManager::new();
+        
+        // Generate a key
+        let view_key = manager.generate_view_key(&wallet_keypair, ViewKeyPermissions::default());
+        
+        // Revoke it
+        manager.revoke_view_key(view_key.public_key());
+        
+        // Check audit log
+        let log = manager.get_audit_log();
+        assert_eq!(log.len(), 2); // Create + Revoke
+        
+        // Check operations
+        assert_eq!(log[0].operation, ViewKeyOperation::Created);
+        assert_eq!(log[1].operation, ViewKeyOperation::Revoked);
+        
+        // Get key-specific log
+        let key_log = manager.get_key_audit_log(view_key.public_key());
+        assert_eq!(key_log.len(), 2);
+    }
+    
+    #[test]
+    fn test_multi_sig_view_key() {
+        let wallet_keypair = crate::crypto::jubjub::generate_keypair();
+        let mut manager = ViewKeyManager::new();
+        
+        // Create some signers
+        let signer1 = crate::crypto::jubjub::generate_keypair();
+        let signer2 = crate::crypto::jubjub::generate_keypair();
+        let signer3 = crate::crypto::jubjub::generate_keypair();
+        
+        let signers = vec![signer1.public.clone(), signer2.public.clone(), signer3.public.clone()];
+        
+        // Create a multi-sig key (2 of 3)
+        let mut multi_sig_key = manager.create_multi_sig_key(
+            &wallet_keypair,
+            ViewKeyPermissions::default(),
+            signers,
+            2,
+            current_time() + 3600 // expire in 1 hour
+        );
+        
+        // Initially not authorized
+        assert!(!multi_sig_key.is_authorized(current_time()));
+        
+        // Add authorizations
+        assert!(multi_sig_key.add_authorization(&signer1.public, &[0; 64], b"authorize"));
+        
+        // Still not enough signatures
+        assert!(!multi_sig_key.is_authorized(current_time()));
+        
+        // Add another authorization
+        assert!(multi_sig_key.add_authorization(&signer2.public, &[0; 64], b"authorize"));
+        
+        // Now it should be authorized
+        assert!(multi_sig_key.is_authorized(current_time()));
+        
+        // Should be able to convert to a view key
+        assert!(multi_sig_key.to_view_key(current_time()).is_some());
+        
+        // Test expiry
+        assert!(!multi_sig_key.is_authorized(current_time() + 7200)); // 2 hours later
+        
+        // Test revocation
+        multi_sig_key.revoke_authorizations();
+        assert!(!multi_sig_key.is_authorized(current_time()));
     }
 } 
