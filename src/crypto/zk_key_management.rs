@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use log::{debug, error, info, trace, warn};
-use ark_std::{Zero, One};
+use ark_std::{Zero, One, UniformRand};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use rand::SeedableRng;
@@ -55,19 +55,19 @@ impl Polynomial {
     fn new(degree: usize, secret: Option<JubjubScalar>) -> Self {
         let mut coefficients = Vec::with_capacity(degree + 1);
         
-        // If secret is provided, use it as the constant term, otherwise generate a random one
+        // Set the constant term (secret)
         if let Some(s) = secret {
             coefficients.push(s);
         } else {
             let mut bytes = [0u8; 32];
             OsRng.fill_bytes(&mut bytes);
-            let s = JubjubScalar::from_bytes(&bytes).unwrap_or_else(|| JubjubScalar::random(&mut OsRng));
+            let s = JubjubScalar::from_bytes(&bytes).unwrap_or_else(|| JubjubScalar::rand(&mut OsRng));
             coefficients.push(s);
         }
         
         // Generate random coefficients for the remaining terms
         for _ in 0..degree {
-            coefficients.push(JubjubScalar::random(&mut OsRng));
+            coefficients.push(JubjubScalar::rand(&mut OsRng));
         }
         
         Self { coefficients }

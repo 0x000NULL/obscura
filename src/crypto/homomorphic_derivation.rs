@@ -5,6 +5,7 @@ use std::sync::{Arc, RwLock};
 use rand::{rngs::OsRng, Rng};
 use sha2::{Digest, Sha256};
 use log::{debug, error, info, trace, warn};
+use ark_std::UniformRand;
 
 /// Constants for homomorphic derivation
 const MAX_DERIVATION_PATH_LENGTH: usize = 20;
@@ -141,7 +142,7 @@ impl HomomorphicKeyDerivation {
             (result.share, result.public_key)
         } else {
             // If no DKG result is provided, generate a random key
-            let scalar = JubjubScalar::random(&mut OsRng);
+            let scalar = JubjubScalar::rand(&mut OsRng);
             let point = JubjubPoint::generator() * scalar;
             let share = Share {
                 index: JubjubScalar::from(1u64),
@@ -227,7 +228,7 @@ impl HomomorphicKeyDerivation {
         let mut bytes = [0u8; 32];
         bytes.copy_from_slice(&hash);
         
-        Ok(JubjubScalar::from_bytes(&bytes).unwrap_or_else(|| JubjubScalar::random(&mut OsRng)))
+        Ok(JubjubScalar::from_bytes(&bytes).unwrap_or_else(|| JubjubScalar::rand(&mut OsRng)))
     }
     
     /// Get the base public key
@@ -309,7 +310,7 @@ mod tests {
         let manager1 = HomomorphicKeyDerivation::new(None, Some(config.clone())).unwrap();
         
         // Create a hardened derivation manager with the same base key
-        let scalar = JubjubScalar::random(&mut OsRng);
+        let scalar = JubjubScalar::rand(&mut OsRng);
         let point = JubjubPoint::generator() * scalar;
         let share = Share {
             index: JubjubScalar::from(1u64),

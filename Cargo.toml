@@ -34,6 +34,7 @@ rand_chacha = "0.3.1"
 siphasher = "0.3"
 group = "0.13.0"
 ff = "0.13.0"
+winapi = { version = "0.3", features = ["winnt", "memoryapi", "errhandlingapi", "processthreadsapi", "handleapi", "wincrypt"] }
 
 # BLS12-381 and Jubjub dependencies
 blstrs = { version = "0.7.1", features = ["serde"] }
@@ -83,6 +84,7 @@ toml = "0.5"
 # Additional missing dependencies
 log = "0.4"
 env_logger = "0.10.0"
+yoke = "0.7.5"
 
 # Visualization and human-friendly output
 chrono = "0.4"

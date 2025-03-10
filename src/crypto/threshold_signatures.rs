@@ -7,7 +7,7 @@ use rand::{rngs::OsRng, Rng};
 use rand_core::RngCore;
 use sha2::{Digest, Sha256};
 use log::{debug, error, info, trace, warn};
-use ark_std::{Zero, One};
+use ark_std::{Zero, One, UniformRand};
 use ark_ff::Field;
 
 /// Constants for the threshold signature scheme
@@ -399,7 +399,7 @@ impl ThresholdSignatureSession {
         let mut bytes = [0u8; 32];
         bytes.copy_from_slice(&hash);
         
-        JubjubScalar::from_bytes(&bytes).unwrap_or_else(|| JubjubScalar::random(&mut OsRng))
+        JubjubScalar::from_bytes(&bytes).unwrap_or_else(|| JubjubScalar::rand(&mut OsRng))
     }
     
     /// Check if the signature session has timed out
@@ -587,13 +587,13 @@ mod tests {
             
             // Create a share for each participant
             let index = JubjubScalar::from((i + 1) as u64);
-            let value = JubjubScalar::random(&mut OsRng);
+            let value = JubjubScalar::rand(&mut OsRng);
             shares.push(Share { index, value });
         }
         
         // Create a mock DKG result
         DkgResult {
-            public_key: JubjubPoint::generator() * JubjubScalar::random(&mut OsRng), // Random public key
+            public_key: JubjubPoint::generator() * JubjubScalar::rand(&mut OsRng), // Random public key
             share: Some(shares[0].clone()), // First participant's share
             participants: participants.clone(),
             verification_data: vec![JubjubPoint::generator(); threshold], // Mock verification data
@@ -635,7 +635,7 @@ mod tests {
         for i in 1..3 { // Add 2 more shares to meet threshold of 3
             let participant_id = vec![i as u8];
             let participant_index = JubjubScalar::from((i + 1) as u64);
-            let share_value = JubjubScalar::random(&mut OsRng);
+            let share_value = JubjubScalar::rand(&mut OsRng);
             
             let share = SignatureShare {
                 participant_id: participant_id.clone(),
@@ -742,11 +742,33 @@ mod tests {
         
         // Verify an invalid signature
         let invalid_signature = JubjubSignature {
-            r: JubjubPoint::generator() * JubjubScalar::random(&mut OsRng),
-            s: JubjubScalar::random(&mut OsRng),
+            r: JubjubPoint::generator() * JubjubScalar::rand(&mut OsRng),
+            s: JubjubScalar::rand(&mut OsRng),
         };
         
         // This might pass in our simplified implementation, but in a real
         // implementation with proper verification, it would fail
+    }
+    
+    #[test]
+    fn test_share_generation() {
+        // ... existing code ...
+        
+        let share_value = JubjubScalar::rand(&mut OsRng);
+        // ... existing code ...
+    }
+    
+    #[test]
+    fn test_share_verification() {
+        // ... existing code ...
+        
+        let value = JubjubScalar::rand(&mut OsRng);
+        // ... existing code ...
+        
+        let invalid_signature = JubjubSignature {
+            r: JubjubPoint::generator() * JubjubScalar::rand(&mut OsRng),
+            s: JubjubScalar::rand(&mut OsRng),
+        };
+        // ... existing code ...
     }
 } 

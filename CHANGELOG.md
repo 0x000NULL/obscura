@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.7.9] - 2025-03-09
+
+### Added
+- **Side-Channel Attack Protection**
+  - Implemented comprehensive protection mechanisms against various side-channel attacks:
+    - Created constant-time operations for all cryptographic functions
+      - Implemented constant-time scalar multiplication for JubjubPoint
+      - Added constant-time comparison for byte arrays
+      - Created secure equality checking primitives for sensitive data
+    - Implemented operation masking techniques
+      - Added random masking for scalar operations
+      - Created generic operation masking for various data types
+      - Implemented mask-and-unmask functionality for hiding values
+    - Added random timing jitter for critical operations
+      - Implemented configurable jitter ranges
+      - Created pre and post operation jitter
+      - Added jitter wrapper for sensitive functions
+    - Created operation batching to hide individual operations
+      - Implemented operation queuing and batching
+      - Added random execution order for batched operations
+      - Created configurable batch sizes with auto-execution
+    - Implemented CPU cache attack mitigations
+      - Added cache filling with random access patterns
+      - Created pre and post operation cache protection
+      - Implemented configurable cache filling size
+  - Added comprehensive configuration system
+    - Created SideChannelProtectionConfig for fine-tuning protections
+    - Added security level templates (none, low, medium, high)
+    - Implemented selective protection activation
+  - Created extensive test suite
+    - Added unit tests for each protection mechanism
+    - Implemented integration tests with cryptographic operations
+    - Created performance testing and comparisons
+
+### Documentation
+- Added detailed documentation for side-channel attack protection
+- Created usage examples for all protection features
+- Added performance considerations and configuration recommendations
+
 ## [0.7.8] - 2025-03-08
 
 ### Added

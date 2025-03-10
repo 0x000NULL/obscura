@@ -66,4 +66,14 @@
 - [FAQ](faq.md)
 - [Release Notes](release_notes.md)
 - [Glossary](glossary.md)
-- [Documentation Options](DOCUMENTATION_OPTIONS.md) 
+- [Documentation Options](DOCUMENTATION_OPTIONS.md)
+
+## Security Features
+
+* [Zero-Knowledge Proofs](docs/zero_knowledge_proofs.md)
+* [Threshold Signatures](docs/threshold_signatures.md)
+* [Forward Secrecy](docs/forward_secrecy.md)
+* [Secure Multi-Party Computation](docs/secure_mpc.md)
+* [Side-Channel Attack Protection](docs/side_channel_protection.md)
+* [Memory Protection](docs/memory_protection.md)
+* [Power Analysis Protection](docs/power_analysis_protection.md) 

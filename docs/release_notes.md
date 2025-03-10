@@ -1,5 +1,109 @@
 # Release Notes
 
+## [0.7.9] - 2025-03-09
+
+### Side-Channel Attack Protection
+
+This release introduces a comprehensive Side-Channel Attack Protection framework, significantly enhancing Obscura's cryptographic security. This implementation helps protect against attacks that exploit information leaked through physical implementation of cryptographic systems rather than weaknesses in the algorithms themselves.
+
+#### Constant-Time Operations
+
+Constant-time operations ensure that cryptographic functions execute in the same amount of time regardless of input values, preventing timing attacks that could extract secret information.
+
+**Key Features:**
+- **Constant-Time Scalar Multiplication:** Secure implementation for Jubjub elliptic curve operations
+- **Constant-Time Comparison:** Byte array comparison that doesn't leak timing information
+- **Secure Equality Checking:** Primitives for sensitive cryptographic data comparison
+
+**Security Benefits:**
+- Prevents timing analysis attacks on cryptographic operations
+- Eliminates key-dependent execution time variations
+- Ensures consistent operation regardless of secret values
+
+**Technical Implementation:**
+- Specialized arithmetic operations that avoid branches for sensitive values
+- Masked comparisons for byte arrays and cryptographic values
+- Integration with critical crypto operations throughout the codebase
+
+#### Operation Masking
+
+Operation masking hides actual values being processed by applying random masks, making side-channel analysis significantly more difficult.
+
+**Key Features:**
+- **Random Value Masking:** Conceals actual scalar values during operations
+- **Generic Data Type Support:** Flexible masking for different cryptographic types
+- **Automatic Mask Management:** Transparent application and removal of masks
+
+**Security Benefits:**
+- Prevents power analysis attacks by randomizing processed values
+- Makes correlation between operations and data more difficult
+- Adds an additional layer of protection to constant-time operations
+
+#### Random Timing Jitter
+
+Random timing jitter introduces variability in execution time to further obfuscate timing patterns.
+
+**Key Features:**
+- **Configurable Jitter Ranges:** Customizable minimum and maximum delay values
+- **Pre and Post Operation Jitter:** Timing randomization before and after critical operations
+- **Operation Wrapping:** Simple API for applying jitter to any function
+
+**Security Benefits:**
+- Disrupts statistical timing analysis attacks
+- Prevents averaging attacks across multiple operations
+- Makes distinguishing between different operations more difficult
+
+#### Operation Batching
+
+Operation batching collects multiple operations and executes them together in random order, preventing isolation of individual operations.
+
+**Key Features:**
+- **Operation Queuing:** Delayed execution of sensitive operations
+- **Randomized Execution Order:** Unpredictable processing sequence
+- **Configurable Batch Parameters:** Adjustable batch sizes with auto-execution thresholds
+
+**Security Benefits:**
+- Obscures relationships between operations and their timing
+- Prevents correlation of specific operations with their inputs
+- Creates larger anonymity sets for cryptographic operations
+
+#### CPU Cache Attack Mitigations
+
+Cache attack mitigations prevent attackers from gathering information through CPU cache timing differences.
+
+**Key Features:**
+- **Cache Filling:** Random access patterns to flush and dirty CPU caches
+- **Pre/Post Operation Protection:** Cache state randomization before and after sensitive operations
+- **Configurable Cache Interaction:** Adjustable parameters for different CPU architectures
+
+**Security Benefits:**
+- Prevents cache timing attacks like FLUSH+RELOAD or PRIME+PROBE
+- Disrupts analysis of memory access patterns
+- Mitigates cache-based covert channels
+
+### Configuration System
+
+The protection framework includes a comprehensive configuration system allowing fine-tuning of security versus performance.
+
+**Key Features:**
+- **Selective Feature Activation:** Enable/disable specific protection mechanisms
+- **Security Level Templates:** Predefined configurations (none, low, medium, high)
+- **Per-Operation Configuration:** Apply different protections to different operations
+
+**Technical Implementation:**
+- Thread-safe protection management
+- Runtime configuration updates
+- Performance impact monitoring
+
+### Documentation and Examples
+
+This release includes detailed documentation on side-channel protections:
+
+- Comprehensive guide to side-channel attack vectors and mitigations
+- Code examples for integrating protections into cryptographic operations
+- Performance considerations and configuration recommendations for different threat models
+- Best practices for protection against various side-channel attacks
+
 ## [0.7.8] - 2025-03-08
 
 ### Advanced Metadata Protection

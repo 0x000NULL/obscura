@@ -12,6 +12,19 @@ pub mod pedersen;
 pub mod atomic_swap;
 pub mod view_key;
 
+// Add side-channel attack protection module
+pub mod side_channel_protection;
+
+// Add memory protection module
+pub mod memory_protection;
+
+// Add power analysis protection module
+pub mod power_analysis_protection;
+
+// Add examples module
+#[cfg(feature = "examples")]
+pub mod examples;
+
 // Add curve modules
 pub mod bls12_381;
 pub mod jubjub;
@@ -53,6 +66,22 @@ pub use self::metadata_protection::EncryptedStorageProvider;
 pub use self::metadata_protection::AdvancedMetadataProtection;
 pub use self::metadata_protection::ZkStateUpdateProvider;
 pub use self::metadata_protection::BroadcastMetadataCleaner;
+
+// Re-export side-channel protection types
+pub use self::side_channel_protection::SideChannelProtection;
+pub use self::side_channel_protection::SideChannelProtectionConfig;
+pub use self::side_channel_protection::SideChannelError;
+
+// Re-export memory protection types
+pub use self::memory_protection::MemoryProtection;
+pub use self::memory_protection::MemoryProtectionConfig;
+pub use self::memory_protection::MemoryProtectionError;
+pub use self::memory_protection::SecureMemory;
+
+// Re-export power analysis protection types
+pub use self::power_analysis_protection::PowerAnalysisProtection;
+pub use self::power_analysis_protection::PowerAnalysisConfig;
+pub use self::power_analysis_protection::PowerAnalysisError;
 
 // Re-export zero-knowledge key management types
 pub use self::zk_key_management::DistributedKeyGeneration;
@@ -199,4 +228,7 @@ mod tests {
     mod hash_tests;
     mod key_tests;
     pub mod vss_test;
+    mod side_channel_protection_tests;
+    mod memory_protection_tests;
+    mod power_analysis_protection_tests;
 }

@@ -7,7 +7,7 @@ use rand::{rngs::OsRng, Rng};
 use rand_core::RngCore;
 use sha2::{Digest, Sha256};
 use log::{debug, error, info, trace, warn};
-use ark_std::{Zero, One};
+use ark_std::{Zero, One, UniformRand};
 
 /// Constants for VSS
 const MAX_VSS_PARTICIPANTS: usize = 100;
@@ -167,11 +167,11 @@ impl Polynomial {
         let mut coefficients = Vec::with_capacity(degree + 1);
         
         // Set the constant term (secret)
-        coefficients.push(secret.unwrap_or_else(|| JubjubScalar::random(&mut OsRng)));
+        coefficients.push(secret.unwrap_or_else(|| JubjubScalar::rand(&mut OsRng)));
         
         // Generate random coefficients for the remaining terms
-        for _ in 1..=degree {
-            coefficients.push(JubjubScalar::random(&mut OsRng));
+        for _ in 0..degree {
+            coefficients.push(JubjubScalar::rand(&mut OsRng));
         }
         
         Self { coefficients }
@@ -808,7 +808,7 @@ mod tests {
         
         // Generate commitments (dealer)
         println!("=== Generating commitments (dealer) ===");
-        let secret = JubjubScalar::random(&mut OsRng);
+        let secret = JubjubScalar::rand(&mut OsRng);
         let commitment = dealer_session.generate_commitments(Some(secret)).unwrap();
         println!("Dealer state after generating commitments: {:?}", dealer_session.get_state());
         
@@ -956,7 +956,7 @@ mod tests {
         assert!(share.verify(), "Valid share verification failed");
         
         // Generate an invalid share
-        let invalid_value = JubjubScalar::random(&mut OsRng);
+        let invalid_value = JubjubScalar::rand(&mut OsRng);
         let invalid_share = VerifiableShare::new(index, invalid_value, commitment);
         
         // The invalid share should fail verification
@@ -992,23 +992,22 @@ mod tests {
     
     #[test]
     fn test_polynomial_evaluation() {
-        // Create a polynomial of degree 2 with constant term 42
-        let secret = JubjubScalar::from(42u64);
-        let polynomial = Polynomial::new(2, Some(secret));
+        let secret = JubjubScalar::rand(&mut OsRng);
+        let poly = Polynomial::new(2, Some(secret.clone()));
         
         // Evaluate at x=0 should give the secret
-        let result = polynomial.evaluate(&JubjubScalar::zero());
+        let result = poly.evaluate(&JubjubScalar::zero());
         assert_eq!(result, secret);
         
         // Evaluate at different points and verify
         for i in 1..5 {
             let x = JubjubScalar::from(i as u64);
-            let y = polynomial.evaluate(&x);
+            let y = poly.evaluate(&x);
             
             // Calculate expected result manually
-            let c0 = polynomial.coefficients[0];
-            let c1 = polynomial.coefficients[1];
-            let c2 = polynomial.coefficients[2];
+            let c0 = poly.coefficients[0];
+            let c1 = poly.coefficients[1];
+            let c2 = poly.coefficients[2];
             
             let expected = c0 + (c1 * x) + (c2 * x * x);
             assert_eq!(y, expected);
@@ -1053,7 +1052,7 @@ mod tests {
         participant_session.add_participant(participant.clone()).unwrap();
         
         println!("Generating commitments (dealer)");
-        let secret = JubjubScalar::random(&mut OsRng);
+        let secret = JubjubScalar::rand(&mut OsRng);
         let commitment = dealer_session.generate_commitments(Some(secret)).unwrap();
         println!("Dealer state after generating commitments: {:?}", dealer_session.get_state());
         
@@ -1155,7 +1154,7 @@ mod tests {
         println!("Participant's participants count: {}", participant_session.participants.read().unwrap().len());
         
         println!("Generating commitments (dealer)");
-        let secret = JubjubScalar::random(&mut OsRng);
+        let secret = JubjubScalar::rand(&mut OsRng);
         let commitment = dealer_session.generate_commitments(Some(secret)).unwrap();
         println!("Dealer state after generating commitments: {:?}", dealer_session.get_state());
         

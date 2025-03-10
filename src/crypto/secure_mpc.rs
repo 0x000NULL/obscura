@@ -7,6 +7,7 @@ use rand::{rngs::OsRng, Rng};
 use rand_core::RngCore;
 use sha2::{Digest, Sha256};
 use log::{debug, error, info, trace, warn};
+use ark_std::UniformRand;
 
 /// Constants for secure MPC
 const MAX_MPC_PARTICIPANTS: usize = 100;
@@ -401,7 +402,7 @@ impl MpcSession {
         // Convert the hash to a scalar
         let mut bytes = [0u8; 32];
         bytes.copy_from_slice(&hash);
-        let scalar = JubjubScalar::from_bytes(&bytes).unwrap_or_else(|| JubjubScalar::random(&mut OsRng));
+        let scalar = JubjubScalar::from_bytes(&bytes).unwrap_or_else(|| JubjubScalar::rand(&mut OsRng));
         
         // Derive a new key using the DKG share and the derivation scalar
         let derived_private_share = dkg_share.value * scalar;
@@ -450,7 +451,7 @@ impl MpcSession {
         // Convert the hash to a scalar
         let mut bytes = [0u8; 32];
         bytes.copy_from_slice(&hash);
-        let message_hash = JubjubScalar::from_bytes(&bytes).unwrap_or_else(|| JubjubScalar::random(&mut OsRng));
+        let message_hash = JubjubScalar::from_bytes(&bytes).unwrap_or_else(|| JubjubScalar::rand(&mut OsRng));
         
         // Sign with our share of the private key
         let signature_share = message_hash * dkg_share.value;
@@ -492,7 +493,7 @@ impl MpcSession {
         }
         
         // Generate a random ephemeral key
-        let ephemeral_scalar = JubjubScalar::random(&mut OsRng);
+        let ephemeral_scalar = JubjubScalar::rand(&mut OsRng);
         let ephemeral_point = JubjubPoint::generator() * ephemeral_scalar;
         
         // Derive a shared secret
@@ -713,13 +714,13 @@ mod tests {
             
             // Create a share for each participant
             let index = JubjubScalar::from((i + 1) as u64);
-            let value = JubjubScalar::random(&mut OsRng);
+            let value = JubjubScalar::rand(&mut OsRng);
             shares.push(Share { index, value });
         }
         
         // Create a mock DKG result
         DkgResult {
-            public_key: JubjubPoint::generator() * JubjubScalar::random(&mut OsRng), // Random public key
+            public_key: JubjubPoint::generator() * JubjubScalar::rand(&mut OsRng), // Random public key
             share: Some(shares[0].clone()), // First participant's share
             participants: participants.clone(),
             verification_data: vec![JubjubPoint::generator(); threshold], // Mock verification data
