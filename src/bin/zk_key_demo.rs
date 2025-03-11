@@ -82,11 +82,15 @@ fn main() {
         commitments.push(commitment);
     }
     
-    // Add commitments to each session
-    for manager in &dkg_managers {
+    // Add commitments to each session, tracking which ones we've added
+    for (manager_idx, manager) in dkg_managers.iter().enumerate() {
         let session = manager.get_session(&dkg_session_ids[0]).unwrap();
         
         for (i, commitment) in commitments.iter().enumerate() {
+            // Skip adding our own commitment as it's already added during generation
+            if manager_idx == i {
+                continue;
+            }
             session.add_commitment(participant_ids[i].clone(), commitment.clone()).unwrap();
         }
     }
@@ -96,21 +100,27 @@ fn main() {
     // Generate and share values
     let mut all_shares = Vec::new();
     
-    for manager in &dkg_managers {
+    for (idx, manager) in dkg_managers.iter().enumerate() {
         let session = manager.get_session(&dkg_session_ids[0]).unwrap();
         let shares = session.generate_shares().unwrap();
-        all_shares.push(shares);
+        
+        // Collect all shares that need to be sent to other participants
+        for (recipient_id, share) in shares {
+            // Skip shares meant for ourselves
+            if recipient_id != participant_ids[idx] {
+                all_shares.push((participant_ids[idx].clone(), recipient_id, share));
+            }
+        }
     }
     
     // Add shares to each session
-    for manager in &dkg_managers {
-        let session = manager.get_session(&dkg_session_ids[0]).unwrap();
+    for (from_id, to_id, share) in all_shares {
+        // Find the manager that corresponds to the recipient
+        let to_idx = participant_ids.iter().position(|id| *id == to_id).unwrap();
+        let session = dkg_managers[to_idx].get_session(&dkg_session_ids[0]).unwrap();
         
-        for (i, shares) in all_shares.iter().enumerate() {
-            for (participant_id, share) in shares {
-                session.add_share(participant_ids[i].clone(), share.clone()).unwrap();
-            }
-        }
+        // Add the share, correctly identifying who it's from
+        session.add_share(from_id, share).unwrap();
     }
     
     println!("Generated and shared values");

@@ -122,17 +122,42 @@ fn test_dkg_flow_with_three_participants() {
     }
     
     // Wait for all managers to transition to ValuesShared state
-    for manager in &managers {
+    for (i, manager) in managers.iter().enumerate() {
         let session = manager.get_session(&session_id).unwrap();
         let mut retries = 0;
         while session.get_state() != DkgState::ValuesShared && retries < 20 {
             println!("Waiting for ValuesShared state (attempt {}) - Current state: {:?}", 
                     retries + 1, session.get_state());
+                    
+            // Check for timeout and handle it properly
+            if session.check_timeout() {
+                println!("DEBUG: DKG session timed out for participant {}", i + 1);
+                // If we've timed out, the state should be updated to TimedOut
+                let current_state = session.get_state();
+                assert_eq!(current_state, DkgState::TimedOut, 
+                          "Expected state to be TimedOut but was {:?}", current_state);
+                // In a real application we'd handle the timeout gracefully
+                // For the test, we'll fail here
+                panic!("DKG protocol timed out after {} seconds", config.timeout_seconds);
+            }
+            
             thread::sleep(Duration::from_millis(200));
             retries += 1;
         }
-        assert_eq!(session.get_state(), DkgState::ValuesShared, 
-                  "Session failed to transition to ValuesShared state");
+        
+        // Check if we've hit the retry limit - this is a different failure than timeout
+        if retries >= 20 {
+            println!("DEBUG: Participant {} exceeded retry limit waiting for ValuesShared state", i + 1);
+            // The state should be checked one more time
+            let final_state = session.get_state();
+            if final_state == DkgState::TimedOut {
+                panic!("DKG protocol timed out after {} seconds", config.timeout_seconds);
+            } else {
+                assert_eq!(final_state, DkgState::ValuesShared, 
+                          "Session {} failed to transition to ValuesShared state. Final state: {:?}", 
+                          i + 1, final_state);
+            }
+        }
     }
     
     // Generate and share secret values
@@ -161,21 +186,27 @@ fn test_dkg_flow_with_three_participants() {
     // First verify all participants
     for (i, manager) in managers.iter().enumerate() {
         let session = manager.get_session(&session_id).unwrap();
+        println!("DEBUG: Current state before verification for participant {}: {:?}", i + 1, session.get_state());
         for (j, other_id) in participant_ids.iter().enumerate() {
             println!("DEBUG: Participant {} verifying participant {}", i + 1, j + 1);
             let is_valid = session.verify_participant(other_id.clone()).unwrap();
             assert!(is_valid, "Participant {} failed to verify participant {}", i + 1, j + 1);
+            println!("DEBUG: Verification result for participant {} verifying {}: {}", i + 1, j + 1, is_valid);
         }
+        println!("DEBUG: Current state after verification for participant {}: {:?}", i + 1, session.get_state());
     }
 
     // Then verify all participants again to ensure state transition
     for (i, manager) in managers.iter().enumerate() {
         let session = manager.get_session(&session_id).unwrap();
+        println!("DEBUG: Current state before re-verification for participant {}: {:?}", i + 1, session.get_state());
         for (j, other_id) in participant_ids.iter().enumerate() {
             println!("DEBUG: Participant {} re-verifying participant {}", i + 1, j + 1);
             let is_valid = session.verify_participant(other_id.clone()).unwrap();
             assert!(is_valid, "Participant {} failed to verify participant {}", i + 1, j + 1);
+            println!("DEBUG: Re-verification result for participant {} verifying {}: {}", i + 1, j + 1, is_valid);
         }
+        println!("DEBUG: Current state after re-verification for participant {}: {:?}", i + 1, session.get_state());
     }
 
     // Wait for all managers to transition to Verified state
@@ -186,11 +217,37 @@ fn test_dkg_flow_with_three_participants() {
         while session.get_state() != DkgState::Verified && retries < 20 {
             println!("DEBUG: Participant {} waiting for Verified state (attempt {}) - Current state: {:?}", 
                     i + 1, retries + 1, session.get_state());
+            
+            // Check for timeout and handle it properly
+            if session.check_timeout() {
+                println!("DEBUG: DKG session timed out for participant {}", i + 1);
+                // If we've timed out, the state should be updated to TimedOut
+                let current_state = session.get_state();
+                assert_eq!(current_state, DkgState::TimedOut, 
+                          "Expected state to be TimedOut but was {:?}", current_state);
+                // In a real application we'd handle the timeout gracefully
+                // For the test, we'll fail here
+                panic!("DKG protocol timed out after {} seconds", config.timeout_seconds);
+            }
+            
             std::thread::sleep(std::time::Duration::from_millis(200));
             retries += 1;
         }
-        assert_eq!(session.get_state(), DkgState::Verified, 
-                  "Session {} failed to transition to Verified state", i + 1);
+        
+        // Check if we've hit the retry limit - this is a different failure than timeout
+        if retries >= 20 {
+            println!("DEBUG: Participant {} exceeded retry limit waiting for Verified state", i + 1);
+            // The state should be checked one more time
+            let final_state = session.get_state();
+            if final_state == DkgState::TimedOut {
+                panic!("DKG protocol timed out after {} seconds", config.timeout_seconds);
+            } else {
+                assert_eq!(final_state, DkgState::Verified, 
+                          "Session {} failed to transition to Verified state. Final state: {:?}", 
+                          i + 1, final_state);
+            }
+        }
+        
         println!("DEBUG: Participant {} reached Verified state", i + 1);
     }
 
@@ -519,11 +576,37 @@ fn test_complete_dkg_example_simulation() {
         while session.get_state() != DkgState::ValuesShared && retries < 20 {  // Increased retries
             println!("DEBUG: Participant {} waiting for ValuesShared state (attempt {}) - Current state: {:?}", 
                     i + 1, retries + 1, session.get_state());
+                    
+            // Check for timeout and handle it properly
+            if session.check_timeout() {
+                println!("DEBUG: DKG session timed out for participant {}", i + 1);
+                // If we've timed out, the state should be updated to TimedOut
+                let current_state = session.get_state();
+                assert_eq!(current_state, DkgState::TimedOut, 
+                          "Expected state to be TimedOut but was {:?}", current_state);
+                // In a real application we'd handle the timeout gracefully
+                // For the test, we'll fail here
+                panic!("DKG protocol timed out after {} seconds", config.timeout_seconds);
+            }
+            
             std::thread::sleep(std::time::Duration::from_millis(200));  // Increased wait time
             retries += 1;
         }
-        assert_eq!(session.get_state(), DkgState::ValuesShared, 
-                  "Session {} failed to transition to ValuesShared state", i + 1);
+        
+        // Check if we've hit the retry limit - this is a different failure than timeout
+        if retries >= 20 {
+            println!("DEBUG: Participant {} exceeded retry limit waiting for ValuesShared state", i + 1);
+            // The state should be checked one more time
+            let final_state = session.get_state();
+            if final_state == DkgState::TimedOut {
+                panic!("DKG protocol timed out after {} seconds", config.timeout_seconds);
+            } else {
+                assert_eq!(final_state, DkgState::ValuesShared, 
+                          "Session {} failed to transition to ValuesShared state. Final state: {:?}", 
+                          i + 1, final_state);
+            }
+        }
+        
         println!("DEBUG: Participant {} reached ValuesShared state", i + 1);
     }
     

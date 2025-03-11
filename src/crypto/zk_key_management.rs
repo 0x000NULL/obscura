@@ -912,9 +912,12 @@ impl DistributedKeyGeneration {
     
     /// Verify that a participant has valid shares
     pub fn verify_participant(&self, participant_id: Vec<u8>) -> Result<bool, String> {
-        let state = self.state.read().unwrap();
+        let state_val = self.state.read().unwrap().clone(); // Clone the state value
+        let in_correct_state = state_val == DkgState::ValuesShared || 
+                               state_val == DkgState::Verified || 
+                               state_val == DkgState::Completed;
         
-        if *state != DkgState::ValuesShared && *state != DkgState::Verified && *state != DkgState::Completed {
+        if !in_correct_state {
             return Err("Not in value sharing, verification, or completion phase".to_string());
         }
         
@@ -932,7 +935,17 @@ impl DistributedKeyGeneration {
             let is_valid = verify_fn(shares, &all_commitments);
             
             if is_valid {
-                self.verified_participants.write().unwrap().insert(participant_id);
+                let mut verified = self.verified_participants.write().unwrap();
+                verified.insert(participant_id);
+                
+                // Check if all participants are verified and state transition is needed
+                let participants = self.participants.read().unwrap();
+                if state_val == DkgState::ValuesShared && verified.len() == participants.len() {
+                    let mut state_write = self.state.write().unwrap();
+                    if *state_write == DkgState::ValuesShared {
+                        *state_write = DkgState::Verified;
+                    }
+                }
             }
             
             return Ok(is_valid);
@@ -943,7 +956,16 @@ impl DistributedKeyGeneration {
         let valid = shares.len() == participants.len();
         
         if valid {
-            self.verified_participants.write().unwrap().insert(participant_id);
+            let mut verified = self.verified_participants.write().unwrap();
+            verified.insert(participant_id);
+            
+            // Check if all participants are verified and state transition is needed
+            if state_val == DkgState::ValuesShared && verified.len() == participants.len() {
+                let mut state_write = self.state.write().unwrap();
+                if *state_write == DkgState::ValuesShared {
+                    *state_write = DkgState::Verified;
+                }
+            }
         }
         
         Ok(valid)
