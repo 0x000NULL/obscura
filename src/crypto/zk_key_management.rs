@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
+use ark_ff::Field;
 
 /// Constants for DKG protocol
 const DKG_TIMEOUT_SECONDS: u64 = 60; // Timeout for DKG protocol phases
@@ -75,13 +76,11 @@ impl Polynomial {
     
     /// Evaluate the polynomial at a given point x
     fn evaluate(&self, x: &JubjubScalar) -> JubjubScalar {
-        let mut result = self.coefficients[0]; // Start with constant term
-        let mut x_pow = *x; // x^1
+        let mut result = JubjubScalar::zero();
+        let mut x_pow = JubjubScalar::one();
         
-        for i in 1..self.coefficients.len() {
-            // Add coefficient * x^i
-            result = result + (self.coefficients[i] * x_pow);
-            // Update x^i to x^(i+1)
+        for coeff in &self.coefficients {
+            result = result + (*coeff * x_pow);
             x_pow = x_pow * (*x);
         }
         
@@ -608,13 +607,6 @@ impl DistributedKeyGeneration {
             }
         };
         
-        if *state != DkgState::Committed {
-            #[cfg(test)]
-            test_log!("DKG IMPL: Invalid state for adding commitment: {:?}", *state);
-            
-            return Err(format!("Invalid state for adding commitment: {:?}", *state));
-        }
-        
         // Verify the participant exists
         #[cfg(test)]
         test_log!("DKG IMPL: Acquiring participants read lock");
@@ -857,10 +849,17 @@ impl DistributedKeyGeneration {
         
         // Compute g^share = Π(C_j^(i^j))
         for (j, comm) in commitment.values.iter().enumerate() {
-            // Calculate i^j
-            let mut power = share.index;
-            for _ in 0..j {
-                power = power * share.index;
+            // Calculate i^j using repeated squaring
+            let mut power = JubjubScalar::one();
+            let mut base = share.index;
+            let mut exp = j;
+            
+            while exp > 0 {
+                if exp & 1 == 1 {
+                    power = power * base;
+                }
+                base = base * base;
+                exp >>= 1;
             }
             
             // Add C_j^(i^j) to the sum
@@ -883,10 +882,29 @@ impl DistributedKeyGeneration {
         
         // Check if we have all shares
         if received_shares.len() == participants.len() {
-            // Move to the next phase
-            let mut state = self.state.write().unwrap();
-            *state = DkgState::Verified;
-            info!("All shares received and verified. Moving to completion phase.");
+            // Verify all participants before transitioning
+            let mut all_verified = true;
+            for participant in participants.iter() {
+                match self.verify_participant(participant.id.clone()) {
+                    Ok(is_valid) => {
+                        if !is_valid {
+                            all_verified = false;
+                            break;
+                        }
+                    }
+                    Err(_) => {
+                        all_verified = false;
+                        break;
+                    }
+                }
+            }
+            
+            if all_verified {
+                // Move to the next phase
+                let mut state = self.state.write().unwrap();
+                *state = DkgState::Verified;
+                info!("All shares received and verified. Moving to completion phase.");
+            }
         }
         
         Ok(())
@@ -896,8 +914,8 @@ impl DistributedKeyGeneration {
     pub fn verify_participant(&self, participant_id: Vec<u8>) -> Result<bool, String> {
         let state = self.state.read().unwrap();
         
-        if *state != DkgState::Verified && *state != DkgState::Completed {
-            return Err("Not in verification or completion phase".to_string());
+        if *state != DkgState::ValuesShared && *state != DkgState::Verified && *state != DkgState::Completed {
+            return Err("Not in value sharing, verification, or completion phase".to_string());
         }
         
         // Get shares from this participant
