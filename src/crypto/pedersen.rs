@@ -6,6 +6,7 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::UniformRand;
 use rand::rngs::OsRng;
 use sha2::{Digest, Sha256};
+use rand::Rng;
 
 // Additional imports for BLS12-381
 use blstrs::{

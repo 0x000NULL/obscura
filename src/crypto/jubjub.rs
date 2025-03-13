@@ -6,20 +6,23 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::UniformRand;
 #[allow(dead_code)]
 use rand::rngs::OsRng;
-use rand::Rng; // Add this import
-use rand_core::RngCore; // Import RngCore trait for fill_bytes
+use rand::Rng;
+use rand_core::RngCore;
 use sha2::{Digest, Sha256};
-use std::ops::Mul; // Add Mul trait import
-use ark_ec::{Group, CurveGroup, AffineRepr}; // Add AffineRepr trait import
-use ark_ff::{One, PrimeField, Zero, BigInteger, Field}; // Add Field trait import
+use std::ops::Mul;
+use ark_ec::{Group, CurveGroup, AffineRepr};
+use ark_ff::{One, PrimeField, Zero, BigInteger};
 use ff::PrimeFieldBits;
-use rand_distr::Distribution; // Add Distribution trait import
+use rand_distr::Distribution;
 
 // Add derive traits for JubjubKeypair
 use std::fmt::Debug;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use once_cell::sync::Lazy;
 use rayon::prelude::*;
+use std::time::Duration;
+use std::thread;
+use log::{debug, info, warn};
 
 type Fr = JubjubFr;
 
@@ -356,23 +359,20 @@ impl JubjubScalarExt for JubjubScalar {
 impl JubjubPointExt for JubjubPoint {
     fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
-        self.into_affine()
-            .serialize_compressed(&mut bytes)
-            .expect("Serialization failed");
+        self.into_affine().serialize_compressed(&mut bytes).unwrap();
         bytes
     }
 
     fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() != 32 {
-            return None;
+        if let Ok(point) = EdwardsAffine::deserialize_compressed(bytes) {
+            Some(point.into())
+        } else {
+            None
         }
-        EdwardsAffine::deserialize_compressed(bytes)
-            .ok()
-            .map(EdwardsProjective::from)
     }
 
     fn generator() -> Self {
-        <EdwardsProjective as Group>::generator()
+        <EdwardsProjective as ark_ec::Group>::generator()
     }
 
     fn verify(&self, message: &[u8], signature: &JubjubSignature) -> bool {
@@ -393,7 +393,7 @@ impl JubjubPointExt for JubjubPoint {
         
         // Verify sG = R + eP
         let sg = <EdwardsProjective as ark_ec::Group>::generator() * signature.s;
-        let ep = (*self) * e;
+        let ep = *self * e;
         let rhs = signature.r + ep;
         
         sg == rhs
@@ -2208,7 +2208,7 @@ mod tests {
         let mut rng = OsRng;
         let sender_private = Fr::rand(&mut rng);
 
-        let (shared_secret, ephemeral_public) =
+        let (_shared_secret, ephemeral_public) =
             stealth_diffie_hellman(&sender_private, &recipient_keypair.public);
 
         // Recover the stealth private key

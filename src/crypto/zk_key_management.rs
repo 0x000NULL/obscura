@@ -1,6 +1,6 @@
 use crate::crypto::{JubjubKeypair, JubjubPoint, JubjubScalar, JubjubPointExt, JubjubScalarExt};
 use crate::crypto::metadata_protection::ForwardSecrecyProvider;
-use rand::{rngs::OsRng, Rng};
+use rand::rngs::OsRng;
 use rand_core::RngCore;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
@@ -92,12 +92,12 @@ impl Polynomial {
     
     /// Evaluate the polynomial at a given point x
     fn evaluate(&self, x: &JubjubScalar) -> JubjubScalar {
-        let mut result = JubjubScalar::zero();
-        let mut x_pow = JubjubScalar::one();
+        let mut result = self.coefficients[0];  // Start with constant term
+        let mut power = JubjubScalar::one();  // Start with x^0
         
-        for coeff in &self.coefficients {
-            result = result + (*coeff * x_pow);
-            x_pow = x_pow * (*x);
+        for coeff in self.coefficients.iter().skip(1) {
+            power = power * (*x);  // Calculate x^i for this term
+            result = result + (*coeff * power);  // Add a_i * x^i
         }
         
         result
@@ -126,6 +126,21 @@ pub struct Share {
 pub struct Commitment {
     /// The committed values (g^coefficient)
     pub values: Vec<JubjubPoint>,
+}
+
+impl Commitment {
+    /// Evaluate the commitment at a point x
+    pub fn evaluate(&self, x: &JubjubScalar) -> JubjubPoint {
+        let mut result = self.values[0];  // Start with constant term (C_0)
+        let mut power = JubjubScalar::one();  // Start with x^0
+        
+        for value in self.values.iter().skip(1) {
+            power = power * (*x);  // Calculate x^i for this term
+            result = result + (*value * power);  // Add C_i * x^i
+        }
+        
+        result
+    }
 }
 
 /// The state of a DKG session with improved state machine pattern
@@ -1001,17 +1016,20 @@ impl DistributedKeyGeneration {
             let mut shares = HashMap::new();
             
             for (idx, participant) in participants.iter().enumerate() {
-                // Convert participant index to field element
+                // Convert participant index to field element (1-based index)
                 let index = JubjubScalar::from((idx + 1) as u64);
                 
                 // Evaluate polynomial at participant's index
                 let value = poly.evaluate(&index);
                 
-                // Create share
+                // Create share with the 1-based index
                 let share = Share { index, value };
                 
                 // Add to map
                 shares.insert(participant.id.clone(), share);
+                
+                #[cfg(test)]
+                test_log!("DKG IMPL: Generated share for participant {} with index {}", idx + 1, index);
             }
             
             Ok(shares)
@@ -1103,14 +1121,15 @@ impl DistributedKeyGeneration {
         };
         
         // Verify the share against the commitment
-        let mut lhs = JubjubPoint::zero();
+        let lhs = JubjubPoint::generator() * share.value;
         
         #[cfg(test)]
         test_log!("DKG IMPL: Starting verification calculation for share from {:?}", from_participant);
         
-        // Compute g^share = Π(C_j^(i^j))
+        // Use the same verification logic as verify_participant
+        let mut rhs = JubjubPoint::zero();
         for (j, comm) in commitment.values.iter().enumerate() {
-            // Calculate i^j using repeated squaring
+            // Calculate i^j
             let mut power = JubjubScalar::one();
             let mut base = share.index;
             let mut exp = j;
@@ -1123,25 +1142,14 @@ impl DistributedKeyGeneration {
                 exp >>= 1;
             }
             
-            #[cfg(test)]
-            test_log!("DKG IMPL: j={}, power={}, commitment={}", j, power, comm);
-            
-            // Add C_j^(i^j) to the sum
-            let term = *comm * power;
-            lhs = lhs + term;
-            
-            #[cfg(test)]
-            test_log!("DKG IMPL: Term {} = commitment[{}] * power = {}", j, j, term);
+            rhs = rhs + (*comm * power);
         }
         
         #[cfg(test)]
-        test_log!("DKG IMPL: LHS (g^share from commitments) = {}", lhs);
-        
-        // Compute right hand side: g^value
-        let rhs = JubjubPoint::generator() * share.value;
+        test_log!("DKG IMPL: LHS (g^share directly) = {}", lhs);
         
         #[cfg(test)]
-        test_log!("DKG IMPL: RHS (g^value directly) = {}", rhs);
+        test_log!("DKG IMPL: RHS (commitment evaluated at share index) = {}", rhs);
         
         #[cfg(test)]
         test_log!("DKG IMPL: Share verification: LHS == RHS? {}", lhs == rhs);
@@ -1167,7 +1175,7 @@ impl DistributedKeyGeneration {
             }
             
             // Enhanced error reporting
-            return Err(format!("Share verification failed for participant {:?}: commitment verification failed (g^share != g^value)", 
+            return Err(format!("Share verification failed for participant {:?}: commitment verification failed (g^share != Π(C_i * x^i))", 
                              hex::encode(&from_participant)));
         }
         
@@ -1384,17 +1392,6 @@ impl DistributedKeyGeneration {
             return Ok(is_valid);
         }
         
-        // Default verification: check if we have the expected number of shares
-        let participants = match self.participants.read() {
-            Ok(guard) => guard,
-            Err(e) => return Err(format!("Failed to acquire participants lock: {:?}", e)),
-        };
-        
-        #[cfg(test)]
-        test_log!("DKG IMPL: Performing default verification for participant {:?}", participant_id);
-        #[cfg(test)]
-        test_log!("DKG IMPL: Found {} shares, expecting {} shares", shares.len(), participants.len());
-        
         // Add specific share checking
         if shares.len() > 0 {
             // Log details about the first share for debugging
@@ -1406,7 +1403,7 @@ impl DistributedKeyGeneration {
                 // Also verify the share against the commitment
                 if let Some(commitment) = commitments.get(&participant_id) {
                     test_log!("DKG IMPL: Verifying share against commitment values...");
-                    let mut lhs = JubjubPoint::zero();
+                    let mut rhs = JubjubPoint::zero();
                     
                     // Compute g^share = Π(C_j^(i^j))
                     for (j, comm) in commitment.values.iter().enumerate() {
@@ -1423,19 +1420,20 @@ impl DistributedKeyGeneration {
                             exp >>= 1;
                         }
                         
-                        lhs = lhs + (*comm * power);
+                        rhs = rhs + (*comm * power);
                     }
                     
-                    let rhs = JubjubPoint::generator() * share.value;
+                    let lhs = JubjubPoint::generator() * share.value;
                     test_log!("DKG IMPL: Share verification: LHS == RHS? {}", lhs == rhs);
                     if lhs != rhs {
                         test_log!("DKG IMPL: WARNING - Individual share verification failed!");
+                        return Ok(false);
                     }
                 }
             }
         }
         
-        let valid = shares.len() == participants.len();
+        let valid = shares.len() == self.participants.read().map_err(|e| format!("Failed to acquire participants lock: {:?}", e))?.len();
         
         #[cfg(test)]
         test_log!("DKG IMPL: Verification result for participant {:?}: {}", participant_id, valid);
@@ -1453,15 +1451,15 @@ impl DistributedKeyGeneration {
             
             // Check if all participants are verified and state transition is needed
             #[cfg(test)]
-            test_log!("DKG IMPL: Verified participants: {}/{}", verified.len(), participants.len());
+            test_log!("DKG IMPL: Verified participants: {}/{}", verified.len(), self.participants.read().map_err(|e| format!("Failed to acquire participants lock: {:?}", e))?.len());
             
-            if current_state == DkgState::ValuesShared && verified.len() == participants.len() {
+            if current_state == DkgState::ValuesShared && verified.len() == self.participants.read().map_err(|e| format!("Failed to acquire participants lock: {:?}", e))?.len() {
                 #[cfg(test)]
                 test_log!("DKG IMPL: All participants verified. Transitioning to Verified state");
                 
                 // To avoid holding multiple locks, drop all locks before transitioning
                 drop(verified);
-                drop(participants);
+                // No need to drop self.participants as we're not holding a lock on it
                 
                 // Try to transition to Verified state
                 let success = self.state_machine.transition_to(DkgState::Verified)?;
@@ -1471,14 +1469,11 @@ impl DistributedKeyGeneration {
                     
                     return Err("Failed to transition to Verified state".to_string());
                 }
-                
-                #[cfg(test)]
-                test_log!("DKG IMPL: Successfully transitioned to Verified state");
             }
         } else {
             #[cfg(test)]
             test_log!("DKG IMPL: Participant {:?} verification failed: expected {} shares, got {}", 
-                     participant_id, participants.len(), shares.len());
+                     participant_id, self.participants.read().map_err(|e| format!("Failed to acquire participants lock: {:?}", e))?.len(), shares.len());
         }
         
         Ok(valid)

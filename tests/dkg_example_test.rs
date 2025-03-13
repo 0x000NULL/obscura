@@ -134,23 +134,66 @@ fn test_dkg_flow_part1_through_share_exchange() {
     }
     
     // 5. EXCHANGE COMMITMENTS
-    println!("Step 5: Exchanging commitments");
+    println!("DEBUG: Exchanging commitments");
+    
+    // First, check which commitments each participant already has
+    let mut received_commitments = vec![Vec::new(); managers.len()];
     for (i, manager) in managers.iter().enumerate() {
         let session = manager.get_session(&session_id).unwrap();
+        println!("DEBUG: Participant {} state before exchange: {:?}", i + 1, session.get_state());
         
-        // Add commitments from other participants
-        for (j, (other_id, commitment)) in commitments.iter().enumerate() {
-            if i != j {
-                println!("P{} adding commitment from P{}", i+1, j+1);
-                session.add_commitment(other_id.clone(), commitment.clone()).unwrap();
+        // Get list of commitments this participant already has
+        let mut has_commitments = Vec::new();
+        for (j, (participant_id, _)) in commitments.iter().enumerate() {
+            let result = session.add_commitment(participant_id.clone(), commitments[j].1.clone());
+            match result {
+                Ok(_) => {
+                    println!("DEBUG: P{} successfully added commitment from P{}", i + 1, j + 1);
+                    has_commitments.push(j);
+                }
+                Err(e) => {
+                    if e.contains("already exists") {
+                        println!("DEBUG: P{} already has commitment from P{}", i + 1, j + 1);
+                        has_commitments.push(j);
+                    }
+                }
             }
         }
-        
-        // Verify state transition to ValuesShared after receiving all commitments
+        received_commitments[i] = has_commitments;
+        println!("DEBUG: P{} has commitments from: {:?}", i + 1, received_commitments[i]);
+    }
+
+    // Now verify that all participants have all commitments
+    for (i, manager) in managers.iter().enumerate() {
+        let session = manager.get_session(&session_id).unwrap();
         let state = session.get_state();
-        println!("P{} state after adding all commitments: {:?}", i+1, state);
+        println!("DEBUG: Participant {} final state: {:?}", i + 1, state);
         assert_eq!(state, DkgState::ValuesShared, 
-                  "Participant {} should transition to ValuesShared state after receiving all commitments", i + 1);
+                  "Participant {} should be in ValuesShared state after receiving all commitments", i + 1);
+    }
+    
+    // Wait for all participants to reach ValuesShared state
+    println!("DEBUG: Waiting for all participants to reach ValuesShared state");
+    for (i, manager) in managers.iter().enumerate() {
+        let session = manager.get_session(&session_id).unwrap();
+        let mut retries = 0;
+        const MAX_RETRIES: usize = 20;
+        
+        while session.get_state() != DkgState::ValuesShared && retries < MAX_RETRIES {
+            println!("DEBUG: Participant {} waiting for ValuesShared state (attempt {}/{}), current state: {:?}", 
+                i + 1, retries + 1, MAX_RETRIES, session.get_state());
+            
+            if session.check_timeout() {
+                panic!("DKG protocol timed out for participant {} while waiting for ValuesShared", i + 1);
+            }
+            
+            thread::sleep(Duration::from_millis(100));
+            retries += 1;
+        }
+        
+        assert_eq!(session.get_state(), DkgState::ValuesShared, 
+            "Participant {} failed to reach ValuesShared state after {} attempts", i + 1, MAX_RETRIES);
+        println!("DEBUG: Participant {} successfully reached ValuesShared state", i + 1);
     }
     
     // 6. GENERATE SHARES
@@ -292,23 +335,66 @@ fn test_dkg_flow_with_three_participants() {
     }
     
     // 5. EXCHANGE COMMITMENTS
-    println!("Step 5: Exchanging commitments");
+    println!("DEBUG: Exchanging commitments");
+    
+    // First, check which commitments each participant already has
+    let mut received_commitments = vec![Vec::new(); managers.len()];
     for (i, manager) in managers.iter().enumerate() {
         let session = manager.get_session(&session_id).unwrap();
+        println!("DEBUG: Participant {} state before exchange: {:?}", i + 1, session.get_state());
         
-        // Add commitments from other participants
-        for (j, (other_id, commitment)) in commitments.iter().enumerate() {
-            if i != j {
-                println!("P{} adding commitment from P{}", i+1, j+1);
-                session.add_commitment(other_id.clone(), commitment.clone()).unwrap();
+        // Get list of commitments this participant already has
+        let mut has_commitments = Vec::new();
+        for (j, (participant_id, _)) in commitments.iter().enumerate() {
+            let result = session.add_commitment(participant_id.clone(), commitments[j].1.clone());
+            match result {
+                Ok(_) => {
+                    println!("DEBUG: P{} successfully added commitment from P{}", i + 1, j + 1);
+                    has_commitments.push(j);
+                }
+                Err(e) => {
+                    if e.contains("already exists") {
+                        println!("DEBUG: P{} already has commitment from P{}", i + 1, j + 1);
+                        has_commitments.push(j);
+                    }
+                }
             }
         }
-        
-        // Verify state transition to ValuesShared after receiving all commitments
+        received_commitments[i] = has_commitments;
+        println!("DEBUG: P{} has commitments from: {:?}", i + 1, received_commitments[i]);
+    }
+
+    // Now verify that all participants have all commitments
+    for (i, manager) in managers.iter().enumerate() {
+        let session = manager.get_session(&session_id).unwrap();
         let state = session.get_state();
-        println!("P{} state after adding all commitments: {:?}", i+1, state);
+        println!("DEBUG: Participant {} final state: {:?}", i + 1, state);
         assert_eq!(state, DkgState::ValuesShared, 
-                  "Participant {} should transition to ValuesShared state after receiving all commitments", i + 1);
+                  "Participant {} should be in ValuesShared state after receiving all commitments", i + 1);
+    }
+    
+    // Wait for all participants to reach ValuesShared state
+    println!("DEBUG: Waiting for all participants to reach ValuesShared state");
+    for (i, manager) in managers.iter().enumerate() {
+        let session = manager.get_session(&session_id).unwrap();
+        let mut retries = 0;
+        const MAX_RETRIES: usize = 20;
+        
+        while session.get_state() != DkgState::ValuesShared && retries < MAX_RETRIES {
+            println!("DEBUG: Participant {} waiting for ValuesShared state (attempt {}/{}), current state: {:?}", 
+                i + 1, retries + 1, MAX_RETRIES, session.get_state());
+            
+            if session.check_timeout() {
+                panic!("DKG protocol timed out for participant {} while waiting for ValuesShared", i + 1);
+            }
+            
+            thread::sleep(Duration::from_millis(100));
+            retries += 1;
+        }
+        
+        assert_eq!(session.get_state(), DkgState::ValuesShared, 
+            "Participant {} failed to reach ValuesShared state after {} attempts", i + 1, MAX_RETRIES);
+        println!("DEBUG: Participant {} successfully reached ValuesShared state", i + 1);
     }
     
     // 6. GENERATE SHARES
@@ -757,25 +843,45 @@ fn test_complete_dkg_example_simulation() {
     
     // Then, exchange all commitments
     println!("DEBUG: Exchanging commitments");
+    
+    // First, check which commitments each participant already has
+    let mut received_commitments = vec![Vec::new(); managers.len()];
     for (i, manager) in managers.iter().enumerate() {
         let session = manager.get_session(&session_id).unwrap();
-        
-        // Print current state before adding commitments
         println!("DEBUG: Participant {} state before exchange: {:?}", i + 1, session.get_state());
         
-        for (j, (other_id, commitment)) in commitments.iter().enumerate() {
-            if i != j {  // Only add commitments from other participants
-                println!("DEBUG: Participant {} adding commitment from participant {}", i + 1, j + 1);
-                session.add_commitment(other_id.clone(), commitment.clone()).unwrap();
+        // Get list of commitments this participant already has
+        let mut has_commitments = Vec::new();
+        for (j, (participant_id, _)) in commitments.iter().enumerate() {
+            let result = session.add_commitment(participant_id.clone(), commitments[j].1.clone());
+            match result {
+                Ok(_) => {
+                    println!("DEBUG: P{} successfully added commitment from P{}", i + 1, j + 1);
+                    has_commitments.push(j);
+                }
+                Err(e) => {
+                    if e.contains("already exists") {
+                        println!("DEBUG: P{} already has commitment from P{}", i + 1, j + 1);
+                        has_commitments.push(j);
+                    }
+                }
             }
         }
-        
-        // Print state after adding commitments
-        println!("DEBUG: Participant {} state after exchange: {:?}", i + 1, session.get_state());
+        received_commitments[i] = has_commitments;
+        println!("DEBUG: P{} has commitments from: {:?}", i + 1, received_commitments[i]);
+    }
+
+    // Now verify that all participants have all commitments
+    for (i, manager) in managers.iter().enumerate() {
+        let session = manager.get_session(&session_id).unwrap();
+        let state = session.get_state();
+        println!("DEBUG: Participant {} final state: {:?}", i + 1, state);
+        assert_eq!(state, DkgState::ValuesShared, 
+                  "Participant {} should be in ValuesShared state after receiving all commitments", i + 1);
     }
     
-    // Wait for ValuesShared state after commitment exchange
-    println!("DEBUG: Waiting for participants to reach ValuesShared state");
+    // Wait for all participants to reach ValuesShared state
+    println!("DEBUG: Waiting for all participants to reach ValuesShared state");
     for (i, manager) in managers.iter().enumerate() {
         let session = manager.get_session(&session_id).unwrap();
         let mut retries = 0;

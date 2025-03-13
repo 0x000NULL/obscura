@@ -1,7 +1,8 @@
 use crate::networking::message::{Message, MessageType};
 use crate::networking::p2p::ConnectionObfuscationConfig;
-use rand::{thread_rng, Rng};
+use rand::thread_rng;
 use rand_distr::{Distribution, Normal, Uniform};
+use rand::Rng;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use std::thread;

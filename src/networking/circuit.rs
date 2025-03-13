@@ -445,7 +445,7 @@ impl CircuitManager {
             // Generate random padding size
             let mut rng = thread_rng();
             let padding_size = rng.gen_range(PADDING_MIN_SIZE..PADDING_MAX_SIZE);
-            let padding_data = vec![0u8; padding_size];
+            let _padding_data = vec![0u8; padding_size];
             
             // Update circuit stats
             circuit.bytes_sent += padding_size as u64;

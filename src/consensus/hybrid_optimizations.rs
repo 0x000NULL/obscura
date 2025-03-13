@@ -445,7 +445,7 @@ impl ValidationManager {
                     .map(|tx| {
                         // Validate and calculate size
                         let valid = self.validate_transaction(tx);
-                        let size = self.calculate_transaction_size(tx);
+                        let size = self.calculate_size(tx);
                         (valid, size, tx)
                     })
                     .collect()
@@ -461,23 +461,23 @@ impl ValidationManager {
 
         // Sort by fee per byte, highest first
         valid_transactions.sort_by(|(size_a, tx_a), (size_b, tx_b)| {
-            let fee_per_byte_a = self.calculate_transaction_fee(tx_a) as f64 / *size_a as f64;
-            let fee_per_byte_b = self.calculate_transaction_fee(tx_b) as f64 / *size_b as f64;
+            let fee_per_byte_a = self.calculate_fee(tx_a) as f64 / *size_a as f64;
+            let fee_per_byte_b = self.calculate_fee(tx_b) as f64 / *size_b as f64;
             fee_per_byte_b.partial_cmp(&fee_per_byte_a).unwrap()
         });
 
         // Fill block up to max_block_size
         let mut result = Vec::new();
-        let mut current_size = 0;
+        let mut _current_size = 0;
 
         for (size, tx) in valid_transactions {
-            if current_size + size <= max_block_size {
+            if _current_size + size <= max_block_size {
                 result.push(tx.clone());
-                current_size += size;
-            } else if current_size == 0 && size <= max_block_size {
+                _current_size += size;
+            } else if _current_size == 0 && size <= max_block_size {
                 // Special case: if the block is empty and this transaction fits on its own
                 result.push(tx.clone());
-                current_size += size;
+                _current_size += size;
                 break;
             }
         }
@@ -486,7 +486,7 @@ impl ValidationManager {
     }
 
     /// Calculate transaction size in bytes (placeholder implementation)
-    fn calculate_transaction_size(&self, tx: &crate::blockchain::Transaction) -> usize {
+    fn calculate_size(&self, tx: &crate::blockchain::Transaction) -> usize {
         // Basic estimate: 10 bytes per input + 10 bytes per output + 10 bytes overhead
         let input_size = tx.inputs.len() * 150;
         let output_size = tx.outputs.len() * 34;
@@ -494,7 +494,7 @@ impl ValidationManager {
     }
 
     /// Calculate transaction fee (placeholder implementation)
-    fn calculate_transaction_fee(&self, _tx: &crate::blockchain::Transaction) -> u64 {
+    fn calculate_fee(&self, _tx: &crate::blockchain::Transaction) -> u64 {
         // In real implementation, this would calculate: sum(inputs) - sum(outputs)
         // For now just return a dummy value
         1000

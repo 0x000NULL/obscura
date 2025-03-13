@@ -3,7 +3,6 @@ use crate::crypto::side_channel_protection::SideChannelProtection;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use rand::{Rng, thread_rng};
 
 #[test]
 fn test_secure_memory_basic() {

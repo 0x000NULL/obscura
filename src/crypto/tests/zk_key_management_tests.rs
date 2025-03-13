@@ -2,7 +2,6 @@ use crate::crypto::zk_key_management::{
     Commitment, DkgConfig, DkgManager, Participant, SessionId, Share
 };
 use crate::crypto::jubjub::JubjubKeypair;
-use rand::{rngs::OsRng, Rng};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::thread;

@@ -324,12 +324,13 @@ impl BlsConsensus {
     pub fn verify_block_signatures(
         &self,
         block_hash: &[u8; 32],
-        signature: &BlsSignature,
+        _signature: &BlsSignature,
     ) -> bool {
-        let validators = self.validators.lock().unwrap();
+        let _validators = self.validators.lock().unwrap();
         
         // Get all validator public keys
-        let public_keys: Vec<BlsPublicKey> = validators.keys().cloned().collect();
+        let validators = self.get_active_validators();
+        let _public_keys: Vec<BlsPublicKey> = validators.keys().cloned().collect();
         
         // For a valid aggregated signature, it should verify against the combination
         // of all validators that contributed to it
@@ -371,6 +372,11 @@ impl BlsConsensus {
         stats.insert("total_stake".to_string(), total_stake.to_string());
         
         stats
+    }
+
+    /// Get the currently active validators
+    pub fn get_active_validators(&self) -> HashMap<BlsPublicKey, Validator> {
+        self.validators.lock().unwrap().clone()
     }
 }
 

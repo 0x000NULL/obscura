@@ -1,9 +1,9 @@
-use crate::crypto::{PowerAnalysisProtection, PowerAnalysisConfig, PowerAnalysisError, SideChannelProtectionConfig};
+use crate::crypto::{PowerAnalysisProtection, PowerAnalysisConfig, SideChannelProtectionConfig};
 use crate::crypto::side_channel_protection::SideChannelProtection;
 use crate::crypto::jubjub::{JubjubPoint, JubjubScalar};
 use std::sync::Arc;
 use std::time::Instant;
-use rand::{Rng, thread_rng};
+use rand::thread_rng;
 use ark_std::UniformRand;
 use rand_core::SeedableRng;
 use ark_ec::{CurveGroup, Group, AffineRepr};

@@ -7,7 +7,7 @@ use std::net::SocketAddr;
 use std::net::{IpAddr, Ipv4Addr};
 use std::time::{Duration, Instant};
 use std::collections::{HashMap, HashSet, VecDeque};
-use rand::{thread_rng, RngCore, Rng};
+use rand::Rng;
 use crate::networking::dandelion::ANONYMITY_SET_ROTATION_INTERVAL;
 use rand_chacha::ChaCha20Rng;
 use crate::networking::dandelion::PeerReputation;

@@ -1,7 +1,8 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use rand::{Rng, thread_rng};
+use rand::thread_rng;
+use rand::Rng;
 use log::{debug, error, info, warn, trace};
 
 use crate::crypto::side_channel_protection::SideChannelProtection;
