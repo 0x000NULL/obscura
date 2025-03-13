@@ -26,6 +26,7 @@ fn create_test_transaction() -> Transaction {
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: std::collections::HashMap::new(),
     }
 }
 

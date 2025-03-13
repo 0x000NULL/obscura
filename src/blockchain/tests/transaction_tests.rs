@@ -37,6 +37,12 @@ fn test_transaction_creation() {
         outputs: vec![output],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
+        metadata: std::collections::HashMap::new(),
     };
     
     assert_eq!(tx.inputs.len(), 1);

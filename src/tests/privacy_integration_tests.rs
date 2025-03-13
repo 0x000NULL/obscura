@@ -1,9 +1,38 @@
 use crate::crypto::jubjub::generate_keypair;
 use crate::networking::dandelion::{DandelionManager, PrivacyRoutingMode, PropagationState};
 use crate::wallet::Wallet;
+use crate::blockchain::Transaction;
 use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
+
+// Extension trait for Transaction serialization in tests
+trait TransactionSerialize {
+    fn serialize(&self) -> Vec<u8>;
+}
+
+impl TransactionSerialize for Transaction {
+    fn serialize(&self) -> Vec<u8> {
+        // Simple mock serialization for testing
+        let mut result = Vec::new();
+        
+        // Add inputs
+        for input in &self.inputs {
+            result.extend_from_slice(&input.previous_output.transaction_hash);
+            result.extend_from_slice(&input.previous_output.index.to_le_bytes());
+            result.extend_from_slice(&input.signature_script);
+            result.extend_from_slice(&input.sequence.to_le_bytes());
+        }
+        
+        // Add outputs
+        for output in &self.outputs {
+            result.extend_from_slice(&output.value.to_le_bytes());
+            result.extend_from_slice(&output.public_key_script);
+        }
+        
+        result
+    }
+}
 
 #[test]
 fn test_transaction_privacy() {

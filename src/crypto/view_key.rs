@@ -1334,7 +1334,12 @@ mod tests {
         // Create a transaction with an output to the wallet
         let mut tx = Transaction {
             inputs: Vec::new(),
-            outputs: Vec::new(),
+            outputs: vec![
+                TransactionOutput {
+                    value: 100,
+                    public_key_script: vec![1, 2, 3],
+                },
+            ],
             lock_time: 0,
             fee_adjustments: None,
             privacy_flags: 0,
@@ -1342,6 +1347,7 @@ mod tests {
             ephemeral_pubkey: None,
             amount_commitments: None,
             range_proofs: None,
+            metadata: HashMap::new(),
         };
         
         // Create an output that should be visible to the view key
@@ -1395,7 +1401,12 @@ mod tests {
         // Create a transaction with an output to the wallet
         let mut tx = Transaction {
             inputs: Vec::new(),
-            outputs: Vec::new(),
+            outputs: vec![
+                TransactionOutput {
+                    value: 100,
+                    public_key_script: vec![1, 2, 3],
+                },
+            ],
             lock_time: 0,
             fee_adjustments: None,
             privacy_flags: 0,
@@ -1403,6 +1414,7 @@ mod tests {
             ephemeral_pubkey: None,
             amount_commitments: None,
             range_proofs: None,
+            metadata: HashMap::new(),
         };
         
         // Create an output that should be visible to the view key
@@ -1457,7 +1469,12 @@ mod tests {
         // Create a transaction with an output to the wallet
         let mut tx = Transaction {
             inputs: Vec::new(),
-            outputs: Vec::new(),
+            outputs: vec![
+                TransactionOutput {
+                    value: 100,
+                    public_key_script: vec![1, 2, 3],
+                },
+            ],
             lock_time: 0,
             fee_adjustments: None,
             privacy_flags: 0,
@@ -1465,6 +1482,7 @@ mod tests {
             ephemeral_pubkey: None,
             amount_commitments: None,
             range_proofs: None,
+            metadata: HashMap::new(),
         };
         
         // Create an output that should be visible to the view key

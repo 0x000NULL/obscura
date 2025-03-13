@@ -38,6 +38,7 @@ pub struct BlockHeader {
     pub privacy_flags: u32, // Flags for privacy features enabled in this block
     pub padding_commitment: Option<[u8; 32]>, // Commitment to padding data for privacy
     pub hash: [u8; 32],     // Cached hash of the block header
+    pub metadata: HashMap<String, String>, // Added metadata field for block header metadata
 }
 
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
@@ -58,6 +59,7 @@ pub struct Transaction {
     pub ephemeral_pubkey: Option<[u8; 32]>,
     pub amount_commitments: Option<Vec<Vec<u8>>>,
     pub range_proofs: Option<Vec<Vec<u8>>>,
+    pub metadata: HashMap<String, String>,
 }
 
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
@@ -165,6 +167,7 @@ impl Block {
                 privacy_flags: 0,
                 padding_commitment: None,
                 hash: [0; 32],
+                metadata: HashMap::new(),
             },
             transactions: Vec::new(),
         }
@@ -184,6 +187,7 @@ impl Block {
                 privacy_flags: 0,
                 padding_commitment: None,
                 hash: [0; 32],
+                metadata: HashMap::new(),
             },
             transactions: Vec::new(),
         }
@@ -362,6 +366,7 @@ pub fn create_coinbase_transaction(reward: u64) -> Transaction {
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: HashMap::new(),
     }
 }
 
@@ -426,6 +431,7 @@ impl Transaction {
             ephemeral_pubkey: None,
             amount_commitments: None,
             range_proofs: None,
+            metadata: HashMap::new(),
         }
     }
 
@@ -450,26 +456,33 @@ impl Transaction {
 
     /// Apply transaction obfuscation for privacy
     pub fn obfuscate(&mut self, obfuscator: &mut crate::crypto::privacy::TransactionObfuscator) {
-        // Obfuscate transaction ID
+        // Get the transaction hash before any modifications
         let tx_hash = self.hash();
+
+        // Apply graph protection
+        let protected = obfuscator.protect_transaction_graph(self);
+        *self = protected;
+
+        // Make the transaction unlinkable
+        let unlinkable = obfuscator.make_transaction_unlinkable(self);
+        *self = unlinkable;
+
+        // Apply metadata stripping
+        let stripped = obfuscator.strip_metadata(self);
+        *self = stripped;
+
+        // Store the obfuscated ID
         let obfuscated_id = obfuscator.obfuscate_tx_id(&tx_hash);
         self.obfuscated_id = Some(obfuscated_id);
 
-        // Apply transaction graph protection
-        let protected_tx = obfuscator.protect_transaction_graph(self);
-        self.inputs = protected_tx.inputs;
-        self.outputs = protected_tx.outputs;
+        // Set appropriate privacy flags
+        self.privacy_flags |= 0x01 | 0x02; // Basic privacy + metadata minimization
+    }
 
-        // Make transaction unlinkable
-        let unlinkable_tx = obfuscator.make_transaction_unlinkable(self);
-        self.inputs = unlinkable_tx.inputs;
-        self.outputs = unlinkable_tx.outputs;
-
-        // Strip metadata
-        let _stripped_tx = obfuscator.strip_metadata(self);
-
-        // Set privacy flags
-        self.privacy_flags |= 0x01; // Basic transaction obfuscation enabled
+    /// Apply metadata protection using the advanced protection system
+    pub fn apply_metadata_protection(&mut self, protection: &crate::crypto::metadata_protection::AdvancedMetadataProtection) {
+        let protected = protection.protect_transaction(self);
+        *self = protected;
     }
 
     /// Apply stealth addressing to transaction outputs
@@ -554,6 +567,7 @@ impl Transaction {
             ephemeral_pubkey: None,
             amount_commitments: None,
             range_proofs: None,
+            metadata: HashMap::new(),
         }
     }
 }

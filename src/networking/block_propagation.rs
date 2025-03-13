@@ -1,4 +1,4 @@
-use crate::blockchain::{Block, BlockHeader, Transaction};
+use crate::blockchain::{Block, BlockHeader, Transaction, TransactionOutput};
 use crate::networking::message::{Message, MessageType};
 use crate::networking::peer_manager::{PeerInfo, PeerManager};
 use log::error;
@@ -1030,11 +1030,17 @@ mod tests {
             privacy_flags: 0,
             padding_commitment: None,
             hash: [0; 32],
+            metadata: std::collections::HashMap::new(),
         };
 
         let tx = Transaction {
-            inputs: vec![],
-            outputs: vec![],
+            inputs: Vec::new(),
+            outputs: vec![
+                TransactionOutput {
+                    value: 100,
+                    public_key_script: vec![1, 2, 3],
+                },
+            ],
             lock_time: 0,
             fee_adjustments: None,
             privacy_flags: 0,
@@ -1042,6 +1048,7 @@ mod tests {
             ephemeral_pubkey: None,
             amount_commitments: None,
             range_proofs: None,
+            metadata: std::collections::HashMap::new(),
         };
 
         Block {

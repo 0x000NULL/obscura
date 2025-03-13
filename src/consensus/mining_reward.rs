@@ -295,6 +295,7 @@ pub fn create_mining_pool_coinbase(
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: std::collections::HashMap::new(),
     }
 }
 
@@ -378,6 +379,7 @@ pub fn create_mining_pool_coinbase_with_utxo(
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: std::collections::HashMap::new(),
     }
 }
 
@@ -855,11 +857,13 @@ pub fn calculate_package_fee_rate(
 
 pub fn create_coinbase_transaction(reward: u64) -> crate::blockchain::Transaction {
     crate::blockchain::Transaction {
-        inputs: vec![],
-        outputs: vec![crate::blockchain::TransactionOutput {
-            value: reward,
-            public_key_script: vec![],
-        }],
+        inputs: Vec::new(),
+        outputs: vec![
+            crate::blockchain::TransactionOutput {
+                value: reward,
+                public_key_script: Vec::new(),
+            },
+        ],
         lock_time: 0,
         fee_adjustments: None,
         privacy_flags: 0,
@@ -867,16 +871,19 @@ pub fn create_coinbase_transaction(reward: u64) -> crate::blockchain::Transactio
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: std::collections::HashMap::new(),
     }
 }
 
 pub fn create_test_transaction(value: u64) -> crate::blockchain::Transaction {
     crate::blockchain::Transaction {
-        inputs: vec![],
-        outputs: vec![crate::blockchain::TransactionOutput {
-            value,
-            public_key_script: vec![],
-        }],
+        inputs: Vec::new(),
+        outputs: vec![
+            crate::blockchain::TransactionOutput {
+                value,
+                public_key_script: Vec::new(),
+            },
+        ],
         lock_time: 0,
         fee_adjustments: None,
         privacy_flags: 0,
@@ -884,6 +891,7 @@ pub fn create_test_transaction(value: u64) -> crate::blockchain::Transaction {
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: std::collections::HashMap::new(),
     }
 }
 
@@ -937,6 +945,7 @@ mod tests {
             ephemeral_pubkey: None,
             amount_commitments: None,
             range_proofs: None,
+            metadata: std::collections::HashMap::new(),
         };
 
         // Test valid coinbase
@@ -959,6 +968,7 @@ mod tests {
             ephemeral_pubkey: None,
             amount_commitments: None,
             range_proofs: None,
+            metadata: std::collections::HashMap::new(),
         };
 
         // Test invalid reward
@@ -981,6 +991,7 @@ mod tests {
             ephemeral_pubkey: None,
             amount_commitments: None,
             range_proofs: None,
+            metadata: std::collections::HashMap::new(),
         };
 
         assert!(validate_coinbase_transaction(

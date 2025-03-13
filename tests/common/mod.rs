@@ -5,6 +5,7 @@ use obscura::crypto::jubjub::{generate_keypair, JubjubKeypair, JubjubSignature};
 use obscura::networking::{Node, NetworkConfig};
 use rand::rngs::OsRng;
 use rand::thread_rng;
+use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn create_test_block(nonce: u64) -> Block {
@@ -39,6 +40,7 @@ pub fn create_test_transaction() -> Transaction {
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: std::collections::HashMap::new(),
     }
 }
 

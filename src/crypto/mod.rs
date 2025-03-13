@@ -29,9 +29,6 @@ pub mod examples;
 pub mod bls12_381;
 pub mod jubjub;
 
-// Import the extension traits
-use crate::crypto::jubjub::{JubjubPointExt, JubjubScalarExt};
-
 // Re-export BlindingStore for easier access
 pub use blinding_store::BlindingStore;
 // Re-export CommitmentVerifier for easier access
@@ -47,75 +44,46 @@ pub use view_key::{
     MultiSigViewKey, AuthorizationStatus, TransactionFieldVisibility, 
     ViewKeyOperation, ViewKeyAuditEntry
 };
+pub use jubjub::{JubjubKeypair, JubjubSignature, JubjubPoint, JubjubScalar, JubjubPointExt, JubjubScalarExt, RotationStrategy, SecurityLevel};
+// Re-export the generate_keypair function
+pub use jubjub::generate_keypair as jubjub_generate_keypair;
 
 // Add new module for advanced metadata protection
 pub mod metadata_protection;
-pub mod zk_key_management;
-pub mod threshold_signatures;
-pub mod verifiable_secret_sharing;
+
+// Add new module for secure multi-party computation
 pub mod secure_mpc;
+
+// Add new module for homomorphic key derivation
 pub mod homomorphic_derivation;
 
-// Re-export types that will be commonly used
-pub use self::jubjub::JubjubKeypair;
+// Add new module for verifiable secret sharing
+pub mod verifiable_secret_sharing;
 
-// Re-export metadata protection types
-pub use self::metadata_protection::ForwardSecrecyProvider;
-pub use self::metadata_protection::MetadataMinimizer;
-pub use self::metadata_protection::EncryptedStorageProvider;
-pub use self::metadata_protection::AdvancedMetadataProtection;
-pub use self::metadata_protection::ZkStateUpdateProvider;
-pub use self::metadata_protection::BroadcastMetadataCleaner;
+// Add new module for threshold signatures
+pub mod threshold_signatures;
 
-// Re-export side-channel protection types
-pub use self::side_channel_protection::SideChannelProtection;
-pub use self::side_channel_protection::SideChannelProtectionConfig;
-pub use self::side_channel_protection::SideChannelError;
-
-// Re-export memory protection types
-pub use self::memory_protection::MemoryProtection;
-pub use self::memory_protection::MemoryProtectionConfig;
-pub use self::memory_protection::MemoryProtectionError;
-pub use self::memory_protection::SecureMemory;
-
-// Re-export power analysis protection types
-pub use self::power_analysis_protection::PowerAnalysisProtection;
-pub use self::power_analysis_protection::PowerAnalysisConfig;
-pub use self::power_analysis_protection::PowerAnalysisError;
-
-// Re-export zero-knowledge key management types
-pub use self::zk_key_management::DistributedKeyGeneration;
-pub use self::zk_key_management::DkgManager;
-pub use self::zk_key_management::DkgConfig;
-pub use self::zk_key_management::Participant;
-pub use self::zk_key_management::Share;
-pub use self::zk_key_management::Commitment;
-pub use self::zk_key_management::SessionId;
+// Add new module for zero-knowledge key management
+pub mod zk_key_management;
 
 // Re-export types for ease of use
-pub use self::jubjub::JubjubSignature;
 pub use self::metadata_protection::{
-    MetadataProtection, ProtectionConfig, MessageTag, PerfectForwardSecrecy,
-    EncryptedMessage, MessageProtection, ProtectedMetadata
+    MetadataProtection, ProtectionConfig, MessageTag, PerfectForwardSecrecy
 };
-pub use self::zk_key_management::{
-    DkgResult, DkgState
+
+// Re-export power analysis protection types
+pub use self::power_analysis_protection::{
+    PowerAnalysisProtection, PowerAnalysisConfig, PowerAnalysisError
 };
-pub use self::threshold_signatures::{
-    ThresholdSignatureSession, ThresholdSignatureManager, SignatureConfig, SignatureShare,
-    SignatureSessionId, SignatureResult, SignatureState
+
+// Re-export memory protection types
+pub use self::memory_protection::{
+    MemoryProtection, MemoryProtectionConfig, MemoryProtectionError
 };
-pub use self::verifiable_secret_sharing::{
-    VerifiableSecretSharingSession, VssManager, VssConfig, VssState, VerifiableShare,
-    PolynomialCommitment, VssSessionId, VssResult
-};
-pub use self::secure_mpc::{
-    MpcSession, MpcManager, MpcConfig, MpcState, MpcInput, MpcSessionId, MpcResult,
-    MpcComputationType
-};
-pub use self::homomorphic_derivation::{
-    HomomorphicKeyDerivation, DerivationConfig, DerivationPath, DerivationSegment,
-    DerivationResult
+
+// Re-export side channel protection types
+pub use self::side_channel_protection::{
+    SideChannelProtection, SideChannelProtectionConfig, SideChannelError
 };
 
 // Key management functions
@@ -123,7 +91,7 @@ pub use self::homomorphic_derivation::{
 #[allow(dead_code)] // Allow unused code as these are intended for future use
 pub fn generate_keypair() -> jubjub::JubjubKeypair {
     // Use JubJub for key generation
-    jubjub::generate_keypair()
+    jubjub_generate_keypair()
 }
 
 #[allow(dead_code)]

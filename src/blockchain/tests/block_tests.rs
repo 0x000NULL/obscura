@@ -26,12 +26,24 @@ fn test_merkle_root_calculation() {
         outputs: vec![],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
+        metadata: std::collections::HashMap::new(),
     };
     let tx2 = Transaction {
         inputs: vec![],
         outputs: vec![],
         lock_time: 0,
         fee_adjustments: None,
+        privacy_flags: 0,
+        obfuscated_id: None,
+        ephemeral_pubkey: None,
+        amount_commitments: None,
+        range_proofs: None,
+        metadata: std::collections::HashMap::new(),
     };
     
     block.transactions = vec![tx1, tx2];

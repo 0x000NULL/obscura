@@ -1,5 +1,6 @@
 use super::*;
 use crate::blockchain::{calculate_merkle_root, Transaction, TransactionOutput};
+use std::collections::HashMap;
 
 #[test]
 fn test_merkle_tree_creation() {
@@ -13,6 +14,7 @@ fn test_merkle_tree_creation() {
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: HashMap::new(),
     };
     let tx2 = Transaction {
         inputs: vec![],
@@ -24,6 +26,7 @@ fn test_merkle_tree_creation() {
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: HashMap::new(),
     };
     let transactions = vec![tx1, tx2];
 
@@ -73,6 +76,7 @@ fn test_transaction_hash() {
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: HashMap::new(),
     };
 
     let tx2 = Transaction {
@@ -88,6 +92,7 @@ fn test_transaction_hash() {
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: HashMap::new(),
     };
 
     assert_eq!(hash_transaction(&tx1), tx1.hash());

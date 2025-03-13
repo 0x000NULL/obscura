@@ -1,5 +1,7 @@
 use super::*;
 use crate::crypto::jubjub::{generate_keypair, JubjubPoint, JubjubPointExt, JubjubSignature};
+use crate::blockchain::{Block, BlockHeader, Transaction, TransactionOutput, calculate_merkle_root};
+use std::collections::HashMap;
 
 // Include the block structure tests
 #[cfg(test)]
@@ -23,6 +25,7 @@ pub fn create_test_transaction() -> Transaction {
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: std::collections::HashMap::new(),
     }
 }
 
@@ -41,6 +44,7 @@ pub fn create_transaction_with_fee(fee: u64) -> Transaction {
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: std::collections::HashMap::new(),
     }
 }
 
@@ -95,6 +99,7 @@ mod fee_adjustment_tests {
             ephemeral_pubkey: None,
             amount_commitments: None,
             range_proofs: None,
+            metadata: std::collections::HashMap::new(),
         };
 
         let adjusted_fee = tx.calculate_adjusted_fee(current_time);
@@ -117,6 +122,7 @@ mod fee_adjustment_tests {
             ephemeral_pubkey: None,
             amount_commitments: None,
             range_proofs: None,
+            metadata: std::collections::HashMap::new(),
         };
 
         let adjusted_fee = tx.calculate_adjusted_fee(current_time);
@@ -139,6 +145,7 @@ mod fee_adjustment_tests {
             ephemeral_pubkey: None,
             amount_commitments: None,
             range_proofs: None,
+            metadata: std::collections::HashMap::new(),
         };
 
         let adjusted_fee = tx.calculate_adjusted_fee(current_time);
@@ -161,6 +168,7 @@ mod fee_adjustment_tests {
             ephemeral_pubkey: None,
             amount_commitments: None,
             range_proofs: None,
+            metadata: std::collections::HashMap::new(),
         };
 
         let adjusted_fee = tx.calculate_adjusted_fee(current_time);

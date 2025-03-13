@@ -1,4 +1,4 @@
-use crate::blockchain::Transaction;
+use crate::blockchain::{OutPoint, Transaction, TransactionInput, TransactionOutput};
 use crate::crypto::bulletproofs::{verify_range_proof, RangeProof};
 use crate::crypto::jubjub::{JubjubPoint, JubjubPointExt, JubjubSignature};
 use crate::crypto::pedersen::{verify_commitment_sum, PedersenCommitment};
@@ -1249,6 +1249,7 @@ mod tests {
             ephemeral_pubkey: None,
             amount_commitments: None,
             range_proofs: None,
+            metadata: std::collections::HashMap::new(),
         };
 
         for (prev_hash, index) in inputs {

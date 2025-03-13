@@ -1,7 +1,7 @@
 // use super::*;
 use crate::blockchain::{
     Block, BlockHeader, Mempool, OutPoint, Transaction, TransactionInput, TransactionOutput,
-    UTXOSet,
+    UTXOSet, calculate_merkle_root,
 };
 use crate::consensus::mining_reward::{
     calculate_block_reward, calculate_block_reward_by_time, calculate_min_fee_rate,
@@ -148,6 +148,7 @@ fn test_transaction_fee_calculation() {
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: HashMap::new(),
     };
 
     // In a real implementation, the input value would be looked up from the UTXO set
@@ -169,6 +170,7 @@ fn test_transaction_fee_calculation() {
             ephemeral_pubkey: None,
             amount_commitments: None,
             range_proofs: None,
+            metadata: HashMap::new(),
         },
         // Regular transaction
         tx,
@@ -229,6 +231,7 @@ fn test_pow_mining_block_with_transactions() {
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: HashMap::new(),
     }];
 
     // Create a mining block with transactions
@@ -281,6 +284,7 @@ fn test_coinbase_maturity() {
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: HashMap::new(),
     };
 
     // Create a map of coinbase heights
@@ -329,6 +333,7 @@ fn test_coinbase_maturity() {
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: HashMap::new(),
     };
 
     // Should be valid regardless of height
@@ -389,6 +394,7 @@ fn test_transaction_size_estimation() {
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: HashMap::new(),
     };
 
     // Expected size calculation:
@@ -435,6 +441,7 @@ fn test_transaction_size_estimation() {
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: HashMap::new(),
     };
 
     // Expected size calculation:
@@ -467,6 +474,7 @@ fn create_test_transaction_with_fee(index: u8, output_value: u64) -> Transaction
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: HashMap::new(),
     }
 }
 
@@ -504,6 +512,7 @@ fn test_block_size_validation() {
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: HashMap::new(),
     };
 
     // Create a UTXO set for testing
@@ -523,6 +532,7 @@ fn test_block_size_validation() {
             privacy_flags: 0,
             padding_commitment: None,
             hash: [0; 32],
+            metadata: HashMap::new(),
         },
         transactions: vec![tx.clone()],
     };
@@ -554,6 +564,7 @@ fn test_block_size_validation() {
             privacy_flags: 0,
             padding_commitment: None,
             hash: [0; 32],
+            metadata: HashMap::new(),
         },
         transactions: large_transactions,
     };
@@ -575,6 +586,7 @@ fn test_block_size_validation() {
             privacy_flags: 0,
             padding_commitment: None,
             hash: [0; 32],
+            metadata: HashMap::new(),
         },
         transactions: vec![tx.clone(); (TARGET_BLOCK_SIZE / tx_size) as usize],
     };
@@ -689,6 +701,7 @@ fn test_cpfp_transaction_prioritization() {
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: HashMap::new(),
     };
 
     // First add the parent transaction to the UTXO set to ensure child can validate
@@ -722,6 +735,7 @@ fn test_cpfp_transaction_prioritization() {
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: HashMap::new(),
     };
 
     // Create some other transactions with medium fees
@@ -745,6 +759,7 @@ fn test_cpfp_transaction_prioritization() {
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: HashMap::new(),
     };
 
     let tx2 = Transaction {
@@ -767,6 +782,7 @@ fn test_cpfp_transaction_prioritization() {
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: HashMap::new(),
     };
 
     // Create a mempool and add all transactions

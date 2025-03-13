@@ -1,7 +1,8 @@
 use crate::blockchain::block_structure::BlockStructureManager;
-use crate::blockchain::{Block, Transaction};
+use crate::blockchain::{Block, BlockHeader, Transaction, TransactionOutput};
 use sha2::Digest;
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::collections::HashMap;
 
 #[test]
 fn test_block_timestamp_validation() {
@@ -46,6 +47,7 @@ fn test_privacy_merkle_root() {
             ephemeral_pubkey: None,
             amount_commitments: None,
             range_proofs: None,
+            metadata: std::collections::HashMap::new(),
         };
         block.transactions.push(tx);
     }
@@ -99,6 +101,7 @@ fn test_merkle_proof_verification() {
             ephemeral_pubkey: None,
             amount_commitments: None,
             range_proofs: None,
+            metadata: std::collections::HashMap::new(),
         };
         transactions.push(tx);
     }

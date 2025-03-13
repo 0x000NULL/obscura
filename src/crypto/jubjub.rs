@@ -325,10 +325,10 @@ pub trait JubjubScalarExt {
 // Implement extension trait for JubjubScalar
 impl JubjubScalarExt for JubjubScalar {
     fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = Vec::new();
-        self.serialize_compressed(&mut bytes)
+        let mut bytes = [0u8; 32];
+        self.serialize_compressed(&mut bytes[..])
             .expect("Serialization failed");
-        bytes
+        bytes.to_vec()
     }
 
     fn from_bytes(bytes: &[u8]) -> Option<Self> {
@@ -1820,7 +1820,7 @@ enum RotationReason {
 
 /// Strategy for key rotation
 #[derive(Clone, Debug)]
-enum RotationStrategy {
+pub enum RotationStrategy {
     /// Rotate based on time interval
     TimeBasedOnly,
     /// Rotate based on usage count
@@ -2706,7 +2706,7 @@ struct CompartmentMetadata {
 
 /// Security level for compartments
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum SecurityLevel {
+pub enum SecurityLevel {
     Standard,
     Enhanced,
     Critical,

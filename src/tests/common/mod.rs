@@ -1,6 +1,7 @@
 use crate::blockchain::{Block, OutPoint, Transaction, TransactionInput, TransactionOutput};
 use crate::consensus::StakeProof;
 use crate::crypto::jubjub::{generate_keypair, JubjubPointExt};
+use std::collections::HashMap;
 
 pub fn create_test_block(nonce: u64) -> Block {
     let mut block = Block::new([0u8; 32]);
@@ -36,6 +37,7 @@ pub fn create_test_transaction() -> Transaction {
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
+        metadata: HashMap::new(),
     }
 }
 

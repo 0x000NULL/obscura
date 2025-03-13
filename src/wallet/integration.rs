@@ -1,24 +1,26 @@
-use std::sync::{Arc, Mutex};
-use log::debug;
+use std::sync::{Arc, Mutex, RwLock};
+use log::{debug, error, info, warn};
 
 use crate::blockchain::{Block, Transaction, UTXOSet};
 use crate::blockchain::mempool::Mempool;
 use crate::networking::Node;
-use crate::crypto::jubjub::JubjubPoint;
+use crate::crypto::jubjub::{JubjubPoint, JubjubPointExt, JubjubScalarExt};
 use crate::wallet::Wallet;
+use crate::crypto::metadata_protection::AdvancedMetadataProtection;
 
 /// Responsible for integrating wallet functionality with the blockchain and network
 pub struct WalletIntegration {
-    wallet: Wallet,
+    wallet: Arc<RwLock<Wallet>>,
     node: Arc<Mutex<Node>>,
     mempool: Arc<Mutex<Mempool>>,
     utxo_set: Arc<Mutex<UTXOSet>>,
+    metadata_protection: Option<Arc<RwLock<AdvancedMetadataProtection>>>,
 }
 
 impl WalletIntegration {
     /// Create a new wallet integration
     pub fn new(
-        wallet: Wallet,
+        wallet: Arc<RwLock<Wallet>>,
         node: Arc<Mutex<Node>>,
         mempool: Arc<Mutex<Mempool>>,
         utxo_set: Arc<Mutex<UTXOSet>>,
@@ -28,16 +30,22 @@ impl WalletIntegration {
             node,
             mempool,
             utxo_set,
+            metadata_protection: None,
         }
     }
 
+    /// Set the metadata protection service
+    pub fn set_metadata_protection(&mut self, protection: Arc<RwLock<AdvancedMetadataProtection>>) {
+        self.metadata_protection = Some(protection);
+    }
+
     /// Get a reference to the underlying wallet
-    pub fn wallet(&self) -> &Wallet {
-        &self.wallet
+    pub fn wallet(&self) -> Arc<RwLock<Wallet>> {
+        self.wallet.clone()
     }
 
     /// Get a mutable reference to the underlying wallet
-    pub fn wallet_mut(&mut self) -> &mut Wallet {
+    pub fn wallet_mut(&mut self) -> &mut Arc<RwLock<Wallet>> {
         &mut self.wallet
     }
 
@@ -46,7 +54,7 @@ impl WalletIntegration {
         debug!("Creating transaction to send {} funds", amount);
         
         // Create the transaction
-        let tx = match self.wallet.create_transaction(recipient, amount) {
+        let tx = match self.wallet.write().unwrap().create_transaction(recipient, amount) {
             Some(tx) => tx,
             None => return Err("Failed to create transaction".to_string()),
         };
@@ -66,7 +74,7 @@ impl WalletIntegration {
         debug!("Creating transaction to send {} funds with custom fee", amount);
         
         // Create the transaction
-        let tx = match self.wallet.create_transaction_with_fee(recipient, amount, fee_per_kb) {
+        let tx = match self.wallet.write().unwrap().create_transaction_with_fee(recipient, amount, fee_per_kb) {
             Some(tx) => tx,
             None => return Err("Failed to create transaction with custom fee".to_string()),
         };
@@ -86,7 +94,7 @@ impl WalletIntegration {
         debug!("Creating staking transaction for {} funds", amount);
         
         // Create the staking transaction
-        let tx = match self.wallet.create_stake(amount) {
+        let tx = match self.wallet.write().unwrap().create_stake(amount) {
             Some(tx) => tx,
             None => return Err("Failed to create staking transaction".to_string()),
         };
@@ -106,7 +114,7 @@ impl WalletIntegration {
         debug!("Creating unstaking transaction for stake ID: {:?}", stake_id);
         
         // Create the unstaking transaction
-        let tx = match self.wallet.unstake(stake_id, amount) {
+        let tx = match self.wallet.write().unwrap().unstake(stake_id, amount) {
             Some(tx) => tx,
             None => return Err("Failed to create unstaking transaction".to_string()),
         };
@@ -126,7 +134,7 @@ impl WalletIntegration {
         debug!("Submitting transaction to network");
         
         // First submit to the wallet
-        self.wallet.submit_transaction(&tx);
+        self.wallet.write().unwrap().submit_transaction(&tx);
         
         // Add to mempool
         {
@@ -165,7 +173,7 @@ impl WalletIntegration {
         
         for block in blocks {
             debug!("Processing block: {:?}", block.hash());
-            self.wallet.process_block(block, &utxo_set);
+            self.wallet.write().unwrap().process_block(block, &utxo_set);
             processed += 1;
         }
         
@@ -187,7 +195,7 @@ impl WalletIntegration {
         
         let mut found = 0;
         for tx in &transactions {
-            if self.wallet.scan_for_stealth_transactions(tx) {
+            if self.wallet.write().unwrap().scan_for_stealth_transactions(tx) {
                 found += 1;
             }
         }
@@ -199,7 +207,7 @@ impl WalletIntegration {
     pub fn create_backup(&self) -> Result<String, String> {
         debug!("Creating wallet backup");
         
-        let backup_data = self.wallet.export_wallet_data();
+        let backup_data = self.wallet.read().unwrap().export_wallet_data();
         // In a real implementation, we would properly serialize this to a secure format
         // For now, we'll just return a placeholder
         
@@ -208,27 +216,28 @@ impl WalletIntegration {
 
     /// Get available wallet balance
     pub fn get_balance(&self) -> u64 {
-        self.wallet.get_available_balance()
+        self.wallet.read().unwrap().get_available_balance()
     }
 
     /// Get pending wallet balance
     pub fn get_pending_balance(&self) -> u64 {
-        self.wallet.get_pending_balance()
+        self.wallet.read().unwrap().get_pending_balance()
     }
 
     /// Generate a view key for the wallet
     pub fn generate_view_key(&mut self) -> Result<Vec<u8>, String> {
         debug!("Generating view key");
         
-        let view_key = match self.wallet.generate_view_key() {
-            Some(key) => key,
-            None => return Err("Failed to generate view key".to_string()),
-        };
+        let view_key = self.wallet.write().unwrap().generate_view_key();
         
         // In a real implementation, you would properly serialize the view key
         // For now, we'll just use the public key component
-        let pubkey = view_key.public_key();
-        Ok(crate::wallet::jubjub_point_to_bytes(&pubkey))
+        if let Some(view_key) = view_key {
+            let pubkey = view_key.public_key();
+            Ok(crate::wallet::jubjub_point_to_bytes(pubkey))
+        } else {
+            Err("Failed to generate view key".to_string())
+        }
     }
 
     /// Revoke a view key
@@ -240,13 +249,13 @@ impl WalletIntegration {
             None => return Err("Invalid view key public key".to_string()),
         };
         
-        self.wallet.revoke_view_key(&pubkey);
+        self.wallet.write().unwrap().revoke_view_key(&pubkey);
         Ok(())
     }
 
     /// Generate a wallet activity report
     pub fn generate_activity_report(&self) -> String {
-        let report = self.wallet.generate_activity_report();
+        let report = self.wallet.read().unwrap().generate_activity_report();
         
         format!(
             "Wallet Report:\n\
@@ -267,5 +276,91 @@ impl WalletIntegration {
             report.recent_transactions.len(),
             report.last_sync_time_ago
         )
+    }
+
+    /// Create a transaction with the wallet
+    pub fn create_transaction(&self, recipient: &str, amount: f64) -> Result<Transaction, String> {
+        let mut wallet = self.wallet.write().unwrap();
+        
+        // Convert recipient string to bytes, then to JubjubPoint
+        // This is a simplified conversion - in a real implementation, we would validate the address format
+        let recipient_bytes = recipient.as_bytes().to_vec();
+        let recipient_point = match crate::wallet::bytes_to_jubjub_point(&recipient_bytes) {
+            Some(point) => point,
+            None => return Err("Invalid recipient address format".to_string()),
+        };
+        
+        // Convert f64 amount to u64 (in smallest units)
+        let amount_u64 = (amount * 100_000_000.0) as u64; // Convert to smallest unit (e.g., satoshis)
+        
+        // Create the transaction with the wallet
+        let tx = match wallet.create_transaction(&recipient_point, amount_u64) {
+            Some(tx) => tx,
+            None => return Err("Failed to create transaction. Insufficient funds or invalid parameters.".to_string()),
+        };
+        
+        // Apply metadata protection if available
+        if let Some(protection) = &self.metadata_protection {
+            let protected_tx = protection.read().unwrap().protect_transaction(&tx);
+            return Ok(protected_tx);
+        }
+        
+        Ok(tx)
+    }
+
+    /// Process an incoming transaction
+    pub fn process_incoming_transaction(&self, tx: &Transaction) -> Result<(), String> {
+        let mut wallet = self.wallet.write().unwrap();
+        let utxo_set = self.utxo_set.lock().unwrap();
+        
+        // Process the transaction with the wallet
+        wallet.process_transaction(tx, &utxo_set);
+        
+        // Return success
+        Ok(())
+    }
+
+    /// Update wallet state
+    pub fn update_state(&self) -> Result<(), String> {
+        // In a real implementation, this would synchronize the wallet with the blockchain
+        // For now, we'll just return success
+        Ok(())
+    }
+
+    /// Sign data with the wallet
+    pub fn sign_data(&self, data: &[u8]) -> Result<Vec<u8>, String> {
+        let wallet = self.wallet.read().unwrap();
+        
+        // Check if the wallet has a keypair
+        if wallet.keypair.is_none() {
+            return Err("No keypair available for signing".to_string());
+        }
+        
+        // Get the keypair
+        let keypair = wallet.keypair.as_ref().unwrap();
+        
+        // Create a signature
+        let signature = keypair.sign(data);
+        
+        // Convert the signature to bytes (simplified)
+        let mut signature_bytes = Vec::new();
+        let r_bytes = signature.r.to_bytes();
+        let s_bytes = signature.s.to_bytes();
+        signature_bytes.extend_from_slice(&r_bytes);
+        signature_bytes.extend_from_slice(&s_bytes);
+        
+        Ok(signature_bytes)
+    }
+    
+    /// Process a transaction before broadcasting to the network
+    pub fn process_outgoing_transaction(&self, tx: &Transaction) -> Result<Transaction, String> {
+        // Apply metadata protection if available
+        if let Some(protection) = &self.metadata_protection {
+            let protected_tx = protection.read().unwrap().protect_transaction(tx);
+            return Ok(protected_tx);
+        }
+        
+        // If no protection available, return the original
+        Ok(tx.clone())
     }
 } 

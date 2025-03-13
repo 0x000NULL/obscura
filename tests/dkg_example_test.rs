@@ -1,4 +1,4 @@
-use obscura::crypto::{DkgConfig, DkgManager, DkgState, Participant, SessionId, DistributedKeyGeneration, Share};
+use obscura::crypto::zk_key_management::{DkgConfig, DkgManager, DkgState, Participant, SessionId, DistributedKeyGeneration, Share};
 use obscura::crypto::jubjub::{JubjubKeypair, JubjubPointExt, JubjubPoint, JubjubScalar};
 use std::time::Duration;
 use std::thread;

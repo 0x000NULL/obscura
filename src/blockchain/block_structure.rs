@@ -1,9 +1,9 @@
-use crate::blockchain::{Block, Transaction};
+use crate::blockchain::{Block, Transaction, TransactionOutput};
 use crate::consensus::difficulty::TARGET_BLOCK_TIME;
 use crate::crypto::bls12_381::{BlsPublicKey, BlsSignature, verify_signature};
 use log::{debug, error, warn};
 use sha2::{Digest, Sha256};
-use std::collections::VecDeque;
+use std::collections::{VecDeque, HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 // Constants for block time mechanism
@@ -607,15 +607,21 @@ mod tests {
         // Test transactions less than minimum batch size
         let small_batch: Vec<Transaction> = (0..TX_BATCH_MIN_SIZE-1)
             .map(|i| Transaction {
-                lock_time: i as u32,
-                inputs: vec![],
-                outputs: vec![],
+                inputs: Vec::new(),
+                outputs: vec![
+                    TransactionOutput {
+                        value: 100 + i as u64,
+                        public_key_script: vec![i as u8, (i + 1) as u8, (i + 2) as u8],
+                    },
+                ],
+                lock_time: 0,
                 fee_adjustments: None,
                 privacy_flags: 0,
                 obfuscated_id: None,
                 ephemeral_pubkey: None,
                 amount_commitments: None,
                 range_proofs: None,
+                metadata: std::collections::HashMap::new(),
             })
             .collect();
         assert_eq!(manager.batch_transactions(small_batch).len(), 1);
@@ -623,15 +629,21 @@ mod tests {
         // Test transactions that need multiple batches
         let large_batch: Vec<Transaction> = (0..TX_BATCH_MIN_SIZE*3)
             .map(|i| Transaction {
-                lock_time: i as u32,
-                inputs: vec![],
-                outputs: vec![],
+                inputs: Vec::new(),
+                outputs: vec![
+                    TransactionOutput {
+                        value: 100 + i as u64,
+                        public_key_script: vec![i as u8, (i + 1) as u8, (i + 2) as u8],
+                    },
+                ],
+                lock_time: 0,
                 fee_adjustments: None,
                 privacy_flags: 0,
                 obfuscated_id: None,
                 ephemeral_pubkey: None,
                 amount_commitments: None,
                 range_proofs: None,
+                metadata: std::collections::HashMap::new(),
             })
             .collect();
         assert_eq!(manager.batch_transactions(large_batch).len(), 3);
@@ -736,14 +748,20 @@ mod tests {
         for i in 0..10 {
             let tx = Transaction {
                 inputs: Vec::new(),
-                outputs: Vec::new(),
-                lock_time: i as u32,
+                outputs: vec![
+                    TransactionOutput {
+                        value: 100 + i as u64,
+                        public_key_script: vec![i as u8, (i + 1) as u8, (i + 2) as u8],
+                    },
+                ],
+                lock_time: 0,
                 fee_adjustments: None,
                 privacy_flags: 0,
                 obfuscated_id: None,
                 ephemeral_pubkey: None,
                 amount_commitments: None,
                 range_proofs: None,
+                metadata: std::collections::HashMap::new(),
             };
             transactions.push(tx);
         }
@@ -829,8 +847,13 @@ mod tests {
 
         // Test invalid transaction index
         let tx = Transaction {
-            inputs: vec![],
-            outputs: vec![],
+            inputs: Vec::new(),
+            outputs: vec![
+                TransactionOutput {
+                    value: 100,
+                    public_key_script: vec![1, 2, 3],
+                },
+            ],
             lock_time: 0,
             fee_adjustments: None,
             privacy_flags: 0,
@@ -838,6 +861,7 @@ mod tests {
             ephemeral_pubkey: None,
             amount_commitments: None,
             range_proofs: None,
+            metadata: std::collections::HashMap::new(),
         };
         let txs = vec![tx];
         assert!(manager.create_merkle_proof(&txs, 1).is_empty()); // Index out of bounds

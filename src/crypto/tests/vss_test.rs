@@ -1,6 +1,6 @@
 use crate::crypto::verifiable_secret_sharing::*;
 use crate::crypto::jubjub::*;
-use crate::crypto::Participant;
+use crate::crypto::zk_key_management::Participant;
 use rand::rngs::OsRng;
 use std::collections::HashMap;
 use std::time::Duration;

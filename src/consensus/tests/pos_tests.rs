@@ -702,13 +702,14 @@ fn create_mock_block(
         previous_hash,
         merkle_root: [0; 32],
         timestamp,
-        height,
+        difficulty_target: 0,
         nonce: 0,
-        difficulty_target: 1,
+        height,
         miner: Some(miner),
         privacy_flags: 0,
         padding_commitment: None,
         hash: [0; 32],
+        metadata: HashMap::new(),
     };
 
     // Create a unique hash for this block

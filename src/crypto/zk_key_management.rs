@@ -1,4 +1,4 @@
-use crate::crypto::jubjub::{JubjubKeypair, JubjubPoint, JubjubScalar, JubjubPointExt, JubjubScalarExt};
+use crate::crypto::{JubjubKeypair, JubjubPoint, JubjubScalar, JubjubPointExt, JubjubScalarExt};
 use crate::crypto::metadata_protection::ForwardSecrecyProvider;
 use rand::{rngs::OsRng, Rng};
 use rand_core::RngCore;

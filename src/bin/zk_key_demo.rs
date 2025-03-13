@@ -1,11 +1,21 @@
 use obscura::crypto::{
-    DkgManager, DkgConfig, Participant, JubjubKeypair,
-    ThresholdSignatureManager, SignatureConfig,
-    VssManager, VssConfig,
-    MpcManager, MpcComputationType, MpcInput,
-    HomomorphicKeyDerivation, DerivationPath,
-    DkgState, DkgResult, Share,
+    JubjubKeypair,
     jubjub::{JubjubPoint, JubjubScalar, JubjubPointExt, JubjubScalarExt}
+};
+use obscura::crypto::zk_key_management::{
+    DkgManager, DkgConfig, Participant, DkgState, DkgResult, Share
+};
+use obscura::crypto::threshold_signatures::{
+    ThresholdSignatureManager, SignatureConfig
+};
+use obscura::crypto::verifiable_secret_sharing::{
+    VssManager, VssConfig
+};
+use obscura::crypto::secure_mpc::{
+    MpcManager, MpcComputationType, MpcInput
+};
+use obscura::crypto::homomorphic_derivation::{
+    HomomorphicKeyDerivation, DerivationPath
 };
 use std::collections::HashMap;
 use rand::{rngs::OsRng, Rng};

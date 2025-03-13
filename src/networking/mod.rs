@@ -19,6 +19,7 @@ use std::time::{Duration, Instant};
 use socket2;
 use serde::{Deserialize, Serialize};
 use log::{debug, error, info, trace, warn};
+use crate::crypto::metadata_protection::AdvancedMetadataProtection;
 
 // Constants for Dandelion
 const MIN_BROADCAST_PEERS: usize = 3;
@@ -153,6 +154,7 @@ pub struct Node {
     pub stem_transactions: Vec<Transaction>,
     pub fluff_queue: Arc<Mutex<Vec<Transaction>>>,
     pub broadcast_transactions: Vec<Transaction>,
+    pub metadata_protection: Option<Arc<RwLock<AdvancedMetadataProtection>>>,
     // ... existing fields ...
 }
 
@@ -178,6 +180,7 @@ impl Node {
             stem_transactions: Vec::new(),
             fluff_queue: Arc::new(Mutex::new(Vec::new())),
             broadcast_transactions: Vec::new(),
+            metadata_protection: None,
         }
     }
     

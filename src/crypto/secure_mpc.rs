@@ -1,4 +1,4 @@
-use crate::crypto::jubjub::{JubjubPoint, JubjubScalar, JubjubKeypair, JubjubSignature, JubjubPointExt, JubjubScalarExt};
+use crate::crypto::{JubjubPoint, JubjubScalar, JubjubKeypair, JubjubSignature, JubjubPointExt, JubjubScalarExt};
 use crate::crypto::zk_key_management::{Participant, Share, DkgResult};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};

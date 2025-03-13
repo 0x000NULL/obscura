@@ -182,20 +182,7 @@ custom_cleaner.add_field_to_redact("semi-sensitive", "redacted");
 
 ## Integration with Existing Systems
 
-The Advanced Metadata Protection system integrates with other components of the Obscura blockchain:
-
-### Dandelion++ Integration
-
-Metadata protection is integrated with the Dandelion++ transaction propagation protocol to provide enhanced privacy:
-
-```rust
-// In DandelionManager:
-pub fn add_transaction_with_privacy(&mut self, tx: Transaction) -> Result<(), String> {
-    let cleaner = BroadcastMetadataCleaner::new();
-    let cleaned_tx = cleaner.clean_transaction_metadata(&tx);
-    self.add_transaction(cleaned_tx)
-}
-```
+The Advanced Metadata Protection system is fully integrated with other components of the Obscura blockchain:
 
 ### Application-Level Integration
 
@@ -206,8 +193,92 @@ The metadata protection system is accessible through the main application:
 let metadata_protection = app.get_metadata_protection();
 
 // Process a transaction with all privacy protections
-let protected_tx = metadata_protection.write().unwrap()
+let protected_tx = metadata_protection.read().unwrap()
     .protect_transaction(&transaction);
+```
+
+### Wallet Integration
+
+The wallet integration module uses metadata protection when creating and sending transactions:
+
+```rust
+// In WalletIntegration
+pub fn create_transaction(&self, recipient: &str, amount: f64) -> Result<Transaction, String> {
+    let wallet = self.wallet.read().unwrap();
+    
+    // Create the transaction with the wallet
+    let tx = wallet.create_transaction(recipient, amount)?;
+    
+    // Apply metadata protection if available
+    if let Some(protection) = &self.metadata_protection {
+        let protected_tx = protection.read().unwrap().protect_transaction(&tx);
+        return Ok(protected_tx);
+    }
+    
+    Ok(tx)
+}
+
+// Process a transaction before broadcasting
+pub fn process_outgoing_transaction(&self, tx: &Transaction) -> Result<Transaction, String> {
+    // Apply metadata protection if available
+    if let Some(protection) = &self.metadata_protection {
+        let protected_tx = protection.read().unwrap().protect_transaction(tx);
+        return Ok(protected_tx);
+    }
+    
+    // If no protection available, return the original
+    Ok(tx.clone())
+}
+```
+
+### Networking Integration
+
+The networking module uses metadata protection when broadcasting transactions:
+
+```rust
+// In Node
+pub fn broadcast_transaction_with_privacy(&self, tx: &Transaction) -> Result<(), String> {
+    // Apply metadata protection if available
+    let transaction_to_broadcast = if let Some(protection) = &self.metadata_protection {
+        protection.read().unwrap().protect_transaction(tx)
+    } else {
+        tx.clone()
+    };
+    
+    // Call the regular broadcast method with the protected transaction
+    self.broadcast_transaction(&transaction_to_broadcast)
+}
+```
+
+### Main Application Setup
+
+The metadata protection service is initialized in the main function and connected to both the wallet and networking components:
+
+```rust
+// Create and set up the AdvancedMetadataProtection
+let metadata_protection = Arc::new(RwLock::new(crypto::metadata_protection::AdvancedMetadataProtection::new()));
+
+// Set metadata protection for wallet integration
+wallet_integration.set_metadata_protection(metadata_protection.clone());
+
+// Set metadata protection for node
+node_arc.lock().unwrap().set_metadata_protection(metadata_protection.clone());
+```
+
+### Dandelion++ Integration
+
+Metadata protection is integrated with the Dandelion++ transaction propagation protocol for enhanced privacy:
+
+```rust
+// In DandelionManager:
+pub fn add_transaction_with_privacy(&mut self, tx: Transaction) -> Result<(), String> {
+    // First apply metadata protection
+    let protected_tx = self.metadata_protection.read().unwrap()
+        .protect_transaction(&tx);
+    
+    // Then add to the Dandelion++ stem pool
+    self.add_transaction(protected_tx)
+}
 ```
 
 ## Configuration Options

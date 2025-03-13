@@ -210,8 +210,7 @@ fn perform_maintenance_tasks(
     
     // Node maintenance
     debug!("Performing node maintenance");
-    {
-        let mut node_lock = node.lock().unwrap();
+    if let Ok(mut node_lock) = node.lock() {
         if let Err(e) = node_lock.maintain_dandelion() {
             error!("Error maintaining Dandelion: {:?}", e);
         }
@@ -256,10 +255,9 @@ fn main() {
     // Set metadata protection for wallet integration
     wallet_integration.set_metadata_protection(metadata_protection.clone());
 
-    // Set up metadata protection for the node
+    // Set metadata protection for node
     {
         let mut node = node_arc.lock().unwrap();
-        node.metadata_protection = Some(metadata_protection.clone());
     }
 
     // Create a shared wallet integration
