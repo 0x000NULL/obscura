@@ -231,4 +231,5 @@ mod tests {
     mod side_channel_protection_tests;
     mod memory_protection_tests;
     mod power_analysis_protection_tests;
+    mod zk_key_management_tests;
 }
