@@ -1,9 +1,6 @@
 use obscura::crypto::{
-    JubjubKeypair, 
-    ViewKey, ViewKeyPermissions, ViewKeyManager, ViewKeyLevel, ViewKeyContext,
-    MultiSigViewKey, TransactionFieldVisibility
+    ViewKeyPermissions, ViewKeyManager, ViewKeyLevel, ViewKeyContext
 };
-use obscura::crypto::jubjub::JubjubPoint;
 use obscura::blockchain::{Transaction, TransactionOutput};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -195,7 +192,7 @@ fn main() {
     println!("\n[4] Context-Restricted View Keys\n");
     
     // Create key with context restrictions
-    let mut context_key = manager.generate_view_key(&wallet_keypair, ViewKeyPermissions::default());
+    let context_key = manager.generate_view_key(&wallet_keypair, ViewKeyPermissions::default());
     
     // Add context
     let context = ViewKeyContext {
@@ -237,7 +234,7 @@ fn main() {
     let mut time_permissions = ViewKeyPermissions::default();
     time_permissions.valid_from = current_time() + 3600; // Valid 1 hour from now
     
-    let time_key = manager.generate_view_key(&wallet_keypair, time_permissions);
+    let _time_key = manager.generate_view_key(&wallet_keypair, time_permissions);
     println!("Created time-bound view key valid from 1 hour in the future");
     
     // Try to use key now (should fail)

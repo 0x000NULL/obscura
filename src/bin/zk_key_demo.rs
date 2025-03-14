@@ -6,20 +6,18 @@ use obscura::crypto::zk_key_management::{
     DkgManager, DkgConfig, Participant, DkgState, DkgResult, Share
 };
 use obscura::crypto::threshold_signatures::{
-    ThresholdSignatureManager, SignatureConfig
+    ThresholdSignatureManager
 };
 use obscura::crypto::verifiable_secret_sharing::{
     VssManager, VssConfig
 };
 use obscura::crypto::secure_mpc::{
-    MpcManager, MpcComputationType, MpcInput
+    MpcManager, MpcComputationType
 };
 use obscura::crypto::homomorphic_derivation::{
     HomomorphicKeyDerivation, DerivationPath
 };
-use std::collections::HashMap;
-use rand::{rngs::OsRng, Rng};
-use std::time::Duration;
+use rand::rngs::OsRng;
 
 fn main() {
     println!("=== Obscura Zero-Knowledge Key Management Demo ===\n");
@@ -302,7 +300,7 @@ fn main() {
     println!("Generated and shared signature shares");
     
     // Complete the signature
-    let signature_result = tss_managers[0].get_session(&tss_session_id).unwrap().complete().unwrap();
+    let _signature_result = tss_managers[0].get_session(&tss_session_id).unwrap().complete().unwrap();
     
     println!("Completed threshold signature");
     println!("Signature created for message: {}", String::from_utf8_lossy(&message));
@@ -313,7 +311,7 @@ fn main() {
     // Create VSS managers
     let mut vss_managers = Vec::new();
     
-    for (i, id) in participant_ids.iter().enumerate() {
+    for (_i, id) in participant_ids.iter().enumerate() {
         let config = VssConfig {
             threshold: 2, // 2-of-3 threshold
             ..Default::default()
@@ -437,7 +435,7 @@ fn main() {
     println!("Submitted and processed inputs");
     
     // Perform computation
-    let mpc_result = mpc_managers[0].get_session(&mpc_session_id).unwrap().compute().unwrap();
+    let _mpc_result = mpc_managers[0].get_session(&mpc_session_id).unwrap().compute().unwrap();
     
     println!("Completed MPC computation");
     println!("Derived new key with MPC");

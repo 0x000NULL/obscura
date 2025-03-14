@@ -1,5 +1,5 @@
-use obscura::crypto::zk_key_management::{DkgConfig, DkgManager, Participant, SessionId};
-use std::io::{self, Write};
+use obscura::crypto::zk_key_management::{DkgConfig, DkgManager, Participant};
+use std::io::Write;
 use std::thread;
 use std::time::Duration;
 

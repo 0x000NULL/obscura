@@ -1135,7 +1135,7 @@ mod tests {
             prefilled_txs: vec![],
         };
 
-        propagation.handle_compact_block(peer_addr, compact_block.clone());
+        let _ = propagation.handle_compact_block(peer_addr, compact_block.clone());
 
         // Verify pending block was created
         if let Some(pending) = propagation.pending_blocks.get(&compact_block.block_hash) {
@@ -1223,7 +1223,7 @@ mod tests {
             relay_count: 0,
         };
 
-        propagation.handle_block_announcement(peer_addr, announcement);
+        let _ = propagation.handle_block_announcement(peer_addr, announcement);
 
         // Verify no new pending block was created
         assert!(!propagation.pending_blocks.contains_key(&block_hash));
@@ -1247,7 +1247,7 @@ mod tests {
             prefilled_txs: vec![],
         };
 
-        propagation.handle_compact_block(peer_addr, compact_block);
+        let _ = propagation.handle_compact_block(peer_addr, compact_block);
 
         // Verify block was not added to pending blocks (should request full block instead)
         assert!(propagation.pending_blocks.is_empty());

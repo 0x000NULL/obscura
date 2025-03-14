@@ -1,6 +1,5 @@
 use obscura::crypto::jubjub::{JubjubSignature, generate_keypair};
 use obscura::crypto::jubjub::JubjubPointExt;
-use rand::rngs::OsRng;
 
 fn main() {
     println!("Testing JubjubSignature::from_bytes...");
