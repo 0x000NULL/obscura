@@ -2,10 +2,8 @@
 // This module provides range proofs for confidential transactions,
 // allowing transaction values to be hidden while proving they are within a valid range.
 
-use crate::crypto::jubjub::{JubjubPoint, JubjubPointExt, JubjubScalar, JubjubScalarExt};
+use crate::crypto::jubjub::{JubjubPoint, JubjubPointExt, JubjubScalar};
 use crate::crypto::pedersen::PedersenCommitment;
-use ark_ec::CurveGroup;
-use ark_ed_on_bls12_381::{EdwardsProjective, Fr};
 use ark_ff::{PrimeField, UniformRand, Zero};
 use ark_serialize::CanonicalSerialize;
 use lazy_static::lazy_static;
@@ -282,15 +280,15 @@ impl RangeProof {
         transcript.append_u64(b"max_value", max_value);
 
         // Create the range proof for the adjusted value
-        let mut proof_bytes = Vec::new();
+        let mut _proof_bytes = Vec::new();
 
         // For edge cases, create special proofs
         if adjusted_value == 0 {
-            proof_bytes = vec![0u8; 32];
-            proof_bytes[0] = 0xBB; // Special marker for zero value
+            _proof_bytes = vec![0u8; 32];
+            _proof_bytes[0] = 0xBB; // Special marker for zero value
         } else if adjusted_value == range {
-            proof_bytes = vec![0u8; 32];
-            proof_bytes[0] = 0xCC; // Special marker for max value
+            _proof_bytes = vec![0u8; 32];
+            _proof_bytes[0] = 0xCC; // Special marker for max value
         } else {
             // Create a real proof for the adjusted value
             let value_scalar = JubjubScalar::from(adjusted_value);
@@ -323,22 +321,22 @@ impl RangeProof {
 
             // Create a dummy proof for testing purposes
             // In a real implementation, this would be a cryptographic proof
-            proof_bytes = vec![0u8; 64];
-            proof_bytes[0] = 0xDD; // Regular proof marker
+            _proof_bytes = vec![0u8; 64];
+            _proof_bytes[0] = 0xDD; // Regular proof marker
 
             // Add the value and blinding factor to the proof for testing
             let value_bytes = adjusted_value.to_le_bytes();
-            proof_bytes[1..9].copy_from_slice(&value_bytes);
+            _proof_bytes[1..9].copy_from_slice(&value_bytes);
 
             // Add a hash of the commitment to the proof
             let mut hasher = Sha256::new();
             hasher.update(&commitment_bytes);
             let hash = hasher.finalize();
-            proof_bytes[9..41].copy_from_slice(&hash);
+            _proof_bytes[9..41].copy_from_slice(&hash);
         }
 
         Some(Self {
-            proof: proof_bytes,
+            proof: _proof_bytes,
             min_value,
             max_value,
             bits,
@@ -978,8 +976,8 @@ fn batch_verify_range_proofs_internal(
     // 3. Verify the combined equation in a single multi-scalar multiplication
 
     // For each proof, extract the verification scalars and points
-    let mut combined_lhs = JubjubPoint::zero();
-    let mut combined_rhs = JubjubPoint::zero();
+    let _combined_lhs = JubjubPoint::zero();
+    let _combined_rhs = JubjubPoint::zero();
 
     // For batch verification with different bit sizes or non-zero min values,
     // we need to handle each proof individually but still combine the results
@@ -993,7 +991,7 @@ fn batch_verify_range_proofs_internal(
         // 4. Add to the combined equation
 
         // Add the weighted commitment to the left-hand side
-        let weight = &weights[i];
+        let _weight = &weights[i];
         let commitment_point = commitments[i];
 
         // Simulate adding to the combined equation

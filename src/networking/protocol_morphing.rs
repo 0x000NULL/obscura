@@ -3,7 +3,8 @@
 // This module implements protocol morphing techniques that make Obscura network traffic
 // resemble other common protocols like HTTP, DNS, or HTTPS to avoid detection and censorship.
 
-use crate::networking::message::{Message, MessageType};
+use crate::networking::{MessageType, Node};
+use crate::networking::message::Message;
 use rand::{thread_rng, Rng, distributions::Alphanumeric};
 use rand::rngs::ThreadRng;
 use std::time::{Duration, Instant};
@@ -259,7 +260,7 @@ impl ProtocolMorphingService {
     }
     
     /// Apply protocol morphing to a message
-    pub fn apply_morphing(&mut self, mut message: Message) -> Message {
+    pub fn apply_morphing(&mut self, message: Message) -> Message {
         // Check and potentially rotate the protocol
         self.check_and_rotate_protocol();
         

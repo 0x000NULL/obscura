@@ -12,17 +12,13 @@ use sha2::{Digest, Sha256};
 use std::ops::Mul;
 use ark_ec::{Group, CurveGroup, AffineRepr};
 use ark_ff::{One, PrimeField, Zero, BigInteger};
-use ff::PrimeFieldBits;
 use rand_distr::Distribution;
 
 // Add derive traits for JubjubKeypair
 use std::fmt::Debug;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use once_cell::sync::Lazy;
 use rayon::prelude::*;
-use std::time::Duration;
-use std::thread;
-use log::{debug, info, warn};
 
 type Fr = JubjubFr;
 
@@ -677,7 +673,7 @@ pub fn generate_secure_ephemeral_key() -> (Fr, EdwardsProjective) {
     // Convert to scalar with proper range checking
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&hash);
-    let mut scalar = Fr::from_le_bytes_mod_order(&scalar_bytes);
+    let scalar = Fr::from_le_bytes_mod_order(&scalar_bytes);
 
     // Ensure the scalar is not zero or one
     if scalar.is_zero() || scalar == Fr::one() {
@@ -1451,7 +1447,7 @@ pub fn generate_secure_key() -> (Fr, EdwardsProjective) {
     // Convert to scalar and ensure proper range
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&second_hash);
-    let mut private_key = Fr::from_le_bytes_mod_order(&scalar_bytes);
+    let private_key = Fr::from_le_bytes_mod_order(&scalar_bytes);
 
     // Validate the private key
     if private_key.is_zero() || private_key == Fr::one() {

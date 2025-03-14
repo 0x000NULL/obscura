@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use log::{debug, trace};
+use log::debug;
 use serde::{Serialize, Deserialize};
 
 /// Configuration for message padding
@@ -231,7 +231,7 @@ impl MessagePaddingService {
     
     /// Generate a padding size that matches real-world protocol distributions
     fn get_distribution_matched_size(&self, distribution: ProtocolDistribution) -> usize {
-        let mut rng = thread_rng();
+        let rng = thread_rng();
         
         match distribution {
             ProtocolDistribution::Http => {

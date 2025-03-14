@@ -1,21 +1,21 @@
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::{Arc, RwLock, Mutex};
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use std::net::SocketAddr;
 use rand::{rngs::OsRng, Rng, thread_rng};
 use rand::RngCore;
 use thiserror::Error;
-use log::{debug, error, info, trace, warn};
+use log::{error, warn};
 use serde::{Deserialize, Serialize};
 use hex;
 
 // Import the MessagePaddingConfig instead of PaddingConfig
 use crate::networking::padding::MessagePaddingConfig;
-use crate::networking::p2p::{NetworkError, FeatureFlag, PrivacyFeatureFlag};
+use crate::networking::p2p::{NetworkError, PrivacyFeatureFlag};
 use crate::networking::connection_pool::NetworkType;
 use crate::networking::tor::{TorService, TorError, CircuitPurpose};
 use crate::networking::i2p_proxy::{I2PProxyService, I2PProxyError};
-use crate::networking::bridge_relay::{BridgeRelayService, BridgeRelayError, TransportType};
+use crate::networking::bridge_relay::{BridgeRelayService, BridgeRelayError};
 
 // Constants
 const CIRCUIT_ID_SIZE: usize = 32;

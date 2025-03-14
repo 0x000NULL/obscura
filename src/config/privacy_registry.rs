@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use log::{debug, error, info, trace, warn};
+use log::{debug, error};
 use serde::{Serialize, Deserialize};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use std::fmt;
 
 use crate::config::presets::{PrivacyLevel, PrivacyPreset};
@@ -107,7 +107,7 @@ impl PrivacySettingsRegistry {
     
     /// Create a new registry with a specific preset
     pub fn with_preset(preset: PrivacyPreset) -> Self {
-        let mut registry = Self::new();
+        let registry = Self::new();
         let _ = registry.apply_preset(preset, "Initialization", "System");
         registry
     }

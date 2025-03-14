@@ -1,10 +1,9 @@
-use crate::crypto::{JubjubPoint, JubjubScalar, JubjubKeypair, JubjubPointExt, JubjubScalarExt};
+use crate::crypto::{JubjubPoint, JubjubScalar, JubjubPointExt, JubjubScalarExt};
 use crate::crypto::zk_key_management::{Share, DkgResult};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use rand::{rngs::OsRng, Rng};
+use rand::rngs::OsRng;
 use sha2::{Digest, Sha256};
-use log::{debug, error, info, trace, warn};
 use ark_std::UniformRand;
 
 /// Constants for homomorphic derivation

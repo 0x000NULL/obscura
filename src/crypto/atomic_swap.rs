@@ -1,14 +1,14 @@
 use crate::crypto::bls12_381::{BlsKeypair, BlsPublicKey, BlsSignature, verify_signature};
-use crate::crypto::jubjub::{JubjubPoint, JubjubPointExt, JubjubScalar};
-use crate::crypto::pedersen::{DualCurveCommitment, PedersenCommitment, BlsPedersenCommitment, initialize_blinding_store};
-use crate::crypto::blinding_store::BlindingStore;
+use crate::crypto::jubjub::JubjubPointExt;
+use crate::crypto::pedersen::{DualCurveCommitment, PedersenCommitment, BlsPedersenCommitment};
 use ark_ec::CurveGroup;
 use merlin::Transcript;
-use rand::rngs::OsRng;
 use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
 #[cfg(test)]
 use tempfile::tempdir;
+use rand::{rngs::OsRng, Rng};
+use rand_core::RngCore;
 
 // Constants for atomic swap timeouts and security parameters
 const SWAP_TIMEOUT_SECONDS: u64 = 3600; // 1 hour

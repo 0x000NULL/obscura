@@ -2,7 +2,6 @@ use super::*;
 use crate::blockchain::{Transaction, TransactionOutput};
 use crate::crypto::jubjub::generate_keypair;
 use crate::crypto::jubjub::JubjubPointExt;
-use std::collections::HashMap;
 
 #[allow(dead_code)]
 pub fn create_test_transaction() -> Transaction {

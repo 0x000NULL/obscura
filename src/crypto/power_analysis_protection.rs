@@ -1,16 +1,15 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use rand::thread_rng;
 use rand::Rng;
-use log::{debug, error, info, warn, trace};
+use log::{debug, info, warn, trace};
 
 use crate::crypto::side_channel_protection::SideChannelProtection;
-use crate::crypto::jubjub::{JubjubPoint, JubjubScalar, JubjubScalarExt, JubjubPointExt};
+use crate::crypto::jubjub::{JubjubPoint, JubjubScalar, JubjubPointExt};
 
 use ark_ff::{BigInteger, PrimeField};
-use ff::PrimeFieldBits;
-use ark_ec::{CurveGroup, Group};
+use ark_ec::Group;
 use ark_std::{Zero, UniformRand, One};
 
 /// Configuration for power analysis protection features

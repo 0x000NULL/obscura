@@ -6,11 +6,10 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::UniformRand;
 use rand::rngs::OsRng;
 use sha2::{Digest, Sha256};
-use rand::Rng;
 
 // Additional imports for BLS12-381
 use blstrs::{
-    G1Affine, G1Projective as BlsG1, G2Affine, G2Projective as BlsG2, Scalar as BlsScalar,
+    G1Projective as BlsG1, Scalar as BlsScalar,
 };
 use ff::Field;
 use group::{Group, GroupEncoding};
@@ -587,7 +586,7 @@ impl DualCurveCommitment {
                 JubjubPoint::from_bytes(&[0u8; 32]).unwrap_or_else(|| JubjubPoint::generator());
 
             // Create a G1Compressed element for BLS
-            let mut compressed_bytes = [0u8; 48];
+            let compressed_bytes = [0u8; 48];
             let bls_point = blstrs::G1Projective::generator();
 
             let jubjub_commitment = PedersenCommitment::from_point(jubjub_point);

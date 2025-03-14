@@ -1,24 +1,20 @@
 #![allow(dead_code)]
 
-use crate::blockchain::{Block, Mempool, Transaction};
-use crate::networking::dandelion::{DandelionManager, PrivacyRoutingMode, PropagationState};
-use bincode;
+use crate::blockchain::{Block, Transaction};
+use crate::networking::dandelion::{DandelionManager, PropagationState};
 use rand;
-use rand::seq::SliceRandom;
 use rand::thread_rng;
 use rand::Rng;
-use rand::RngCore;
-use rand_distr::{Bernoulli, Distribution};
+use rand_distr::Distribution;
 use std::collections::{HashMap, HashSet};
 use std::io;
-use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex, RwLock};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use socket2;
 use serde::{Deserialize, Serialize};
-use log::{debug, error, info, trace, warn};
+use log::{debug, warn};
 use crate::crypto::metadata_protection::AdvancedMetadataProtection;
 
 // Constants for Dandelion
@@ -184,6 +180,12 @@ impl Node {
             broadcast_transactions: Vec::new(),
             metadata_protection: None,
         }
+    }
+    
+    /// Create a new Node with test configuration
+    pub fn new_with_test_config() -> Self {
+        let config = NetworkConfig::default();
+        Self::new_with_config(config)
     }
     
     // ... existing code ...

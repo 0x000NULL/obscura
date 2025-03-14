@@ -4,8 +4,7 @@ use std::net::{SocketAddr, TcpStream, TcpListener};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use std::process::{Command, Child, Stdio};
-use log::{debug, error, info, trace, warn};
-use rand::{Rng, thread_rng};
+use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 

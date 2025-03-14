@@ -2,12 +2,10 @@ use crate::crypto::side_channel_protection::SideChannelProtection;
 use std::alloc::{alloc, dealloc, Layout};
 use std::mem;
 use std::ptr::{self, NonNull};
-use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 use rand::thread_rng;
 use rand::Rng;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use log::{debug, error, info, trace, warn};
+use std::sync::Arc;
+use log::{debug, error};
 use serde::{Serialize, Deserialize};
 
 #[cfg(unix)]
@@ -137,20 +135,18 @@ impl<T> Drop for SecureMemory<T> {
     fn drop(&mut self) {
         // Securely clear memory before freeing
         if self.config.secure_clearing_enabled {
-            unsafe {
-                // Ensure memory is decrypted before clearing
-                if self.is_encrypted && self.config.encrypted_memory_enabled {
-                    if let Err(e) = self.decrypt() {
-                        error!("Failed to decrypt memory during drop: {}", e);
-                    }
+            // Ensure memory is decrypted before clearing
+            if self.is_encrypted && self.config.encrypted_memory_enabled {
+                if let Err(e) = self.decrypt() {
+                    error!("Failed to decrypt memory during drop: {}", e);
                 }
-                
-                // Securely clear the memory
-                self.memory_protection.secure_clear(
-                    self.ptr.as_ptr() as *mut u8,
-                    mem::size_of::<T>(),
-                );
             }
+            
+            // Securely clear the memory
+            self.memory_protection.secure_clear(
+                self.ptr.as_ptr() as *mut u8,
+                mem::size_of::<T>(),
+            );
         }
         
         // Free allocated memory including guard pages if enabled
@@ -424,12 +420,12 @@ impl MemoryProtection {
     
     /// Allocate memory with guard pages
     fn allocate_with_guard_pages<T>(&self) -> Result<(NonNull<T>, Option<GuardPageInfo>), MemoryProtectionError> {
-        let page_size = Self::get_page_size();
+        let _page_size = Self::get_page_size();
         let data_size = mem::size_of::<T>();
         
         // Calculate total allocation size including guard pages
-        let pre_guard_size = self.config.pre_guard_pages * page_size;
-        let post_guard_size = self.config.post_guard_pages * page_size;
+        let pre_guard_size = self.config.pre_guard_pages * _page_size;
+        let post_guard_size = self.config.post_guard_pages * _page_size;
         let total_size = pre_guard_size + data_size + post_guard_size;
         
         // Create layout with proper alignment
@@ -483,7 +479,7 @@ impl MemoryProtection {
     ) -> Result<(), MemoryProtectionError> {
         use libc::{mprotect, PROT_NONE, PROT_READ, PROT_WRITE};
         
-        let page_size = Self::get_page_size();
+        let _page_size = Self::get_page_size();
         
         // Protect pre-guard pages
         if pre_guard_size > 0 {
@@ -530,7 +526,7 @@ impl MemoryProtection {
         data_size: usize,
         post_guard_size: usize,
     ) -> Result<(), MemoryProtectionError> {
-        let page_size = Self::get_page_size();
+        let _page_size = Self::get_page_size();
         let mut old_protect: DWORD = 0;
         
         // Ensure the pointer and sizes are aligned to page boundaries for VirtualProtect

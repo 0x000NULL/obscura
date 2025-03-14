@@ -1,18 +1,15 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::io::{self, Read, Write};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, TcpListener, ToSocketAddrs};
+use std::net::TcpStream;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use std::process::{Command, Child, Stdio};
-use std::path::PathBuf;
 use thiserror::Error;
-use log::{debug, error, info, trace, warn};
+use log::{error, info, warn};
 use rand::{Rng, thread_rng};
 use serde::{Deserialize, Serialize};
-use tokio::net::TcpStream as TokioTcpStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use crate::networking::circuit::{CircuitManager, Circuit};
-use crate::networking::p2p::{NetworkError, FeatureFlag, PrivacyFeatureFlag};
+use crate::networking::circuit::CircuitManager;
 
 /// Tor-related error types
 #[derive(Error, Debug)]
@@ -469,7 +466,7 @@ impl TorService {
         let proxy_addr = format!("{}:{}", self.config.socks_host, self.config.socks_port);
         let timeout = Duration::from_secs(self.config.connection_timeout_secs);
         
-        let mut stream = TcpStream::connect_timeout(&proxy_addr.parse().unwrap(), timeout)
+        let stream = TcpStream::connect_timeout(&proxy_addr.parse().unwrap(), timeout)
             .map_err(|e| TorError::ConnectionError(format!("Failed to connect to Tor proxy: {}", e)))?;
         
         // Set timeouts

@@ -2,18 +2,12 @@ use crate::crypto::{JubjubKeypair, JubjubPoint, JubjubScalar, JubjubPointExt, Ju
 use crate::crypto::metadata_protection::ForwardSecrecyProvider;
 use rand::rngs::OsRng;
 use rand_core::RngCore;
-use sha2::{Digest, Sha256};
+use sha2::Digest;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
-use log::{debug, error, info, trace, warn};
+use log::info;
 use ark_std::{Zero, One, UniformRand};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread;
-use rand::SeedableRng;
-use rand_chacha::ChaCha20Rng;
-use ark_ff::Field;
-use ark_ec::CurveGroup;
 use hex;
 
 #[cfg(test)]

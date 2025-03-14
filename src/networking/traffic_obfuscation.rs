@@ -1,9 +1,7 @@
-use std::sync::{Arc, Mutex};
-use std::net::TcpStream;
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 use std::time::{Duration, Instant};
 use rand::{Rng, thread_rng};
-use log::{debug, trace, warn, error};
+use log::{debug, trace, error};
 
 use crate::networking::p2p::ConnectionObfuscationConfig;
 use crate::networking::message::{Message, MessageType};

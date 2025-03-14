@@ -1,13 +1,14 @@
-use crate::crypto::{JubjubPoint, JubjubScalar, JubjubKeypair, JubjubPointExt};
+use crate::crypto::{JubjubPoint, JubjubScalar, JubjubPointExt};
+use crate::crypto::jubjub::generate_keypair;
 use crate::crypto::zk_key_management::{Participant, Share};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-use rand::{rngs::OsRng, Rng};
+use rand::rngs::OsRng;
 use rand_core::RngCore;
-use sha2::{Digest, Sha256};
-use log::{debug, error, info, trace, warn};
-use ark_std::{Zero, One, UniformRand};
+use sha2::Digest;
+use log::{debug, error, info, warn};
+use ark_std::{One, UniformRand, Zero};
 
 /// Constants for VSS
 const MAX_VSS_PARTICIPANTS: usize = 100;
@@ -259,7 +260,7 @@ impl VerifiableSecretSharingSession {
     
     /// Start the VSS session
     pub fn start(&self) -> Result<(), String> {
-        let mut state = self.state.write().unwrap();
+        let state = self.state.write().unwrap();
         
         if *state != VssState::Initialized {
             return Err("VSS session already started".to_string());
@@ -785,7 +786,7 @@ mod tests {
         println!("=== Creating participant objects ===");
         let mut participants = Vec::new();
         for id in &participant_ids {
-            let keypair = JubjubKeypair::generate();
+            let keypair = generate_keypair();
             let participant = Participant::new(id.clone(), keypair.public, None);
             participants.push(participant);
         }
@@ -1039,10 +1040,10 @@ mod tests {
         participant_session.start().unwrap();
         
         println!("Creating participant objects");
-        let dealer_keypair = JubjubKeypair::generate();
+        let dealer_keypair = generate_keypair();
         let dealer_participant = Participant::new(dealer_id.clone(), dealer_keypair.public, None);
         
-        let participant_keypair = JubjubKeypair::generate();
+        let participant_keypair = generate_keypair();
         let participant = Participant::new(participant_id.clone(), participant_keypair.public, None);
         
         println!("Adding participants");
@@ -1137,10 +1138,10 @@ mod tests {
         println!("Participant state after start: {:?}", participant_session.get_state());
         
         println!("Creating participant objects");
-        let dealer_keypair = JubjubKeypair::generate();
+        let dealer_keypair = generate_keypair();
         let dealer_participant = Participant::new(dealer_id.clone(), dealer_keypair.public, None);
         
-        let participant_keypair = JubjubKeypair::generate();
+        let participant_keypair = generate_keypair();
         let participant = Participant::new(participant_id.clone(), participant_keypair.public, None);
         
         println!("Adding participants to dealer session");

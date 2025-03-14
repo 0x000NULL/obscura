@@ -1,4 +1,4 @@
-use crate::blockchain::{OutPoint, Transaction, TransactionInput, TransactionOutput};
+use crate::blockchain::{Transaction, TransactionOutput};
 use crate::crypto;
 use crate::crypto::jubjub::{JubjubKeypair, JubjubPoint, JubjubPointExt, JubjubSignature};
 use rand::{rngs::OsRng, Rng};
@@ -387,7 +387,7 @@ impl StealthAddressing {
         let shared_point = (*ephemeral_pubkey * *owner_secret) + *view_key_point;
         
         // Convert to bytes for further derivation
-        let mut point_bytes = shared_point.to_bytes();
+        let point_bytes = shared_point.to_bytes();
         let mut hasher = Sha256::new();
         hasher.update(&point_bytes);
         hasher.update(b"view_key_scan");
@@ -493,7 +493,7 @@ impl ConfidentialTransactions {
         let mut commitments = Vec::new();
 
         // Replace actual values with commitments
-        for (i, output) in obfuscated_tx.outputs.iter_mut().enumerate() {
+        for (_i, output) in obfuscated_tx.outputs.iter_mut().enumerate() {
             // Create a commitment to the amount
             let commitment_array = self.create_commitment(output.value);
 
@@ -614,7 +614,7 @@ impl ConfidentialTransactions {
         hasher.update(&shared_bytes);
         hasher.update(commitment);
         hasher.update(b"amount_view");
-        let decryption_key = hasher.finalize();
+        let _decryption_key = hasher.finalize();
         
         // Check if we can decrypt this commitment
         // For this example, we'll just look up in our commitment_amounts map
@@ -626,7 +626,7 @@ impl ConfidentialTransactions {
     /// Check if a view key has permission to see this amount
     pub fn can_view_amount(
         &self,
-        commitment: &[u8],
+        _commitment: &[u8],
         view_key_point: &JubjubPoint,
         owner_point: &JubjubPoint
     ) -> bool {

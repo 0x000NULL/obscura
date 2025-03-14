@@ -8,7 +8,6 @@ use crate::crypto::jubjub::{
 };
 use crate::crypto::view_key::{ViewKey, ViewKeyPermissions, ViewKeyManager};
 use crate::utils::{current_time, format_time_diff};
-use ark_ec::CurveGroup;
 use crypto::jubjub;
 use rand::rngs::OsRng;
 use rand::Rng;
@@ -16,7 +15,6 @@ use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use log::debug;
-use bincode;
 
 #[derive(Debug, Clone)]
 pub struct Wallet {

@@ -1,13 +1,14 @@
-use crate::crypto::{JubjubPoint, JubjubScalar, JubjubKeypair, JubjubSignature, JubjubPointExt, JubjubScalarExt};
+use crate::crypto::{JubjubPoint, JubjubScalar, JubjubPointExt, JubjubScalarExt};
 use crate::crypto::zk_key_management::{Participant, Share, DkgResult};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-use rand::{rngs::OsRng, Rng};
+use rand::rngs::OsRng;
 use rand_core::RngCore;
 use sha2::{Digest, Sha256};
-use log::{debug, error, info, trace, warn};
+use log::{debug, error, info};
 use ark_std::UniformRand;
+use crate::crypto::jubjub::generate_keypair;
 
 /// Constants for secure MPC
 const MAX_MPC_PARTICIPANTS: usize = 100;
@@ -708,7 +709,7 @@ mod tests {
         
         for i in 0..participant_count {
             let id = vec![i as u8];
-            let keypair = JubjubKeypair::generate();
+            let keypair = generate_keypair();
             let participant = Participant::new(id.clone(), keypair.public, None);
             participants.push(participant);
             

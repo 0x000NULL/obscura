@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::pos_old::{StakeProof, StakingContract};
-use crate::blockchain::{Block, OutPoint, Transaction, TransactionInput, TransactionOutput};
+use crate::blockchain::Block;
 
 /// Manages the state of the hybrid consensus system with optimizations
 pub struct HybridStateManager {
@@ -512,7 +512,7 @@ pub struct ValidatorStateDiff {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::blockchain::Transaction;
+    use crate::blockchain::{Transaction, TransactionInput, TransactionOutput, OutPoint};
 
     // Create a mock StakingContract for testing
     fn create_mock_staking_contract() -> Arc<RwLock<StakingContract>> {

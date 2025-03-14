@@ -1,16 +1,10 @@
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use std::thread;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use rand::{thread_rng, Rng};
-use rand::distributions::Standard;
 use ark_ed_on_bls12_381::{EdwardsProjective as JubjubPoint, Fr as JubjubScalar};
 use ark_ff::PrimeField;
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use ark_ec::CurveGroup;
-use crate::crypto::jubjub::{JubjubPointExt, JubjubScalarExt};
-use merlin::Transcript;
-use ark_std::UniformRand;
 
 /// Configuration for side-channel attack protection measures
 #[derive(Debug, Clone)]

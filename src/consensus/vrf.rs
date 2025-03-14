@@ -1,5 +1,5 @@
-use crate::crypto::jubjub::{JubjubKeypair, JubjubPoint, JubjubPointExt, JubjubSignature, JubjubScalarExt};
-use ark_ed_on_bls12_381::{Fr, EdwardsProjective, EdwardsAffine};
+use crate::crypto::jubjub::{JubjubKeypair, JubjubPoint, JubjubPointExt, JubjubScalarExt};
+use ark_ed_on_bls12_381::{Fr, EdwardsProjective};
 use ark_ec::CurveGroup;
 use ark_ff::{PrimeField, Zero};
 use ark_serialize::CanonicalSerialize;

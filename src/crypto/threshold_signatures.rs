@@ -1,12 +1,11 @@
-use crate::crypto::zk_key_management::{DkgResult, Share, Participant, SessionId};
-use crate::crypto::{JubjubPoint, JubjubScalar, JubjubKeypair, JubjubSignature, JubjubPointExt, JubjubScalarExt};
-use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex, RwLock};
+use crate::crypto::zk_key_management::{DkgResult, Share, Participant};
+use crate::crypto::{JubjubPoint, JubjubScalar, JubjubSignature, JubjubPointExt, JubjubScalarExt};
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-use rand::{rngs::OsRng, Rng};
-use rand_core::RngCore;
+use rand::rngs::OsRng;
 use sha2::{Digest, Sha256};
-use log::{debug, error, info, trace, warn};
+use log::{debug, error, info};
 use ark_std::{Zero, One, UniformRand};
 use ark_ff::Field;
 
@@ -259,8 +258,8 @@ impl ThresholdSignatureSession {
         }
         
         // Verify the signature share (simple verification based on public key)
-        let message_hash = self.hash_message(&self.message);
-        let expected_value = self.public_key * (JubjubScalar::from(1u64) / share.index);
+        let _message_hash = self.hash_message(&self.message);
+        let _expected_value = self.public_key * (JubjubScalar::from(1u64) / share.index);
         
         // In a real implementation, we would do more sophisticated verification
         // For now, we'll just check if the share is non-zero
@@ -375,9 +374,8 @@ impl ThresholdSignatureSession {
     }
     
     /// Verify a signature
-    pub fn verify_signature(&self, signature: &JubjubSignature, message: &[u8], public_key: &JubjubPoint) -> bool {
-        // Hash the message
-        let message_hash = self.hash_message(message);
+    pub fn verify_signature(&self, signature: &JubjubSignature, message: &[u8], _public_key: &JubjubPoint) -> bool {
+        let _message_hash = self.hash_message(message);
         
         // Verify: g^s = r
         let left_side = JubjubPoint::generator() * signature.s;

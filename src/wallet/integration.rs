@@ -1,5 +1,5 @@
 use std::sync::{Arc, Mutex, RwLock};
-use log::{debug, error, info, warn};
+use log::{debug, info};
 
 use crate::blockchain::{Block, Transaction, UTXOSet};
 use crate::blockchain::mempool::Mempool;

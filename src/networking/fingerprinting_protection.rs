@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use rand::{Rng, thread_rng};
 use rand::prelude::SliceRandom;
-use log::{debug, info, trace, warn};
+use log::{debug, info};
 use std::io;
 use socket2::TcpKeepalive;
 

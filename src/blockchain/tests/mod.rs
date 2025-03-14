@@ -1,7 +1,6 @@
 use super::*;
 use crate::crypto::jubjub::{generate_keypair, JubjubPoint, JubjubPointExt, JubjubSignature};
-use crate::blockchain::{Block, BlockHeader, Transaction, TransactionOutput, calculate_merkle_root};
-use std::collections::HashMap;
+use crate::blockchain::{Block, Transaction, TransactionOutput};
 
 // Include the block structure tests
 #[cfg(test)]

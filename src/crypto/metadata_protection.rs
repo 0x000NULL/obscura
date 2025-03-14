@@ -769,7 +769,7 @@ impl BroadcastMetadataCleaner {
     /// Clean metadata from a message before broadcasting
     pub fn clean_message_metadata(&self, message: &Message) -> Message {
         // Create a copy of the message
-        let mut cleaned_message = Message {
+        let cleaned_message = Message {
             message_type: message.message_type,
             payload: message.payload.clone(),
             is_padded: message.is_padded,

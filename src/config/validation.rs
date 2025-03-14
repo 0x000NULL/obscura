@@ -1,6 +1,5 @@
-use std::fmt;
 use std::collections::HashMap;
-use log::{debug, error, info, warn};
+use log::{debug, error};
 use thiserror::Error;
 
 use crate::config::presets::PrivacyPreset;
@@ -109,7 +108,7 @@ impl ValidationResult {
 }
 
 /// Configuration validation rule
-pub trait ValidationRule {
+pub trait ValidationRule: Send + Sync {
     /// Get the name of the validation rule
     fn name(&self) -> &str;
     

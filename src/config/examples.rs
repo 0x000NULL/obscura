@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use log::{debug, info, warn, error};
+use log::{info, warn, error};
 
 use crate::config::presets::{PrivacyLevel, PrivacyPreset};
 use crate::config::privacy_registry::{PrivacySettingsRegistry, ConfigUpdateListener, ConfigChangeEvent, ComponentType};

@@ -241,7 +241,7 @@ impl NetworkPrivacyIntegration {
     /// Update Dandelion configuration
     fn update_dandelion_config(&self, config: &PrivacyPreset) {
         if let Some(dandelion) = &self.dandelion_router {
-            let mut dandelion_config = DandelionConfig {
+            let dandelion_config = DandelionConfig {
                 enabled: config.use_dandelion,
                 stem_phase_hops: if config.level == PrivacyLevel::High {
                     10
@@ -262,7 +262,7 @@ impl NetworkPrivacyIntegration {
             };
             
             // Update the Dandelion configuration
-            let mut dandelion_router = dandelion.write().unwrap();
+            let dandelion_router = dandelion.write().unwrap();
             
             // Instead of using reconfigure, update relevant fields directly
             if config.use_dandelion {

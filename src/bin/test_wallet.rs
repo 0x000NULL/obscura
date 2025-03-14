@@ -1,5 +1,5 @@
 use obscura::wallet::Wallet;
-use obscura::crypto::jubjub::JubjubKeypair;
+use obscura::crypto::jubjub;
 use obscura::Node;
 use obscura::blockchain::UTXOSet;
 use obscura::blockchain::mempool::Mempool;
@@ -18,8 +18,8 @@ fn main() {
     let mut wallet = Wallet::new();
     wallet.enable_privacy();
     
-    // Generate a keypair
-    let keypair = JubjubKeypair::generate();
+    // Generate a keypair using the generate_keypair function instead of JubjubKeypair::generate
+    let keypair = jubjub::generate_keypair();
     wallet.set_keypair(keypair);
     
     // Wrap the wallet in an Arc<RwLock> for thread-safe access

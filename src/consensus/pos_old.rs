@@ -5,14 +5,12 @@
 use crate::consensus::pos::*;
 
 use crate::consensus::sharding::{CrossShardCommittee, Shard, ShardManager};
-use crate::crypto::jubjub::{JubjubPoint, JubjubPointExt, JubjubSignature, JubjubKeypair};
+use crate::crypto::jubjub::{JubjubPoint, JubjubPointExt, JubjubSignature};
 use bincode;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{SystemTime, UNIX_EPOCH};
 use crate::consensus::vrf::Vrf;
-use ark_ed_on_bls12_381::Fr;
-use ark_ff::Zero;
 
 // Constants for PoS mechanism
 pub const MINIMUM_STAKE: u64 = 1000;

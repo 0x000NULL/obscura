@@ -5,10 +5,10 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::error::Error as StdError;
 #[macro_use]
-use log::{error, info, warn, debug};
+use log::{info, warn};
 use rand::{thread_rng, Rng};
 use serde::{Serialize, Deserialize};
-use crate::networking::p2p::{FeatureFlag, PrivacyFeatureFlag};
+use crate::networking::p2p::FeatureFlag;
 
 /// Error types for I2P proxy operations
 #[derive(Debug)]

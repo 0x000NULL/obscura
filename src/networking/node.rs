@@ -94,6 +94,12 @@ impl crate::networking::Node {
             dandelion_manager.set_mixnet_integration(true);
         }
         
+        // Initialize stem successors with outbound peers
+        let outbound_peers = dandelion_manager.get_outbound_peers();
+        if !outbound_peers.is_empty() {
+            dandelion_manager.update_stem_successors(&outbound_peers);
+        }
+        
         Ok(())
     }
     

@@ -1,16 +1,15 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 
-use crate::blockchain::{OutPoint, Transaction, TransactionInput, TransactionOutput};
+use crate::blockchain::{OutPoint, Transaction, TransactionOutput};
 use crate::crypto::blinding_store::BlindingStore;
 use crate::crypto::bulletproofs::RangeProof;
-use crate::crypto::jubjub::{JubjubPoint, JubjubScalar};
+use crate::crypto::jubjub::JubjubScalar;
 use crate::crypto::pedersen::{
     bls_get_g, bls_get_h, get_blinding_store, jubjub_get_g, jubjub_get_h, BlsPedersenCommitment,
     DualCurveCommitment, PedersenCommitment,
 };
 
-use blstrs::{G1Projective as BlsG1, Scalar as BlsScalar};
+use blstrs::Scalar as BlsScalar;
 use log::{debug, error, warn};
 use sha2::{Digest, Sha256};
 

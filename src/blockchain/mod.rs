@@ -488,7 +488,7 @@ impl Transaction {
     /// Apply stealth addressing to transaction outputs
     pub fn apply_stealth_addressing(
         &mut self,
-        stealth: &mut crate::crypto::privacy::StealthAddressing,
+        _stealth: &mut crate::crypto::privacy::StealthAddressing,
         recipient_pubkeys: &[crate::crypto::jubjub::JubjubPoint],
     ) {
         if recipient_pubkeys.is_empty() {

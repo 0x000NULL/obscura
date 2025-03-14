@@ -1,12 +1,10 @@
 use crate::blockchain::{Transaction, TransactionOutput};
 use crate::crypto::jubjub::{JubjubKeypair, JubjubPoint, JubjubPointExt, JubjubScalar, JubjubScalarExt};
-use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use std::collections::{HashMap, HashSet};
 use ark_std::Zero;
 use blake2b_simd;
 use std::sync::{Arc, Mutex};
-use log::{debug, info, warn};
 
 /// Hierarchical view key levels
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

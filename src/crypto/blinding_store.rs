@@ -8,15 +8,13 @@ use ark_serialize::CanonicalDeserialize;
 use ark_serialize::CanonicalSerialize;
 use bincode;
 use hex;
-use rand::rngs::OsRng;
-use ring::aead::{self, Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM};
+use ring::aead::{self, Aad, LessSafeKey, Nonce, UnboundKey};
 use ring::pbkdf2;
 use ring::rand::{SecureRandom, SystemRandom};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+use sha2::Digest;
 use blstrs::Scalar;
 
-use crate::blockchain::Transaction;
 use crate::crypto::jubjub::JubjubScalar;
 use crate::utils::current_time;
 
@@ -245,7 +243,7 @@ impl BlindingStore {
 
         // Encrypt the data
         let mut serialized_clone = serialized.clone();
-        let encryption_result = encryption_key
+        let _encryption_result = encryption_key
             .as_ref()
             .unwrap()
             .seal_in_place_append_tag(nonce, Aad::empty(), &mut serialized_clone)
@@ -540,7 +538,7 @@ impl BlindingStore {
     }
 
     // Change the password
-    pub fn change_password(&self, old_password: &str, new_password: &str) -> Result<(), String> {
+    pub fn change_password(&self, _old_password: &str, new_password: &str) -> Result<(), String> {
         // Verify the encryption key is initialized
         if self.encryption_key.lock().unwrap().is_none() {
             return Err("Encryption key not initialized".to_string());

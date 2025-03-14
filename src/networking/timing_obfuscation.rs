@@ -6,8 +6,7 @@ use rand::Rng;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use rand_core::RngCore;
-use rand_distr::{Distribution, Normal, LogNormal, Bernoulli};
-use log::{debug, trace, info, warn};
+use rand_distr::{Distribution, Normal, LogNormal};
 
 // Constants for timing obfuscation
 const MIN_DELAY_MS: u64 = 10;

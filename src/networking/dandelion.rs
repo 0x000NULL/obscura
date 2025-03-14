@@ -1736,7 +1736,7 @@ impl DandelionManager {
     /// Create a new DandelionManager instance
     pub fn new() -> Self {
         let now = Instant::now();
-        let mut secure_rng = ChaCha20Rng::from_entropy();
+        let secure_rng = ChaCha20Rng::from_entropy();
 
         Self {
             transactions: HashMap::new(),
@@ -1810,7 +1810,7 @@ impl DandelionManager {
     }
 
     pub fn detect_sybil_clusters(&mut self) {
-        let mut clusters: Vec<HashSet<SocketAddr>> = Vec::new();
+        let clusters: Vec<HashSet<SocketAddr>> = Vec::new();
         let mut processed: HashSet<SocketAddr> = HashSet::new();
 
         // First collect all peer data to avoid borrow checker issues
@@ -3415,5 +3415,10 @@ impl DandelionManager {
         // Update the mixnet integration setting
         println!("Setting mixnet integration to {}", enabled);
     }
-}
 
+    /// Update the outbound peers list
+    /// Get the outbound peers list
+    pub fn get_outbound_peers(&self) -> Vec<SocketAddr> {
+        self.outbound_peers.clone().into_iter().collect()
+    }
+}

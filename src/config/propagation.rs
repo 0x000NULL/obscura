@@ -1,15 +1,13 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock, Mutex};
 use thiserror::Error;
-use log::{debug, error, info, warn};
+use log::{error, info};
 use serde::{Serialize, Deserialize};
-use std::time::Instant;
 use semver::Version;
 use std::fmt;
 
-use crate::config::privacy_registry::{PrivacySettingsRegistry, ConfigUpdateListener, ConfigChangeEvent, ComponentType};
+use crate::config::privacy_registry::{PrivacySettingsRegistry, ConfigUpdateListener, ComponentType};
 use crate::config::presets::PrivacyPreset;
-use crate::config::validation::{ValidationResult, ConfigValidationError};
 
 /// Error type for configuration propagation issues
 #[derive(Debug, Error)]

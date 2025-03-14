@@ -11,12 +11,10 @@ pub use enhancements::{
 
 use hex;
 use std::collections::HashMap;
-use crate::blockchain::{Block, Transaction};
-use crate::crypto::bls12_381::{BlsKeypair, BlsPublicKey, BlsSignature, aggregate_signatures, verify_batch_parallel, verify_signature, ProofOfPossession};
+use crate::crypto::bls12_381::{BlsPublicKey, BlsSignature, aggregate_signatures, verify_batch_parallel, ProofOfPossession, BlsKeypair};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use log::{debug, error, info, warn};
-use crate::crypto::bls12_381::ensure_tables_initialized;
+use std::time::{SystemTime, UNIX_EPOCH};
+use log::info;
 
 /// Constants for BLS signature consensus
 pub const VALIDATOR_THRESHOLD_PERCENTAGE: usize = 67; // 2/3 majority
@@ -384,7 +382,7 @@ impl BlsConsensus {
 mod tests {
     use super::*;
     use std::time::{Instant, Duration};
-    use crate::crypto::bls12_381::ensure_tables_initialized;
+    use crate::crypto::bls12_381::{ensure_tables_initialized};
     
     /// A specialized consensus implementation for testing that allows a single validator to achieve consensus
     struct TestConsensus {

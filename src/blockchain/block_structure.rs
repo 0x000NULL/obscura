@@ -1,9 +1,9 @@
-use crate::blockchain::{Block, Transaction, TransactionOutput};
+use crate::blockchain::{Block, Transaction};
 use crate::consensus::difficulty::TARGET_BLOCK_TIME;
 use crate::crypto::bls12_381::{BlsPublicKey, BlsSignature, verify_signature};
 use log::{debug, error, warn};
 use sha2::{Digest, Sha256};
-use std::collections::{VecDeque, HashMap, HashSet};
+use std::collections::VecDeque;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 // Constants for block time mechanism
@@ -545,6 +545,7 @@ impl BlockStructureManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::blockchain::TransactionOutput;
 
     #[test]
     fn test_new_block_structure_manager() {

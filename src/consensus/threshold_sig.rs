@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::crypto::bls12_381::{BlsKeypair, BlsPublicKey, BlsSignature, aggregate_signatures, hash_to_g1, verify_batch_parallel, verify_signature};
+use crate::crypto::bls12_381::{BlsPublicKey, BlsSignature, aggregate_signatures, verify_batch_parallel, verify_signature};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 

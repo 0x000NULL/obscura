@@ -4,15 +4,11 @@ use std::io::{self, Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
-use rand::{thread_rng, Rng};
-use socket2::TcpKeepalive;
-use crate::networking::padding::{MessagePaddingService, MessagePaddingConfig, MessagePaddingStrategy};
+use rand::Rng;
+use crate::networking::padding::{MessagePaddingService, MessagePaddingConfig};
 use crate::networking::protocol_morphing::{ProtocolMorphingService, ProtocolMorphingConfig};
 use crate::networking::traffic_obfuscation::TrafficObfuscationService;
-use crate::networking::fingerprinting_protection::{
-    FingerprintingProtectionService, TcpFingerprintParameters, TlsParameters,
-    HandshakePattern, BrowserConnectionBehavior
-};
+use crate::networking::fingerprinting_protection::FingerprintingProtectionService;
 use socket2;
 use std::fmt;
 
@@ -1087,7 +1083,7 @@ pub fn apply_connection_obfuscation(
         return Ok(stream);
     }
     
-    let mut obfuscated_stream = stream;
+    let obfuscated_stream = stream;
     
     // Apply socket-level obfuscation
     // ... 

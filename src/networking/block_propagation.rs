@@ -701,22 +701,6 @@ impl BlockPropagation {
         }
     }
 
-    pub fn handle_announcement_response(
-        &mut self,
-        from_peer: SocketAddr,
-        response: BlockAnnouncementResponse,
-        protocol: &mut BlockAnnouncementProtocol,
-    ) {
-        // Process the response using the protocol
-        protocol.process_announcement_response(from_peer, &response);
-
-        // If the peer requested a compact block, send it
-        if response.request_compact && self.known_blocks.contains(&response.block_hash) {
-            // TODO: Retrieve the block and send a compact version
-            // This would be implemented in the actual network layer
-        }
-    }
-
     // Implement compact block relay
     pub fn send_compact_block(
         &mut self,

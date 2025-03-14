@@ -1,15 +1,13 @@
-use blstrs::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar, pairing, G1Compressed};
+use blstrs::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar, pairing};
 use ff::Field;
-use group::{Curve, Group, GroupEncoding, prime::PrimeCurveAffine};
+use group::{Group, prime::PrimeCurveAffine};
 use once_cell::sync::Lazy;
-use rand::thread_rng;
 use sha2::{Sha256, Digest};
-use rayon::iter::{IntoParallelIterator, ParallelIterator, ParallelExtend};
+use rayon::iter::ParallelIterator;
 use rayon::prelude::*;
 use rayon::iter::IntoParallelRefIterator;
 use std::sync::Arc;
 use std::time::Instant;
-use std::collections::HashMap;
 
 #[cfg(test)]
 use rand::{Rng, RngCore, CryptoRng};
