@@ -5,6 +5,7 @@ use crate::networking::NetworkConfig;
 use crate::blockchain::Transaction;
 use crate::crypto::metadata_protection::AdvancedMetadataProtection;
 use std::sync::{Arc, RwLock, Mutex};
+use std::collections::HashSet;
 
 // Note: Node is already defined elsewhere in the codebase
 // This is an implementation of additional methods for Node
@@ -47,7 +48,52 @@ impl crate::networking::Node {
     /// Disconnect from a peer
     pub fn disconnect_peer(&self, _peer_addr: &SocketAddr) -> Result<(), NodeError> {
         // Implementation would close the connection and update internal state
-        // For now just return success
+        Ok(())
+    }
+    
+    /// Enhance Dandelion privacy features based on configuration
+    pub fn enhance_dandelion_privacy(&mut self, enable_tor: bool, enable_mixnet: bool, privacy_level: f64) -> Result<(), NodeError> {
+        // Validate privacy level
+        if privacy_level < 0.0 || privacy_level > 1.0 {
+            return Err(NodeError::NetworkError("Privacy level must be between 0.0 and 1.0".to_string()));
+        }
+        
+        // Configure Dandelion based on privacy level
+        let mut dandelion_manager = self.dandelion_manager.lock().map_err(|_| {
+            NodeError::NetworkError("Failed to acquire lock on Dandelion manager".to_string())
+        })?;
+        
+        // Determine stem phase hops based on privacy level
+        let stem_phase_hops = if privacy_level < 0.3 {
+            2 // Low privacy
+        } else if privacy_level < 0.7 {
+            4 // Medium privacy
+        } else {
+            6 // High privacy
+        };
+        
+        // Configure Dandelion with appropriate settings
+        // These methods should be implemented in DandelionManager
+        dandelion_manager.set_stem_phase_hops(stem_phase_hops);
+        dandelion_manager.set_traffic_analysis_protection(privacy_level > 0.5);
+        dandelion_manager.set_multi_path_routing(privacy_level > 0.7);
+        dandelion_manager.set_adaptive_timing(privacy_level > 0.6);
+        
+        // Set fluff probability inversely proportional to privacy level
+        // Higher privacy = lower probability of fluffing early
+        let fluff_probability = 0.3 * (1.0 - privacy_level);
+        dandelion_manager.set_fluff_probability(fluff_probability);
+        
+        // Configure Tor integration if enabled
+        if enable_tor {
+            dandelion_manager.set_tor_integration(true);
+        }
+        
+        // Configure mixnet integration if enabled
+        if enable_mixnet {
+            dandelion_manager.set_mixnet_integration(true);
+        }
+        
         Ok(())
     }
     
@@ -68,6 +114,8 @@ pub struct Node {
     /// Metadata protection for privacy
     metadata_protection: Option<Arc<RwLock<AdvancedMetadataProtection>>>,
     dandelion_manager: Arc<Mutex<crate::networking::dandelion::DandelionManager>>,
+    /// Outbound peers
+    outbound_peers: HashSet<SocketAddr>,
 }
 
 impl Node {
@@ -85,6 +133,7 @@ impl Node {
             // ... existing fields initialization
             dandelion_manager,
             metadata_protection: None,
+            outbound_peers: HashSet::new(),
             // ... other fields
         }
     }
@@ -119,6 +168,21 @@ impl Node {
             // This would be called when initializing the node or setting the metadata protection
             // In a real implementation, we would register the service with Dandelion
         }
+    }
+    
+    fn remove_peer(&mut self, peer: &SocketAddr) {
+        self.outbound_peers.remove(peer);
+    }
+    
+    pub fn add_transaction(&self, tx: Transaction) {
+        // Add the transaction to the Dandelion manager for privacy routing
+        let mut dandelion_manager = self.dandelion_manager.lock().unwrap();
+        
+        // Clean the transaction for privacy
+        let clean_tx = dandelion_manager.prepare_transaction_for_broadcast(&tx);
+        
+        // Add the transaction with privacy metadata
+        let _ = dandelion_manager.add_transaction_with_privacy_metadata(clean_tx);
     }
     
     // ... existing methods

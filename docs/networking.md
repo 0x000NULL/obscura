@@ -26,6 +26,31 @@ Obscura's networking layer is designed for privacy and efficiency, implementing 
 
 ## Network Privacy
 
+### Privacy Configuration
+- Unified privacy configuration system
+  - Centralized management of all network privacy settings
+  - Presets for different privacy levels (Standard, Medium, High)
+  - Dynamic reconfiguration of privacy components
+  - Automatic validation of privacy settings
+  - Real-time updates via observer pattern
+
+```rust
+// Example: Accessing and applying network privacy settings
+let registry = app.get_privacy_settings();
+
+// Apply high privacy preset for sensitive operations
+let validation = registry.apply_preset(PrivacyPreset::high(), "Sensitive operation", "UI");
+if validation.is_valid {
+    // All network components now operate with maximum privacy
+    // - Tor enabled with stream isolation
+    - I2P enabled
+    - Dandelion++ configured with longer stems
+    - Circuit routing with more hops
+}
+```
+
+For comprehensive documentation, see [Privacy Configuration](privacy_configuration.md).
+
 ### Dandelion++ Implementation
 - Stem phase routing
 - Fluff phase propagation

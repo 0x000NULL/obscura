@@ -1,5 +1,76 @@
 # Release Notes
 
+## [0.7.11] - 2025-03-25
+
+### Unified Privacy Configuration System
+
+This release introduces a comprehensive Unified Privacy Configuration System for Obscura, providing a centralized, flexible, and secure way to manage privacy settings across the entire application. This system addresses the complexity of maintaining consistent privacy configurations across different components while enabling users to easily adjust their privacy preferences.
+
+#### Privacy Settings Registry
+
+The Privacy Settings Registry serves as the central component of the configuration system, providing a single source of truth for all privacy settings.
+
+**Key Features:**
+- **Centralized Management:** Single interface for all privacy-related configurations
+- **Runtime Configuration Updates:** Apply changes at runtime without service restarts
+- **Configuration History:** Track and audit all privacy setting changes
+- **Component-Specific Derivation:** Automatically generate optimized configurations for individual components
+
+**Technical Implementation:**
+- Thread-safe implementation with read-write locks for concurrent access
+- Publish-subscribe pattern for efficient change notification
+- Serialization support for configuration persistence
+- Comprehensive logging of configuration changes
+
+#### Privacy Presets
+
+Predefined privacy configurations allow users to quickly adjust their privacy level without understanding all technical details.
+
+**Available Presets:**
+- **Standard:** Basic privacy protections suitable for everyday use
+- **Medium:** Enhanced privacy with balanced performance impact (default)
+- **High:** Maximum privacy protections for sensitive operations
+- **Custom:** User-defined configurations with fine-grained control
+
+#### Configuration Propagation Mechanism
+
+The configuration propagation mechanism ensures consistent propagation of privacy configurations throughout the system with versioning and migration support.
+
+**Key Features:**
+- **Semantic Versioning:** Track configuration changes with proper version management
+- **Configuration Migration:** Safely upgrade configurations between versions with defined migration paths
+- **Conflict Resolution:** Multiple strategies for resolving configuration conflicts
+  - **Latest:** Use the most recent configuration
+  - **Merge:** Combine changes from different configurations
+  - **Priority:** Use configurations based on source priority
+  - **User:** Ask for user input on conflicts
+  - **Reject:** Prevent incompatible configurations
+- **Compatibility Validation:** Ensure configurations work with component requirements
+- **Thread Safety:** Robust locking mechanisms to prevent race conditions during updates
+
+**Technical Implementation:**
+- Observer pattern for advanced change notification beyond basic listeners
+- Multi-step migration paths for complex version transitions
+- Component-specific compatibility rules with detailed validation
+- Comprehensive error handling for all propagation operations
+- Extensive test suite ensuring propagation reliability
+
+**Developer Benefits:**
+- Simple API for component integration with configuration changes
+- Automatic handling of version-to-version migrations
+- Clear separation between configuration storage and propagation
+- Comprehensive examples for typical integration scenarios
+- Detailed documentation of all propagation mechanisms
+
+#### Integration with Existing Components
+
+The privacy configuration system seamlessly integrates with all components that require privacy settings:
+
+- **Network Components:** Automatic reconfiguration of Tor, I2P, and circuit routing
+- **Cryptographic Components:** Adjustment of side-channel protections and memory security
+- **Transaction Processing:** Configuration of stealth addresses and confidential transactions
+- **Wallet Operations:** Privacy settings for viewing key management
+
 ## [0.7.9] - 2025-03-09
 
 ### Side-Channel Attack Protection

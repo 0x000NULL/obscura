@@ -8,6 +8,7 @@ use rand::Rng;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use log::{debug, error, info, trace, warn};
+use serde::{Serialize, Deserialize};
 
 #[cfg(unix)]
 use libc;
@@ -22,7 +23,7 @@ use winapi::shared::minwindef::{DWORD, LPVOID};
 use winapi::um::sysinfoapi::{GetSystemInfo, SYSTEM_INFO};
 
 /// Configuration for memory protection features
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryProtectionConfig {
     /// Enable secure memory clearing
     pub secure_clearing_enabled: bool,

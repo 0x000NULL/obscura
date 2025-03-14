@@ -6,6 +6,15 @@ This section provides comprehensive documentation on Obscura's privacy features,
 
 Obscura implements a comprehensive set of privacy features at the network, transaction, and consensus levels. These features work together to provide robust privacy protections for users while maintaining the security and integrity of the blockchain.
 
+## Privacy Configuration
+
+- [Unified Privacy Configuration](../privacy_configuration.md): Centralized management of all privacy settings
+  - Privacy presets (Standard, Medium, High, Custom)
+  - Configuration validation framework
+  - Runtime configuration updates
+  - Component-specific configuration derivation
+  - Observer pattern for privacy setting changes
+
 ## Network Privacy
 
 - [Client Fingerprinting Countermeasures](../networking/fingerprinting_protection.md): Prevents identification based on network behavior patterns

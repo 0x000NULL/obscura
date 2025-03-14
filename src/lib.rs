@@ -1,6 +1,7 @@
 #![allow(dead_code)] // Temporarily allow dead code while in development
 
 pub mod blockchain;
+pub mod config;
 pub mod consensus;
 pub mod crypto;
 pub mod errors;
@@ -17,6 +18,10 @@ pub use errors::NetworkError;
 pub use networking::{Node, NodeError};
 // Re-export privacy features
 pub use crypto::privacy::{ConfidentialTransactions, StealthAddressing, TransactionObfuscator};
+
+// Re-export configuration
+pub use config::privacy_registry::PrivacySettingsRegistry;
+pub use config::presets::{PrivacyLevel, PrivacyPreset};
 
 // Re-export key types for convenience
 pub use consensus::pos;
@@ -38,6 +43,9 @@ pub struct ObscuraApp {
     
     // Add the advanced metadata protection service
     pub metadata_protection: Arc<RwLock<AdvancedMetadataProtection>>,
+    
+    // Add the privacy settings registry
+    pub privacy_settings: Arc<PrivacySettingsRegistry>,
 }
 
 impl ObscuraApp {
@@ -46,16 +54,25 @@ impl ObscuraApp {
         // Initialize advanced metadata protection
         let metadata_protection = Arc::new(RwLock::new(AdvancedMetadataProtection::new()));
         
+        // Initialize privacy settings registry
+        let privacy_settings = Arc::new(PrivacySettingsRegistry::new());
+        
         ObscuraApp {
             // Existing fields initialization...
             
             metadata_protection,
+            privacy_settings,
         }
     }
     
     // Method to access the metadata protection service
     pub fn get_metadata_protection(&self) -> Arc<RwLock<AdvancedMetadataProtection>> {
         self.metadata_protection.clone()
+    }
+    
+    // Method to access the privacy settings registry
+    pub fn get_privacy_settings(&self) -> Arc<PrivacySettingsRegistry> {
+        self.privacy_settings.clone()
     }
     
     // ... existing methods...

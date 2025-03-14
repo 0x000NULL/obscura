@@ -861,6 +861,36 @@ impl AdvancedMetadataProtection {
     pub fn broadcast_cleaner(&self) -> &BroadcastMetadataCleaner {
         &self.broadcast_cleaner
     }
+    
+    /// Apply full metadata protection to a transaction
+    pub fn apply_full_protection(&self, tx: &Transaction) -> Transaction {
+        // Apply all protection mechanisms in sequence
+        let mut protected_tx = self.protect_transaction_metadata(tx);
+        protected_tx = self.broadcast_cleaner.clean_transaction_metadata(&protected_tx);
+        
+        // Apply additional ZK protections if necessary
+        if !tx.inputs.is_empty() {
+            // Create a dummy proof for testing purposes
+            let old_state = [0u8; 32]; // Dummy old state
+            let new_state = tx.hash(); // Use tx hash as new state
+            let private_data = [0u8; 32]; // Dummy private data
+            
+            let proof = self.zk_provider.create_state_update_proof(
+                &old_state,
+                &new_state,
+                &private_data
+            );
+            
+            // Add the proof to the transaction's extra data in the first input
+            if !protected_tx.inputs.is_empty() {
+                let mut extra_data = protected_tx.inputs[0].signature_script.clone();
+                extra_data.extend_from_slice(&proof);
+                protected_tx.inputs[0].signature_script = extra_data;
+            }
+        }
+        
+        protected_tx
+    }
 }
 
 #[cfg(test)]

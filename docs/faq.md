@@ -13,6 +13,34 @@ Obscura differentiates itself through its hybrid consensus mechanism, multi-asse
 ### What is the native token of Obscura?
 The native token of Obscura is OBX. It is used for transaction fees, staking, and governance.
 
+## Privacy Features
+
+### How does Obscura protect user privacy?
+Obscura employs multiple privacy technologies including stealth addressing, confidential transactions with bulletproofs, zero-knowledge proofs, Dandelion++ transaction propagation, and network-level privacy protections through Tor and I2P integration.
+
+### What are the privacy levels in Obscura?
+Obscura provides three predefined privacy levels:
+- **Standard**: Basic privacy protections suitable for everyday use
+- **Medium**: Enhanced protections balancing privacy and performance (default)
+- **High**: Maximum privacy protections for sensitive operations
+
+Users can also create custom privacy configurations to meet specific needs.
+
+### How do I change my privacy settings?
+Privacy settings can be changed through the unified privacy configuration system:
+- In the GUI wallet: Settings > Privacy > Privacy Level
+- In the CLI wallet: `wallet privacy set-level [standard|medium|high]`
+- Programmatically: Using the `PrivacySettingsRegistry` API
+
+### Can I use different privacy levels for different transactions?
+Yes, you can temporarily change the privacy level for specific operations. For example:
+- In the GUI: Select "High Privacy" in the transaction confirmation dialog
+- In the CLI: `send --privacy=high [amount] [address]`
+- Programmatically: Use a transaction-specific privacy context
+
+### Does using high privacy affect performance?
+Higher privacy levels may require more computational resources and network bandwidth. The Medium level (default) provides a good balance between privacy and performance for most users. Performance impact varies by device and network conditions.
+
 ## Consensus Mechanism
 
 ### How does Obscura's hybrid consensus work?

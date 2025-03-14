@@ -10,8 +10,8 @@ pub fn validate_signature(input: &TransactionInput, message: &[u8], public_key: 
     
     // Convert signature bytes to JubjubSignature
     match JubjubSignature::from_bytes(&signature_bytes) {
-        Ok(signature) => public_key.verify(message, &signature).is_ok(),
-        Err(_) => false
+        Some(signature) => public_key.verify(message, &signature),
+        None => false
     }
 }
 

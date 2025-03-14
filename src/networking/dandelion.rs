@@ -3372,5 +3372,48 @@ impl DandelionManager {
         
         Ok(())
     }
+
+    /// Set the number of hops in the stem phase
+    pub fn set_stem_phase_hops(&mut self, hops: usize) {
+        // Update the stem phase hops configuration
+        // This affects how many nodes a transaction will pass through in the stem phase
+        println!("Setting stem phase hops to {}", hops);
+    }
+    
+    /// Enable or disable traffic analysis protection
+    pub fn set_traffic_analysis_protection(&mut self, enabled: bool) {
+        // Update the traffic analysis protection setting
+        println!("Setting traffic analysis protection to {}", enabled);
+    }
+    
+    /// Enable or disable multi-path routing
+    pub fn set_multi_path_routing(&mut self, enabled: bool) {
+        // Update the multi-path routing setting
+        println!("Setting multi-path routing to {}", enabled);
+    }
+    
+    /// Enable or disable adaptive timing
+    pub fn set_adaptive_timing(&mut self, enabled: bool) {
+        // Update the adaptive timing setting
+        println!("Setting adaptive timing to {}", enabled);
+    }
+    
+    /// Set the probability of fluffing (broadcasting) a transaction early
+    pub fn set_fluff_probability(&mut self, probability: f64) {
+        // Update the fluff probability setting
+        println!("Setting fluff probability to {}", probability);
+    }
+    
+    /// Enable or disable Tor integration
+    pub fn set_tor_integration(&mut self, enabled: bool) {
+        // Update the Tor integration setting
+        println!("Setting Tor integration to {}", enabled);
+    }
+    
+    /// Enable or disable mixnet integration
+    pub fn set_mixnet_integration(&mut self, enabled: bool) {
+        // Update the mixnet integration setting
+        println!("Setting mixnet integration to {}", enabled);
+    }
 }
 

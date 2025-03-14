@@ -30,6 +30,7 @@ Welcome to the official documentation for the Obscura blockchain project. This d
 ### Privacy
 
 - [Privacy Features Overview](./privacy_features.md) - Comprehensive documentation on privacy features
+- [Privacy Configuration](./privacy_configuration.md) - Unified privacy configuration system
 - [Privacy Reference](./privacy/index.md) - Detailed reference for all privacy components
 - [Confidential Transactions](./crypto/confidential_transactions.md) - How confidential transactions work
 - [Stealth Addressing](./crypto/stealth_addressing.md) - Implementation of stealth addresses

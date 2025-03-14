@@ -4,6 +4,73 @@
 
 The Obscura blockchain employs multiple cryptographic privacy technologies to protect user transactions from analysis and surveillance. These features prevent blockchain analytics from linking transactions, identifying users, or determining transaction amounts.
 
+## Unified Privacy Configuration System
+
+Obscura implements a centralized privacy configuration system that provides consistent management of all privacy features across the application. This system makes it easy to adjust privacy settings while ensuring they remain consistent and secure.
+
+### Privacy Settings Registry
+
+The Privacy Settings Registry serves as the central component for managing all privacy-related settings:
+
+```rust
+// Access the privacy settings registry from the ObscuraApp
+let registry = app.get_privacy_settings();
+
+// Apply a high privacy preset
+registry.apply_preset(PrivacyPreset::high(), "User requested", "UI");
+
+// Get the current configuration
+let config = registry.get_config();
+println!("Current privacy level: {}", config.level);
+```
+
+### Privacy Presets
+
+The system provides predefined privacy levels that can be applied with a single command:
+
+- **Standard**: Basic privacy protections suitable for everyday use
+- **Medium**: Enhanced protections balancing privacy and performance (default)
+- **High**: Maximum privacy protections for the most sensitive operations
+- **Custom**: User-defined settings with fine-grained control
+
+### Configuration Validation
+
+All privacy configurations are automatically validated to ensure they don't introduce security risks:
+
+```rust
+// Create a custom configuration
+let mut custom = PrivacyPreset::medium();
+custom.use_tor = true;
+custom.tor_stream_isolation = true;
+
+// Apply and validate the configuration
+let validation = registry.apply_preset(custom, "Custom configuration", "User");
+if !validation.is_valid {
+    println!("Configuration warning: {}", validation.get_summary());
+}
+```
+
+### Dynamic Configuration Updates
+
+Components automatically receive updates when relevant privacy settings change:
+
+```rust
+// Implement ConfigUpdateListener for a component
+impl ConfigUpdateListener for NetworkComponent {
+    fn on_config_update(&self, config: &PrivacyPreset, changes: &[ConfigChangeEvent]) {
+        if config.use_tor {
+            // Configure Tor with appropriate settings
+            configure_tor(config.tor_stream_isolation, config.tor_only_connections);
+        }
+    }
+    
+    fn name(&self) -> &str { "NetworkComponent" }
+    fn component_type(&self) -> ComponentType { ComponentType::Network }
+}
+```
+
+For detailed information about the unified privacy configuration system, see the [Privacy Configuration](privacy_configuration.md) documentation.
+
 ## Key Privacy Features
 
 ### 1. Network-Level Privacy

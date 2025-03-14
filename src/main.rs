@@ -224,6 +224,21 @@ fn perform_maintenance_tasks(
     debug!("Maintenance tasks completed");
 }
 
+// Initialize enhanced privacy features
+fn init_enhanced_privacy(node: &mut networking::Node) {
+    info!("Initializing enhanced privacy features...");
+    
+    // Configure privacy options - these could be read from config in real implementation
+    const ENABLE_TOR: bool = false;         // Disabled by default as requires external Tor
+    const ENABLE_MIXNET: bool = false;      // Disabled by default as requires external mixnet
+    const PRIVACY_LEVEL: f64 = 0.8;         // High privacy level (0.0-1.0)
+    
+    match node.enhance_dandelion_privacy(ENABLE_TOR, ENABLE_MIXNET, PRIVACY_LEVEL) {
+        Ok(_) => info!("Enhanced Dandelion privacy features activated"),
+        Err(e) => error!("Failed to activate enhanced privacy features: {:?}", e),
+    }
+}
+
 fn main() {
     // Initialize cryptographic components
     let keypair = init_crypto();
@@ -240,6 +255,11 @@ fn main() {
     
     // Initialize networking components
     let mut node = init_networking();
+    
+    // Initialize enhanced privacy features (Dandelion++)
+    init_enhanced_privacy(&mut node);
+    
+    // Continue with existing code...
     let node_arc = Arc::new(Mutex::new(node));
     
     // Initialize wallet integration
