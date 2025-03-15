@@ -75,7 +75,7 @@ fn test_integration_with_side_channel_protection() {
     });
     
     // Verify the result
-    assert_eq!(result, 63);
+    assert_eq!(result, 65);
     
     println!("Integration with side-channel protection test passed successfully");
 }

@@ -71,12 +71,12 @@ impl PolynomialCommitment {
     
     /// Evaluate the commitment at a point (for verification)
     pub fn evaluate_at(&self, x: &JubjubScalar) -> JubjubPoint {
-        let mut result = self.commitments[0];
-        let mut power = JubjubScalar::one();
+        let mut result = JubjubPoint::zero();  // Start with zero
+        let mut power = JubjubScalar::one();  // Start with x^0
         
-        for i in 1..self.commitments.len() {
-            power = power * x;
-            result = result + (self.commitments[i] * power);
+        for commitment in self.commitments.iter() {
+            result = result + (*commitment * power);  // Add C_i * x^i
+            power = power * (*x);  // Calculate x^(i+1) for next term
         }
         
         result
@@ -112,7 +112,7 @@ impl VerifiableShare {
     /// Verify this share against the commitment
     pub fn verify(&self) -> bool {
         // Verify g^value = commitment.evaluate_at(index)
-        let left_side = JubjubPoint::generator() * self.value;
+        let left_side = JubjubPoint::generator() * self.value;  // point * scalar
         let right_side = self.commitment.evaluate_at(&self.index);
         
         left_side == right_side

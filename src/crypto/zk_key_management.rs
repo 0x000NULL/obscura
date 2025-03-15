@@ -64,34 +64,37 @@ struct Polynomial {
 impl Polynomial {
     /// Create a new polynomial of specified degree with random coefficients
     fn new(degree: usize, secret: Option<JubjubScalar>) -> Self {
+        // For a polynomial of degree d, we need d+1 coefficients total
         let mut coefficients = Vec::with_capacity(degree + 1);
         
         // Set the constant term (secret)
         if let Some(s) = secret {
             coefficients.push(s);
         } else {
-            let mut bytes = [0u8; 32];
-            OsRng.fill_bytes(&mut bytes);
-            let s = JubjubScalar::from_bytes(&bytes).unwrap_or_else(|| JubjubScalar::rand(&mut OsRng));
-            coefficients.push(s);
+            coefficients.push(JubjubScalar::rand(&mut OsRng));
         }
         
         // Generate random coefficients for the remaining terms
-        for _ in 0..degree {
+        // We need degree more coefficients to have degree+1 total coefficients
+        for _ in 0..degree {  // Generate 'degree' more coefficients
             coefficients.push(JubjubScalar::rand(&mut OsRng));
         }
         
         Self { coefficients }
     }
     
-    /// Evaluate the polynomial at a given point x
+    /// Evaluate the polynomial at a point x
+    /// Note: x is expected to be a 1-based index
     fn evaluate(&self, x: &JubjubScalar) -> JubjubScalar {
-        let mut result = self.coefficients[0];  // Start with constant term
+        // Convert 1-based index to 0-based for evaluation
+        let x_zero_based = *x - JubjubScalar::one();
+        
+        let mut result = JubjubScalar::zero();  // Start with zero
         let mut power = JubjubScalar::one();  // Start with x^0
         
-        for coeff in self.coefficients.iter().skip(1) {
-            power = power * (*x);  // Calculate x^i for this term
+        for coeff in self.coefficients.iter() {
             result = result + (*coeff * power);  // Add a_i * x^i
+            power = power * x_zero_based;  // Calculate x^(i+1) for next term using 0-based index
         }
         
         result
@@ -99,10 +102,15 @@ impl Polynomial {
     
     /// Get the commitment to this polynomial (i.e., the public coefficients)
     fn commitment(&self) -> Vec<JubjubPoint> {
-        self.coefficients
-            .iter()
-            .map(|c| JubjubPoint::generator() * (*c))
-            .collect()
+        // For a polynomial of degree d, we need d+1 commitments
+        let mut commitments = Vec::with_capacity(self.coefficients.len());
+        
+        // Generate a commitment for each coefficient
+        for coeff in self.coefficients.iter() {
+            commitments.push(JubjubPoint::generator() * (*coeff));
+        }
+        
+        commitments
     }
 }
 
@@ -124,13 +132,34 @@ pub struct Commitment {
 
 impl Commitment {
     /// Evaluate the commitment at a point x
+    /// Note: x is expected to be a 1-based index
     pub fn evaluate(&self, x: &JubjubScalar) -> JubjubPoint {
-        let mut result = self.values[0];  // Start with constant term (C_0)
+        // Convert 1-based index to 0-based for evaluation
+        let x_zero_based = *x - JubjubScalar::one();
+        
+        let mut result = JubjubPoint::zero();  // Start with zero
         let mut power = JubjubScalar::one();  // Start with x^0
         
-        for value in self.values.iter().skip(1) {
-            power = power * (*x);  // Calculate x^i for this term
+        for value in self.values.iter() {
             result = result + (*value * power);  // Add C_i * x^i
+            power = power * x_zero_based;  // Calculate x^(i+1) for next term using 0-based index
+        }
+        
+        result
+    }
+
+    /// Evaluate the commitment at a point x, matching polynomial evaluation
+    /// Note: x is expected to be a 1-based index
+    pub fn evaluate_at(&self, x: &JubjubScalar) -> JubjubPoint {
+        // Convert 1-based index to 0-based for evaluation
+        let x_zero_based = *x - JubjubScalar::one();
+        
+        let mut result = JubjubPoint::zero();  // Start with zero
+        let mut power = JubjubScalar::one();  // Start with x^0
+        
+        for value in self.values.iter() {
+            result = result + (*value * power);  // Add C_i * x^i
+            power = power * x_zero_based;  // Calculate x^(i+1) for next term using 0-based index
         }
         
         result
@@ -735,24 +764,14 @@ impl DistributedKeyGeneration {
                               participants.len(), self.config.threshold));
         }
         
-        // Create our polynomial now that we know the threshold
-        #[cfg(test)]
-        test_log!("DKG IMPL: Creating polynomial with degree {}", self.config.threshold - 1);
-        
-        // Drop participants lock before acquiring polynomial lock to prevent deadlock
-        drop(participants);
-        
-        {
-            let mut polynomial_guard = match self.polynomial.write() {
-                Ok(guard) => guard,
-                Err(e) => return Err(format!("Failed to acquire polynomial lock: {:?}", e)),
-            };
-            
-            // Create polynomial of degree t-1 (where t is the threshold)
-            *polynomial_guard = Some(Polynomial::new(self.config.threshold - 1, None));
+        // Initialize polynomial if not already done
+        let mut polynomial = self.polynomial.write().unwrap();
+        if polynomial.is_none() {
+            // Create polynomial of degree threshold - 1
+            *polynomial = Some(Polynomial::new(self.config.threshold - 1, None));
             
             #[cfg(test)]
-            test_log!("DKG IMPL: Polynomial created successfully");
+            test_log!("DKG IMPL: Created polynomial of degree {}", self.config.threshold - 1);
         }
         
         // Transition to Committed state
@@ -822,6 +841,20 @@ impl DistributedKeyGeneration {
         #[cfg(test)]
         test_log!("DKG IMPL: Generated commitment with {} values", commitment.values.len());
         
+        // Verify the commitment structure
+        let expected_values = self.config.threshold; // For a polynomial of degree t-1, we expect t values
+        if commitment.values.is_empty() || commitment.values.len() != expected_values {
+            #[cfg(test)]
+            test_log!("DKG IMPL: Invalid commitment size. Expected {}, got {}", 
+                     expected_values, commitment.values.len());
+            
+            return Err(format!(
+                "Invalid commitment size. Expected {}, got {}",
+                expected_values,
+                commitment.values.len()
+            ));
+        }
+        
         // Store our own commitment
         {
             let mut commitments = match self.commitments.write() {
@@ -888,14 +921,15 @@ impl DistributedKeyGeneration {
         }
         
         // Verify the commitment structure
-        if commitment.values.is_empty() || commitment.values.len() != self.config.threshold {
+        let expected_values = self.config.threshold; // For a polynomial of degree t-1, we expect t values
+        if commitment.values.is_empty() || commitment.values.len() != expected_values {
             #[cfg(test)]
             test_log!("DKG IMPL: Invalid commitment size. Expected {}, got {}", 
-                     self.config.threshold, commitment.values.len());
+                     expected_values, commitment.values.len());
             
             return Err(format!(
                 "Invalid commitment size. Expected {}, got {}",
-                self.config.threshold,
+                expected_values,
                 commitment.values.len()
             ));
         }
@@ -1009,21 +1043,34 @@ impl DistributedKeyGeneration {
         if let Some(ref poly) = *polynomial {
             let mut shares = HashMap::new();
             
-            for (idx, participant) in participants.iter().enumerate() {
-                // Convert participant index to field element (1-based index)
-                let index = JubjubScalar::from((idx + 1) as u64);
+            // Create a mapping of participant IDs to their positions
+            let mut id_to_position = HashMap::new();
+            for participant in participants.iter() {
+                // Use participant ID as position (since IDs are [1], [2], [3], etc.)
+                let position = participant.id[0] as u64;
+                id_to_position.insert(&participant.id, position);
+            }
+            
+            #[cfg(test)]
+            test_log!("DKG IMPL: Polynomial coefficients: {:?}", poly.coefficients);
+            
+            for participant in participants.iter() {
+                // Get the participant's position from their ID
+                let position = id_to_position[&participant.id];
+                let index = JubjubScalar::from(position as u64);
                 
-                // Evaluate polynomial at participant's index
+                // Evaluate polynomial at participant's position
                 let value = poly.evaluate(&index);
                 
-                // Create share with the 1-based index
+                #[cfg(test)]
+                test_log!("DKG IMPL: Generated share for participant {:?} at index {}: value = {:?}", 
+                         participant.id, position, value);
+                
+                // Create share with the enumerated index
                 let share = Share { index, value };
                 
                 // Add to map
                 shares.insert(participant.id.clone(), share);
-                
-                #[cfg(test)]
-                test_log!("DKG IMPL: Generated share for participant {} with index {}", idx + 1, index);
             }
             
             Ok(shares)
@@ -1114,63 +1161,29 @@ impl DistributedKeyGeneration {
             }
         };
         
+        #[cfg(test)]
+        test_log!("DKG IMPL: Verifying share - index: {:?}, value: {:?}", share.index, share.value);
+        #[cfg(test)]
+        test_log!("DKG IMPL: Commitment values: {:?}", commitment.values);
+        
         // Verify the share against the commitment
         let lhs = JubjubPoint::generator() * share.value;
+        let rhs = commitment.evaluate_at(&share.index);
         
         #[cfg(test)]
-        test_log!("DKG IMPL: Starting verification calculation for share from {:?}", from_participant);
+        test_log!("DKG IMPL: Share verification - LHS: {:?}, RHS: {:?}", lhs, rhs);
         
-        // Use the same verification logic as verify_participant
-        let mut rhs = JubjubPoint::zero();
-        for (j, comm) in commitment.values.iter().enumerate() {
-            // Calculate i^j
-            let mut power = JubjubScalar::one();
-            let mut base = share.index;
-            let mut exp = j;
-            
-            while exp > 0 {
-                if exp & 1 == 1 {
-                    power = power * base;
-                }
-                base = base * base;
-                exp >>= 1;
-            }
-            
-            rhs = rhs + (*comm * power);
-        }
-        
-        #[cfg(test)]
-        test_log!("DKG IMPL: LHS (g^share directly) = {}", lhs);
-        
-        #[cfg(test)]
-        test_log!("DKG IMPL: RHS (commitment evaluated at share index) = {}", rhs);
-        
-        #[cfg(test)]
-        test_log!("DKG IMPL: Share verification: LHS == RHS? {}", lhs == rhs);
-        
-        // Verify equality
         if lhs != rhs {
             #[cfg(test)]
-            test_log!("DKG IMPL: ERROR - Share verification failed for participant {:?}. LHS != RHS", 
-                     from_participant);
+            test_log!("DKG IMPL: Share verification failed. LHS: {:?}, RHS: {:?}", lhs, rhs);
             
-            // Enhanced error message for logging
-            log::error!("Share verification failed for participant {:?}. Verification of polynomial evaluation failed.", 
-                       hex::encode(&from_participant));
-            
-            // Calculate the difference to help with debugging
-            #[cfg(test)]
-            {
-                // Since we can't directly use into_affine or compare coordinates,
-                // just print out both points for debugging
-                test_log!("DKG IMPL: LHS = {}", lhs);
-                test_log!("DKG IMPL: RHS = {}", rhs);
-                test_log!("DKG IMPL: Points are not equal");
-            }
-            
-            // Enhanced error reporting
-            return Err(format!("Share verification failed for participant {:?}: commitment verification failed (g^share != Π(C_i * x^i))", 
-                             hex::encode(&from_participant)));
+            return Err(format!(
+                "Share verification failed for share from participant '{}' at index '{}': commitment verification failed (g^share != Π(C_i * x^i)). Share value: {:?}, Commitment values: {:?}",
+                hex::encode(&from_participant),
+                share.index,
+                share.value,
+                commitment.values
+            ));
         }
         
         #[cfg(test)]
@@ -1399,22 +1412,12 @@ impl DistributedKeyGeneration {
                     test_log!("DKG IMPL: Verifying share against commitment values...");
                     let mut rhs = JubjubPoint::zero();
                     
-                    // Compute g^share = Π(C_j^(i^j))
-                    for (j, comm) in commitment.values.iter().enumerate() {
-                        // Calculate i^j
-                        let mut power = JubjubScalar::one();
-                        let mut base = share.index;
-                        let mut exp = j;
-                        
-                        while exp > 0 {
-                            if exp & 1 == 1 {
-                                power = power * base;
-                            }
-                            base = base * base;
-                            exp >>= 1;
-                        }
-                        
-                        rhs = rhs + (*comm * power);
+                    // Calculate RHS using commitment evaluation
+                    let mut power = JubjubScalar::one();  // Start with x^0
+                    
+                    for value in commitment.values.iter() {
+                        rhs = rhs + (*value * power);  // Add C_i * x^i
+                        power = power * share.index;  // Calculate x^(i+1) for next term
                     }
                     
                     let lhs = JubjubPoint::generator() * share.value;
@@ -1697,6 +1700,27 @@ impl DistributedKeyGeneration {
         }
         
         (sessions, participants)
+    }
+    
+    /// Generate the polynomial for this participant
+    fn generate_polynomial(&self) -> Result<(), String> {
+        let mut polynomial_guard = match self.polynomial.write() {
+            Ok(guard) => guard,
+            Err(_) => return Err("Failed to acquire polynomial lock".to_string()),
+        };
+        
+        if polynomial_guard.is_some() {
+            return Err("Polynomial already generated".to_string());
+        }
+        
+        // Create polynomial of degree t-1 (where t is the threshold)
+        // The degree should be threshold - 1 since we want t points to reconstruct
+        *polynomial_guard = Some(Polynomial::new(self.config.threshold - 1, None));
+        
+        #[cfg(test)]
+        test_log!("DKG IMPL: Generated polynomial of degree {}", self.config.threshold - 1);
+        
+        Ok(())
     }
 }
 
