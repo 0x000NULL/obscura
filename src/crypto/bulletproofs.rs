@@ -957,9 +957,9 @@ fn batch_verify_range_proofs_internal(
     proof_bytes: &[&[u8]],
     commitments: &[&JubjubPoint],
     bits: &[u32],
-    bp_gens: &JubjubBulletproofGens,
-    pc_gens: &JubjubPedersenGens,
-    transcript: &mut Transcript,
+    _bp_gens: &JubjubBulletproofGens,
+    _pc_gens: &JubjubPedersenGens,
+    _transcript: &mut Transcript,
 ) -> Result<bool, BulletproofsError> {
     // Generate random weights for the linear combination
     let mut rng = OsRng;
@@ -1021,8 +1021,8 @@ fn batch_verify_range_proofs_internal(
             proof_bytes[i],
             commitment_point,
             bits[i],
-            bp_gens,
-            pc_gens,
+            &BP_GENS,
+            &PC_GENS,
             &mut individual_transcript,
         ) {
             Ok(valid) => {
@@ -1050,9 +1050,9 @@ fn create_range_proof(
     value: u64,
     bits: u32,
     blinding: &JubjubScalar,
-    bp_gens: &JubjubBulletproofGens,
-    pc_gens: &JubjubPedersenGens,
-    transcript: &mut Transcript,
+    _bp_gens: &JubjubBulletproofGens,
+    _pc_gens: &JubjubPedersenGens,
+    _transcript: &mut Transcript,
 ) -> Result<(Vec<u8>, JubjubScalar), BulletproofsError> {
     // Implementation of the bulletproofs range proof algorithm
     // This is a simplified version for demonstration purposes
@@ -1096,10 +1096,10 @@ fn create_range_proof(
 fn verify_range_proof_internal(
     proof: &[u8],
     commitment: &JubjubPoint,
-    bits: u32,
-    bp_gens: &JubjubBulletproofGens,
-    pc_gens: &JubjubPedersenGens,
-    transcript: &mut Transcript,
+    _bits: u32,
+    _bp_gens: &JubjubBulletproofGens,
+    _pc_gens: &JubjubPedersenGens,
+    _transcript: &mut Transcript,
 ) -> Result<bool, BulletproofsError> {
     // Check if the proof is too short (corrupted)
     if proof.is_empty() {
@@ -1140,7 +1140,7 @@ fn verify_range_proof_internal(
             // Extract the value from the proof
             let mut value_bytes = [0u8; 8];
             value_bytes.copy_from_slice(&proof[1..9]);
-            let value = u64::from_le_bytes(value_bytes);
+            let _value = u64::from_le_bytes(value_bytes);
 
             // Verify the commitment hash matches what's in the proof
             let mut commitment_bytes = Vec::new();
@@ -1196,9 +1196,9 @@ fn create_multi_output_range_proof(
     values: &[u64],
     blinding_factors: &[JubjubScalar],
     bits: u32,
-    bp_gens: &JubjubBulletproofGens,
-    pc_gens: &JubjubPedersenGens,
-    transcript: &mut Transcript,
+    _bp_gens: &JubjubBulletproofGens,
+    _pc_gens: &JubjubPedersenGens,
+    _transcript: &mut Transcript,
 ) -> Result<Vec<u8>, BulletproofsError> {
     // Implementation of the bulletproofs multi-output range proof algorithm
     // This is a simplified version for demonstration purposes
@@ -1246,12 +1246,12 @@ fn create_multi_output_range_proof(
 
 // Internal function to verify a multi-output range proof
 fn verify_multi_output_range_proof_internal(
-    proof_bytes: &[u8],
-    commitments: &[&JubjubPoint],
-    bits: u32,
-    bp_gens: &JubjubBulletproofGens,
-    pc_gens: &JubjubPedersenGens,
-    transcript: &mut Transcript,
+    _proof_bytes: &[u8],
+    _commitments: &[&JubjubPoint],
+    _bits: u32,
+    _bp_gens: &JubjubBulletproofGens,
+    _pc_gens: &JubjubPedersenGens,
+    _transcript: &mut Transcript,
 ) -> Result<bool, BulletproofsError> {
     // In a real implementation, this would verify the zero-knowledge proof
     // For now, we'll just return true to simulate a successful verification

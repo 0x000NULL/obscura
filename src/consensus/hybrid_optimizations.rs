@@ -1,11 +1,11 @@
 use rayon::prelude::*;
-use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::pos_old::{StakeProof, StakingContract};
 use crate::blockchain::Block;
+use sha2::Digest;
 
 /// Manages the state of the hybrid consensus system with optimizations
 pub struct HybridStateManager {
@@ -513,6 +513,7 @@ pub struct ValidatorStateDiff {
 mod tests {
     use super::*;
     use crate::blockchain::{Transaction, TransactionInput, TransactionOutput, OutPoint};
+    use sha2::{Digest, Sha256};
 
     // Create a mock StakingContract for testing
     fn create_mock_staking_contract() -> Arc<RwLock<StakingContract>> {

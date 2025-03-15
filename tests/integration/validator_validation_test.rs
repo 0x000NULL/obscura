@@ -1,7 +1,7 @@
 use hex;
 use obscura::consensus::pos::{
     DiversityMetrics, HardwareSecurityInfo, ProofOfStake, ReputationAssessment, ValidatorGeoInfo,
-    ValidatorInfo, ValidatorReputationManager,
+    ValidatorInfo,
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 

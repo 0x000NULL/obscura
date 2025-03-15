@@ -2,9 +2,7 @@
 mod test {
     use hex;
     use obscura::consensus::pos::{
-        ContractVerificationManager, DelegationMarketplace, HardwareSecurityInfo,
-        HardwareSecurityManager, ProofOfStake, ReputationAssessment, StakeCompoundingManager,
-        ValidatorDiversityManager, ValidatorGeoInfo, ValidatorInfo, ValidatorReputationManager,
+        HardwareSecurityInfo, ProofOfStake, ReputationAssessment, ValidatorGeoInfo, ValidatorInfo,
     };
 
     // Helper function to get current time

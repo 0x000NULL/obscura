@@ -1,10 +1,8 @@
 use hex;
 use obscura::consensus::pos::{
-    ClientImplementation, CompoundingConfig, CompoundingOperation, CompoundingStatus,
-    ContractVerificationManager, DelegationMarketplace, DiversityMetrics, EntityInfo,
-    GeoDistributionReport, HardwareSecurityInfo, HardwareSecurityManager, MarketplaceListing,
-    MarketplaceOffer, MarketplaceTransaction, ProofOfStake, ReputationAssessment, ReputationOracle,
-    ReputationScore, SecurityAttestation, StakeCompoundingManager, ValidatorDiversityManager,
+    CompoundingConfig, CompoundingOperation, CompoundingStatus,
+    ContractVerificationManager, DelegationMarketplace, DiversityMetrics, EntityInfo, HardwareSecurityInfo, HardwareSecurityManager, MarketplaceListing,
+    MarketplaceOffer, MarketplaceTransaction, ProofOfStake, ReputationAssessment, ReputationOracle, SecurityAttestation, StakeCompoundingManager, ValidatorDiversityManager,
     ValidatorGeoInfo, ValidatorInfo, ValidatorReputationManager, VerificationStatus,
     VerifiedContract,
 };

@@ -3,13 +3,14 @@
 // This module implements protocol morphing techniques that make Obscura network traffic
 // resemble other common protocols like HTTP, DNS, or HTTPS to avoid detection and censorship.
 
-use crate::networking::{MessageType, Node};
 use crate::networking::message::Message;
 use rand::{thread_rng, Rng, distributions::Alphanumeric};
 use rand::rngs::ThreadRng;
 use std::time::{Duration, Instant};
 use log::{debug, trace, warn};
 use std::sync::{Arc, Mutex};
+use crate::networking::message::MessageType;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 /// Protocol types that Obscura traffic can be morphed to resemble
 #[derive(Debug, Clone, Copy, PartialEq)]

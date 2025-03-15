@@ -1,12 +1,7 @@
 use obscura::blockchain::{Block, OutPoint, Transaction, TransactionInput, TransactionOutput};
-use obscura::consensus::randomx::RandomXContext;
 use obscura::consensus::StakeProof;
-use obscura::crypto::jubjub::{generate_keypair, JubjubKeypair, JubjubSignature};
+use obscura::crypto::jubjub::generate_keypair;
 use obscura::networking::{Node, NetworkConfig};
-use rand::rngs::OsRng;
-use rand::thread_rng;
-use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn create_test_block(nonce: u64) -> Block {
     let mut block = Block::new([0u8; 32]);

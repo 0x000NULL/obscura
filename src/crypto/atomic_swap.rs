@@ -7,8 +7,10 @@ use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
 #[cfg(test)]
 use tempfile::tempdir;
-use rand::{rngs::OsRng, Rng};
-use rand_core::RngCore;
+#[cfg(test)]
+use rand::RngCore;
+#[cfg(test)]
+use rand::rngs::OsRng;
 
 // Constants for atomic swap timeouts and security parameters
 const SWAP_TIMEOUT_SECONDS: u64 = 3600; // 1 hour
@@ -305,6 +307,7 @@ impl CrossCurveSwap {
 mod tests {
     use super::*;
     use rand::RngCore;
+    use rand::rngs::OsRng;
     use crate::crypto::pedersen::initialize_blinding_store;
 
     #[test]

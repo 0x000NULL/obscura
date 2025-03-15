@@ -11,7 +11,7 @@ pub use enhancements::{
 
 use hex;
 use std::collections::HashMap;
-use crate::crypto::bls12_381::{BlsPublicKey, BlsSignature, aggregate_signatures, verify_batch_parallel, ProofOfPossession, BlsKeypair};
+use crate::crypto::bls12_381::{BlsPublicKey, BlsSignature, aggregate_signatures, verify_batch_parallel, ProofOfPossession};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use log::info;
@@ -382,7 +382,7 @@ impl BlsConsensus {
 mod tests {
     use super::*;
     use std::time::{Instant, Duration};
-    use crate::crypto::bls12_381::{ensure_tables_initialized};
+    use crate::crypto::bls12_381::{ensure_tables_initialized, BlsKeypair};
     
     /// A specialized consensus implementation for testing that allows a single validator to achieve consensus
     struct TestConsensus {

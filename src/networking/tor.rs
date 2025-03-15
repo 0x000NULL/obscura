@@ -1,14 +1,13 @@
 use std::collections::HashMap;
-use std::io::{self, Read, Write};
+use std::io;
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
+use log::{info, warn, error};
+use serde::{Serialize, Deserialize};
+use rand::{thread_rng, Rng};
 use std::process::{Command, Child, Stdio};
 use thiserror::Error;
-use log::{error, info, warn};
-use rand::{Rng, thread_rng};
-use serde::{Deserialize, Serialize};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use crate::networking::circuit::CircuitManager;
 
 /// Tor-related error types

@@ -1,5 +1,4 @@
 use crate::crypto::{JubjubPoint, JubjubScalar, JubjubPointExt};
-use crate::crypto::jubjub::generate_keypair;
 use crate::crypto::zk_key_management::{Participant, Share};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
@@ -9,6 +8,7 @@ use rand_core::RngCore;
 use sha2::Digest;
 use log::{debug, error, info, warn};
 use ark_std::{One, UniformRand, Zero};
+use crate::crypto::jubjub::generate_keypair;
 
 /// Constants for VSS
 const MAX_VSS_PARTICIPANTS: usize = 100;

@@ -1,10 +1,8 @@
-use obscura::crypto::zk_key_management::{DkgConfig, DkgManager, DkgState, Participant, SessionId, DistributedKeyGeneration, Share};
-use obscura::crypto::jubjub::{JubjubKeypair, JubjubPointExt, JubjubPoint, JubjubScalar, JubjubScalarExt};
+use obscura::crypto::zk_key_management::{DkgConfig, DkgManager, DkgState, Participant, DistributedKeyGeneration};
+use obscura::crypto::jubjub::{JubjubPointExt, JubjubScalarExt};
 use std::time::Duration;
 use std::thread;
 use num_traits::identities::Zero;
-use num_traits::One;
-use std::collections::HashMap;
 use std::sync::Arc;
 use hex;
 

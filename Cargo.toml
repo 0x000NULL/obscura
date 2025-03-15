@@ -148,6 +148,8 @@ integration-tests = []
 metrics = ["prometheus"]
 # Consensus features
 randomx = ["randomx-rs"]
+# Examples feature
+examples = []
 
 [[bench]]
 name = "crypto_benchmarks"

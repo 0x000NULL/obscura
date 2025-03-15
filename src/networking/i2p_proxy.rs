@@ -4,7 +4,6 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, TcpListener, ToSocketAdd
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::error::Error as StdError;
-#[macro_use]
 use log::{info, warn};
 use rand::{thread_rng, Rng};
 use serde::{Serialize, Deserialize};
