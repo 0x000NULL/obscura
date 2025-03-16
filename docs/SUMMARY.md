@@ -25,6 +25,7 @@
     - [Transaction Ordering](transactions/ordering.md)
     - [Fee Calculation](transactions/fees.md)
     - [Transaction Validation](transactions/validation.md)
+  - [Transaction Privacy](transaction_privacy.md)
 - [Privacy Features](privacy_features.md)
   - [Transaction Obfuscation](crypto/transaction_obfuscation.md)
   - [Stealth Addressing](crypto/stealth_addressing.md)

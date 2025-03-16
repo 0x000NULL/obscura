@@ -48,6 +48,16 @@ pub use jubjub::{JubjubKeypair, JubjubSignature, JubjubPoint, JubjubScalar, Jubj
 // Re-export the generate_keypair function
 pub use jubjub::generate_keypair as jubjub_generate_keypair;
 
+// Re-export privacy primitives
+pub use privacy::{
+    PrivacyFeature, PrivacyPrimitive, PrivacyPrimitiveFactory,
+    SenderPrivacy, ReceiverPrivacy, TransactionObfuscator,
+    StealthAddressing, ConfidentialTransactions,
+    TransactionObfuscationPrimitive, StealthAddressingPrimitive,
+    ConfidentialTransactionsPrimitive, RangeProofPrimitive,
+    MetadataProtectionPrimitive
+};
+
 // Add new module for advanced metadata protection
 pub mod metadata_protection;
 

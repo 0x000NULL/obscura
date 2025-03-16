@@ -6,6 +6,9 @@ use crate::blockchain::{Block, Transaction, TransactionOutput};
 #[cfg(test)]
 mod block_structure_tests;
 
+// Import test modules
+pub mod transaction_privacy_tests;
+
 #[allow(dead_code)]
 pub fn create_test_transaction() -> Transaction {
     let keypair = generate_keypair();

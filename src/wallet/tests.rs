@@ -366,3 +366,109 @@ fn test_basic_wallet_functions() {
     let public_key = wallet.get_public_key();
     assert!(public_key.is_some());
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::wallet::Wallet;
+    use crate::crypto::jubjub::{JubjubKeypair, JubjubPoint, JubjubPointExt};
+    use crate::wallet::{StealthAddressing, jubjub_point_to_bytes, bytes_to_jubjub_point};
+    use crate::blockchain::{OutPoint, Transaction, TransactionOutput};
+
+    #[test]
+    fn test_stealth_address_generation_and_scanning() {
+        // Create a sender and recipient keypair
+        let sender_keypair = JubjubKeypair::generate();
+        let recipient_keypair = JubjubKeypair::generate();
+        
+        // Create a StealthAddressing instance
+        let mut stealth_addressing = StealthAddressing::new();
+        
+        // Generate a one-time address for the recipient
+        let stealth_address_bytes = stealth_addressing.generate_one_time_address(&recipient_keypair.public);
+        
+        // Create a transaction with the stealth address
+        let mut tx = Transaction::default();
+        
+        // Add an output to the stealth address
+        let payment_amount = 100;
+        let output = TransactionOutput {
+            value: payment_amount,
+            public_key_script: stealth_address_bytes.clone(),
+        };
+        tx.outputs.push(output);
+        
+        // Set the ephemeral public key in the transaction
+        // In a real implementation, this would be the ephemeral public key used to generate the stealth address
+        let ephemeral_key = stealth_addressing.ephemeral_keys.get(&stealth_address_bytes).unwrap();
+        tx.ephemeral_pubkey = Some(jubjub_point_to_bytes(ephemeral_key).try_into().unwrap());
+        
+        // Scan the transaction with the recipient's keypair
+        let found_outputs = stealth_addressing.scan_transaction(&tx, &recipient_keypair);
+        
+        // Verify that the output was found
+        assert!(found_outputs.is_some());
+        let outputs = found_outputs.unwrap();
+        assert_eq!(outputs.len(), 1);
+        assert_eq!(outputs[0].1.value, payment_amount);
+        
+        // Test amount decryption (for non-confidential transaction)
+        let decrypted_amount = stealth_addressing.decrypt_amount(&tx, 0, &recipient_keypair);
+        assert!(decrypted_amount.is_some());
+        assert_eq!(decrypted_amount.unwrap(), payment_amount);
+    }
+    
+    #[test]
+    fn test_wallet_stealth_transaction_scanning() {
+        // Create a wallet with a keypair
+        let mut wallet = Wallet::new_with_keypair();
+        let recipient_pubkey = wallet.get_public_key().unwrap();
+        
+        // Create a sender keypair
+        let sender_keypair = JubjubKeypair::generate();
+        
+        // Create a StealthAddressing instance
+        let mut stealth_addressing = StealthAddressing::new();
+        
+        // Generate a one-time address for the recipient
+        let stealth_address_bytes = stealth_addressing.generate_one_time_address(&recipient_pubkey);
+        
+        // Create a transaction with the stealth address
+        let mut tx = Transaction::default();
+        
+        // Add an output to the stealth address
+        let payment_amount = 100;
+        let output = TransactionOutput {
+            value: payment_amount,
+            public_key_script: stealth_address_bytes.clone(),
+        };
+        tx.outputs.push(output);
+        
+        // Set the ephemeral public key in the transaction
+        let ephemeral_key = stealth_addressing.ephemeral_keys.get(&stealth_address_bytes).unwrap();
+        tx.ephemeral_pubkey = Some(jubjub_point_to_bytes(ephemeral_key).try_into().unwrap());
+        
+        // Initial balance should be 0
+        assert_eq!(wallet.balance, 0);
+        
+        // Scan the transaction with the wallet
+        let found = wallet.scan_for_stealth_transactions(&tx);
+        
+        // Verify that the output was found and balance updated
+        assert!(found);
+        assert_eq!(wallet.balance, payment_amount);
+        
+        // Check that the UTXO was added to the wallet
+        assert_eq!(wallet.utxos.len(), 1);
+        
+        // Get the outpoint
+        let outpoint = OutPoint {
+            transaction_hash: tx.hash(),
+            index: 0,
+        };
+        
+        // Verify the UTXO is in the wallet
+        assert!(wallet.utxos.contains_key(&outpoint));
+        assert_eq!(wallet.utxos.get(&outpoint).unwrap().value, payment_amount);
+    }
+}

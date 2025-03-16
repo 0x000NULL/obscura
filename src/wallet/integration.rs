@@ -426,4 +426,84 @@ impl WalletIntegration {
         info!("Privacy-enhanced transaction created and submitted: {}", hex::encode(tx_hash));
         Ok(tx_hash)
     }
+
+    /// Enable privacy features
+    pub fn enable_privacy(&self) {
+        let mut wallet = self.wallet.write().unwrap();
+        wallet.enable_privacy();
+    }
+
+    /// Disable privacy features
+    pub fn disable_privacy(&self) {
+        let mut wallet = self.wallet.write().unwrap();
+        wallet.disable_privacy();
+    }
+
+    /// Check if privacy is enabled
+    pub fn is_privacy_enabled(&self) -> bool {
+        let wallet = self.wallet.read().unwrap();
+        wallet.is_privacy_enabled()
+    }
+}
+
+#[cfg(test)]
+mod integration_tests {
+    use super::*;
+    use crate::blockchain::{Transaction, TransactionOutput};
+    use crate::crypto::jubjub::{JubjubKeypair, JubjubPoint, JubjubPointExt};
+    use crate::wallet::{Wallet, StealthAddressing};
+    use std::sync::{Arc, RwLock, Mutex};
+
+    #[test]
+    fn test_stealth_address_integration() {
+        // Create a sender wallet
+        let sender_wallet = Arc::new(RwLock::new(Wallet::new_with_keypair()));
+        let sender_pubkey = sender_wallet.read().unwrap().get_public_key().unwrap();
+        
+        // Create a receiver wallet
+        let receiver_wallet = Arc::new(RwLock::new(Wallet::new_with_keypair()));
+        let receiver_pubkey = receiver_wallet.read().unwrap().get_public_key().unwrap();
+        
+        // Create a mock UTXO set
+        let utxo_set = Arc::new(Mutex::new(crate::blockchain::UTXOSet::new()));
+        
+        // Create wallet integration for sender
+        let sender_integration = WalletIntegration::new(
+            sender_wallet.clone(),
+            utxo_set.clone(),
+            None,
+        );
+        
+        // Create wallet integration for receiver
+        let receiver_integration = WalletIntegration::new(
+            receiver_wallet.clone(),
+            utxo_set.clone(),
+            None,
+        );
+        
+        // Enable privacy for sender
+        sender_integration.enable_privacy();
+        
+        // Create a transaction from sender to receiver
+        let payment_amount = 100.0;
+        let receiver_address = std::str::from_utf8(&receiver_pubkey.to_bytes()).unwrap().to_string();
+        
+        // Create the transaction
+        let tx = sender_integration.create_transaction(&receiver_address, payment_amount).unwrap();
+        
+        // Verify that the transaction has stealth addressing features
+        assert!(tx.ephemeral_pubkey.is_some());
+        assert_eq!(tx.privacy_flags & 0x02, 0x02); // Check stealth addressing flag
+        
+        // Process the transaction with the receiver wallet
+        receiver_integration.process_incoming_transaction(&tx).unwrap();
+        
+        // Verify that the receiver wallet has received the funds
+        let receiver_balance = receiver_wallet.read().unwrap().balance;
+        assert_eq!(receiver_balance, (payment_amount * 100_000_000.0) as u64);
+        
+        // Verify that the receiver wallet has the UTXO
+        let receiver_utxos = receiver_wallet.read().unwrap().get_utxos();
+        assert_eq!(receiver_utxos.len(), 1);
+    }
 } 

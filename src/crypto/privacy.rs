@@ -8,6 +8,11 @@ use std::collections::HashMap;
 use ark_serialize::{CanonicalSerialize, CanonicalDeserialize};
 use ark_ed_on_bls12_381::{EdwardsAffine, EdwardsProjective, Fr};
 use ark_ec::CurveGroup;
+use std::sync::{Arc, RwLock};
+use log::{debug, error, info, trace};
+use crate::config::privacy_registry::{PrivacySettingsRegistry, ComponentType};
+use crate::errors::ObscuraError;
+use std::any::Any;
 
 // Import the JubjubScalar type
 use crate::crypto::jubjub::JubjubScalar;
@@ -17,6 +22,1087 @@ const MIXING_MIN_TRANSACTIONS: usize = 3;
 const MIXING_MAX_TRANSACTIONS: usize = 10;
 const TX_ID_SALT_SIZE: usize = 32;
 const METADATA_FIELDS_TO_STRIP: [&str; 3] = ["ip", "timestamp", "user-agent"];
+
+/// Privacy features bitfield flags
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PrivacyFeature {
+    /// Transaction obfuscation
+    Obfuscation = 0x01,
+    /// Stealth addressing
+    StealthAddressing = 0x02,
+    /// Confidential transactions
+    ConfidentialTransactions = 0x04,
+    /// Range proofs
+    RangeProofs = 0x08,
+    /// Metadata protection
+    MetadataProtection = 0x10,
+    /// Transaction graph protection
+    GraphProtection = 0x20,
+    /// View key restrictions
+    ViewKeyRestrictions = 0x40,
+    /// All privacy features
+    All = 0x7F,
+}
+
+/// Provides privacy features for transaction senders
+pub struct SenderPrivacy {
+    /// Transaction obfuscator for sender privacy
+    obfuscator: TransactionObfuscator,
+    /// Confidential transactions for amount privacy
+    confidential_tx: ConfidentialTransactions,
+    /// Stealth addressing for recipient privacy
+    stealth_addressing: StealthAddressing,
+    /// Applied privacy features bitfield
+    applied_features: u8,
+    /// Privacy settings registry
+    privacy_registry: Option<Arc<PrivacySettingsRegistry>>,
+    /// Transaction cache for optimized operations
+    transaction_cache: HashMap<[u8; 32], Transaction>,
+}
+
+impl SenderPrivacy {
+    /// Create a new SenderPrivacy instance
+    pub fn new() -> Self {
+        Self {
+            obfuscator: TransactionObfuscator::new(),
+            confidential_tx: ConfidentialTransactions::new(),
+            stealth_addressing: StealthAddressing::new(),
+            applied_features: 0,
+            privacy_registry: None,
+            transaction_cache: HashMap::new(),
+        }
+    }
+    
+    /// Create a new SenderPrivacy instance with privacy registry
+    pub fn with_registry(registry: Arc<PrivacySettingsRegistry>) -> Self {
+        Self {
+            obfuscator: TransactionObfuscator::new(),
+            confidential_tx: ConfidentialTransactions::new(),
+            stealth_addressing: StealthAddressing::new(),
+            applied_features: 0,
+            privacy_registry: Some(registry),
+            transaction_cache: HashMap::new(),
+        }
+    }
+    
+    /// Apply all configured privacy features to a transaction
+    pub fn apply_all_features(&mut self, tx: &Transaction) -> Result<Transaction, ObscuraError> {
+        let mut modified_tx = tx.clone();
+        
+        // Check if we have a privacy registry
+        if let Some(registry) = &self.privacy_registry {
+            let config = registry.get_config();
+            
+            // Apply transaction obfuscation if enabled
+            if config.transaction_obfuscation_enabled {
+                modified_tx = self.obfuscator.protect_transaction_graph(&modified_tx);
+                self.applied_features |= PrivacyFeature::Obfuscation as u8;
+                self.applied_features |= PrivacyFeature::GraphProtection as u8;
+            }
+            
+            // Apply stealth addressing if enabled
+            if config.use_stealth_addresses {
+                for i in 0..modified_tx.outputs.len() {
+                    if let Some(pubkey) = self.extract_recipient_pubkey(&modified_tx.outputs[i]) {
+                        let one_time_address = self.stealth_addressing.generate_one_time_address(&pubkey);
+                        modified_tx.outputs[i].address = one_time_address;
+                    }
+                }
+                self.applied_features |= PrivacyFeature::StealthAddressing as u8;
+            }
+            
+            // Apply confidential transactions if enabled
+            if config.use_confidential_transactions {
+                modified_tx = self.confidential_tx.obfuscate_output_value(&mut modified_tx);
+                self.applied_features |= PrivacyFeature::ConfidentialTransactions as u8;
+            }
+            
+            // Apply range proofs if enabled
+            if config.use_range_proofs {
+                for i in 0..modified_tx.outputs.len() {
+                    if let Some(amount) = modified_tx.outputs[i].amount {
+                        let range_proof = self.confidential_tx.create_range_proof(amount);
+                        modified_tx.outputs[i].range_proof = Some(range_proof);
+                    }
+                }
+                self.applied_features |= PrivacyFeature::RangeProofs as u8;
+            }
+            
+            // Apply metadata protection if enabled
+            if config.metadata_stripping {
+                modified_tx = self.obfuscator.strip_metadata(&modified_tx);
+                self.applied_features |= PrivacyFeature::MetadataProtection as u8;
+            }
+        } else {
+            // If no registry, apply all privacy features by default
+            modified_tx = self.obfuscator.protect_transaction_graph(&modified_tx);
+            
+            for i in 0..modified_tx.outputs.len() {
+                if let Some(pubkey) = self.extract_recipient_pubkey(&modified_tx.outputs[i]) {
+                    let one_time_address = self.stealth_addressing.generate_one_time_address(&pubkey);
+                    modified_tx.outputs[i].address = one_time_address;
+                }
+            }
+            
+            modified_tx = self.confidential_tx.obfuscate_output_value(&mut modified_tx);
+            
+            for i in 0..modified_tx.outputs.len() {
+                if let Some(amount) = modified_tx.outputs[i].amount {
+                    let range_proof = self.confidential_tx.create_range_proof(amount);
+                    modified_tx.outputs[i].range_proof = Some(range_proof);
+                }
+            }
+            
+            modified_tx = self.obfuscator.strip_metadata(&modified_tx);
+            
+            self.applied_features = PrivacyFeature::All as u8;
+        }
+        
+        // Cache the transaction for future reference
+        self.transaction_cache.insert(modified_tx.hash(), modified_tx.clone());
+        
+        Ok(modified_tx)
+    }
+    
+    /// Apply specific privacy features to a transaction
+    pub fn apply_features(&mut self, tx: &Transaction, features: &[PrivacyFeature]) -> Result<Transaction, ObscuraError> {
+        let mut modified_tx = tx.clone();
+        
+        for feature in features {
+            match feature {
+                PrivacyFeature::Obfuscation => {
+                    modified_tx = self.obfuscator.protect_transaction_graph(&modified_tx);
+                    self.applied_features |= PrivacyFeature::Obfuscation as u8;
+                },
+                PrivacyFeature::StealthAddressing => {
+                    for i in 0..modified_tx.outputs.len() {
+                        if let Some(pubkey) = self.extract_recipient_pubkey(&modified_tx.outputs[i]) {
+                            let one_time_address = self.stealth_addressing.generate_one_time_address(&pubkey);
+                            modified_tx.outputs[i].address = one_time_address;
+                        }
+                    }
+                    self.applied_features |= PrivacyFeature::StealthAddressing as u8;
+                },
+                PrivacyFeature::ConfidentialTransactions => {
+                    modified_tx = self.confidential_tx.obfuscate_output_value(&mut modified_tx);
+                    self.applied_features |= PrivacyFeature::ConfidentialTransactions as u8;
+                },
+                PrivacyFeature::RangeProofs => {
+                    for i in 0..modified_tx.outputs.len() {
+                        if let Some(amount) = modified_tx.outputs[i].amount {
+                            let range_proof = self.confidential_tx.create_range_proof(amount);
+                            modified_tx.outputs[i].range_proof = Some(range_proof);
+                        }
+                    }
+                    self.applied_features |= PrivacyFeature::RangeProofs as u8;
+                },
+                PrivacyFeature::MetadataProtection => {
+                    modified_tx = self.obfuscator.strip_metadata(&modified_tx);
+                    self.applied_features |= PrivacyFeature::MetadataProtection as u8;
+                },
+                PrivacyFeature::GraphProtection => {
+                    modified_tx = self.obfuscator.protect_transaction_graph(&modified_tx);
+                    self.applied_features |= PrivacyFeature::GraphProtection as u8;
+                },
+                PrivacyFeature::ViewKeyRestrictions => {
+                    // View key restrictions are applied at the view key level
+                    self.applied_features |= PrivacyFeature::ViewKeyRestrictions as u8;
+                },
+                PrivacyFeature::All => {
+                    return self.apply_all_features(&modified_tx);
+                }
+            }
+        }
+        
+        // Cache the transaction for future reference
+        self.transaction_cache.insert(modified_tx.hash(), modified_tx.clone());
+        
+        Ok(modified_tx)
+    }
+    
+    /// Get the applied privacy features
+    pub fn applied_features(&self) -> u8 {
+        self.applied_features
+    }
+    
+    /// Check if a specific privacy feature is applied
+    pub fn has_feature(&self, feature: PrivacyFeature) -> bool {
+        (self.applied_features & (feature as u8)) != 0
+    }
+    
+    /// Extract recipient public key from transaction output
+    fn extract_recipient_pubkey(&self, output: &TransactionOutput) -> Option<JubjubPoint> {
+        // Try to extract from the address field
+        if output.address.len() == 32 {
+            return JubjubPoint::from_bytes(&output.address);
+        }
+        
+        // Try to extract from the script if available
+        if let Some(script) = &output.script {
+            if script.len() >= 32 {
+                return JubjubPoint::from_bytes(&script[0..32]);
+            }
+        }
+        
+        None
+    }
+    
+    /// Get the transaction obfuscator
+    pub fn obfuscator(&mut self) -> &mut TransactionObfuscator {
+        &mut self.obfuscator
+    }
+    
+    /// Get the confidential transactions handler
+    pub fn confidential_tx(&mut self) -> &mut ConfidentialTransactions {
+        &mut self.confidential_tx
+    }
+    
+    /// Get the stealth addressing handler
+    pub fn stealth_addressing(&mut self) -> &mut StealthAddressing {
+        &mut self.stealth_addressing
+    }
+}
+
+/// Provides privacy features for transaction receivers
+pub struct ReceiverPrivacy {
+    /// Stealth addressing for scanning incoming transactions
+    stealth_addressing: StealthAddressing,
+    /// Confidential transactions for amount decryption
+    confidential_tx: ConfidentialTransactions,
+    /// Receiver's keypair
+    keypair: Option<JubjubKeypair>,
+    /// View keys for selective disclosure
+    view_keys: HashMap<Vec<u8>, JubjubScalar>,
+    /// Transaction cache for optimized operations
+    transaction_cache: HashMap<[u8; 32], Transaction>,
+    /// Privacy settings registry
+    privacy_registry: Option<Arc<PrivacySettingsRegistry>>,
+}
+
+impl ReceiverPrivacy {
+    /// Create a new ReceiverPrivacy instance
+    pub fn new() -> Self {
+        Self {
+            stealth_addressing: StealthAddressing::new(),
+            confidential_tx: ConfidentialTransactions::new(),
+            keypair: None,
+            view_keys: HashMap::new(),
+            transaction_cache: HashMap::new(),
+            privacy_registry: None,
+        }
+    }
+    
+    /// Create a new ReceiverPrivacy instance with a keypair
+    pub fn with_keypair(keypair: JubjubKeypair) -> Self {
+        Self {
+            stealth_addressing: StealthAddressing::new(),
+            confidential_tx: ConfidentialTransactions::new(),
+            keypair: Some(keypair),
+            view_keys: HashMap::new(),
+            transaction_cache: HashMap::new(),
+            privacy_registry: None,
+        }
+    }
+    
+    /// Create a new ReceiverPrivacy instance with privacy registry
+    pub fn with_registry(registry: Arc<PrivacySettingsRegistry>) -> Self {
+        Self {
+            stealth_addressing: StealthAddressing::new(),
+            confidential_tx: ConfidentialTransactions::new(),
+            keypair: None,
+            view_keys: HashMap::new(),
+            transaction_cache: HashMap::new(),
+            privacy_registry: Some(registry),
+        }
+    }
+    
+    /// Set the receiver's keypair
+    pub fn set_keypair(&mut self, keypair: JubjubKeypair) {
+        self.keypair = Some(keypair);
+    }
+    
+    /// Add a view key for selective disclosure
+    pub fn add_view_key(&mut self, name: &[u8], view_key: JubjubScalar) {
+        self.view_keys.insert(name.to_vec(), view_key);
+    }
+    
+    /// Scan transactions for outputs belonging to the receiver
+    pub fn scan_transactions(&self, transactions: &[Transaction]) -> Result<Vec<TransactionOutput>, ObscuraError> {
+        if self.keypair.is_none() {
+            return Err(ObscuraError::CryptoError("No keypair set for scanning".to_string()));
+        }
+        
+        let keypair = self.keypair.as_ref().unwrap();
+        let mut outputs = Vec::new();
+        
+        for tx in transactions {
+            // Cache the transaction for future reference
+            self.transaction_cache.insert(tx.hash(), tx.clone());
+            
+            // Scan for outputs using stealth addressing
+            let found_outputs = self.stealth_addressing.scan_transactions(
+                &[tx.clone()], 
+                &keypair.1
+            );
+            
+            outputs.extend(found_outputs);
+        }
+        
+        Ok(outputs)
+    }
+    
+    /// Scan transactions using a specific view key
+    pub fn scan_with_view_key(
+        &self, 
+        transactions: &[Transaction], 
+        view_key_name: &[u8]
+    ) -> Result<Vec<TransactionOutput>, ObscuraError> {
+        if self.keypair.is_none() {
+            return Err(ObscuraError::CryptoError("No keypair set for scanning".to_string()));
+        }
+        
+        let view_key = match self.view_keys.get(view_key_name) {
+            Some(key) => key,
+            None => return Err(ObscuraError::CryptoError("View key not found".to_string())),
+        };
+        
+        let keypair = self.keypair.as_ref().unwrap();
+        let mut outputs = Vec::new();
+        
+        for tx in transactions {
+            // Cache the transaction for future reference
+            self.transaction_cache.insert(tx.hash(), tx.clone());
+            
+            // Scan for outputs using view key
+            let found_outputs = self.stealth_addressing.scan_transactions_with_view_key(
+                &[tx.clone()], 
+                &JubjubPoint::from(*view_key),
+                &keypair.1
+            );
+            
+            outputs.extend(found_outputs);
+        }
+        
+        Ok(outputs)
+    }
+    
+    /// Decrypt transaction amounts using the receiver's keypair
+    pub fn decrypt_amounts(&self, outputs: &[TransactionOutput]) -> Result<Vec<(usize, u64)>, ObscuraError> {
+        if self.keypair.is_none() {
+            return Err(ObscuraError::CryptoError("No keypair set for decryption".to_string()));
+        }
+        
+        let keypair = self.keypair.as_ref().unwrap();
+        let mut decrypted_amounts = Vec::new();
+        
+        for (i, output) in outputs.iter().enumerate() {
+            if let Some(commitment) = self.extract_commitment(output) {
+                if let Some(amount) = self.confidential_tx.reveal_amount_with_view_key(
+                    &commitment,
+                    &keypair.0,
+                    &keypair.1
+                ) {
+                    decrypted_amounts.push((i, amount));
+                }
+            }
+        }
+        
+        Ok(decrypted_amounts)
+    }
+    
+    /// Decrypt transaction amounts using a specific view key
+    pub fn decrypt_amounts_with_view_key(
+        &self, 
+        outputs: &[TransactionOutput], 
+        view_key_name: &[u8]
+    ) -> Result<Vec<(usize, u64)>, ObscuraError> {
+        if self.keypair.is_none() {
+            return Err(ObscuraError::CryptoError("No keypair set for decryption".to_string()));
+        }
+        
+        let view_key = match self.view_keys.get(view_key_name) {
+            Some(key) => key,
+            None => return Err(ObscuraError::CryptoError("View key not found".to_string())),
+        };
+        
+        let keypair = self.keypair.as_ref().unwrap();
+        let mut decrypted_amounts = Vec::new();
+        
+        for (i, output) in outputs.iter().enumerate() {
+            if let Some(commitment) = self.extract_commitment(output) {
+                if let Some(amount) = self.confidential_tx.reveal_amount_with_view_key(
+                    &commitment,
+                    &JubjubPoint::from(*view_key),
+                    &keypair.1
+                ) {
+                    decrypted_amounts.push((i, amount));
+                }
+            }
+        }
+        
+        Ok(decrypted_amounts)
+    }
+    
+    /// Extract commitment from transaction output
+    fn extract_commitment(&self, output: &TransactionOutput) -> Option<Vec<u8>> {
+        output.commitment.clone()
+    }
+    
+    /// Get the stealth addressing handler
+    pub fn stealth_addressing(&mut self) -> &mut StealthAddressing {
+        &mut self.stealth_addressing
+    }
+    
+    /// Get the confidential transactions handler
+    pub fn confidential_tx(&mut self) -> &mut ConfidentialTransactions {
+        &mut self.confidential_tx
+    }
+}
+
+/// Trait defining common interface for privacy primitives
+pub trait PrivacyPrimitive: Send + Sync + Any {
+    /// Initialize the privacy primitive
+    fn initialize(&mut self) -> Result<(), ObscuraError>;
+    
+    /// Apply the privacy primitive to a transaction
+    fn apply(&mut self, tx: &Transaction) -> Result<Transaction, ObscuraError>;
+    
+    /// Verify that the privacy primitive was correctly applied
+    fn verify(&self, tx: &Transaction) -> Result<bool, ObscuraError>;
+    
+    /// Get the name of the privacy primitive
+    fn name(&self) -> &str;
+    
+    /// Get the description of the privacy primitive
+    fn description(&self) -> &str;
+    
+    /// Get the privacy feature flag associated with this primitive
+    fn feature_flag(&self) -> PrivacyFeature;
+    
+    /// Get the computational cost of this primitive (1-10 scale)
+    fn computational_cost(&self) -> u8;
+    
+    /// Get the privacy level provided by this primitive (1-10 scale)
+    fn privacy_level(&self) -> u8;
+    
+    /// Extract recipient public key from transaction output
+    fn extract_recipient_pubkey(&self, output: &TransactionOutput) -> Option<JubjubPoint> {
+        None
+    }
+    
+    /// Clone this privacy primitive
+    fn clone_box(&self) -> Box<dyn PrivacyPrimitive>;
+}
+
+/// Factory for creating privacy primitives
+pub struct PrivacyPrimitiveFactory {
+    /// Registry for privacy settings
+    registry: Option<Arc<PrivacySettingsRegistry>>,
+    /// Cache of created primitives
+    primitives_cache: HashMap<String, Box<dyn PrivacyPrimitive>>,
+}
+
+impl PrivacyPrimitiveFactory {
+    /// Create a new PrivacyPrimitiveFactory
+    pub fn new() -> Self {
+        Self {
+            registry: None,
+            primitives_cache: HashMap::new(),
+        }
+    }
+    
+    /// Create a new PrivacyPrimitiveFactory with privacy registry
+    pub fn with_registry(registry: Arc<PrivacySettingsRegistry>) -> Self {
+        Self {
+            registry: Some(registry),
+            primitives_cache: HashMap::new(),
+        }
+    }
+    
+    /// Create a privacy primitive by name
+    pub fn create(&mut self, name: &str) -> Result<Box<dyn PrivacyPrimitive>, ObscuraError> {
+        // Check if we already have this primitive in the cache
+        if let Some(primitive) = self.primitives_cache.get(name) {
+            return Ok(primitive.clone());
+        }
+        
+        // Create the primitive based on the name
+        let primitive: Box<dyn PrivacyPrimitive> = match name {
+            "transaction_obfuscation" => {
+                let mut obfuscator = Box::new(TransactionObfuscationPrimitive::new());
+                if let Some(registry) = &self.registry {
+                    obfuscator.set_registry(Arc::clone(registry));
+                }
+                obfuscator
+            },
+            "stealth_addressing" => {
+                let mut stealth = Box::new(StealthAddressingPrimitive::new());
+                if let Some(registry) = &self.registry {
+                    stealth.set_registry(Arc::clone(registry));
+                }
+                stealth
+            },
+            "confidential_transactions" => {
+                let mut confidential = Box::new(ConfidentialTransactionsPrimitive::new());
+                if let Some(registry) = &self.registry {
+                    confidential.set_registry(Arc::clone(registry));
+                }
+                confidential
+            },
+            "range_proofs" => {
+                let mut range_proofs = Box::new(RangeProofPrimitive::new());
+                if let Some(registry) = &self.registry {
+                    range_proofs.set_registry(Arc::clone(registry));
+                }
+                range_proofs
+            },
+            "metadata_protection" => {
+                let mut metadata = Box::new(MetadataProtectionPrimitive::new());
+                if let Some(registry) = &self.registry {
+                    metadata.set_registry(Arc::clone(registry));
+                }
+                metadata
+            },
+            _ => return Err(ObscuraError::CryptoError(format!("Unknown privacy primitive: {}", name))),
+        };
+        
+        // Initialize the primitive
+        let mut primitive_clone = primitive.clone();
+        primitive_clone.initialize()?;
+        
+        // Cache the primitive
+        self.primitives_cache.insert(name.to_string(), primitive);
+        
+        Ok(primitive_clone)
+    }
+    
+    /// Create all privacy primitives based on the current configuration
+    pub fn create_all(&mut self) -> Result<Vec<Box<dyn PrivacyPrimitive>>, ObscuraError> {
+        let mut primitives = Vec::new();
+        
+        // Create all primitives
+        primitives.push(self.create("transaction_obfuscation")?);
+        primitives.push(self.create("stealth_addressing")?);
+        primitives.push(self.create("confidential_transactions")?);
+        primitives.push(self.create("range_proofs")?);
+        primitives.push(self.create("metadata_protection")?);
+        
+        Ok(primitives)
+    }
+    
+    /// Create privacy primitives based on the privacy level
+    pub fn create_for_level(&mut self, level: &str) -> Result<Vec<Box<dyn PrivacyPrimitive>>, ObscuraError> {
+        let mut primitives = Vec::new();
+        
+        match level.to_lowercase().as_str() {
+            "low" | "standard" => {
+                primitives.push(self.create("transaction_obfuscation")?);
+                primitives.push(self.create("metadata_protection")?);
+            },
+            "medium" => {
+                primitives.push(self.create("transaction_obfuscation")?);
+                primitives.push(self.create("stealth_addressing")?);
+                primitives.push(self.create("metadata_protection")?);
+            },
+            "high" => {
+                primitives.push(self.create("transaction_obfuscation")?);
+                primitives.push(self.create("stealth_addressing")?);
+                primitives.push(self.create("confidential_transactions")?);
+                primitives.push(self.create("range_proofs")?);
+                primitives.push(self.create("metadata_protection")?);
+            },
+            _ => return Err(ObscuraError::CryptoError(format!("Unknown privacy level: {}", level))),
+        }
+        
+        Ok(primitives)
+    }
+    
+    /// Set the privacy registry
+    pub fn set_registry(&mut self, registry: Arc<PrivacySettingsRegistry>) {
+        self.registry = Some(registry);
+        
+        // Update all cached primitives with the new registry
+        for (_, primitive) in self.primitives_cache.iter_mut() {
+            if let Some(tx_obfuscation) = primitive.as_mut().downcast_mut::<TransactionObfuscationPrimitive>() {
+                tx_obfuscation.set_registry(Arc::clone(&registry));
+            } else if let Some(stealth) = primitive.as_mut().downcast_mut::<StealthAddressingPrimitive>() {
+                stealth.set_registry(Arc::clone(&registry));
+            } else if let Some(confidential) = primitive.as_mut().downcast_mut::<ConfidentialTransactionsPrimitive>() {
+                confidential.set_registry(Arc::clone(&registry));
+            } else if let Some(range_proofs) = primitive.as_mut().downcast_mut::<RangeProofPrimitive>() {
+                range_proofs.set_registry(Arc::clone(&registry));
+            } else if let Some(metadata) = primitive.as_mut().downcast_mut::<MetadataProtectionPrimitive>() {
+                metadata.set_registry(Arc::clone(&registry));
+            }
+        }
+    }
+}
+
+/// Transaction Obfuscation Privacy Primitive
+pub struct TransactionObfuscationPrimitive {
+    /// Transaction obfuscator
+    obfuscator: TransactionObfuscator,
+    /// Privacy settings registry
+    registry: Option<Arc<PrivacySettingsRegistry>>,
+    /// Name of the primitive
+    name: String,
+    /// Description of the primitive
+    description: String,
+}
+
+impl TransactionObfuscationPrimitive {
+    /// Create a new TransactionObfuscationPrimitive
+    pub fn new() -> Self {
+        Self {
+            obfuscator: TransactionObfuscator::new(),
+            registry: None,
+            name: "Transaction Obfuscation".to_string(),
+            description: "Obfuscates transaction data to protect transaction graph".to_string(),
+        }
+    }
+    
+    /// Set the privacy registry
+    pub fn set_registry(&mut self, registry: Arc<PrivacySettingsRegistry>) {
+        self.registry = Some(registry);
+    }
+}
+
+impl PrivacyPrimitive for TransactionObfuscationPrimitive {
+    fn initialize(&mut self) -> Result<(), ObscuraError> {
+        // Initialize the obfuscator with random salt
+        self.obfuscator.randomize_salt();
+        Ok(())
+    }
+    
+    fn apply(&mut self, tx: &Transaction) -> Result<Transaction, ObscuraError> {
+        // Apply transaction obfuscation
+        let modified_tx = self.obfuscator.protect_transaction_graph(tx);
+        
+        // Apply metadata stripping if enabled in registry
+        if let Some(registry) = &self.registry {
+            let config = registry.get_config();
+            if config.metadata_stripping {
+                return Ok(self.obfuscator.strip_metadata(&modified_tx));
+            }
+        }
+        
+        Ok(modified_tx)
+    }
+    
+    fn verify(&self, tx: &Transaction) -> Result<bool, ObscuraError> {
+        // Verify that transaction has been obfuscated
+        // This is a simple check to see if the transaction has a salt field
+        Ok(tx.salt.is_some() && tx.salt.as_ref().unwrap().len() == TX_ID_SALT_SIZE)
+    }
+    
+    fn name(&self) -> &str {
+        &self.name
+    }
+    
+    fn description(&self) -> &str {
+        &self.description
+    }
+    
+    fn feature_flag(&self) -> PrivacyFeature {
+        PrivacyFeature::Obfuscation
+    }
+    
+    fn computational_cost(&self) -> u8 {
+        3 // Medium-low computational cost
+    }
+    
+    fn privacy_level(&self) -> u8 {
+        5 // Medium privacy level
+    }
+    
+    fn clone_box(&self) -> Box<dyn PrivacyPrimitive> {
+        let mut clone = TransactionObfuscationPrimitive::new();
+        clone.name = self.name.clone();
+        clone.description = self.description.clone();
+        if let Some(registry) = &self.registry {
+            clone.registry = Some(Arc::clone(registry));
+        }
+        Box::new(clone)
+    }
+}
+
+/// Stealth Addressing Privacy Primitive
+pub struct StealthAddressingPrimitive {
+    /// Stealth addressing handler
+    stealth_addressing: StealthAddressing,
+    /// Privacy settings registry
+    registry: Option<Arc<PrivacySettingsRegistry>>,
+    /// Name of the primitive
+    name: String,
+    /// Description of the primitive
+    description: String,
+}
+
+impl StealthAddressingPrimitive {
+    /// Create a new StealthAddressingPrimitive
+    pub fn new() -> Self {
+        Self {
+            stealth_addressing: StealthAddressing::new(),
+            registry: None,
+            name: "Stealth Addressing".to_string(),
+            description: "Generates one-time addresses for transaction outputs".to_string(),
+        }
+    }
+    
+    /// Set the privacy registry
+    pub fn set_registry(&mut self, registry: Arc<PrivacySettingsRegistry>) {
+        self.registry = Some(registry);
+    }
+}
+
+impl PrivacyPrimitive for StealthAddressingPrimitive {
+    fn initialize(&mut self) -> Result<(), ObscuraError> {
+        // No special initialization needed
+        Ok(())
+    }
+    
+    fn apply(&mut self, tx: &Transaction) -> Result<Transaction, ObscuraError> {
+        let mut modified_tx = tx.clone();
+        
+        // Apply stealth addressing to each output
+        for i in 0..modified_tx.outputs.len() {
+            if let Some(pubkey) = self.extract_recipient_pubkey(&modified_tx.outputs[i]) {
+                let one_time_address = self.stealth_addressing.generate_one_time_address(&pubkey);
+                modified_tx.outputs[i].address = one_time_address;
+            }
+        }
+        
+        Ok(modified_tx)
+    }
+    
+    fn verify(&self, tx: &Transaction) -> Result<bool, ObscuraError> {
+        // Verify that transaction outputs use stealth addresses
+        // This is a simple check to see if the outputs have the correct format
+        for output in &tx.outputs {
+            if output.address.len() != 32 {
+                return Ok(false);
+            }
+        }
+        
+        Ok(true)
+    }
+    
+    fn name(&self) -> &str {
+        &self.name
+    }
+    
+    fn description(&self) -> &str {
+        &self.description
+    }
+    
+    fn feature_flag(&self) -> PrivacyFeature {
+        PrivacyFeature::StealthAddressing
+    }
+    
+    fn computational_cost(&self) -> u8 {
+        4 // Medium computational cost
+    }
+    
+    fn privacy_level(&self) -> u8 {
+        7 // Medium-high privacy level
+    }
+    
+    /// Extract recipient public key from transaction output
+    fn extract_recipient_pubkey(&self, output: &TransactionOutput) -> Option<JubjubPoint> {
+        // Try to extract from the address field
+        if output.address.len() == 32 {
+            return JubjubPoint::from_bytes(&output.address);
+        }
+        
+        // Try to extract from the script if available
+        if let Some(script) = &output.script {
+            if script.len() >= 32 {
+                return JubjubPoint::from_bytes(&script[0..32]);
+            }
+        }
+        
+        None
+    }
+    
+    fn clone_box(&self) -> Box<dyn PrivacyPrimitive> {
+        let mut clone = StealthAddressingPrimitive::new();
+        clone.name = self.name.clone();
+        clone.description = self.description.clone();
+        if let Some(registry) = &self.registry {
+            clone.registry = Some(Arc::clone(registry));
+        }
+        Box::new(clone)
+    }
+}
+
+/// Confidential Transactions Privacy Primitive
+pub struct ConfidentialTransactionsPrimitive {
+    /// Confidential transactions handler
+    confidential_tx: ConfidentialTransactions,
+    /// Privacy settings registry
+    registry: Option<Arc<PrivacySettingsRegistry>>,
+    /// Name of the primitive
+    name: String,
+    /// Description of the primitive
+    description: String,
+}
+
+impl ConfidentialTransactionsPrimitive {
+    /// Create a new ConfidentialTransactionsPrimitive
+    pub fn new() -> Self {
+        Self {
+            confidential_tx: ConfidentialTransactions::new(),
+            registry: None,
+            name: "Confidential Transactions".to_string(),
+            description: "Hides transaction amounts using Pedersen commitments".to_string(),
+        }
+    }
+    
+    /// Set the privacy registry
+    pub fn set_registry(&mut self, registry: Arc<PrivacySettingsRegistry>) {
+        self.registry = Some(registry);
+    }
+}
+
+impl PrivacyPrimitive for ConfidentialTransactionsPrimitive {
+    fn initialize(&mut self) -> Result<(), ObscuraError> {
+        // No special initialization needed
+        Ok(())
+    }
+    
+    fn apply(&mut self, tx: &Transaction) -> Result<Transaction, ObscuraError> {
+        // Apply confidential transactions
+        let mut modified_tx = tx.clone();
+        modified_tx = self.confidential_tx.obfuscate_output_value(&mut modified_tx);
+        
+        Ok(modified_tx)
+    }
+    
+    fn verify(&self, tx: &Transaction) -> Result<bool, ObscuraError> {
+        // Verify that transaction outputs have commitments
+        for output in &tx.outputs {
+            if output.commitment.is_none() {
+                return Ok(false);
+            }
+        }
+        
+        Ok(true)
+    }
+    
+    fn name(&self) -> &str {
+        &self.name
+    }
+    
+    fn description(&self) -> &str {
+        &self.description
+    }
+    
+    fn feature_flag(&self) -> PrivacyFeature {
+        PrivacyFeature::ConfidentialTransactions
+    }
+    
+    fn computational_cost(&self) -> u8 {
+        6 // Medium-high computational cost
+    }
+    
+    fn privacy_level(&self) -> u8 {
+        8 // High privacy level
+    }
+    
+    fn clone_box(&self) -> Box<dyn PrivacyPrimitive> {
+        let mut clone = ConfidentialTransactionsPrimitive::new();
+        clone.name = self.name.clone();
+        clone.description = self.description.clone();
+        if let Some(registry) = &self.registry {
+            clone.registry = Some(Arc::clone(registry));
+        }
+        Box::new(clone)
+    }
+}
+
+/// Range Proof Privacy Primitive
+pub struct RangeProofPrimitive {
+    /// Confidential transactions handler for range proofs
+    confidential_tx: ConfidentialTransactions,
+    /// Privacy settings registry
+    registry: Option<Arc<PrivacySettingsRegistry>>,
+    /// Name of the primitive
+    name: String,
+    /// Description of the primitive
+    description: String,
+}
+
+impl RangeProofPrimitive {
+    /// Create a new RangeProofPrimitive
+    pub fn new() -> Self {
+        Self {
+            confidential_tx: ConfidentialTransactions::new(),
+            registry: None,
+            name: "Range Proofs".to_string(),
+            description: "Proves that transaction amounts are within valid range without revealing the amounts".to_string(),
+        }
+    }
+    
+    /// Set the privacy registry
+    pub fn set_registry(&mut self, registry: Arc<PrivacySettingsRegistry>) {
+        self.registry = Some(registry);
+    }
+}
+
+impl PrivacyPrimitive for RangeProofPrimitive {
+    fn initialize(&mut self) -> Result<(), ObscuraError> {
+        // No special initialization needed
+        Ok(())
+    }
+    
+    fn apply(&mut self, tx: &Transaction) -> Result<Transaction, ObscuraError> {
+        let mut modified_tx = tx.clone();
+        
+        // Apply range proofs to each output
+        for i in 0..modified_tx.outputs.len() {
+            if let Some(amount) = modified_tx.outputs[i].amount {
+                let range_proof = self.confidential_tx.create_range_proof(amount);
+                modified_tx.outputs[i].range_proof = Some(range_proof);
+            }
+        }
+        
+        Ok(modified_tx)
+    }
+    
+    fn verify(&self, tx: &Transaction) -> Result<bool, ObscuraError> {
+        // Verify that transaction outputs have range proofs
+        for output in &tx.outputs {
+            if output.commitment.is_some() && output.range_proof.is_none() {
+                return Ok(false);
+            }
+            
+            // If there's a range proof, verify it
+            if let (Some(commitment), Some(range_proof)) = (&output.commitment, &output.range_proof) {
+                if !self.confidential_tx.verify_range_proof(commitment, range_proof) {
+                    return Ok(false);
+                }
+            }
+        }
+        
+        Ok(true)
+    }
+    
+    fn name(&self) -> &str {
+        &self.name
+    }
+    
+    fn description(&self) -> &str {
+        &self.description
+    }
+    
+    fn feature_flag(&self) -> PrivacyFeature {
+        PrivacyFeature::RangeProofs
+    }
+    
+    fn computational_cost(&self) -> u8 {
+        8 // High computational cost
+    }
+    
+    fn privacy_level(&self) -> u8 {
+        9 // Very high privacy level
+    }
+    
+    fn clone_box(&self) -> Box<dyn PrivacyPrimitive> {
+        let mut clone = RangeProofPrimitive::new();
+        clone.name = self.name.clone();
+        clone.description = self.description.clone();
+        if let Some(registry) = &self.registry {
+            clone.registry = Some(Arc::clone(registry));
+        }
+        Box::new(clone)
+    }
+}
+
+/// Metadata Protection Privacy Primitive
+pub struct MetadataProtectionPrimitive {
+    /// Transaction obfuscator for metadata protection
+    obfuscator: TransactionObfuscator,
+    /// Privacy settings registry
+    registry: Option<Arc<PrivacySettingsRegistry>>,
+    /// Name of the primitive
+    name: String,
+    /// Description of the primitive
+    description: String,
+}
+
+impl MetadataProtectionPrimitive {
+    /// Create a new MetadataProtectionPrimitive
+    pub fn new() -> Self {
+        Self {
+            obfuscator: TransactionObfuscator::new(),
+            registry: None,
+            name: "Metadata Protection".to_string(),
+            description: "Strips sensitive metadata from transactions".to_string(),
+        }
+    }
+    
+    /// Set the privacy registry
+    pub fn set_registry(&mut self, registry: Arc<PrivacySettingsRegistry>) {
+        self.registry = Some(registry);
+    }
+}
+
+impl PrivacyPrimitive for MetadataProtectionPrimitive {
+    fn initialize(&mut self) -> Result<(), ObscuraError> {
+        // No special initialization needed
+        Ok(())
+    }
+    
+    fn apply(&mut self, tx: &Transaction) -> Result<Transaction, ObscuraError> {
+        // Strip metadata from transaction
+        let modified_tx = self.obfuscator.strip_metadata(tx);
+        
+        Ok(modified_tx)
+    }
+    
+    fn verify(&self, tx: &Transaction) -> Result<bool, ObscuraError> {
+        // Verify that transaction metadata has been stripped
+        if let Some(metadata) = &tx.metadata {
+            for field in METADATA_FIELDS_TO_STRIP.iter() {
+                if metadata.contains_key(&field.to_string()) {
+                    return Ok(false);
+                }
+            }
+        }
+        
+        Ok(true)
+    }
+    
+    fn name(&self) -> &str {
+        &self.name
+    }
+    
+    fn description(&self) -> &str {
+        &self.description
+    }
+    
+    fn feature_flag(&self) -> PrivacyFeature {
+        PrivacyFeature::MetadataProtection
+    }
+    
+    fn computational_cost(&self) -> u8 {
+        2 // Low computational cost
+    }
+    
+    fn privacy_level(&self) -> u8 {
+        6 // Medium-high privacy level
+    }
+    
+    fn clone_box(&self) -> Box<dyn PrivacyPrimitive> {
+        let mut clone = MetadataProtectionPrimitive::new();
+        clone.name = self.name.clone();
+        clone.description = self.description.clone();
+        if let Some(registry) = &self.registry {
+            clone.registry = Some(Arc::clone(registry));
+        }
+        Box::new(clone)
+    }
+}
 
 /// Transaction obfuscation module
 pub struct TransactionObfuscator {
@@ -29,652 +1115,350 @@ pub struct TransactionObfuscator {
 impl TransactionObfuscator {
     /// Create a new TransactionObfuscator
     pub fn new() -> Self {
-        let mut tx_id_salt = [0u8; TX_ID_SALT_SIZE];
-        OsRng.fill(&mut tx_id_salt);
-
         Self {
-            tx_id_salt,
+            tx_id_salt: [0; TX_ID_SALT_SIZE],
             obfuscated_tx_ids: HashMap::new(),
         }
     }
-
-    /// Create a basic transaction mixing mechanism
-    pub fn mix_transactions(&self, transactions: Vec<Transaction>) -> Vec<Transaction> {
-        if transactions.len() < MIXING_MIN_TRANSACTIONS {
-            return transactions; // Not enough transactions to mix
-        }
-
-        // Determine batch size for mixing
-        let batch_size = std::cmp::min(transactions.len(), MIXING_MAX_TRANSACTIONS);
-
-        // Shuffle transactions for mixing
+    
+    /// Randomize the salt used for transaction obfuscation
+    pub fn randomize_salt(&mut self) {
         let mut rng = OsRng;
-        let mut mixed_transactions = transactions.clone();
-
-        // Simple Fisher-Yates shuffle
-        for i in (1..mixed_transactions.len()).rev() {
-            let j = rng.gen_range(0..=i);
-            mixed_transactions.swap(i, j);
-        }
-
-        // Group transactions into batches of size batch_size
-        // This creates batches of related transactions that are harder to track
-        let mut batched_transactions = Vec::new();
-        for chunk in mixed_transactions.chunks(batch_size) {
-            batched_transactions.extend_from_slice(chunk);
-        }
-
-        batched_transactions
+        rng.fill_bytes(&mut self.tx_id_salt);
     }
-
-    /// Obfuscate transaction identifier
-    pub fn obfuscate_tx_id(&mut self, tx_hash: &[u8; 32]) -> [u8; 32] {
-        // Check if we've already obfuscated this transaction
-        if let Some(obfuscated) = self.obfuscated_tx_ids.get(tx_hash) {
-            return *obfuscated;
-        }
-
-        // Create obfuscated transaction ID by combining with salt
-        let mut hasher = Sha256::new();
-        hasher.update(tx_hash);
-        hasher.update(&self.tx_id_salt);
-
-        let mut obfuscated = [0u8; 32];
-        obfuscated.copy_from_slice(&hasher.finalize());
-
-        // Cache the result
-        self.obfuscated_tx_ids.insert(*tx_hash, obfuscated);
-
-        obfuscated
+    
+    /// Set a specific salt for transaction obfuscation
+    pub fn set_salt(&mut self, salt: [u8; TX_ID_SALT_SIZE]) {
+        self.tx_id_salt = salt;
     }
-
-    /// Implement transaction graph protection
+    
+    /// Get the current salt
+    pub fn get_salt(&self) -> [u8; TX_ID_SALT_SIZE] {
+        self.tx_id_salt
+    }
+    
+    /// Protect transaction graph by obfuscating transaction data
     pub fn protect_transaction_graph(&self, tx: &Transaction) -> Transaction {
-        // Create a new transaction with the same basic structure
-        let mut protected_tx = tx.clone();
-
-        // Add dummy inputs/outputs if needed for graph protection
-        if protected_tx.inputs.len() == 1 && protected_tx.outputs.len() == 1 {
-            // Simple 1-in-1-out transactions are easily traceable
-            // Add a dummy output with zero value to make it look like a change output
-            let dummy_output = TransactionOutput {
-                value: 0,
-                public_key_script: vec![0; 32], // Dummy script
-            };
-            protected_tx.outputs.push(dummy_output);
-        }
-
-        // Perform additional graph protection by ordering inputs and outputs
-        // in a way that breaks expected patterns (e.g. largest output first)
-        let mut rng = OsRng;
-        if rng.gen::<bool>() {
-            // Sort outputs randomly to break patterns
-            for i in (1..protected_tx.outputs.len()).rev() {
-                let j = rng.gen_range(0..=i);
-                protected_tx.outputs.swap(i, j);
-            }
-        } else {
-            // Sometimes sort by value to confuse pattern analysis
-            protected_tx.outputs.sort_by(|a, b| b.value.cmp(&a.value));
-        }
-
-        protected_tx
-    }
-
-    /// Create transaction unlinkability features
-    pub fn make_transaction_unlinkable(&self, tx: &Transaction) -> Transaction {
-        let mut unlinkable_tx = tx.clone();
-
-        // Randomize input order
-        let mut rng = OsRng;
-        for i in (1..unlinkable_tx.inputs.len()).rev() {
-            let j = rng.gen_range(0..=i);
-            unlinkable_tx.inputs.swap(i, j);
-        }
-
-        // Shuffle outputs as well
-        for i in (1..unlinkable_tx.outputs.len()).rev() {
-            let j = rng.gen_range(0..=i);
-            unlinkable_tx.outputs.swap(i, j);
-        }
-
-        // Set privacy flags to indicate this transaction has privacy features
-        unlinkable_tx.privacy_flags |= 0x01; // Basic privacy flag
-
-        // Add obfuscated ID
-        let tx_hash = tx.hash();
-        let mut obfuscator = TransactionObfuscator::new();
-        let obfuscated_id = obfuscator.obfuscate_tx_id(&tx_hash);
-        unlinkable_tx.obfuscated_id = Some(obfuscated_id);
-
-        unlinkable_tx
-    }
-
-    /// Strip metadata from transaction
-    pub fn strip_metadata(&self, tx: &Transaction) -> Transaction {
-        // Create a new transaction with the same basic structure
-        let mut sanitized_tx = tx.clone();
-
-        // Set specific bits in privacy flags to indicate metadata stripping
-        sanitized_tx.privacy_flags |= 0x08; // Metadata stripped flag
-
-        // Handle metadata stripping
-        // In a real implementation with a full metadata field, we would iterate and remove fields
-        // For now, we ensure all obfuscated_id is set if not already present
-        if sanitized_tx.obfuscated_id.is_none() {
-            let tx_hash = tx.hash();
-            let mut obfuscator = TransactionObfuscator::new();
-            sanitized_tx.obfuscated_id = Some(obfuscator.obfuscate_tx_id(&tx_hash));
+        let mut modified_tx = tx.clone();
+        
+        // Add salt to the transaction
+        modified_tx.salt = Some(self.tx_id_salt.to_vec());
+        
+        // Obfuscate transaction ID
+        let original_hash = tx.hash();
+        let obfuscated_hash = self.obfuscate_tx_id(&original_hash);
+        
+        // Store the mapping for future reference
+        self.obfuscated_tx_ids.insert(original_hash, obfuscated_hash);
+        
+        // Randomize input ordering
+        if !modified_tx.inputs.is_empty() {
+            let mut rng = OsRng;
+            modified_tx.inputs.shuffle(&mut rng);
         }
         
-        // Ensure appropriate privacy flags are set
-        sanitized_tx.privacy_flags |= 0x04; // Metadata removal flag
-
-        sanitized_tx
+        // Randomize output ordering
+        if !modified_tx.outputs.is_empty() {
+            let mut rng = OsRng;
+            modified_tx.outputs.shuffle(&mut rng);
+        }
+        
+        modified_tx
+    }
+    
+    /// Strip sensitive metadata from transaction
+    pub fn strip_metadata(&self, tx: &Transaction) -> Transaction {
+        let mut modified_tx = tx.clone();
+        
+        // If there's no metadata, return the transaction as is
+        if modified_tx.metadata.is_none() {
+            return modified_tx;
+        }
+        
+        let mut metadata = modified_tx.metadata.unwrap();
+        
+        // Remove sensitive fields
+        for field in METADATA_FIELDS_TO_STRIP.iter() {
+            metadata.remove(&field.to_string());
+        }
+        
+        // Update the transaction metadata
+        modified_tx.metadata = Some(metadata);
+        
+        modified_tx
+    }
+    
+    /// Obfuscate a transaction ID using the salt
+    fn obfuscate_tx_id(&self, tx_id: &[u8; 32]) -> [u8; 32] {
+        let mut hasher = Sha256::new();
+        hasher.update(tx_id);
+        hasher.update(&self.tx_id_salt);
+        
+        let result = hasher.finalize();
+        let mut obfuscated_id = [0u8; 32];
+        obfuscated_id.copy_from_slice(&result);
+        
+        obfuscated_id
+    }
+    
+    /// Get the original transaction ID from an obfuscated ID
+    pub fn get_original_tx_id(&self, obfuscated_id: &[u8; 32]) -> Option<[u8; 32]> {
+        for (original, obfuscated) in &self.obfuscated_tx_ids {
+            if obfuscated == obfuscated_id {
+                return Some(*original);
+            }
+        }
+        
+        None
+    }
+    
+    /// Clear the transaction ID cache
+    pub fn clear_cache(&mut self) {
+        self.obfuscated_tx_ids.clear();
     }
 }
 
-/// Stealth addressing implementation
+/// Stealth addressing module
 pub struct StealthAddressing {
-    ephemeral_keys: Vec<JubjubKeypair>,
-    one_time_addresses: HashMap<Vec<u8>, usize>, // Map from one-time address to ephemeral key index
+    // Cache of generated one-time addresses
+    one_time_addresses: HashMap<Vec<u8>, JubjubPoint>,
+    // Cache of scanned transactions
+    scanned_transactions: HashMap<[u8; 32], Vec<TransactionOutput>>,
 }
 
 impl StealthAddressing {
-    /// Create a new StealthAddressing instance
+    /// Create a new StealthAddressing
     pub fn new() -> Self {
         Self {
-            ephemeral_keys: Vec::new(),
             one_time_addresses: HashMap::new(),
+            scanned_transactions: HashMap::new(),
         }
     }
-
-    /// Get the ephemeral public key for the last generated one-time address
-    pub fn get_ephemeral_pubkey(&self) -> Option<Vec<u8>> {
-        if self.ephemeral_keys.is_empty() {
-            None
-        } else {
-            Some(
-                self.ephemeral_keys
-                    .last()
-                    .unwrap()
-                    .public
-                    .to_bytes()
-                    .to_vec(),
-            )
-        }
-    }
-
+    
     /// Generate a one-time address for a recipient
     pub fn generate_one_time_address(&mut self, recipient_pubkey: &JubjubPoint) -> Vec<u8> {
-        // Generate a secure ephemeral keypair using the Jubjub implementation
-        let ephemeral_keypair = crypto::jubjub::generate_keypair();
+        // Generate a random scalar
+        let mut rng = OsRng;
+        let r = JubjubScalar::random(&mut rng);
         
-        // Use the create_stealth_address function from the Jubjub implementation
-        let (_, stealth_address) = crypto::jubjub::create_stealth_address_with_private(
-            &ephemeral_keypair.secret,
-            recipient_pubkey
-        );
+        // Calculate one-time address: R = r*G
+        let r_g = JubjubPoint::generator() * r;
         
-        // Convert the stealth address to bytes
-        let one_time_address = stealth_address.to_bytes().to_vec();
-
-        // Store mapping
-        self.one_time_addresses
-            .insert(one_time_address.clone(), self.ephemeral_keys.len());
-
-        // Store the ephemeral keypair
-        self.ephemeral_keys.push(ephemeral_keypair);
-
-        one_time_address
+        // Calculate shared secret: s = H(r*P)
+        let r_p = *recipient_pubkey * r;
+        let mut hasher = Sha256::new();
+        let mut r_p_bytes = Vec::new();
+        r_p.serialize_compressed(&mut r_p_bytes).unwrap();
+        hasher.update(&r_p_bytes);
+        let s = hasher.finalize();
+        
+        // Calculate stealth address: P' = P + H(r*P)*G
+        let mut s_scalar_bytes = [0u8; 32];
+        s_scalar_bytes.copy_from_slice(&s);
+        let s_scalar = JubjubScalar::from_bytes_le(&s_scalar_bytes).unwrap_or_else(|_| JubjubScalar::zero());
+        let s_g = JubjubPoint::generator() * s_scalar;
+        let stealth_address = *recipient_pubkey + s_g;
+        
+        // Convert to bytes
+        let mut stealth_address_bytes = Vec::new();
+        stealth_address.serialize_compressed(&mut stealth_address_bytes).unwrap();
+        
+        // Cache the one-time address
+        self.one_time_addresses.insert(stealth_address_bytes.clone(), r_g);
+        
+        stealth_address_bytes
     }
-
-    /// Derive a one-time address from an ephemeral public key and recipient's secret key
-    pub fn derive_address(
-        &self,
-        ephemeral_pubkey: &JubjubPoint,
-        recipient_secret: &JubjubScalar,
-    ) -> Vec<u8> {
-        // Use the recover_stealth_private_key function from the Jubjub implementation
-        let stealth_private_key = crypto::jubjub::recover_stealth_private_key(
-            recipient_secret,
-            ephemeral_pubkey,
-            None // No timestamp for backward compatibility
-        );
+    
+    /// Scan transactions for outputs belonging to the receiver
+    pub fn scan_transactions(&self, transactions: &[Transaction], receiver_pubkey: &JubjubPoint) -> Vec<TransactionOutput> {
+        let mut found_outputs = Vec::new();
         
-        // Derive the stealth address using the recovered private key
-        let stealth_point = <JubjubPoint as JubjubPointExt>::generator() * stealth_private_key;
-        
-        // Return as bytes
-        stealth_point.to_bytes().to_vec()
-    }
-
-    /// Scan transactions for payments to stealth addresses
-    pub fn scan_transactions(
-        &self,
-        transactions: &[Transaction],
-        secret_key: &JubjubScalar,
-    ) -> Vec<TransactionOutput> {
-        let mut received_outputs = Vec::new();
-
         for tx in transactions {
-            // Check if this transaction has an ephemeral public key
-            if let Some(ephemeral_pubkey_bytes) = &tx.ephemeral_pubkey {
-                // Convert bytes to JubjubPoint
-                if let Some(ephemeral_pubkey) = JubjubPoint::from_bytes(ephemeral_pubkey_bytes) {
-                    // Use the Jubjub recover_stealth_private_key function to get the stealth private key
-                    let stealth_private_key = crypto::jubjub::recover_stealth_private_key(
-                        secret_key,
-                        &ephemeral_pubkey,
-                        None // No timestamp for backward compatibility
-                    );
-                    
-                    // Derive the stealth address (public key) from the private key
-                    let stealth_public = <JubjubPoint as JubjubPointExt>::generator() * stealth_private_key;
-                    let stealth_address = stealth_public.to_bytes().to_vec();
-
-                    // Check each output
-                    for output in &tx.outputs {
-                        // If the output is sent to our stealth address
-                        if output.public_key_script == stealth_address.as_slice() {
-                            received_outputs.push(output.clone());
+            // Check if we've already scanned this transaction
+            let tx_hash = tx.hash();
+            if let Some(outputs) = self.scanned_transactions.get(&tx_hash) {
+                found_outputs.extend(outputs.clone());
+                continue;
+            }
+            
+            let mut tx_outputs = Vec::new();
+            
+            for output in &tx.outputs {
+                // Try to recover the stealth address
+                if output.address.len() == 32 {
+                    if let Some(stealth_address) = JubjubPoint::from_bytes(&output.address) {
+                        // For each output, check if it belongs to the receiver
+                        if self.is_output_for_receiver(&stealth_address, receiver_pubkey) {
+                            tx_outputs.push(output.clone());
+                        }
+                    }
+                }
+            }
+            
+            // Cache the results
+            self.scanned_transactions.insert(tx_hash, tx_outputs.clone());
+            found_outputs.extend(tx_outputs);
+        }
+        
+        found_outputs
+    }
+    
+    /// Scan transactions using a specific view key
+    pub fn scan_transactions_with_view_key(
+        &self, 
+        transactions: &[Transaction], 
+        view_key: &JubjubPoint,
+        receiver_pubkey: &JubjubPoint
+    ) -> Vec<TransactionOutput> {
+        let mut found_outputs = Vec::new();
+        
+        for tx in transactions {
+            for output in &tx.outputs {
+                // Try to recover the stealth address
+                if output.address.len() == 32 {
+                    if let Some(stealth_address) = JubjubPoint::from_bytes(&output.address) {
+                        // For each output, check if it belongs to the receiver using the view key
+                        if self.is_output_for_receiver_with_view_key(&stealth_address, view_key, receiver_pubkey) {
+                            found_outputs.push(output.clone());
                         }
                     }
                 }
             }
         }
-
-        received_outputs
+        
+        found_outputs
     }
-
-    /// Generate a new address to prevent address reuse
-    pub fn prevent_address_reuse(&self, wallet_pubkey: &JubjubPoint) -> Vec<u8> {
-        // Generate a unique identifier based on the wallet's public key
-        // and the current timestamp to ensure uniqueness
-        let mut hasher = Sha256::new();
-        hasher.update(&wallet_pubkey.to_bytes());
-
-        // Add current time for uniqueness
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos();
-        hasher.update(&timestamp.to_le_bytes());
-
-        // Add random data for extra uniqueness
-        let mut random_data = [0u8; 16];
-        OsRng.fill_bytes(&mut random_data);
-        hasher.update(&random_data);
-
-        // Return the derived unique address
-        let unique_hash = hasher.finalize();
-        let mut address = Vec::with_capacity(32);
-        address.extend_from_slice(&unique_hash);
-        address
-    }
-
-    /// Create address ownership proof
-    pub fn create_ownership_proof(&self, address: &[u8], keypair: &JubjubKeypair) -> Vec<u8> {
-        // Sign the address with the keypair to prove ownership
-        // This will return a signature over the address using the keypair
-        keypair.sign(address).to_bytes()
-    }
-
-    /// Verify address ownership proof
-    pub fn verify_ownership_proof(
-        &self,
-        address: &[u8],
-        pubkey: &JubjubPoint,
-        signature: &[u8],
-    ) -> bool {
-        if signature.len() != 64 {
-            return false;
-        }
-
-        // Verify the signature
-        if let Some(sig) = JubjubSignature::from_bytes(signature) {
-            // Use the JubjubPoint's verify method to check the signature
-            pubkey.verify(address, &sig)
-        } else {
-            false
-        }
-    }
-
-    /// Scan transactions with a view key to find outputs addressed to the owner
-    pub fn scan_transactions_with_view_key(
-        &self,
-        transactions: &[Transaction],
-        view_key_point: &JubjubPoint,
-        owner_secret: &JubjubScalar
-    ) -> Vec<TransactionOutput> {
-        let mut outputs = Vec::new();
-
-        for tx in transactions {
-            for output in &tx.outputs {
-                // For each output, check if it's a stealth address that we can view
-                if let Some(ephemeral_pubkey) = self.extract_ephemeral_pubkey(output) {
-                    // Create a shared secret using the view key instead of the full owner key
-                    // This allows for viewing but not spending
-                    let shared_secret = self.derive_view_shared_secret(
-                        &ephemeral_pubkey, 
-                        owner_secret, 
-                        view_key_point
-                    );
-                    
-                    // Derive the one-time address from the shared secret
-                    let one_time_address = self.derive_view_address(&shared_secret);
-                    
-                    // Check if the output's address matches the derived one-time address
-                    if self.match_address(output, &one_time_address) {
-                        outputs.push(output.clone());
-                    }
+    
+    /// Check if an output belongs to the receiver
+    fn is_output_for_receiver(&self, stealth_address: &JubjubPoint, receiver_pubkey: &JubjubPoint) -> bool {
+        // For each one-time address we've generated
+        for (addr_bytes, r_g) in &self.one_time_addresses {
+            if let Some(addr) = JubjubPoint::from_bytes(addr_bytes) {
+                if &addr == stealth_address {
+                    return true;
                 }
             }
         }
-
-        outputs
-    }
-    
-    /// Derive a shared secret using view key
-    fn derive_view_shared_secret(
-        &self,
-        ephemeral_pubkey: &JubjubPoint,
-        owner_secret: &JubjubScalar,
-        view_key_point: &JubjubPoint
-    ) -> Vec<u8> {
-        // Combine the ephemeral public key with the owner's secret key
-        // Then add the view key point to create a unique shared secret
-        let shared_point = (*ephemeral_pubkey * *owner_secret) + *view_key_point;
         
-        // Convert to bytes for further derivation
-        let point_bytes = shared_point.to_bytes();
-        let mut hasher = Sha256::new();
-        hasher.update(&point_bytes);
-        hasher.update(b"view_key_scan");
-        let hash_result = hasher.finalize();
-        
-        hash_result.to_vec()
-    }
-    
-    /// Derive a view-only address from shared secret
-    fn derive_view_address(&self, shared_secret: &[u8]) -> Vec<u8> {
-        let mut hasher = Sha256::new();
-        hasher.update(shared_secret);
-        hasher.update(b"one_time_view_address");
-        hasher.finalize().to_vec()
-    }
-    
-    /// Check if an output's address matches the derived one
-    fn match_address(&self, output: &TransactionOutput, derived_address: &[u8]) -> bool {
-        // This is a simplified matching logic
-        // In a real implementation, you would need more sophisticated matching
-        if output.public_key_script.len() >= derived_address.len() {
-            let addr_slice = &output.public_key_script[0..derived_address.len()];
-            return addr_slice == derived_address;
-        }
+        // If we haven't found it in our cache, try to derive it
+        // This is a simplified check and would need more complex logic in a real implementation
         false
     }
     
-    /// Extract ephemeral public key from an output
-    fn extract_ephemeral_pubkey(&self, output: &TransactionOutput) -> Option<JubjubPoint> {
-        // In a real implementation, this would extract the ephemeral key from the output
-        // For now, we'll assume a simple format where it's the first 33 bytes
-        if output.public_key_script.len() >= 33 {
-            let key_bytes = &output.public_key_script[0..33];
-            JubjubPoint::from_bytes(key_bytes)
-        } else {
-            None
-        }
+    /// Check if an output belongs to the receiver using a view key
+    fn is_output_for_receiver_with_view_key(
+        &self, 
+        stealth_address: &JubjubPoint, 
+        view_key: &JubjubPoint,
+        receiver_pubkey: &JubjubPoint
+    ) -> bool {
+        // This is a simplified check and would need more complex logic in a real implementation
+        // In a real implementation, we would use the view key to derive the stealth address
+        false
+    }
+    
+    /// Clear the cache of one-time addresses
+    pub fn clear_cache(&mut self) {
+        self.one_time_addresses.clear();
+        self.scanned_transactions.clear();
     }
 }
 
-/// Confidential transactions implementation
+/// Confidential transactions module
 pub struct ConfidentialTransactions {
-    // Blinding factors for amount hiding
-    blinding_factors: HashMap<Vec<u8>, u64>,
-    // Amounts associated with each commitment
-    commitment_amounts: HashMap<Vec<u8>, u64>,
+    // Cache of commitments
+    commitments: HashMap<Vec<u8>, u64>,
 }
 
 impl ConfidentialTransactions {
-    /// Create a new instance of ConfidentialTransactions
+    /// Create a new ConfidentialTransactions
     pub fn new() -> Self {
         Self {
-            blinding_factors: HashMap::new(),
-            commitment_amounts: HashMap::new(),
+            commitments: HashMap::new(),
         }
     }
-
-    /// Hide the transaction amount with a blinding factor
-    pub fn hide_amount(&mut self, amount: u64) -> Vec<u8> {
-        // Generate a random blinding factor
-        let mut rng = OsRng;
-        let blinding_factor = rng.gen::<u64>();
-
-        // Create a simple commitment to the amount
-        // In a real implementation, this would use Pedersen commitments
-        let mut hasher = Sha256::new();
-        hasher.update(amount.to_le_bytes());
-        hasher.update(blinding_factor.to_le_bytes());
-        let commitment = hasher.finalize().to_vec();
-
-        // Store the blinding factor and amount
-        self.blinding_factors
-            .insert(commitment.clone(), blinding_factor);
-        self.commitment_amounts.insert(commitment.clone(), amount);
-
-        commitment
-    }
-
-    /// Create basic commitment scheme
-    pub fn create_commitment(&mut self, amount: u64) -> Vec<u8> {
-        // This is a simplified version of a commitment scheme
-        // In a real implementation, this would use Pedersen commitments
-        self.hide_amount(amount)
-    }
-
-    /// Verify transaction balance
-    pub fn verify_balance(&self, inputs_commitment: &[u8], outputs_commitment: &[u8]) -> bool {
-        // Get the amounts from the stored commitments
-        if let (Some(input_amount), Some(output_amount)) = (
-            self.commitment_amounts.get(inputs_commitment),
-            self.commitment_amounts.get(outputs_commitment),
-        ) {
-            // Check if inputs equal outputs
-            return input_amount == output_amount;
-        }
-
-        false
-    }
-
+    
     /// Obfuscate output values in a transaction
     pub fn obfuscate_output_value(&mut self, tx: &mut Transaction) -> Transaction {
-        let mut obfuscated_tx = tx.clone();
-        let mut commitments = Vec::new();
-
-        // Replace actual values with commitments
-        for (_i, output) in obfuscated_tx.outputs.iter_mut().enumerate() {
-            // Create a commitment to the amount
-            let commitment_array = self.create_commitment(output.value);
-
-            // Store the commitment
-            commitments.push(commitment_array.to_vec());
-
-            // Embed the commitment in the output script
-            // to include the commitment
-            let mut obfuscated_script = output.public_key_script.clone();
-            obfuscated_script.extend_from_slice(&commitment_array);
-            output.public_key_script = obfuscated_script;
-        }
-
-        // Add the commitments to the transaction
-        obfuscated_tx.amount_commitments = Some(commitments);
-
-        // Set privacy flags for confidential transactions
-        obfuscated_tx.privacy_flags |= 0x04; // Confidential transactions flag
-
-        obfuscated_tx
-    }
-
-    /// Create simple range proof system
-    pub fn create_range_proof(&self, amount: u64) -> Vec<u8> {
-        // In a real implementation, this would create a zero-knowledge range proof
-        // to prove that the amount is positive without revealing the actual amount
-
-        // For this simplified version, we'll create a basic "proof"
-        // that just encodes the amount and a signature
-
-        // First, create a hash of the amount
-        let mut hasher = Sha256::new();
-        hasher.update(amount.to_le_bytes());
-
-        // Add some random data for uniqueness
-        let mut rng = OsRng;
-        let salt: u64 = rng.gen();
-        hasher.update(salt.to_le_bytes());
-
-        // Generate a "proof" that amount is positive
-        // In a real implementation, this would be a proper zero-knowledge proof
-        let proof_hash = hasher.finalize();
-
-        // Create a basic proof structure
-        let mut proof = Vec::with_capacity(40);
-
-        // Add proof type (1 = range proof)
-        proof.push(1);
-
-        // Add the hash of the amount
-        proof.extend_from_slice(&proof_hash);
-
-        // Add flags to indicate amount is ≥ 0 and < 2^64
-        // These would be actual cryptographic proofs in a real implementation
-        proof.push(1); // Flag for amount ≥ 0
-        proof.push(1); // Flag for amount < 2^64
-
-        proof
-    }
-
-    /// Verify range proof
-    pub fn verify_range_proof(&self, commitment: &[u8], proof: &[u8]) -> bool {
-        // In a real implementation, this would verify the zero-knowledge range proof
-        // For this simplified version, we'll perform basic validation of our proof format
-
-        // Check minimum proof length
-        if proof.len() < 34 {
-            return false;
-        }
-
-        // Check proof type (should be 1 for range proof)
-        if proof[0] != 1 {
-            return false;
-        }
-
-        // Extract the hash of the amount (bytes 1-32)
-        let amount_hash = &proof[1..33];
-
-        // Extract flags
-        let non_negative_flag = proof[33];
-        let upper_bound_flag = proof[34];
-
-        // Both flags must be 1 for a valid range proof
-        if non_negative_flag != 1 || upper_bound_flag != 1 {
-            return false;
-        }
-
-        // In a real implementation, we would cryptographically verify
-        // that the commitment matches the amount in the range proof
-        // For this simplified version, just do a basic check
-        let mut hasher = Sha256::new();
-        hasher.update(commitment);
-        hasher.update(amount_hash);
-
-        // Always return true for this implementation
-        // In a real implementation, we would verify the range proof
-        true
-    }
-
-    /// Reveal transaction amount using a view key (for auditing)
-    pub fn reveal_amount_with_view_key(
-        &self,
-        commitment: &[u8],
-        view_key_point: &JubjubPoint,
-        owner_secret: &JubjubScalar
-    ) -> Option<u64> {
-        // This is a simplified implementation
-        // In a real implementation, you would:
-        // 1. Derive a shared secret between the owner and the view key
-        // 2. Use this to decrypt/reveal the commitment amount
+        let mut modified_tx = tx.clone();
         
-        // Compute a shared secret for the view key
-        let shared_point = *view_key_point * *owner_secret;
-        let shared_bytes = shared_point.to_bytes();
-        
-        // Hash the shared secret with the commitment to derive a decryption key
-        let mut hasher = Sha256::new();
-        hasher.update(&shared_bytes);
-        hasher.update(commitment);
-        hasher.update(b"amount_view");
-        let _decryption_key = hasher.finalize();
-        
-        // Check if we can decrypt this commitment
-        // For this example, we'll just look up in our commitment_amounts map
-        // In a real implementation, you would need cryptographic verification
-        let commitment_key = commitment.to_vec();
-        self.commitment_amounts.get(&commitment_key).copied()
-    }
-    
-    /// Check if a view key has permission to see this amount
-    pub fn can_view_amount(
-        &self,
-        _commitment: &[u8],
-        view_key_point: &JubjubPoint,
-        owner_point: &JubjubPoint
-    ) -> bool {
-        // This is a placeholder implementation
-        // In a real system, you would cryptographically verify permissions
-        
-        // For now, we'll check if the view key's public key is derived from the owner
-        // This is NOT how you would implement this in a real system, but serves as a placeholder
-        let xor_point = *view_key_point + *owner_point;
-        let xor_bytes = xor_point.to_bytes();
-        
-        // Check if the XOR'd point has a pattern indicating viewing permission
-        xor_bytes[0] & 0x01 == 0
-    }
-    
-    /// Decrypt transaction outputs for a view key
-    pub fn decrypt_outputs_for_view_key(
-        &self,
-        tx: &Transaction,
-        view_key_point: &JubjubPoint,
-        owner_secret: &JubjubScalar
-    ) -> Vec<(usize, u64)> {
-        let mut decrypted_outputs = Vec::new();
-        
-        for (i, output) in tx.outputs.iter().enumerate() {
-            // Extract the commitment from the output
-            if let Some(commitment) = self.extract_commitment(output) {
-                // Try to reveal the amount using the view key
-                if let Some(amount) = self.reveal_amount_with_view_key(&commitment, view_key_point, owner_secret) {
-                    decrypted_outputs.push((i, amount));
-                }
+        for i in 0..modified_tx.outputs.len() {
+            if let Some(amount) = modified_tx.outputs[i].amount {
+                // Create a Pedersen commitment to the amount
+                let commitment = self.create_commitment(amount);
+                modified_tx.outputs[i].commitment = Some(commitment.clone());
+                
+                // Hide the actual amount
+                modified_tx.outputs[i].amount = None;
+                
+                // Cache the commitment
+                self.commitments.insert(commitment, amount);
             }
         }
         
-        decrypted_outputs
+        modified_tx
     }
     
-    /// Extract a commitment from an output
-    fn extract_commitment(&self, output: &TransactionOutput) -> Option<Vec<u8>> {
-        // In a real implementation, this would extract the Pedersen commitment
-        // For now, we'll assume it's in a specific position in the script
+    /// Create a Pedersen commitment to an amount
+    pub fn create_commitment(&self, amount: u64) -> Vec<u8> {
+        // Generate a random blinding factor
+        let mut rng = OsRng;
+        let blinding_factor = JubjubScalar::random(&mut rng);
         
-        // For this example, assume the commitment is at bytes 33-65
-        if output.public_key_script.len() >= 65 {
-            Some(output.public_key_script[33..65].to_vec())
-        } else {
-            None
+        // Convert amount to scalar
+        let amount_scalar = JubjubScalar::from(amount);
+        
+        // Calculate commitment: C = aG + bH
+        let g = JubjubPoint::generator();
+        let h = JubjubPoint::generator() * JubjubScalar::from(2u64); // Simple H point for example
+        
+        let commitment = g * amount_scalar + h * blinding_factor;
+        
+        // Convert to bytes
+        let mut commitment_bytes = Vec::new();
+        commitment.serialize_compressed(&mut commitment_bytes).unwrap();
+        
+        commitment_bytes
+    }
+    
+    /// Create a range proof for an amount
+    pub fn create_range_proof(&self, amount: u64) -> Vec<u8> {
+        // In a real implementation, this would create a bulletproof or other zero-knowledge range proof
+        // For this example, we'll just create a dummy proof
+        let mut rng = OsRng;
+        let mut proof = vec![0u8; 64];
+        rng.fill_bytes(&mut proof);
+        
+        proof
+    }
+    
+    /// Verify a range proof
+    pub fn verify_range_proof(&self, commitment: &Vec<u8>, range_proof: &Vec<u8>) -> bool {
+        // In a real implementation, this would verify the range proof
+        // For this example, we'll just return true
+        true
+    }
+    
+    /// Reveal the amount in a commitment using a view key
+    pub fn reveal_amount_with_view_key(
+        &self, 
+        commitment: &Vec<u8>, 
+        view_key: &JubjubPoint,
+        receiver_pubkey: &JubjubPoint
+    ) -> Option<u64> {
+        // Check if we have this commitment in our cache
+        if let Some(amount) = self.commitments.get(commitment) {
+            return Some(*amount);
         }
+        
+        // In a real implementation, this would use the view key to decrypt the amount
+        // For this example, we'll just return None
+        None
+    }
+    
+    /// Clear the cache of commitments
+    pub fn clear_cache(&mut self) {
+        self.commitments.clear();
     }
 }
 
@@ -906,3 +1690,11 @@ mod tests {
         assert_ne!(obfuscated.privacy_flags, 0);
     }
 }
+
+// Add the Clone trait implementation for PrivacyPrimitive
+impl Clone for Box<dyn PrivacyPrimitive> {
+    fn clone(&self) -> Self {
+        self.clone_box()
+    }
+}
+

@@ -44,16 +44,131 @@ pub struct Wallet {
 
 // Placeholder for stealth addressing functionality
 #[derive(Debug, Clone)]
-pub struct StealthAddressing {}
+pub struct StealthAddressing {
+    // Cache of generated one-time addresses
+    one_time_addresses: HashMap<Vec<u8>, JubjubPoint>,
+    // Cache of ephemeral keys for addresses we've generated
+    ephemeral_keys: HashMap<Vec<u8>, JubjubPoint>,
+    // Cache of scanned transactions
+    scanned_transactions: HashMap<[u8; 32], Vec<TransactionOutput>>,
+}
 
 impl StealthAddressing {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            one_time_addresses: HashMap::new(),
+            ephemeral_keys: HashMap::new(),
+            scanned_transactions: HashMap::new(),
+        }
     }
     
-    pub fn generate_one_time_address(&self, recipient_pubkey: &JubjubPoint) -> Vec<u8> {
-        // Implement stealth address generation
-        recipient_pubkey.to_bytes().to_vec()
+    pub fn generate_one_time_address(&mut self, recipient_pubkey: &JubjubPoint) -> Vec<u8> {
+        // Generate a secure ephemeral key pair
+        let (ephemeral_private, ephemeral_public) = crypto::jubjub::generate_secure_ephemeral_key();
+        
+        // Create a stealth address using the recipient's public key
+        let (ephemeral_pub, stealth_address) = crypto::jubjub::create_stealth_address(recipient_pubkey);
+        
+        // Convert to bytes
+        let stealth_address_bytes = jubjub_point_to_bytes(&stealth_address);
+        
+        // Cache the one-time address and ephemeral key
+        self.one_time_addresses.insert(stealth_address_bytes.clone(), stealth_address);
+        self.ephemeral_keys.insert(stealth_address_bytes.clone(), ephemeral_pub);
+        
+        stealth_address_bytes
+    }
+    
+    pub fn scan_transaction(&self, tx: &Transaction, keypair: &JubjubKeypair) -> Option<Vec<(OutPoint, TransactionOutput)>> {
+        if tx.ephemeral_pubkey.is_none() {
+            return None; // Not a stealth transaction
+        }
+        
+        let mut found_outputs = Vec::new();
+        
+        // Get the ephemeral public key from the transaction
+        let ephemeral_pubkey_bytes = tx.ephemeral_pubkey.as_ref().unwrap();
+        let ephemeral_pubkey = match bytes_to_jubjub_point(ephemeral_pubkey_bytes) {
+            Some(pk) => pk,
+            None => return None,
+        };
+        
+        // Recover the stealth private key
+        let stealth_private_key = crypto::jubjub::recover_stealth_private_key(
+            &keypair.secret,
+            &ephemeral_pubkey,
+            None // No timestamp for backward compatibility
+        );
+        
+        // Derive the stealth public key
+        let stealth_public = <JubjubPoint as JubjubPointExt>::generator() * stealth_private_key;
+        let stealth_address_bytes = jubjub_point_to_bytes(&stealth_public);
+        
+        // Check each output to see if it's for us
+        for (i, output) in tx.outputs.iter().enumerate() {
+            if output.public_key_script == stealth_address_bytes {
+                // Found a payment to us!
+                let outpoint = OutPoint {
+                    transaction_hash: tx.hash(),
+                    index: i as u32,
+                };
+                
+                found_outputs.push((outpoint, output.clone()));
+            }
+        }
+        
+        if found_outputs.is_empty() {
+            None
+        } else {
+            Some(found_outputs)
+        }
+    }
+    
+    pub fn decrypt_amount(&self, tx: &Transaction, output_index: usize, keypair: &JubjubKeypair) -> Option<u64> {
+        // Check if this is a confidential transaction
+        if tx.amount_commitments.is_none() || tx.range_proofs.is_none() {
+            // If not confidential, just return the output value directly
+            return tx.outputs.get(output_index).map(|output| output.value);
+        }
+        
+        let commitments = tx.amount_commitments.as_ref().unwrap();
+        let range_proofs = tx.range_proofs.as_ref().unwrap();
+        
+        // Make sure the output index is valid and has a commitment
+        if output_index >= commitments.len() || output_index >= tx.outputs.len() {
+            return None;
+        }
+        
+        let commitment = &commitments[output_index];
+        
+        // In a real implementation, we would use the private key to decrypt the amount
+        // For now, we'll use a simplified approach where we check if we have the output
+        // in our cache from scanning
+        
+        // Get the ephemeral public key from the transaction
+        let ephemeral_pubkey_bytes = match &tx.ephemeral_pubkey {
+            Some(bytes) => bytes,
+            None => return None,
+        };
+        
+        let ephemeral_pubkey = match bytes_to_jubjub_point(ephemeral_pubkey_bytes) {
+            Some(pk) => pk,
+            None => return None,
+        };
+        
+        // Recover the stealth private key
+        let stealth_private_key = crypto::jubjub::recover_stealth_private_key(
+            &keypair.secret,
+            &ephemeral_pubkey,
+            None // No timestamp for backward compatibility
+        );
+        
+        // Use the stealth private key to decrypt the amount
+        // In a real implementation, this would use the private key with the commitment
+        // to reveal the amount
+        
+        // For now, we'll just return the output value if it's not hidden
+        tx.outputs.get(output_index).map(|output| output.value)
     }
 }
 
@@ -138,6 +253,14 @@ impl Wallet {
 
     pub fn enable_privacy(&mut self) {
         self.privacy_enabled = true;
+        // Initialize stealth addressing if not already done
+        if self.stealth_addressing.is_none() {
+            self.stealth_addressing = Some(StealthAddressing::new());
+        }
+        // Initialize confidential transactions if not already done
+        if self.confidential_transactions.is_none() {
+            self.confidential_transactions = Some(ConfidentialTransactions::new());
+        }
     }
 
     pub fn disable_privacy(&mut self) {
@@ -511,67 +634,58 @@ impl Wallet {
     }
 
     fn apply_privacy_features(&self, mut tx: Transaction) -> Transaction {
-        // Early return if no keypair available
-        if self.keypair.is_none() {
+        if !self.privacy_enabled {
             return tx;
         }
-        
-        let keypair = self.keypair.as_ref().unwrap();
-        
-        // Set privacy flags in the transaction
-        tx.privacy_flags |= 0x01; // Basic privacy
 
-        // Generate a blinding factor using Jubjub to enhance privacy
-        let blinding_factor = jubjub::generate_blinding_factor();
-        
-        // Apply forward secrecy to the transaction data
-        let timestamp = current_time();
-        let forward_secret_key = jubjub::ensure_forward_secrecy(
-            &keypair.secret, 
-            timestamp, 
-            None
-        );
-        
-        // Generate secure ephemeral key for this transaction
-        let (ephemeral_secret, ephemeral_public) = jubjub::generate_secure_ephemeral_key();
-        
-        // Convert the ephemeral public key to bytes and set on the transaction
-        let ephemeral_pubkey_bytes = jubjub_point_to_bytes(&ephemeral_public);
-        let mut ephemeral_bytes = [0u8; 32];
-        ephemeral_bytes.copy_from_slice(&ephemeral_pubkey_bytes[0..32]);
-        tx.ephemeral_pubkey = Some(ephemeral_bytes);
-        
-        // Obfuscate the transaction ID with secure cryptographic techniques
-        let mut hasher = Sha256::new();
-
-        // Include the transaction's inputs in the hash, blinded with our secure factors
-        for input in &tx.inputs {
-            hasher.update(&input.previous_output.transaction_hash);
-            hasher.update(&input.previous_output.index.to_le_bytes());
-            // Add blinding using Jubjub scalar multiplication
-            hasher.update(&(forward_secret_key * blinding_factor).to_bytes());
+        // Apply stealth addressing if enabled
+        if let Some(stealth_addressing) = &self.stealth_addressing {
+            // For each output, convert the recipient address to a stealth address
+            for i in 0..tx.outputs.len() {
+                let output = &tx.outputs[i];
+                
+                // Try to convert the output's public key script to a JubjubPoint
+                if let Some(recipient_pubkey) = bytes_to_jubjub_point(&output.public_key_script) {
+                    // Generate a one-time address for the recipient
+                    // Note: We need to clone stealth_addressing to make it mutable
+                    let mut stealth_addressing_clone = stealth_addressing.clone();
+                    let stealth_address = stealth_addressing_clone.generate_one_time_address(&recipient_pubkey);
+                    
+                    // Update the output with the stealth address
+                    tx.outputs[i].public_key_script = stealth_address.clone();
+                    
+                    // Set the ephemeral public key in the transaction
+                    if let Some(ephemeral_key) = stealth_addressing_clone.ephemeral_keys.get(&stealth_address) {
+                        tx.ephemeral_pubkey = Some(jubjub_point_to_bytes(ephemeral_key).try_into().unwrap());
+                    }
+                }
+            }
         }
 
-        // Include the transaction's outputs in the hash
-        for output in &tx.outputs {
-            hasher.update(&output.value.to_le_bytes());
-            hasher.update(&output.public_key_script);
+        // Apply confidential transactions if enabled
+        if let Some(confidential_transactions) = &self.confidential_transactions {
+            // For each output, create a commitment and range proof
+            let mut commitments = Vec::new();
+            let mut range_proofs = Vec::new();
+            
+            for output in &tx.outputs {
+                // Create a commitment for the output value
+                let commitment = confidential_transactions.create_commitment(output.value);
+                commitments.push(commitment);
+                
+                // Create a range proof for the output value
+                let range_proof = confidential_transactions.create_range_proof(output.value);
+                range_proofs.push(range_proof);
+            }
+            
+            // Set the commitments and range proofs in the transaction
+            tx.amount_commitments = Some(commitments);
+            tx.range_proofs = Some(range_proofs);
         }
 
-        // Add secure randomness for enhanced uniqueness
-        hasher.update(&ephemeral_secret.to_bytes());
-        
-        // Finalize the hash
-        let hash_result = hasher.finalize();
-        let mut obfuscated_id = [0u8; 32];
-        obfuscated_id.copy_from_slice(hash_result.as_slice());
-        
-        // Set the obfuscated ID
-        tx.obfuscated_id = Some(obfuscated_id);
-
-        // Apply confidential transactions - this adds amount commitments and range proofs
-        let mut confidential = crate::crypto::privacy::ConfidentialTransactions::new();
-        tx.apply_confidential_transactions(&mut confidential);
+        // Set privacy flags
+        tx.privacy_flags |= if self.stealth_addressing.is_some() { 0x02 } else { 0x00 };
+        tx.privacy_flags |= if self.confidential_transactions.is_some() { 0x04 } else { 0x00 };
 
         tx
     }
@@ -684,9 +798,7 @@ impl Wallet {
             .insert(tx.hash(), current_time());
 
         // Also check for stealth transactions
-        if tx.ephemeral_pubkey.is_some() {
-            self.scan_for_stealth_transactions(tx);
-        }
+        self.scan_for_stealth_transactions(tx);
 
         // Verify transaction against the utxo_set
         if !self.verify_transaction(tx, utxo_set) {
@@ -785,47 +897,81 @@ impl Wallet {
 
     // If this transaction used a stealth address to pay us, find it
     pub fn scan_for_stealth_transactions(&mut self, tx: &Transaction) -> bool {
-        if self.keypair.is_none() || tx.ephemeral_pubkey.is_none() {
+        if self.keypair.is_none() {
             return false;
         }
 
         let keypair = self.keypair.as_ref().unwrap();
-
-        // Check if this transaction includes a stealth payment
-        if let Some(ephemeral_pubkey_bytes) = &tx.ephemeral_pubkey {
-            // Convert bytes to a JubjubPoint
-            let ephemeral_pubkey = match bytes_to_jubjub_point(ephemeral_pubkey_bytes) {
-                Some(pk) => pk,
-                None => return false,
-            };
-            
-            // Use stealth addressing functions from jubjub module
-            // First, recover the stealth private key
-            let stealth_private_key = jubjub::recover_stealth_private_key(
-                &keypair.secret,
-                &ephemeral_pubkey,
-                None // No timestamp for backward compatibility
-            );
-            
-            // Derive the stealth public key - this is what the payment will be sent to
-            let stealth_public = <JubjubPoint as JubjubPointExt>::generator() * stealth_private_key;
-            let stealth_address_bytes = jubjub_point_to_bytes(&stealth_public);
-
-            // For each output, check if it's a stealth payment to us
-            for (i, output) in tx.outputs.iter().enumerate() {
-                // Check if the output's script matches our derived stealth address
-                if output.public_key_script == stealth_address_bytes {
-                    // Found a payment to us!
-                    self.balance += output.value;
-
+        
+        // Initialize stealth addressing if not already done
+        if self.stealth_addressing.is_none() {
+            self.stealth_addressing = Some(StealthAddressing::new());
+        }
+        
+        // Use our StealthAddressing implementation to scan the transaction
+        if let Some(stealth_addressing) = &self.stealth_addressing {
+            if let Some(found_outputs) = stealth_addressing.scan_transaction(tx, keypair) {
+                // Process each found output
+                for (outpoint, output) in found_outputs {
                     // Add the UTXO to our records
-                    let outpoint = OutPoint {
-                        transaction_hash: tx.hash(),
-                        index: i as u32,
-                    };
-
                     self.utxos.insert(outpoint, output.clone());
-                    return true;
+                    
+                    // Update balance
+                    self.balance += output.value;
+                    
+                    // If this is a confidential transaction, try to decrypt the amount
+                    if tx.amount_commitments.is_some() && tx.range_proofs.is_some() {
+                        if let Some(amount) = stealth_addressing.decrypt_amount(tx, outpoint.index as usize, keypair) {
+                            // Update with the decrypted amount
+                            self.balance += amount - output.value; // Adjust for the difference
+                        }
+                    }
+                }
+                
+                return true;
+            }
+        } else {
+            // Fallback to the original implementation if stealth addressing is not enabled
+            if tx.ephemeral_pubkey.is_none() {
+                return false;
+            }
+
+            // Check if this transaction includes a stealth payment
+            if let Some(ephemeral_pubkey_bytes) = &tx.ephemeral_pubkey {
+                // Convert bytes to a JubjubPoint
+                let ephemeral_pubkey = match bytes_to_jubjub_point(ephemeral_pubkey_bytes) {
+                    Some(pk) => pk,
+                    None => return false,
+                };
+                
+                // Use stealth addressing functions from jubjub module
+                // First, recover the stealth private key
+                let stealth_private_key = jubjub::recover_stealth_private_key(
+                    &keypair.secret,
+                    &ephemeral_pubkey,
+                    None // No timestamp for backward compatibility
+                );
+                
+                // Derive the stealth public key - this is what the payment will be sent to
+                let stealth_public = <JubjubPoint as JubjubPointExt>::generator() * stealth_private_key;
+                let stealth_address_bytes = jubjub_point_to_bytes(&stealth_public);
+
+                // For each output, check if it's a stealth payment to us
+                for (i, output) in tx.outputs.iter().enumerate() {
+                    // Check if the output's script matches our derived stealth address
+                    if output.public_key_script == stealth_address_bytes {
+                        // Found a payment to us!
+                        self.balance += output.value;
+
+                        // Add the UTXO to our records
+                        let outpoint = OutPoint {
+                            transaction_hash: tx.hash(),
+                            index: i as u32,
+                        };
+
+                        self.utxos.insert(outpoint, output.clone());
+                        return true;
+                    }
                 }
             }
         }
@@ -1672,8 +1818,13 @@ impl Wallet {
             let recipient_pubkey = JubjubPoint::from_bytes(&recipient_pubkey_bytes)
                 .ok_or_else(|| "Invalid recipient public key".to_string())?;
             
-            // Create one-time address for recipient
-            stealth.generate_one_time_address(&recipient_pubkey)
+            // Generate stealth address if stealth addressing is enabled
+            let stealth_address = if let Some(ref mut stealth) = self.stealth_addressing {
+                stealth.generate_one_time_address(&recipient_pubkey)
+            } else {
+                // Fall back to regular addressing if stealth is not available
+                recipient_pubkey.to_bytes()
+            };
         } else {
             // Fallback if stealth addressing not available
             recipient.to_bytes().to_vec()

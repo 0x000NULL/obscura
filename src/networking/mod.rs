@@ -71,6 +71,8 @@ pub mod tor;
 pub mod bridge_relay;
 // Add the privacy_config_integration module
 pub mod privacy_config_integration;
+// Add the privacy module
+pub mod privacy;
 
 // Re-export key types from p2p module
 pub use p2p::{
