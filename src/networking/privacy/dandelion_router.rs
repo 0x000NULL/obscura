@@ -8,8 +8,8 @@ use rand_distr::Distribution;
 use rand::distributions::{Bernoulli};
 use rand_chacha::{ChaCha20Rng, rand_core::SeedableRng};
 use rand::prelude::SliceRandom;
-use crate::config::presets::PrivacyLevel;
-use crate::config::privacy_registry::PrivacySettingsRegistry;
+use crate::networking::privacy::PrivacyLevel;
+use crate::networking::privacy_config_integration::PrivacySettingsRegistry;
 use crate::blockchain::Transaction;
 use crate::networking::dandelion::{DandelionManager, PropagationState};
 

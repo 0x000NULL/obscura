@@ -1,13 +1,10 @@
 use std::sync::{Arc, RwLock};
 use log::{debug, info};
 use std::fmt;
-use crate::config::presets;
-use crate::config::privacy_registry as config_registry;
 use crate::networking::privacy::{
     DandelionRouter as NetworkDandelionRouter,
     CircuitRouter as NetworkCircuitRouter,
-    TimingObfuscator as NetworkTimingObfuscator,
-    NetworkPrivacyLevel
+    TimingObfuscator as NetworkTimingObfuscator
 };
 
 // Local definitions to avoid import issues
@@ -19,28 +16,15 @@ pub enum PrivacyLevel {
     Custom
 }
 
-// Implement conversion from presets::PrivacyLevel to PrivacyLevel
-impl From<presets::PrivacyLevel> for PrivacyLevel {
-    fn from(level: presets::PrivacyLevel) -> Self {
-        match level {
-            presets::PrivacyLevel::Standard => PrivacyLevel::Standard,
-            presets::PrivacyLevel::Medium => PrivacyLevel::Medium,
-            presets::PrivacyLevel::High => PrivacyLevel::High,
-            presets::PrivacyLevel::Custom => PrivacyLevel::Custom,
-        }
-    }
-}
-
-// Implement conversion from PrivacyLevel to presets::PrivacyLevel
-impl From<PrivacyLevel> for presets::PrivacyLevel {
-    fn from(level: PrivacyLevel) -> Self {
-        match level {
-            PrivacyLevel::Standard => presets::PrivacyLevel::Standard,
-            PrivacyLevel::Medium => presets::PrivacyLevel::Medium,
-            PrivacyLevel::High => presets::PrivacyLevel::High,
-            PrivacyLevel::Custom => presets::PrivacyLevel::Custom,
-        }
-    }
+// Local component type enum
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum ComponentType {
+    DandelionRouter,
+    CircuitRouter,
+    TimingObfuscator,
+    TorConnection,
+    FingerprintingProtection,
+    Network
 }
 
 // Implement Display for PrivacyLevel
@@ -55,59 +39,63 @@ impl fmt::Display for PrivacyLevel {
     }
 }
 
-// Simple structure to hold privacy settings
+// Basic privacy preset structure
 #[derive(Debug, Clone)]
 pub struct PrivacyPreset {
     pub level: PrivacyLevel,
     pub use_tor: bool,
     pub tor_stream_isolation: bool,
+    pub tor_only_connections: bool,
     pub use_i2p: bool,
     pub use_dandelion: bool,
+    pub dandelion_stem_phase_hops: usize,
+    pub dandelion_traffic_analysis_protection: bool,
     pub use_circuit_routing: bool,
     pub circuit_min_hops: usize,
     pub circuit_max_hops: usize,
+    pub connection_obfuscation_enabled: bool,
+    pub traffic_pattern_obfuscation: bool,
+    pub use_bridge_relays: bool,
     pub transaction_obfuscation_enabled: bool,
     pub use_stealth_addresses: bool,
     pub use_confidential_transactions: bool,
     pub use_range_proofs: bool,
-    pub metadata_stripping: bool
+    pub metadata_stripping: bool,
 }
 
-impl PrivacyPreset {
-    /// Create a high privacy preset
-    pub fn high() -> Self {
+impl Default for PrivacyPreset {
+    fn default() -> Self {
         Self {
-            level: PrivacyLevel::High,
-            use_tor: true,
-            tor_stream_isolation: true,
-            use_i2p: true,
+            level: PrivacyLevel::Standard,
+            use_tor: false,
+            tor_stream_isolation: false,
+            tor_only_connections: false,
+            use_i2p: false,
             use_dandelion: true,
-            use_circuit_routing: true,
-            circuit_min_hops: 3,
-            circuit_max_hops: 7,
-            transaction_obfuscation_enabled: true,
-            use_stealth_addresses: true,
-            use_confidential_transactions: true,
-            use_range_proofs: true,
-            metadata_stripping: true
+            dandelion_stem_phase_hops: 2,
+            dandelion_traffic_analysis_protection: false,
+            use_circuit_routing: false,
+            circuit_min_hops: 2,
+            circuit_max_hops: 5,
+            connection_obfuscation_enabled: false,
+            traffic_pattern_obfuscation: false,
+            use_bridge_relays: false,
+            transaction_obfuscation_enabled: false,
+            use_stealth_addresses: false,
+            use_confidential_transactions: false,
+            use_range_proofs: false,
+            metadata_stripping: false,
         }
     }
 }
 
-// Component types for the privacy registry
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum ComponentType {
-    Network,
-    Blockchain,
-    Wallet,
-    Crypto
-}
-
 // Event structure for configuration changes
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ConfigChangeEvent {
+    pub component: ComponentType,
+    pub key: String,
+    pub value: String,
     pub setting_path: String,
-    pub component_type: ComponentType,
 }
 
 // Configuration update listener interface
@@ -117,60 +105,57 @@ pub trait ConfigUpdateListener: Send + Sync {
     fn component_type(&self) -> ComponentType;
 }
 
-// Registry to manage privacy settings
+// Simple Registry for Privacy Settings
 pub struct PrivacySettingsRegistry {
-    listeners: RwLock<Vec<Arc<dyn ConfigUpdateListener>>>
+    // Current privacy level
+    pub privacy_level: RwLock<PrivacyLevel>,
+    // Configuration preset
+    config: RwLock<PrivacyPreset>,
+    // Listeners for configuration changes
+    listeners: RwLock<Vec<Arc<dyn ConfigUpdateListener>>>,
 }
 
 impl PrivacySettingsRegistry {
-    /// Create a new PrivacySettingsRegistry
+    /// Create a new registry
     pub fn new() -> Self {
         Self {
-            listeners: RwLock::new(Vec::new())
+            privacy_level: RwLock::new(PrivacyLevel::Standard),
+            config: RwLock::new(PrivacyPreset::default()),
+            listeners: RwLock::new(Vec::new()),
         }
     }
     
-    /// Create a new registry with a preset
-    pub fn with_preset(preset: PrivacyPreset) -> Self {
-        // In a real implementation, we would store the preset
-        // For now, just create a new registry
-        Self::new()
+    /// Set privacy level
+    pub fn set_privacy_level(&self, level: PrivacyLevel) {
+        *self.privacy_level.write().unwrap() = level;
     }
     
-    // Get current config
+    /// Get privacy level
+    pub fn get_privacy_level(&self) -> PrivacyLevel {
+        *self.privacy_level.read().unwrap()
+    }
+    
+    /// Get a setting for a component with a default value
+    pub fn get_setting_for_component<T: Clone>(&self, _component: ComponentType, _key: &str, default_value: T) -> T {
+        // In this simplified version, just return default
+        default_value
+    }
+    
+    /// Get a configuration value as int
+    pub fn get_int(&self, _component: ComponentType, _key: &str, default_value: i32) -> i32 {
+        // In this simplified version, just return default
+        default_value
+    }
+    
+    /// Get configuration
     pub fn get_config(&self) -> PrivacyPreset {
-        PrivacyPreset {
-            level: PrivacyLevel::Standard,
-            use_tor: false,
-            tor_stream_isolation: false,
-            use_i2p: false,
-            use_dandelion: true,
-            use_circuit_routing: false,
-            circuit_min_hops: 2,
-            circuit_max_hops: 5,
-            transaction_obfuscation_enabled: false,
-            use_stealth_addresses: false,
-            use_confidential_transactions: false,
-            use_range_proofs: false,
-            metadata_stripping: false
-        }
+        self.config.read().unwrap().clone()
     }
     
-    // Register a listener
+    /// Register a configuration change listener
     pub fn register_listener(&self, listener: Arc<dyn ConfigUpdateListener>) {
         let mut listeners = self.listeners.write().unwrap();
         listeners.push(listener);
-    }
-    
-    pub fn get_setting_for_component(&self, _component_type: ComponentType, _setting_name: &str, default_value: PrivacyLevel) -> PrivacyLevel {
-        // For now, just return the default value
-        // In a real implementation, this would look up the setting in a configuration store
-        default_value
-    }
-
-    /// Convert from config_registry::PrivacySettingsRegistry
-    pub fn from_config_registry(_registry: Arc<config_registry::PrivacySettingsRegistry>) -> Arc<Self> {
-        Arc::new(Self::new())
     }
 }
 
@@ -424,9 +409,16 @@ pub struct DandelionRouter {
 }
 
 impl DandelionRouter {
-    pub fn new(config: DandelionConfig) -> Self {
+    pub fn new() -> Self {
         Self {
-            config,
+            config: DandelionConfig {
+                enabled: true,
+                stem_phase_hops: 2,
+                traffic_analysis_protection: false,
+                multi_path_routing: false,
+                adaptive_timing: false,
+                fluff_probability: 0.1,
+            }
         }
     }
     

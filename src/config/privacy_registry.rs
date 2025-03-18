@@ -437,6 +437,7 @@ impl PrivacySettingsRegistry {
             control_password: None,
             connection_timeout_secs: 30,
             circuit_build_timeout_secs: 60,
+            circuit_rotation_interval: std::time::Duration::from_secs(1800), // 30 minutes
             hidden_service_enabled: false,
             hidden_service_dir: None,
             hidden_service_port: None,

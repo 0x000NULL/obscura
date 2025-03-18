@@ -1,5 +1,0 @@
-//
-Fixed
-version
-of
-set_metadata_protection

@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
+use std::str::FromStr;
 use log::{debug, info, warn, error};
 use rand::{thread_rng, Rng};
 use rand_chacha::{ChaCha20Rng, rand_core::SeedableRng};
@@ -10,10 +11,9 @@ use thiserror::Error;
 use hex;
 
 use crate::blockchain::Transaction;
-use crate::config::presets::PrivacyLevel;
 use crate::networking::circuit::{CircuitError, CircuitManager};
-use crate::config::privacy_registry;
-use crate::config::privacy_registry::PrivacySettingsRegistry;
+use crate::networking::privacy::PrivacyLevel;
+use crate::networking::privacy_config_integration::PrivacySettingsRegistry;
 
 // Constants for circuit routing
 const MIN_CIRCUIT_SIZE_STANDARD: usize = 3;
@@ -108,7 +108,7 @@ pub struct CircuitRouter {
     circuits: Mutex<HashMap<String, CircuitInfo>>,
     
     /// Mapping of peer IDs to circuit IDs
-    peer_circuits: Mutex<HashMap<[u8; 32], String>>,
+    peer_circuits: Mutex<HashMap<SocketAddr, String>>,
     
     /// Last time circuit was rotated
     last_rotation: Mutex<Instant>,
@@ -266,14 +266,27 @@ impl CircuitRouter {
                 CircuitPurpose::PeerDiscovery => crate::networking::tor::CircuitPurpose::PeerDiscovery,
             };
             
-            match manager.create_circuit(circuit_purpose, None) {
-                Ok(id) => id,
+            // Get the current privacy level
+            let privacy_level = *self.privacy_level.read().unwrap();
+            // Convert our PrivacyLevel to CircuitManager's PrivacyLevel
+            let circuit_privacy_level = match privacy_level {
+                PrivacyLevel::Standard => crate::networking::circuit::PrivacyLevel::Standard,
+                PrivacyLevel::Medium => crate::networking::circuit::PrivacyLevel::Medium,
+                PrivacyLevel::High => crate::networking::circuit::PrivacyLevel::High,
+                PrivacyLevel::Custom => crate::networking::circuit::PrivacyLevel::Medium, // Default to medium for custom
+            };
+            
+            // Default to Normal priority
+            let circuit_priority = crate::networking::circuit::CircuitPriority::Normal;
+            
+            match manager.create_circuit(circuit_purpose, circuit_privacy_level, circuit_priority, None) {
+                Ok(id) => hex::encode(id),
                 Err(e) => return Err(CircuitRouterError::CircuitCreationFailed(e.to_string())),
             }
         } else {
             // Generate a random circuit ID if no circuit manager is available
-            let random_id = [0u8; 16];
-            let random_id: [u8; 16] = rand::random();
+            let mut random_id = [0u8; 32];
+            thread_rng().fill(&mut random_id);
             hex::encode(random_id)
         };
         
@@ -473,7 +486,7 @@ impl CircuitRouter {
         *self.initialized.read().unwrap()
     }
     
-    pub fn get_peer_circuit(&self, peer_id: &[u8; 32]) -> Result<String, CircuitRouterError> {
+    pub fn get_peer_circuit(&self, peer_id: &SocketAddr) -> Result<String, CircuitRouterError> {
         let peer_circuits = self.peer_circuits.lock().unwrap();
         
         if let Some(circuit_id) = peer_circuits.get(peer_id) {
@@ -496,24 +509,12 @@ impl CircuitRouter {
     }
     
     // Add a new method to get a peer ID from a string representation (hex)
-    pub fn get_peer_id_from_string(&self, peer_id_str: &str) -> Result<[u8; 32], CircuitRouterError> {
-        // Convert hex string to bytes
-        if peer_id_str.len() != 64 {
-            return Err(CircuitRouterError::InvalidPeerID("Peer ID must be 64 hex characters".to_string()));
+    pub fn get_peer_id_from_string(&self, peer_id_str: &str) -> Result<SocketAddr, CircuitRouterError> {
+        // Parse the string as a SocketAddr directly
+        match SocketAddr::from_str(peer_id_str) {
+            Ok(socket_addr) => Ok(socket_addr),
+            Err(_) => Err(CircuitRouterError::InvalidPeerID(peer_id_str.to_string())),
         }
-        
-        let bytes = match hex::decode(peer_id_str) {
-            Ok(b) => b,
-            Err(e) => return Err(CircuitRouterError::InvalidPeerID(format!("Invalid hex: {}", e))),
-        };
-        
-        if bytes.len() != 32 {
-            return Err(CircuitRouterError::InvalidPeerID("Decoded peer ID must be 32 bytes".to_string()));
-        }
-        
-        let mut result = [0u8; 32];
-        result.copy_from_slice(&bytes);
-        Ok(result)
     }
     
     pub fn route_message(&self, dest: String, message: Vec<u8>) -> Result<(), CircuitRouterError> {
@@ -547,7 +548,7 @@ impl CircuitRouter {
             // For now, log the message but don't try to send it since CircuitManager
             // doesn't have a send_message method
             log::info!("Would send message to peer {} through circuit {}: {} bytes", 
-                hex::encode(peer_id), circuit_id, message.len());
+                peer_id, circuit_id, message.len());
             
             // In a real implementation, you'd call the appropriate method on the circuit manager
             // manager.send_message(&circuit_id, &message)...
@@ -558,9 +559,9 @@ impl CircuitRouter {
         }
     }
     
-    pub fn get_available_peers(&self) -> Vec<[u8; 32]> {
+    pub fn get_available_peers(&self) -> Vec<SocketAddr> {
         let available_peers = self.peer_circuits.lock().unwrap();
-        let peers_vec: Vec<[u8; 32]> = available_peers.keys().cloned().collect();
+        let peers_vec: Vec<SocketAddr> = available_peers.keys().cloned().collect();
         peers_vec
     }
 }

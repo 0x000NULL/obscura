@@ -13,10 +13,8 @@ use std::thread;
 use crate::networking::Node;
 use crate::blockchain::{Transaction, Block};
 use std::hash::{Hash, Hasher};
-use crate::config::presets::PrivacyLevel;
-use crate::config::privacy_registry;
-use crate::config::privacy_registry::PrivacySettingsRegistry;
-use crate::networking::privacy::NetworkPrivacyLevel;
+use crate::networking::privacy::PrivacyLevel;
+use crate::networking::privacy_config_integration::PrivacySettingsRegistry;
 
 // Constants for timing obfuscation
 const MIN_DELAY_MS: u64 = 10;

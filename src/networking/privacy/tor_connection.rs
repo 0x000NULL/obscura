@@ -10,11 +10,10 @@ use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::path::PathBuf;
 
-use crate::networking::privacy::NetworkPrivacyLevel;
 use crate::networking::tor::{TorError, TorConfig, OnionAddress};
 use crate::networking::privacy_config_integration::{ComponentType, PrivacyLevel as ConfigPrivacyLevel};
-use crate::config::presets::PrivacyLevel;
-use crate::config::privacy_registry::PrivacySettingsRegistry;
+use crate::networking::privacy::PrivacyLevel;
+use crate::networking::privacy_config_integration::PrivacySettingsRegistry;
 
 // Constants for Tor connection
 const TOR_SOCKS_PORT: u16 = 9050;

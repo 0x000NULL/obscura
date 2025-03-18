@@ -1,19 +1,19 @@
 use obscura::{
     blockchain::Transaction,
-    config::{presets::PrivacyLevel, privacy_registry::PrivacyRegistry},
+    config::presets::PrivacyLevel,
     crypto::{
         bulletproofs::RangeProof,
-        pedersen::PedersenCommitment,
+        pedersen::{PedersenCommitment, ImportedPedersenCommitment},
         privacy::{SenderPrivacy, ReceiverPrivacy},
         view_key::ViewKey,
-        pedersen::generate_random_jubjub_scalar,
-        jubjub::JubjubKeypair,
     },
-    networking::privacy::{
-        DandelionRouter,
-        CircuitRouter,
-        TimingObfuscator,
-        FingerprintingProtection,
+    networking::{
+        privacy::{
+            DandelionRouter,
+            CircuitRouter,
+            TimingObfuscator,
+        },
+        privacy_config_integration::PrivacySettingsRegistry,
     },
     wallet::StealthAddress,
 };
@@ -22,28 +22,30 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-/// Test fixture for long-running scenario tests
+/// Test fixture for long running privacy scenarios
 struct LongRunningTest {
-    privacy_config: PrivacyRegistry,
+    privacy_config: Arc<PrivacySettingsRegistry>,
     dandelion_router: DandelionRouter,
     circuit_router: CircuitRouter,
     timing_obfuscator: TimingObfuscator,
 }
 
 impl LongRunningTest {
+    /// Create a new test instance with the specified privacy level
     fn new(privacy_level: PrivacyLevel) -> Self {
-        let privacy_config = PrivacyRegistry::from_preset(privacy_level);
+        let privacy_config = Arc::new(PrivacySettingsRegistry::new());
+        privacy_config.set_privacy_level(privacy_level);
         
         let dandelion_router = DandelionRouter::new(
-            privacy_config.get_dandelion_config().clone(),
+            privacy_config.clone(),
         );
         
         let circuit_router = CircuitRouter::new(
-            privacy_config.get_circuit_config().clone(),
+            privacy_config.clone(),
         );
         
         let timing_obfuscator = TimingObfuscator::new(
-            privacy_config.get_timing_config().clone(),
+            privacy_config.clone(),
         );
         
         Self {
@@ -54,170 +56,83 @@ impl LongRunningTest {
         }
     }
     
-    fn create_private_transaction(&self, amount: u64) -> Transaction {
-        // Create a transaction with privacy features
-        let mut tx = Transaction::new();
+    /// Create a transaction with the specified amount
+    fn create_transaction(&self, amount: u64) -> Transaction {
+        let mut tx = Transaction::new(Vec::new(), Vec::new());
+        
+        // Apply sender privacy features
         tx.apply_sender_privacy(SenderPrivacy::new());
+        
+        // Apply receiver privacy features
         tx.apply_receiver_privacy(ReceiverPrivacy::new());
         
-        // Create a Pedersen commitment for the amount
-        let blinding = generate_random_jubjub_scalar();
-        let commitment = PedersenCommitment::commit(amount, blinding);
-        tx.set_amount_commitment(commitment);
+        // Create a commitment for the amount
+        let blinding_factor = obscura::crypto::pedersen::generate_random_jubjub_scalar();
+        let commitment = PedersenCommitment::commit(amount, blinding_factor);
+        tx.set_amount_commitment(0, commitment.to_bytes()).unwrap();
         
-        // Create a range proof for the amount
+        // Create range proof
         let range_proof = RangeProof::new(amount, 64).unwrap();
-        tx.set_range_proof(range_proof);
+        tx.set_range_proof(0, range_proof.to_bytes()).unwrap();
         
         tx
     }
     
-    fn propagate_transaction(&self, tx: Transaction) -> bool {
+    /// Propagate transaction through privacy components
+    fn propagate_transaction(&self, tx: Transaction) -> Transaction {
         // Apply timing obfuscation
         let delayed_tx = self.timing_obfuscator.apply_delay(tx);
         
-        // Route through Dandelion++ stem phase
-        let stem_routed_tx = self.dandelion_router.route_stem_phase(delayed_tx);
-        
         // Route through circuit for additional network privacy
-        let circuit_routed_tx = self.circuit_router.route_through_circuit(stem_routed_tx);
+        let circuit_routed_tx = self.circuit_router.route_through_circuit(delayed_tx);
         
-        // Simulate fluff phase broadcast
-        self.dandelion_router.broadcast_fluff_phase(circuit_routed_tx)
+        // Route through Dandelion++ stem phase
+        let stem_routed_tx = self.dandelion_router.route_stem_phase(circuit_routed_tx);
+        
+        // Return after fluff phase
+        self.dandelion_router.broadcast_fluff_phase(stem_routed_tx)
     }
     
-    fn create_and_propagate_transactions(&self, count: usize) -> (usize, Duration) {
-        let start_time = Instant::now();
-        let mut successful_count = 0;
+    /// Run sustained privacy test for the specified duration
+    fn run_sustained_privacy_test(&self, duration_seconds: u64, transactions_per_second: u64) -> bool {
+        let start = Instant::now();
+        let end = start + Duration::from_secs(duration_seconds);
         
-        for i in 0..count {
-            let amount = (i as u64 + 1) * 100;
-            let tx = self.create_private_transaction(amount);
-            
-            if self.propagate_transaction(tx) {
-                successful_count += 1;
+        let transaction_interval = Duration::from_nanos(1_000_000_000 / transactions_per_second);
+        let mut last_tx_time = Instant::now();
+        
+        let mut success = true;
+        
+        while Instant::now() < end {
+            // Check if it's time to send a new transaction
+            if Instant::now() - last_tx_time >= transaction_interval {
+                // Create and propagate a transaction
+                let amount = (Instant::now() - start).as_secs() * 100;
+                let tx = self.create_transaction(amount);
+                
+                // Propagate transaction
+                let result = self.propagate_transaction(tx);
+                
+                // Check if propagation was successful
+                success = success && result.has_sender_privacy_features() && result.has_receiver_privacy_features();
+                
+                // Update last transaction time
+                last_tx_time = Instant::now();
             }
+            
+            // Sleep a bit to avoid busy-waiting
+            thread::sleep(Duration::from_millis(10));
         }
         
-        let elapsed = start_time.elapsed();
-        (successful_count, elapsed)
+        success
     }
     
-    fn create_and_propagate_transactions_concurrent(&self, count: usize, threads: usize) -> (usize, Duration) {
-        let start_time = Instant::now();
-        let successful_count = Arc::new(Mutex::new(0));
-        
-        let transactions_per_thread = count / threads;
-        let mut handles = vec![];
-        
-        for thread_id in 0..threads {
-            let successful_count_clone = Arc::clone(&successful_count);
-            let test_clone = self.clone();
-            
-            let handle = thread::spawn(move || {
-                let start = thread_id * transactions_per_thread;
-                let end = start + transactions_per_thread;
-                
-                let mut thread_successful = 0;
-                
-                for i in start..end {
-                    let amount = (i as u64 + 1) * 100;
-                    let tx = test_clone.create_private_transaction(amount);
-                    
-                    if test_clone.propagate_transaction(tx) {
-                        thread_successful += 1;
-                    }
-                }
-                
-                let mut total_successful = successful_count_clone.lock().unwrap();
-                *total_successful += thread_successful;
-            });
-            
-            handles.push(handle);
-        }
-        
-        for handle in handles {
-            handle.join().unwrap();
-        }
-        
-        let elapsed = start_time.elapsed();
-        let final_count = *successful_count.lock().unwrap();
-        
-        (final_count, elapsed)
-    }
-    
-    // Add method to get keypair
-    pub fn get_keypair(&self) -> JubjubKeypair {
-        // This is a stub implementation for testing
-        JubjubKeypair::generate()
-    }
-}
-
-// Implement Clone for LongRunningTest to support concurrent testing
-impl Clone for LongRunningTest {
+    /// Clone the current test with same settings
     fn clone(&self) -> Self {
-        let privacy_config = self.privacy_config.clone();
+        let mut new_config = PrivacySettingsRegistry::new();
+        new_config.set_privacy_level(self.privacy_config.get_privacy_level());
         
-        let dandelion_router = DandelionRouter::new(
-            privacy_config.get_dandelion_config().clone(),
-        );
-        
-        let circuit_router = CircuitRouter::new(
-            privacy_config.get_circuit_config().clone(),
-        );
-        
-        let timing_obfuscator = TimingObfuscator::new(
-            privacy_config.get_timing_config().clone(),
-        );
-        
-        Self {
-            privacy_config,
-            dandelion_router,
-            circuit_router,
-            timing_obfuscator,
-        }
-    }
-}
-
-// Add implementation for the TimingObfuscator method
-impl TimingObfuscator {
-    pub fn apply_delay(&self, tx: Transaction) -> Transaction {
-        // This is a stub implementation that just returns the transaction
-        // without modifications
-        tx
-    }
-}
-
-// Add implementation for the DandelionRouter methods
-impl DandelionRouter {
-    pub fn route_stem_phase(&self, tx: Transaction) -> Transaction {
-        // This is a stub implementation that just returns the transaction
-        // without modifications
-        tx
-    }
-    
-    pub fn broadcast_fluff_phase(&self, tx: Transaction) -> Transaction {
-        // This is a stub implementation that just returns the transaction
-        // without modifications
-        tx
-    }
-}
-
-// Add implementation for the CircuitRouter method
-impl CircuitRouter {
-    pub fn route_through_circuit(&self, tx: Transaction) -> Transaction {
-        // This is a stub implementation that just returns the transaction
-        // without modifications
-        tx
-    }
-}
-
-// Add implementation for FingerprintingProtection method
-impl FingerprintingProtection {
-    pub fn protect_transaction(&self, tx: Transaction) -> Transaction {
-        // This is a stub implementation that just returns the transaction
-        // without modifications
-        tx
+        Self::new(new_config.get_privacy_level())
     }
 }
 
@@ -226,176 +141,157 @@ mod tests {
     use super::*;
     
     #[test]
-    #[ignore] // Long-running test, run explicitly
-    fn test_many_transactions_sequential() {
-        let test = LongRunningTest::new(PrivacyLevel::Medium);
-        
-        // Create and propagate 100 transactions
-        let (successful_count, elapsed) = test.create_and_propagate_transactions(100);
-        
-        // Verify all transactions were successful
-        assert_eq!(successful_count, 100);
-        
-        // Log performance metrics
-        println!("Sequential processing of 100 transactions took: {:?}", elapsed);
-        println!("Average time per transaction: {:?}", elapsed / 100);
-    }
-    
-    #[test]
-    #[ignore] // Long-running test, run explicitly
-    fn test_many_transactions_concurrent() {
-        let test = LongRunningTest::new(PrivacyLevel::Medium);
-        
-        // Create and propagate 100 transactions using 4 threads
-        let (successful_count, elapsed) = test.create_and_propagate_transactions_concurrent(100, 4);
-        
-        // Verify all transactions were successful
-        assert_eq!(successful_count, 100);
-        
-        // Log performance metrics
-        println!("Concurrent processing of 100 transactions took: {:?}", elapsed);
-        println!("Average time per transaction: {:?}", elapsed / 100);
-    }
-    
-    #[test]
-    #[ignore] // Long-running test, run explicitly
-    fn test_privacy_level_performance_comparison() {
-        // Test with Low privacy level
-        let low_test = LongRunningTest::new(PrivacyLevel::Standard);
-        let (low_count, low_elapsed) = low_test.create_and_propagate_transactions(50);
-        
-        // Test with Medium privacy level
-        let medium_test = LongRunningTest::new(PrivacyLevel::Medium);
-        let (medium_count, medium_elapsed) = medium_test.create_and_propagate_transactions(50);
-        
-        // Test with High privacy level
-        let high_test = LongRunningTest::new(PrivacyLevel::High);
-        let (high_count, high_elapsed) = high_test.create_and_propagate_transactions(50);
-        
-        // Verify all transactions were successful
-        assert_eq!(low_count, 50);
-        assert_eq!(medium_count, 50);
-        assert_eq!(high_count, 50);
-        
-        // Log performance metrics
-        println!("Low privacy level: {:?} for 50 transactions", low_elapsed);
-        println!("Medium privacy level: {:?} for 50 transactions", medium_elapsed);
-        println!("High privacy level: {:?} for 50 transactions", high_elapsed);
-        
-        // Calculate performance impact of privacy levels
-        let medium_overhead = (medium_elapsed.as_millis() as f64 / low_elapsed.as_millis() as f64) - 1.0;
-        let high_overhead = (high_elapsed.as_millis() as f64 / low_elapsed.as_millis() as f64) - 1.0;
-        
-        println!("Medium privacy overhead: {:.2}%", medium_overhead * 100.0);
-        println!("High privacy overhead: {:.2}%", high_overhead * 100.0);
-    }
-    
-    #[test]
-    #[ignore] // Long-running test, run explicitly
-    fn test_continuous_transaction_stream() {
-        let test = LongRunningTest::new(PrivacyLevel::Medium);
-        let duration = Duration::from_secs(30); // Run for 30 seconds
-        
-        let start_time = Instant::now();
-        let mut transaction_count = 0;
-        
-        // Create and propagate transactions continuously for the specified duration
-        while start_time.elapsed() < duration {
-            let tx = test.create_private_transaction(100);
-            if test.propagate_transaction(tx) {
-                transaction_count += 1;
-            }
-            
-            // Small delay to prevent overwhelming the system
-            thread::sleep(Duration::from_millis(50));
-        }
-        
-        let elapsed = start_time.elapsed();
-        let transactions_per_second = transaction_count as f64 / elapsed.as_secs_f64();
-        
-        println!("Processed {} transactions in {:?}", transaction_count, elapsed);
-        println!("Transactions per second: {:.2}", transactions_per_second);
-        
-        // Verify we processed a reasonable number of transactions
-        assert!(transaction_count > 0);
-    }
-    
-    #[test]
-    #[ignore] // Long-running test, run explicitly
-    fn test_view_key_performance_with_many_transactions() {
-        let test = LongRunningTest::new(PrivacyLevel::Medium);
-        let transaction_count = 100;
-        
-        // Create transactions
-        let mut transactions = Vec::with_capacity(transaction_count);
-        let mut view_keys = Vec::with_capacity(transaction_count);
-        
-        for i in 0..transaction_count {
-            let amount = (i as u64 + 1) * 100;
-            let tx = test.create_private_transaction(amount);
-            let view_key = ViewKey::new(&test.get_keypair());
-            
-            transactions.push(tx);
-            view_keys.push(view_key);
-        }
-        
-        // Measure view key decryption performance
-        let start_time = Instant::now();
-        
-        for i in 0..transaction_count {
-            let decrypted_amount = view_keys[i].decrypt_amount(&transactions[i]);
-            assert_eq!(decrypted_amount, (i as u64 + 1) * 100);
-        }
-        
-        let elapsed = start_time.elapsed();
-        
-        println!("Decrypted {} transactions in {:?}", transaction_count, elapsed);
-        println!("Average decryption time: {:?}", elapsed / transaction_count as u32);
-    }
-    
-    #[test]
-    #[ignore] // Long-running test, run explicitly
-    fn test_stealth_address_scanning_performance() {
+    fn test_sustained_transaction_privacy() {
+        // Create test instance with high privacy level
         let test = LongRunningTest::new(PrivacyLevel::High);
-        let transaction_count = 100;
         
-        // Create stealth address
-        let stealth_address = StealthAddress::generate();
+        // Run sustained privacy test for 5 seconds at 10 transactions per second
+        let success = test.run_sustained_privacy_test(5, 10);
         
-        // Create transactions, with every 5th transaction sent to the stealth address
-        let mut transactions = Vec::with_capacity(transaction_count);
-        let mut expected_matches = Vec::with_capacity(transaction_count / 5);
+        // Verify all transactions maintained privacy
+        assert!(success);
+    }
+    
+    #[test]
+    fn test_privacy_with_changing_volume() {
+        // Create test instance with medium privacy level
+        let test = LongRunningTest::new(PrivacyLevel::Medium);
         
-        for i in 0..transaction_count {
-            let amount = (i as u64 + 1) * 100;
-            let mut tx = test.create_private_transaction(amount);
-            
-            if i % 5 == 0 {
-                // Set stealth address as recipient for every 5th transaction
-                tx.set_stealth_recipient(stealth_address.clone());
-                expected_matches.push(i);
+        // Test with different transaction volumes
+        let low_volume_success = test.run_sustained_privacy_test(2, 1);
+        let medium_volume_success = test.run_sustained_privacy_test(2, 5);
+        let high_volume_success = test.run_sustained_privacy_test(2, 10);
+        
+        // Verify all volume levels maintained privacy
+        assert!(low_volume_success);
+        assert!(medium_volume_success);
+        assert!(high_volume_success);
+    }
+    
+    #[test]
+    fn test_privacy_with_multiple_instances() {
+        // Create three test instances with different privacy levels
+        let test1 = LongRunningTest::new(PrivacyLevel::Standard);
+        let test2 = LongRunningTest::new(PrivacyLevel::Medium);
+        let test3 = LongRunningTest::new(PrivacyLevel::High);
+        
+        // Create threads for each test instance
+        let handle1 = thread::spawn(move || {
+            test1.run_sustained_privacy_test(3, 5)
+        });
+        
+        let handle2 = thread::spawn(move || {
+            test2.run_sustained_privacy_test(3, 5)
+        });
+        
+        let handle3 = thread::spawn(move || {
+            test3.run_sustained_privacy_test(3, 5)
+        });
+        
+        // Wait for all threads to complete
+        let result1 = handle1.join().unwrap();
+        let result2 = handle2.join().unwrap();
+        let result3 = handle3.join().unwrap();
+        
+        // Verify all instances maintained privacy
+        assert!(result1);
+        assert!(result2);
+        assert!(result3);
+    }
+    
+    #[test]
+    fn test_sequential_transaction_batches() {
+        // Create test instance with high privacy level
+        let test = LongRunningTest::new(PrivacyLevel::High);
+        
+        // Process multiple batches of transactions
+        for i in 0..5 {
+            // Create and propagate a batch of transactions
+            for j in 0..5 {
+                let amount = (i * 100 + j * 10) as u64;
+                let tx = test.create_transaction(amount);
+                let result = test.propagate_transaction(tx);
+                
+                // Verify each transaction maintained privacy
+                assert!(result.has_sender_privacy_features());
+                assert!(result.has_receiver_privacy_features());
+                assert!(result.has_amount_commitment());
+                assert!(result.has_range_proof());
             }
             
-            transactions.push(tx);
+            // Sleep between batches
+            thread::sleep(Duration::from_millis(100));
+        }
+    }
+    
+    #[test]
+    fn test_privacy_with_stealth_addresses() {
+        // Create test instance with high privacy level
+        let test = LongRunningTest::new(PrivacyLevel::High);
+        
+        // Create multiple stealth addresses
+        let addresses: Vec<StealthAddress> = (0..10)
+            .map(|_| StealthAddress::new())
+            .collect();
+        
+        // Create and propagate transactions to each address
+        for (i, address) in addresses.iter().enumerate() {
+            // Create transaction with amount
+            let mut tx = test.create_transaction((i as u64 + 1) * 100);
+            
+            // Set stealth address as recipient
+            tx.set_stealth_recipient(address.clone());
+            
+            // Propagate transaction
+            let result = test.propagate_transaction(tx);
+            
+            // Verify transaction maintained privacy
+            assert!(result.has_sender_privacy_features());
+            assert!(result.has_receiver_privacy_features());
+            
+            // Verify stealth address can find and decrypt the transaction
+            let found = address.scan_transaction(&result).is_some();
+            assert!(found);
+            
+            // Verify amount can be decrypted
+            let decrypted_amount = address.decrypt_amount(&result);
+            assert_eq!(decrypted_amount, Some((i as u64 + 1) * 100));
+        }
+    }
+    
+    #[test]
+    fn test_view_key_with_multiple_transactions() {
+        // Create test instance
+        let test = LongRunningTest::new(PrivacyLevel::High);
+        
+        // Create a stealth address and view key
+        let stealth_address = StealthAddress::new();
+        
+        // Generate transactions
+        let mut transactions = Vec::new();
+        
+        // Create and propagate multiple transactions
+        for i in 0..5 {
+            // Create transaction with amount
+            let mut tx = test.create_transaction((i as u64 + 1) * 500);
+            
+            // Set stealth address as recipient
+            tx.set_stealth_recipient(stealth_address.clone());
+            
+            // Propagate transaction
+            let result = test.propagate_transaction(tx);
+            
+            // Store transaction
+            transactions.push(result);
         }
         
-        // Measure stealth address scanning performance
-        let start_time = Instant::now();
-        let mut found_matches = Vec::new();
-        
-        for i in 0..transaction_count {
-            if stealth_address.scan_for_transaction(&transactions[i]) {
-                found_matches.push(i);
-            }
+        // Verify stealth address can find and decrypt all transactions
+        for (i, tx) in transactions.iter().enumerate() {
+            let found = stealth_address.scan_transaction(tx).is_some();
+            assert!(found);
+            
+            let decrypted_amount = stealth_address.decrypt_amount(tx);
+            assert_eq!(decrypted_amount, Some((i as u64 + 1) * 500));
         }
-        
-        let elapsed = start_time.elapsed();
-        
-        // Verify correct transactions were found
-        assert_eq!(found_matches, expected_matches);
-        
-        println!("Scanned {} transactions in {:?}", transaction_count, elapsed);
-        println!("Found {} matching transactions", found_matches.len());
-        println!("Average scanning time: {:?}", elapsed / transaction_count as u32);
     }
 }

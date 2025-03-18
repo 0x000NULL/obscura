@@ -576,6 +576,10 @@ pub struct MetadataProtection {
     pub minimizer: MetadataMinimizer,
     /// Encrypted storage provider
     pub storage: EncryptedStorageProvider,
+    /// Broadcast metadata cleaner
+    pub broadcast_cleaner: BroadcastMetadataCleaner,
+    /// Zero-knowledge state update provider
+    pub zk_provider: ZkStateUpdateProvider,
 }
 
 impl MetadataProtection {
@@ -585,6 +589,8 @@ impl MetadataProtection {
             forward_secrecy: ForwardSecrecyProvider::new(),
             minimizer: MetadataMinimizer::new(),
             storage: EncryptedStorageProvider::new(),
+            broadcast_cleaner: BroadcastMetadataCleaner::new(),
+            zk_provider: ZkStateUpdateProvider::new(),
         }
     }
 }

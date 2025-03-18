@@ -26,14 +26,8 @@ use crate::networking::Node;
 use std::collections::HashMap;
 use std::time::Duration;
 use log::{debug, info, warn};
-
-use crate::config::presets::PrivacyLevel;
-use crate::config::privacy_registry;
-use crate::config::privacy_registry::PrivacySettingsRegistry;
-use crate::config::privacy_registry::ComponentType;
-
-// Privacy config integration
-use crate::networking::privacy_config_integration::ComponentType;
+// Import privacy configuration
+use crate::networking::privacy_config_integration::{PrivacySettingsRegistry, ComponentType, PrivacyLevel};
 
 /// Defines a standard interface for all privacy routing components
 pub trait PrivacyRouter {
@@ -126,17 +120,24 @@ impl NetworkPrivacyFactory {
     
     /// Integrate with a registry
     pub fn integrate_with_registry(registry: Arc<PrivacySettingsRegistry>) -> Arc<Self> {
-        // Create a new factory with the registry
-        let factory = Self::new(registry);
+        let factory = NetworkPrivacyFactory::new(registry.clone());
+        let manager = factory.create_manager();
         
-        // Return the factory wrapped in an Arc
+        let privacy_level = registry.get_setting_for_component(
+            ComponentType::Network,
+            "privacy_level", 
+            PrivacyLevel::Medium
+        );
+        
+        manager.set_privacy_level(privacy_level);
+        
         Arc::new(factory)
     }
 }
 
 impl NetworkPrivacyManager {
     /// Create a new NetworkPrivacyManager
-    pub fn new(config_registry: privacy_registry::PrivacySettingsRegistry) -> Self {
+    pub fn new(config_registry: PrivacySettingsRegistry) -> Self {
         // Wrap the config_registry in an Arc
         let config_registry = Arc::new(config_registry);
         

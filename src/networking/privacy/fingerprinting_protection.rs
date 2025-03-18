@@ -9,9 +9,8 @@ use rand::distributions::{Distribution, Uniform};
 use std::net::IpAddr;
 
 use crate::blockchain::Transaction;
-use crate::config::presets::PrivacyLevel;
-use crate::config::privacy_registry;
-use crate::config::privacy_registry::PrivacySettingsRegistry;
+use crate::networking::privacy::PrivacyLevel;
+use crate::networking::privacy_config_integration::PrivacySettingsRegistry;
 
 // Constants for fingerprinting protection
 const USER_AGENT_ROTATION_INTERVAL_HOURS: u64 = 24;
@@ -391,6 +390,7 @@ impl FingerprintingProtection {
                 };
                 
                 // Use i32 to safely handle negative values, then convert back to usize
+                let mut rng = thread_rng();
                 let variation = rng.gen_range(-variance..=variance);
                 let adjusted = base_connections as i32 + variation;
                 adjusted.max(MIN_PRIVACY_CONNECTIONS as i32) as usize
@@ -524,7 +524,7 @@ impl FingerprintingProtection {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::privacy_registry::PrivacySettingsRegistry;
+    use crate::networking::privacy_config_integration::PrivacySettingsRegistry;
     
     #[test]
     fn test_user_agent_rotation() {
