@@ -1,4 +1,4 @@
-use crate::blockchain::{Block, Transaction};
+use crate::blockchain::{Block, Transaction, TransactionInput, TransactionOutput, OutPoint};
 use crate::consensus::difficulty::TARGET_BLOCK_TIME;
 use crate::crypto::bls12_381::{BlsPublicKey, BlsSignature, verify_signature};
 use log::{debug, error, warn};
@@ -613,6 +613,8 @@ mod tests {
                     TransactionOutput {
                         value: 100 + i as u64,
                         public_key_script: vec![i as u8, (i + 1) as u8, (i + 2) as u8],
+                        commitment: None,
+                        range_proof: None,
                     },
                 ],
                 lock_time: 0,
@@ -623,6 +625,7 @@ mod tests {
                 amount_commitments: None,
                 range_proofs: None,
                 metadata: std::collections::HashMap::new(),
+                salt: None,
             })
             .collect();
         assert_eq!(manager.batch_transactions(small_batch).len(), 1);
@@ -635,6 +638,8 @@ mod tests {
                     TransactionOutput {
                         value: 100 + i as u64,
                         public_key_script: vec![i as u8, (i + 1) as u8, (i + 2) as u8],
+                        commitment: None,
+                        range_proof: None,
                     },
                 ],
                 lock_time: 0,
@@ -645,6 +650,7 @@ mod tests {
                 amount_commitments: None,
                 range_proofs: None,
                 metadata: std::collections::HashMap::new(),
+                salt: None,
             })
             .collect();
         assert_eq!(manager.batch_transactions(large_batch).len(), 3);
@@ -748,12 +754,23 @@ mod tests {
         let mut transactions = Vec::new();
         for i in 0..10 {
             let tx = Transaction {
-                inputs: Vec::new(),
+                inputs: vec![
+                    TransactionInput {
+                        previous_output: OutPoint {
+                            transaction_hash: [0; 32],
+                            index: 0,
+                        },
+                        signature_script: vec![1, 2, 3],
+                        sequence: 0,
+                    }
+                ],
                 outputs: vec![
                     TransactionOutput {
                         value: 100 + i as u64,
                         public_key_script: vec![i as u8, (i + 1) as u8, (i + 2) as u8],
-                    },
+                        commitment: None,
+                        range_proof: None,
+                    }
                 ],
                 lock_time: 0,
                 fee_adjustments: None,
@@ -763,6 +780,7 @@ mod tests {
                 amount_commitments: None,
                 range_proofs: None,
                 metadata: std::collections::HashMap::new(),
+                salt: None,
             };
             transactions.push(tx);
         }
@@ -848,12 +866,23 @@ mod tests {
 
         // Test invalid transaction index
         let tx = Transaction {
-            inputs: Vec::new(),
+            inputs: vec![
+                TransactionInput {
+                    previous_output: OutPoint {
+                        transaction_hash: [0; 32],
+                        index: 0,
+                    },
+                    signature_script: vec![1, 2, 3],
+                    sequence: 0,
+                }
+            ],
             outputs: vec![
                 TransactionOutput {
                     value: 100,
-                    public_key_script: vec![1, 2, 3],
-                },
+                    public_key_script: vec![4, 5, 6],
+                    commitment: None,
+                    range_proof: None,
+                }
             ],
             lock_time: 0,
             fee_adjustments: None,
@@ -863,6 +892,7 @@ mod tests {
             amount_commitments: None,
             range_proofs: None,
             metadata: std::collections::HashMap::new(),
+            salt: None,
         };
         let txs = vec![tx];
         assert!(manager.create_merkle_proof(&txs, 1).is_empty()); // Index out of bounds

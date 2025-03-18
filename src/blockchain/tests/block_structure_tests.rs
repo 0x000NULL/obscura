@@ -48,6 +48,7 @@ fn test_privacy_merkle_root() {
             amount_commitments: None,
             range_proofs: None,
             metadata: std::collections::HashMap::new(),
+            salt: None,
         };
         block.transactions.push(tx);
     }
@@ -102,6 +103,7 @@ fn test_merkle_proof_verification() {
             amount_commitments: None,
             range_proofs: None,
             metadata: std::collections::HashMap::new(),
+            salt: None,
         };
         transactions.push(tx);
     }

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::config::privacy_registry::{ComponentType, PrivacySettingsRegistry};
-use crate::config::validation::{ValidationRule, ValidationResult, ConfigValidationError};
+use crate::config::validation::{ValidationRule, ValidationResult, ConfigValidationError, ConfigValidator};
 use crate::config::presets::{PrivacyLevel, PrivacyPreset};
 
 struct TestValidator {}
@@ -26,9 +26,16 @@ impl ValidationRule for TestValidator {
     }
 }
 
+// Create a custom ConfigValidator that uses our TestValidator
+fn create_test_validator() -> Arc<ConfigValidator> {
+    let mut validator = ConfigValidator::new();
+    validator.add_rule(Box::new(TestValidator {}));
+    Arc::new(validator)
+}
+
 #[test]
 fn test_preset_configurations() {
-    let validator = Arc::new(TestValidator {});
+    let validator = create_test_validator();
     let registry = PrivacySettingsRegistry::new_with_preset(
         PrivacyPreset::standard(),
         validator,
@@ -59,7 +66,7 @@ fn test_preset_configurations() {
 
 #[test]
 fn test_apply_privacy_level() {
-    let validator = Arc::new(TestValidator {});
+    let validator = create_test_validator();
     let registry = PrivacySettingsRegistry::new_with_preset(
         PrivacyPreset::standard(),
         validator,
@@ -83,7 +90,7 @@ fn test_apply_privacy_level() {
 
 #[test]
 fn test_component_specific_configs() {
-    let validator = Arc::new(TestValidator {});
+    let validator = create_test_validator();
     let registry = PrivacySettingsRegistry::new_with_preset(
         PrivacyPreset::standard(),
         validator,
@@ -96,9 +103,15 @@ fn test_component_specific_configs() {
         "test_component_specific_configs"
     );
     
-    // Test getting component configs
-    let network_config = registry.get_component_config(ComponentType::Network);
-    let wallet_config = registry.get_component_config(ComponentType::Wallet);
+    // Test getting component-specific configurations
+    let network_config = registry.get_component_config::<HashMap<String, String>>(
+        ComponentType::Network,
+        "default"
+    );
+    let wallet_config = registry.get_component_config::<HashMap<String, String>>(
+        ComponentType::Wallet,
+        "default"
+    );
     
     assert!(network_config.is_some());
     assert!(wallet_config.is_some());
@@ -133,7 +146,7 @@ fn test_component_specific_configs() {
 
 #[test]
 fn test_update_settings() {
-    let validator = Arc::new(TestValidator {});
+    let validator = create_test_validator();
     let registry = PrivacySettingsRegistry::new_with_preset(
         PrivacyPreset::standard(),
         validator,

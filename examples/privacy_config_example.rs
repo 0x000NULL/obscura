@@ -23,7 +23,7 @@ impl PrivacyAwareComponent {
 }
 
 impl ConfigUpdateListener for PrivacyAwareComponent {
-    fn on_config_update(&self, config: &PrivacyPreset, changes: &[ConfigChangeEvent]) {
+    fn on_config_update(&self, changes: &[ConfigChangeEvent]) {
         println!("{}: Received {} configuration changes", self.name, changes.len());
         
         // Print details about the changes
@@ -32,19 +32,8 @@ impl ConfigUpdateListener for PrivacyAwareComponent {
                      change.setting_path, change.old_value, change.new_value);
         }
         
-        // Print current privacy status
-        println!("Current privacy level: {}", config.level);
-        println!("Tor enabled: {}", config.use_tor);
-        println!("Confidential transactions: {}", config.use_confidential_transactions);
-        println!("Stealth addresses: {}", config.use_stealth_addresses);
-    }
-    
-    fn name(&self) -> &str {
-        &self.name
-    }
-    
-    fn component_type(&self) -> ComponentType {
-        ComponentType::Other
+        // We can't access the config directly from here anymore
+        println!("Configuration has been updated");
     }
 }
 

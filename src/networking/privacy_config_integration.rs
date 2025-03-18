@@ -1,6 +1,14 @@
 use std::sync::{Arc, RwLock};
 use log::{debug, info};
 use std::fmt;
+use crate::config::presets;
+use crate::config::privacy_registry as config_registry;
+use crate::networking::privacy::{
+    DandelionRouter as NetworkDandelionRouter,
+    CircuitRouter as NetworkCircuitRouter,
+    TimingObfuscator as NetworkTimingObfuscator,
+    NetworkPrivacyLevel
+};
 
 // Local definitions to avoid import issues
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -9,6 +17,30 @@ pub enum PrivacyLevel {
     Medium,
     High,
     Custom
+}
+
+// Implement conversion from presets::PrivacyLevel to PrivacyLevel
+impl From<presets::PrivacyLevel> for PrivacyLevel {
+    fn from(level: presets::PrivacyLevel) -> Self {
+        match level {
+            presets::PrivacyLevel::Standard => PrivacyLevel::Standard,
+            presets::PrivacyLevel::Medium => PrivacyLevel::Medium,
+            presets::PrivacyLevel::High => PrivacyLevel::High,
+            presets::PrivacyLevel::Custom => PrivacyLevel::Custom,
+        }
+    }
+}
+
+// Implement conversion from PrivacyLevel to presets::PrivacyLevel
+impl From<PrivacyLevel> for presets::PrivacyLevel {
+    fn from(level: PrivacyLevel) -> Self {
+        match level {
+            PrivacyLevel::Standard => presets::PrivacyLevel::Standard,
+            PrivacyLevel::Medium => presets::PrivacyLevel::Medium,
+            PrivacyLevel::High => presets::PrivacyLevel::High,
+            PrivacyLevel::Custom => presets::PrivacyLevel::Custom,
+        }
+    }
 }
 
 // Implement Display for PrivacyLevel
@@ -33,7 +65,33 @@ pub struct PrivacyPreset {
     pub use_dandelion: bool,
     pub use_circuit_routing: bool,
     pub circuit_min_hops: usize,
-    pub circuit_max_hops: usize
+    pub circuit_max_hops: usize,
+    pub transaction_obfuscation_enabled: bool,
+    pub use_stealth_addresses: bool,
+    pub use_confidential_transactions: bool,
+    pub use_range_proofs: bool,
+    pub metadata_stripping: bool
+}
+
+impl PrivacyPreset {
+    /// Create a high privacy preset
+    pub fn high() -> Self {
+        Self {
+            level: PrivacyLevel::High,
+            use_tor: true,
+            tor_stream_isolation: true,
+            use_i2p: true,
+            use_dandelion: true,
+            use_circuit_routing: true,
+            circuit_min_hops: 3,
+            circuit_max_hops: 7,
+            transaction_obfuscation_enabled: true,
+            use_stealth_addresses: true,
+            use_confidential_transactions: true,
+            use_range_proofs: true,
+            metadata_stripping: true
+        }
+    }
 }
 
 // Component types for the privacy registry
@@ -65,6 +123,20 @@ pub struct PrivacySettingsRegistry {
 }
 
 impl PrivacySettingsRegistry {
+    /// Create a new PrivacySettingsRegistry
+    pub fn new() -> Self {
+        Self {
+            listeners: RwLock::new(Vec::new())
+        }
+    }
+    
+    /// Create a new registry with a preset
+    pub fn with_preset(preset: PrivacyPreset) -> Self {
+        // In a real implementation, we would store the preset
+        // For now, just create a new registry
+        Self::new()
+    }
+    
     // Get current config
     pub fn get_config(&self) -> PrivacyPreset {
         PrivacyPreset {
@@ -75,7 +147,12 @@ impl PrivacySettingsRegistry {
             use_dandelion: true,
             use_circuit_routing: false,
             circuit_min_hops: 2,
-            circuit_max_hops: 5
+            circuit_max_hops: 5,
+            transaction_obfuscation_enabled: false,
+            use_stealth_addresses: false,
+            use_confidential_transactions: false,
+            use_range_proofs: false,
+            metadata_stripping: false
         }
     }
     
@@ -83,6 +160,17 @@ impl PrivacySettingsRegistry {
     pub fn register_listener(&self, listener: Arc<dyn ConfigUpdateListener>) {
         let mut listeners = self.listeners.write().unwrap();
         listeners.push(listener);
+    }
+    
+    pub fn get_setting_for_component(&self, _component_type: ComponentType, _setting_name: &str, default_value: PrivacyLevel) -> PrivacyLevel {
+        // For now, just return the default value
+        // In a real implementation, this would look up the setting in a configuration store
+        default_value
+    }
+
+    /// Convert from config_registry::PrivacySettingsRegistry
+    pub fn from_config_registry(_registry: Arc<config_registry::PrivacySettingsRegistry>) -> Arc<Self> {
+        Arc::new(Self::new())
     }
 }
 

@@ -2,6 +2,7 @@ use rand::{thread_rng, Rng};
 use sha2::{Digest, Sha256};
 use std::io::{self, Read, Write};
 use std::time::{Duration, Instant};
+use std::collections::HashMap;
 
 // Constants for message framing and padding
 const MAGIC_BYTES: [u8; 4] = [0x4f, 0x42, 0x58, 0x00]; // "OBX\0"
@@ -113,6 +114,10 @@ pub struct Message {
     // Protocol morphing fields
     pub is_morphed: bool,
     pub morph_type: Option<u8>, // Protocol type (1=HTTP, 2=DNS, 3=HTTPS/TLS, 4=SSH)
+    // Additional field for metadata needed by tests
+    pub metadata: Option<HashMap<String, String>>,
+    // Signature for authenticated messages
+    pub signature: Option<Vec<u8>>,
 }
 
 impl Message {
@@ -124,6 +129,8 @@ impl Message {
             padding_size: 0,
             is_morphed: false,
             morph_type: None,
+            metadata: None,
+            signature: None,
         }
     }
 
@@ -260,6 +267,8 @@ impl Message {
             padding_size: 0,
             is_morphed: false,
             morph_type: None,
+            metadata: None,
+            signature: None,
         })
     }
 

@@ -262,17 +262,15 @@ impl ProtocolMorphingService {
     
     /// Apply protocol morphing to a message
     pub fn apply_morphing(&mut self, message: Message) -> Message {
-        // Check and potentially rotate the protocol
-        self.check_and_rotate_protocol();
-        
-        // Skip if morphing is disabled
         if !self.config.protocol_morphing_enabled {
             return message;
         }
         
+        // Check if we need to rotate protocols
+        self.check_and_rotate_protocol();
+        
         // Apply protocol-specific morphing
         match self.current_morph_type {
-            ProtocolMorphType::None => message,
             ProtocolMorphType::Http => self.morph_to_http(message),
             ProtocolMorphType::Dns => self.morph_to_dns(message),
             ProtocolMorphType::Https => self.morph_to_https(message),
@@ -282,12 +280,15 @@ impl ProtocolMorphingService {
             ProtocolMorphType::Mqtt => self.morph_to_mqtt(message),
             ProtocolMorphType::Rtmp => self.morph_to_rtmp(message),
             ProtocolMorphType::Random => {
-                // This should never happen as Random gets converted to a specific type
-                // during initialization, but handle it anyway
-                let specific_type = Self::select_random_protocol(&mut self.rng);
-                self.current_morph_type = specific_type;
+                // Select a random protocol type each time
+                let morph_type = Self::select_random_protocol(&mut self.rng);
+                self.current_morph_type = morph_type;
                 self.apply_morphing(message)
-            }
+            },
+            ProtocolMorphType::None => {
+                // No morphing, return the original message
+                message
+            },
         }
     }
     
@@ -1270,6 +1271,8 @@ mod tests {
             padding_size: 0,
             is_morphed: false,
             morph_type: None,
+            metadata: None,
+            signature: None,
         };
         
         // Apply HTTP morphing
@@ -1315,6 +1318,8 @@ mod tests {
             padding_size: 0,
             is_morphed: false,
             morph_type: None,
+            metadata: None,
+            signature: None,
         };
         
         // Apply DNS morphing
@@ -1377,10 +1382,19 @@ mod tests {
             padding_size: 0,
             is_morphed: false,
             morph_type: None,
+            metadata: None,
+            signature: None,
         };
         
         // Apply morphing (should do nothing since it's disabled)
         let morphed = service.apply_morphing(message);
+        
+        assert!(!morphed.is_morphed);
+        assert_eq!(morphed.morph_type, None);
+        assert_eq!(morphed.payload, original_payload);
+    }
+} 
+} 
         
         assert!(!morphed.is_morphed);
         assert_eq!(morphed.morph_type, None);

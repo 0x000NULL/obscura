@@ -16,6 +16,8 @@ fn test_wallet_balance_calculation() {
     tx.outputs.push(crate::blockchain::TransactionOutput {
         value: 50,
         public_key_script: vec![],
+        commitment: None,
+        range_proof: None,
     });
 
     // Create a proper UTXO set
@@ -41,12 +43,16 @@ fn test_utxo_selection() {
     // Create two UTXOs with different values
     let utxo1 = crate::blockchain::TransactionOutput {
         value: 100,
-        public_key_script: public_key_bytes.clone(),
+        public_key_script: vec![1, 2, 3],
+        commitment: None,
+        range_proof: None,
     };
 
     let utxo2 = crate::blockchain::TransactionOutput {
-        value: 50,
-        public_key_script: public_key_bytes.clone(),
+        value: 200,
+        public_key_script: vec![4, 5, 6],
+        commitment: None,
+        range_proof: None,
     };
 
     // Create outpoints for the UTXOs
@@ -163,6 +169,8 @@ fn test_pending_transactions() {
     let output = crate::blockchain::TransactionOutput {
         value: 100,
         public_key_script: vec![1u8; 32],
+        commitment: None,
+        range_proof: None,
     };
 
     // Add UTXO to wallet directly
@@ -198,14 +206,18 @@ fn test_pending_transactions() {
     let recipient_bytes = crate::wallet::jubjub_point_to_bytes(&recipient_keypair.public);
     let payment_output = crate::blockchain::TransactionOutput {
         value: 50,
-        public_key_script: recipient_bytes,
+        public_key_script: vec![1, 2, 3],
+        commitment: None,
+        range_proof: None,
     };
     tx.outputs.push(payment_output);
 
     // Add change output
     let change_output = crate::blockchain::TransactionOutput {
-        value: 50,
-        public_key_script: crate::wallet::jubjub_point_to_bytes(&keypair.public),
+        value: 40,
+        public_key_script: vec![4, 5, 6],
+        commitment: None,
+        range_proof: None,
     };
     tx.outputs.push(change_output);
 
@@ -238,6 +250,8 @@ fn test_staking_transactions() {
     let output = crate::blockchain::TransactionOutput {
         value: 1000,
         public_key_script: vec![1u8; 32],
+        commitment: None,
+        range_proof: None,
     };
 
     // Add UTXO to wallet directly
@@ -284,6 +298,8 @@ fn test_transaction_create_with_privacy() {
     let output = crate::blockchain::TransactionOutput {
         value: 1000,
         public_key_script: vec![1u8; 32],
+        commitment: None,
+        range_proof: None,
     };
 
     // Add UTXO to wallet directly
@@ -327,6 +343,8 @@ fn test_process_block() {
     tx.outputs.push(crate::blockchain::TransactionOutput {
         value: 100,
         public_key_script: pubkey_bytes.clone(),
+        commitment: None,
+        range_proof: None,
     });
 
     // Create a UTXO set and add our transaction's output to it
@@ -395,6 +413,8 @@ mod tests {
         let output = TransactionOutput {
             value: payment_amount,
             public_key_script: stealth_address_bytes.clone(),
+            commitment: None,
+            range_proof: None,
         };
         tx.outputs.push(output);
         
@@ -441,6 +461,8 @@ mod tests {
         let output = TransactionOutput {
             value: payment_amount,
             public_key_script: stealth_address_bytes.clone(),
+            commitment: None,
+            range_proof: None,
         };
         tx.outputs.push(output);
         

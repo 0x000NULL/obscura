@@ -1250,6 +1250,7 @@ mod tests {
             amount_commitments: None,
             range_proofs: None,
             metadata: std::collections::HashMap::new(),
+            salt: None,
         };
 
         for (prev_hash, index) in inputs {
@@ -1269,6 +1270,8 @@ mod tests {
             tx.outputs.push(crate::blockchain::TransactionOutput {
                 value,
                 public_key_script: vec![4, 5, 6], // Dummy pubkey script
+                commitment: None,
+                range_proof: None,
             });
         }
 

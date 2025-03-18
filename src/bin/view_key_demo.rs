@@ -97,6 +97,8 @@ fn create_test_transaction() -> Transaction {
     tx.outputs.push(TransactionOutput {
         value: 1000,
         public_key_script: vec![1, 2, 3, 4, 5], // Dummy public key script
+        range_proof: None,
+        commitment: None,
     });
     
     tx

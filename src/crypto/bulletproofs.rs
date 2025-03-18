@@ -167,319 +167,189 @@ impl fmt::Display for BulletproofsError {
 
 impl std::error::Error for BulletproofsError {}
 
-/// Represents a range proof that a value is within a specific range
-/// This implementation uses bulletproofs for efficient range proofs
+/// RangeProof stub for testing
 #[derive(Debug, Clone)]
 pub struct RangeProof {
-    /// The proof data
+    /// The actual proof data
     pub proof: Vec<u8>,
-    /// The minimum value in the range
-    pub min_value: u64,
-    /// The maximum value in the range
-    pub max_value: u64,
-    /// The number of bits in the range
+    /// Bit length of the range
     pub bits: u32,
+    /// Minimum value in the range (if non-zero)
+    pub min_value: u64,
+    /// Maximum value in the range
+    pub max_value: u64,
 }
 
 impl RangeProof {
-    /// Create a new range proof for a value with a given bit size
-    pub fn new(value: u64, bits: u32) -> Result<Self, String> {
-        // Check if the value fits within the bit size
-        if value >= (1 << bits) {
-            return Err(format!(
-                "Value {} exceeds the range for {} bits",
+    /// Create a new range proof for a value within [0, 2^bits)
+    pub fn new(value: u64, bits: u32) -> Result<Self, BulletproofsError> {
+        if bits == 0 || bits > 64 {
+            return Err(BulletproofsError::InvalidBitsize);
+        }
+        
+        let max_value = (1u64 << bits) - 1;
+        if value > max_value {
+            return Err(BulletproofsError::InvalidRange(format!(
+                "Value {} exceeds maximum allowed for {} bits",
                 value, bits
-            ));
-        }
-
-        // Create a random blinding factor
-        let mut rng = OsRng;
-        let blinding = JubjubScalar::rand(&mut rng);
-
-        // Create a transcript for the proof
-        let mut transcript = Transcript::new(b"range_proof");
-
-        // Create a commitment to the value
-        let value_scalar = JubjubScalar::from(value);
-        let commitment = PC_GENS.commit(value_scalar, blinding);
-
-        // Serialize the commitment to the transcript
-        let mut commitment_bytes = Vec::new();
-        commitment
-            .serialize_compressed(&mut commitment_bytes)
-            .expect("Failed to serialize commitment");
-
-        transcript.append_message(b"commitment", &commitment_bytes);
-
-        // Create a hash of the commitment for the proof
-        let mut hasher = Sha256::new();
-        hasher.update(&commitment_bytes);
-        let hash = hasher.finalize();
-
-        // Create a proof with a specific marker (0xDD) for compatibility with verify_range_proof_internal
-        let mut proof = vec![0xDD]; // Marker for a standard range proof
-
-        // Add the bit size (4 bytes)
-        proof.extend_from_slice(&bits.to_le_bytes());
-
-        // Add the commitment hash (32 bytes)
-        proof.extend_from_slice(&hash);
-
-        // Add the value (8 bytes)
-        proof.extend_from_slice(&value.to_le_bytes());
-
-        // Return the proof
-        Ok(RangeProof {
-            proof,
-            min_value: 0,
-            max_value: (1 << bits) - 1,
-            bits,
-        })
-    }
-
-    /// Create a new range proof for a value in [0, 2^32)
-    /// Default implementation with 32-bit range proof
-    pub fn new_with_range(value: u64, min_value: u64, max_value: u64) -> Option<Self> {
-        // Check if value is in range
-        if value < min_value || value > max_value {
-            return None;
-        }
-
-        // Special case: min_value equals max_value
-        if min_value == max_value {
-            // If value equals min_value/max_value, we can create a trivial proof
-            // We'll use 8 bits as a minimum to ensure the proof is valid
-            let bits = 8u32;
-            let mut proof_bytes = vec![0u8; 32]; // Create a special marker for this case
-            proof_bytes[0] = 0xAA; // Special marker for equal min/max
-
-            return Some(Self {
-                proof: proof_bytes,
-                min_value,
-                max_value,
-                bits,
-            });
-        }
-
-        // Calculate the number of bits needed for the range
-        let range = max_value - min_value;
-        let bits = std::cmp::max(8, (range as f64).log2().ceil() as u32);
-
-        // Adjust the value to be relative to min_value
-        let adjusted_value = value - min_value;
-
-        // Create a random blinding factor
-        let mut rng = OsRng;
-        let blinding = JubjubScalar::rand(&mut rng);
-
-        // Create a transcript for the proof
-        let mut transcript = Transcript::new(TRANSCRIPT_LABEL_RANGE_PROOF);
-
-        // Add min_value and max_value to the transcript
-        transcript.append_u64(b"min_value", min_value);
-        transcript.append_u64(b"max_value", max_value);
-
-        // Create the range proof for the adjusted value
-        let mut _proof_bytes = Vec::new();
-
-        // For edge cases, create special proofs
-        if adjusted_value == 0 {
-            _proof_bytes = vec![0u8; 32];
-            _proof_bytes[0] = 0xBB; // Special marker for zero value
-        } else if adjusted_value == range {
-            _proof_bytes = vec![0u8; 32];
-            _proof_bytes[0] = 0xCC; // Special marker for max value
-        } else {
-            // Create a real proof for the adjusted value
-            let value_scalar = JubjubScalar::from(adjusted_value);
-
-            // Create a commitment to the adjusted value
-            let commitment = PC_GENS.commit(value_scalar, blinding);
-
-            // If min_value > 0, we need to adjust the commitment for verification
-            let adjusted_commitment = if min_value > 0 {
-                // Convert min_value to scalar
-                let min_value_scalar = JubjubScalar::from(min_value);
-                let neg_min_value = -min_value_scalar;
-                let zero_blinding = JubjubScalar::zero();
-
-                // Adjust the commitment: C' = C + Commit(-min_value, 0)
-                // This effectively shifts the committed value by -min_value
-                let min_value_commitment = PC_GENS.commit(neg_min_value, zero_blinding);
-                commitment + min_value_commitment
-            } else {
-                // No adjustment needed
-                commitment
-            };
-
-            // Serialize commitment to transcript
-            let mut commitment_bytes = Vec::new();
-            adjusted_commitment
-                .serialize_compressed(&mut commitment_bytes)
-                .expect("Failed to serialize commitment");
-            transcript.append_message(b"commitment", &commitment_bytes);
-
-            // Create a dummy proof for testing purposes
-            // In a real implementation, this would be a cryptographic proof
-            _proof_bytes = vec![0u8; 64];
-            _proof_bytes[0] = 0xDD; // Regular proof marker
-
-            // Add the value and blinding factor to the proof for testing
-            let value_bytes = adjusted_value.to_le_bytes();
-            _proof_bytes[1..9].copy_from_slice(&value_bytes);
-
-            // Add a hash of the commitment to the proof
-            let mut hasher = Sha256::new();
-            hasher.update(&commitment_bytes);
-            let hash = hasher.finalize();
-            _proof_bytes[9..41].copy_from_slice(&hash);
-        }
-
-        Some(Self {
-            proof: _proof_bytes,
-            min_value,
-            max_value,
-            bits,
-        })
-    }
-
-    /// Serialize the range proof to bytes
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = Vec::new();
-
-        // Serialize the range
-        bytes.extend_from_slice(&self.min_value.to_le_bytes());
-        bytes.extend_from_slice(&self.max_value.to_le_bytes());
-
-        // Serialize the bits used
-        bytes.extend_from_slice(&self.bits.to_le_bytes());
-
-        // Serialize the compressed proof
-        let proof_len = self.proof.len() as u32;
-        bytes.extend_from_slice(&proof_len.to_le_bytes());
-        bytes.extend_from_slice(&self.proof);
-
-        bytes
-    }
-
-    /// Deserialize from bytes
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, BulletproofsError> {
-        if bytes.len() < 24 {
-            // 8 + 8 + 4 + 4 bytes minimum
-            return Err(BulletproofsError::DeserializationError(
-                "Insufficient bytes for RangeProof (minimum 24 bytes required)".to_string(),
-            ));
-        }
-
-        let min_value = u64::from_le_bytes([
-            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
-        ]);
-
-        let max_value = u64::from_le_bytes([
-            bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15],
-        ]);
-
-        let bits = u32::from_le_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]);
-
-        let proof_len = u32::from_le_bytes([bytes[20], bytes[21], bytes[22], bytes[23]]) as usize;
-
-        if bytes.len() < 24 + proof_len {
-            return Err(BulletproofsError::DeserializationError(format!(
-                "Insufficient bytes for compressed proof (expected {} bytes, got {})",
-                24 + proof_len,
-                bytes.len()
             )));
         }
-
-        // Validate the range
-        if min_value > max_value {
-            return Err(BulletproofsError::DeserializationError(format!(
-                "Invalid range: min_value ({}) > max_value ({})",
+        
+        // Create a transcript for the proof
+        let mut transcript = Transcript::new(TRANSCRIPT_LABEL_RANGE_PROOF);
+        
+        // Generate a random blinding factor
+        let mut rng = OsRng;
+        let blinding = JubjubScalar::rand(&mut rng);
+        
+        // Create the range proof
+        let (proof_bytes, _nonce) = create_range_proof(
+            value,
+            bits,
+            &blinding,
+            &BP_GENS,
+            &PC_GENS,
+            &mut transcript,
+        )?;
+        
+        Ok(Self {
+            proof: proof_bytes,
+            bits,
+            min_value: 0,
+            max_value,
+        })
+    }
+    
+    /// Create a new range proof for a value within [min_value, max_value]
+    pub fn new_with_range(value: u64, min_value: u64, max_value: u64) -> Result<Self, BulletproofsError> {
+        if min_value >= max_value {
+            return Err(BulletproofsError::InvalidRange(format!(
+                "Invalid range: min_value ({}) must be less than max_value ({})",
                 min_value, max_value
             )));
         }
-
-        // Validate the bitsize
-        if bits == 0 || bits > 64 {
-            return Err(BulletproofsError::DeserializationError(format!(
-                "Invalid bitsize: {}",
-                bits
+        
+        if value < min_value || value > max_value {
+            return Err(BulletproofsError::InvalidRange(format!(
+                "Value {} is outside the specified range [{}, {}]",
+                value, min_value, max_value
             )));
         }
-
-        let proof = bytes[24..24 + proof_len].to_vec();
-
-        Ok(RangeProof {
-            proof,
+        
+        // Calculate the number of bits needed to represent the range
+        let range_size = max_value - min_value;
+        let bits = 64 - range_size.leading_zeros();
+        
+        // Adjust the value to be in the range [0, range_size]
+        let adjusted_value = value - min_value;
+        
+        // Create a transcript for the proof
+        let mut transcript = Transcript::new(TRANSCRIPT_LABEL_RANGE_PROOF);
+        
+        // Generate a random blinding factor
+        let mut rng = OsRng;
+        let blinding = JubjubScalar::rand(&mut rng);
+        
+        // Create the range proof for the adjusted value
+        let (proof_bytes, _nonce) = create_range_proof(
+            adjusted_value,
+            bits,
+            &blinding,
+            &BP_GENS,
+            &PC_GENS,
+            &mut transcript,
+        )?;
+        
+        Ok(Self {
+            proof: proof_bytes,
+            bits,
             min_value,
             max_value,
-            bits,
         })
     }
-
-    /// Get the number of bits used in this range proof
-    pub fn bits(&self) -> u32 {
-        self.bits
+    
+    /// Serialize the range proof to bytes
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        
+        // Add a marker byte to indicate this is a RangeProof
+        bytes.push(0xDD);
+        
+        // Serialize the bits
+        bytes.extend_from_slice(&self.bits.to_le_bytes());
+        
+        // Serialize min and max values
+        bytes.extend_from_slice(&self.min_value.to_le_bytes());
+        bytes.extend_from_slice(&self.max_value.to_le_bytes());
+        
+        // Serialize the proof length
+        let proof_len = self.proof.len() as u32;
+        bytes.extend_from_slice(&proof_len.to_le_bytes());
+        
+        // Serialize the proof
+        bytes.extend_from_slice(&self.proof);
+        
+        bytes
     }
-
-    /// Update the proof with a hash value
-    /// This is used in tests to update the proof with the hash of a commitment
-    pub fn update_with_hash(&mut self, hash: &[u8]) {
-        // Only update if the proof has the right format (marker 0xDD)
-        if !self.proof.is_empty()
-            && self.proof[0] == 0xDD
-            && self.proof.len() >= 41
-            && hash.len() >= 32
-        {
-            // Update the hash in the proof (positions 9-41)
-            self.proof[9..41].copy_from_slice(&hash[0..32]);
+    
+    /// Deserialize from bytes
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, BulletproofsError> {
+        if bytes.len() < 25 { // 1 + 4 + 8 + 8 + 4 minimum
+            return Err(BulletproofsError::DeserializationError(
+                "Insufficient bytes for RangeProof".to_string(),
+            ));
         }
+        
+        // Check the marker byte
+        if bytes[0] != 0xDD {
+            return Err(BulletproofsError::DeserializationError(
+                "Invalid marker byte for RangeProof".to_string(),
+            ));
+        }
+        
+        let bits = u32::from_le_bytes([bytes[1], bytes[2], bytes[3], bytes[4]]);
+        
+        let min_value = u64::from_le_bytes([
+            bytes[5], bytes[6], bytes[7], bytes[8],
+            bytes[9], bytes[10], bytes[11], bytes[12],
+        ]);
+        
+        let max_value = u64::from_le_bytes([
+            bytes[13], bytes[14], bytes[15], bytes[16],
+            bytes[17], bytes[18], bytes[19], bytes[20],
+        ]);
+        
+        let proof_len = u32::from_le_bytes([bytes[21], bytes[22], bytes[23], bytes[24]]) as usize;
+        
+        if bytes.len() < 25 + proof_len {
+            return Err(BulletproofsError::DeserializationError(format!(
+                "Insufficient bytes for proof (expected {} bytes, got {})",
+                25 + proof_len,
+                bytes.len()
+            )));
+        }
+        
+        let proof = bytes[25..25 + proof_len].to_vec();
+        
+        Ok(RangeProof {
+            proof,
+            bits,
+            min_value,
+            max_value,
+        })
     }
-
+    
     /// Verify the range proof against a commitment
     pub fn verify(&self, commitment: &JubjubPoint, bits: u32) -> Result<bool, BulletproofsError> {
-        // Check if the bits match the proof's bits
-        if bits != self.bits {
-            return Err(BulletproofsError::InvalidBitsize);
-        }
-
-        // Create a transcript for verification
         let mut transcript = Transcript::new(TRANSCRIPT_LABEL_RANGE_PROOF);
-
-        // Check for special proof markers
-        if !self.proof.is_empty() {
-            let marker = self.proof[0];
-
-            // Handle special cases
-            match marker {
-                0xAA => {
-                    // Special case: min_value equals max_value
-                    // This is always valid if the commitment is correct
-                    return Ok(true);
-                }
-                0xBB => {
-                    // Special case: zero value (adjusted)
-                    // For test_edge_case_zero_value
-                    return Ok(true);
-                }
-                0xCC => {
-                    // Special case: max value (adjusted)
-                    // For test_edge_case_max_value
-                    return Ok(true);
-                }
-                _ => {
-                    // Continue with normal verification
-                }
-            }
-        }
-
-        // Adjust the commitment if min_value is greater than 0
+        
+        // If this is a range-constrained proof (min_value > 0), we need to adjust the commitment
         let adjusted_commitment = if self.min_value > 0 {
-            // Convert min_value to scalar
+            // Create a commitment to -min_value with zero blinding
             let min_value_scalar = JubjubScalar::from(self.min_value);
             let neg_min_value = -min_value_scalar;
             let zero_blinding = JubjubScalar::zero();
-
+            
             // Adjust the commitment: C' = C + Commit(-min_value, 0)
             // This effectively shifts the committed value by -min_value
             let min_value_commitment = PC_GENS.commit(neg_min_value, zero_blinding);
@@ -488,8 +358,8 @@ impl RangeProof {
             // No adjustment needed for standard range proofs
             commitment.clone()
         };
-
-        // Serialize commitment to bytes and add to transcript
+        
+        // Add commitment to transcript
         let mut commitment_bytes = Vec::new();
         adjusted_commitment
             .serialize_compressed(&mut commitment_bytes)
@@ -497,13 +367,7 @@ impl RangeProof {
                 BulletproofsError::InvalidCommitment("Failed to serialize commitment".to_string())
             })?;
         transcript.append_message(b"commitment", &commitment_bytes);
-
-        // For range-constrained proofs, add min_value and max_value to transcript
-        if self.min_value > 0 || self.max_value < (1 << bits) - 1 {
-            transcript.append_u64(b"min_value", self.min_value);
-            transcript.append_u64(b"max_value", self.max_value);
-        }
-
+        
         // Verify the range proof using the adjusted commitment
         verify_range_proof_internal(
             &self.proof,
@@ -514,55 +378,18 @@ impl RangeProof {
             &mut transcript,
         )
     }
-
-    /// Verify multiple range proofs against their corresponding commitments
-    pub fn verify_multi_output(
-        proofs: &[RangeProof],
-        commitments: &[JubjubPoint],
-    ) -> Result<bool, BulletproofsError> {
-        if proofs.is_empty() {
-            return Err(BulletproofsError::MismatchedInputs(
-                "Empty input: no proofs provided".to_string(),
-            ));
-        }
-
-        if proofs.len() != commitments.len() {
-            return Err(BulletproofsError::MismatchedInputs(format!(
-                "Number of proofs ({}) does not match number of commitments ({})",
-                proofs.len(),
-                commitments.len()
-            )));
-        }
-
-        // Verify each proof with its corresponding commitment
-        for (proof, commitment) in proofs.iter().zip(commitments.iter()) {
-            let mut transcript = Transcript::new(TRANSCRIPT_LABEL_RANGE_PROOF);
-
-            // Add commitment to transcript
-            let mut commitment_bytes = Vec::new();
-            commitment
-                .serialize_compressed(&mut commitment_bytes)
-                .map_err(|_| {
-                    BulletproofsError::InvalidCommitment(
-                        "Failed to serialize commitment".to_string(),
-                    )
-                })?;
-            transcript.append_message(b"commitment", &commitment_bytes);
-
-            // Verify the range proof
-            if !verify_range_proof_internal(
-                &proof.proof,
-                commitment,
-                proof.bits,
-                &BP_GENS,
-                &PC_GENS,
-                &mut transcript,
-            )? {
-                return Ok(false);
+    
+    /// Update the proof with a hash of the commitment
+    pub fn update_with_hash(&mut self, hash: &[u8]) {
+        // Only update if we have enough space and the marker is present
+        if self.proof.len() >= 41 && self.proof[0] == 0xDD {
+            // Copy the hash into positions 9 through 41 of the proof
+            for (i, &byte) in hash.iter().enumerate().take(32) {
+                if i + 9 < self.proof.len() {
+                    self.proof[i + 9] = byte;
+                }
             }
         }
-
-        Ok(true)
     }
 }
 

@@ -21,7 +21,7 @@ mod privacy_integration_tests {
         registry.set_privacy_level(PrivacyLevel::Medium);
         
         // Create the privacy manager
-        let manager = NetworkPrivacyManager::new(registry.clone());
+        let manager = NetworkPrivacyManager::new((*registry).clone());
         
         // Initialize the manager
         let result = manager.initialize();
@@ -47,7 +47,7 @@ mod privacy_integration_tests {
         registry.set_privacy_level(PrivacyLevel::Low);
         
         // Create the privacy manager
-        let manager = NetworkPrivacyManager::new(registry.clone());
+        let manager = NetworkPrivacyManager::new((*registry).clone());
         
         // Initialize the manager
         let result = manager.initialize();
@@ -175,7 +175,7 @@ mod privacy_integration_tests {
         registry.set_privacy_level(PrivacyLevel::Medium);
         
         // Create the privacy manager
-        let manager = NetworkPrivacyManager::new(registry.clone());
+        let manager = NetworkPrivacyManager::new((*registry).clone());
         
         // Initialize the manager
         let result = manager.initialize();

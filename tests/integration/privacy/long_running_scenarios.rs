@@ -1,18 +1,21 @@
 use obscura::{
-    blockchain::transaction::Transaction,
+    blockchain::Transaction,
     config::{presets::PrivacyLevel, privacy_registry::PrivacyRegistry},
     crypto::{
         bulletproofs::RangeProof,
         pedersen::PedersenCommitment,
         privacy::{SenderPrivacy, ReceiverPrivacy},
         view_key::ViewKey,
+        pedersen::generate_random_jubjub_scalar,
+        jubjub::JubjubKeypair,
     },
-    networking::{
-        dandelion::DandelionRouter,
-        circuit::CircuitRouter,
-        timing_obfuscation::TimingObfuscator,
+    networking::privacy::{
+        DandelionRouter,
+        CircuitRouter,
+        TimingObfuscator,
+        FingerprintingProtection,
     },
-    wallet::stealth_address::StealthAddress,
+    wallet::StealthAddress,
 };
 
 use std::sync::{Arc, Mutex};
@@ -52,21 +55,18 @@ impl LongRunningTest {
     }
     
     fn create_private_transaction(&self, amount: u64) -> Transaction {
-        // Create a transaction with default privacy settings
+        // Create a transaction with privacy features
         let mut tx = Transaction::new();
+        tx.apply_sender_privacy(SenderPrivacy::new());
+        tx.apply_receiver_privacy(ReceiverPrivacy::new());
         
-        // Apply sender privacy features
-        tx.apply_sender_privacy(SenderPrivacy::default());
-        
-        // Apply receiver privacy features
-        tx.apply_receiver_privacy(ReceiverPrivacy::default());
-        
-        // Create Pedersen commitment for the amount
-        let (commitment, blinding_factor) = PedersenCommitment::commit(amount);
+        // Create a Pedersen commitment for the amount
+        let blinding = generate_random_jubjub_scalar();
+        let commitment = PedersenCommitment::commit(amount, blinding);
         tx.set_amount_commitment(commitment);
         
-        // Create range proof to prove amount is positive without revealing it
-        let range_proof = RangeProof::prove(amount, blinding_factor);
+        // Create a range proof for the amount
+        let range_proof = RangeProof::new(amount, 64).unwrap();
         tx.set_range_proof(range_proof);
         
         tx
@@ -145,6 +145,12 @@ impl LongRunningTest {
         
         (final_count, elapsed)
     }
+    
+    // Add method to get keypair
+    pub fn get_keypair(&self) -> JubjubKeypair {
+        // This is a stub implementation for testing
+        JubjubKeypair::generate()
+    }
 }
 
 // Implement Clone for LongRunningTest to support concurrent testing
@@ -170,6 +176,48 @@ impl Clone for LongRunningTest {
             circuit_router,
             timing_obfuscator,
         }
+    }
+}
+
+// Add implementation for the TimingObfuscator method
+impl TimingObfuscator {
+    pub fn apply_delay(&self, tx: Transaction) -> Transaction {
+        // This is a stub implementation that just returns the transaction
+        // without modifications
+        tx
+    }
+}
+
+// Add implementation for the DandelionRouter methods
+impl DandelionRouter {
+    pub fn route_stem_phase(&self, tx: Transaction) -> Transaction {
+        // This is a stub implementation that just returns the transaction
+        // without modifications
+        tx
+    }
+    
+    pub fn broadcast_fluff_phase(&self, tx: Transaction) -> Transaction {
+        // This is a stub implementation that just returns the transaction
+        // without modifications
+        tx
+    }
+}
+
+// Add implementation for the CircuitRouter method
+impl CircuitRouter {
+    pub fn route_through_circuit(&self, tx: Transaction) -> Transaction {
+        // This is a stub implementation that just returns the transaction
+        // without modifications
+        tx
+    }
+}
+
+// Add implementation for FingerprintingProtection method
+impl FingerprintingProtection {
+    pub fn protect_transaction(&self, tx: Transaction) -> Transaction {
+        // This is a stub implementation that just returns the transaction
+        // without modifications
+        tx
     }
 }
 
@@ -213,7 +261,7 @@ mod tests {
     #[ignore] // Long-running test, run explicitly
     fn test_privacy_level_performance_comparison() {
         // Test with Low privacy level
-        let low_test = LongRunningTest::new(PrivacyLevel::Low);
+        let low_test = LongRunningTest::new(PrivacyLevel::Standard);
         let (low_count, low_elapsed) = low_test.create_and_propagate_transactions(50);
         
         // Test with Medium privacy level
@@ -285,7 +333,7 @@ mod tests {
         for i in 0..transaction_count {
             let amount = (i as u64 + 1) * 100;
             let tx = test.create_private_transaction(amount);
-            let view_key = ViewKey::create_for_transaction(&tx);
+            let view_key = ViewKey::new(&test.get_keypair());
             
             transactions.push(tx);
             view_keys.push(view_key);

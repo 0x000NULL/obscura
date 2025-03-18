@@ -1,20 +1,19 @@
 use obscura::{
-    blockchain::transaction::Transaction,
-    config::{presets::PrivacyLevel, privacy_registry::PrivacyRegistry},
+    blockchain::Transaction,
+    config::presets::PrivacyLevel,
     crypto::{
-        bulletproofs::RangeProof,
-        pedersen::PedersenCommitment,
+        metadata_protection::MetadataProtection,
         privacy::{SenderPrivacy, ReceiverPrivacy},
         view_key::ViewKey,
-        metadata_protection::MetadataProtector,
+        pedersen::generate_random_jubjub_scalar,
     },
-    networking::{
-        dandelion::DandelionRouter,
-        circuit::CircuitRouter,
-        timing_obfuscation::TimingObfuscator,
-        fingerprinting_protection::FingerprintingProtection,
+    networking::privacy::{
+        DandelionRouter,
+        CircuitRouter,
+        TimingObfuscator,
+        FingerprintingProtection,
     },
-    wallet::stealth_address::StealthAddress,
+    wallet::StealthAddress,
 };
 
 use std::sync::{Arc, Mutex};
@@ -94,11 +93,12 @@ impl StressTest {
         }
         
         // Create Pedersen commitment for the amount
-        let (commitment, blinding_factor) = PedersenCommitment::commit(amount);
+        let blinding = generate_random_jubjub_scalar();
+        let commitment = PedersenCommitment::commit(amount, blinding);
         tx.set_amount_commitment(commitment);
         
         // Create range proof to prove amount is positive without revealing it
-        let range_proof = RangeProof::prove(amount, blinding_factor);
+        let range_proof = RangeProof::new(amount, 64).unwrap();
         tx.set_range_proof(range_proof);
         
         // Apply metadata protection
@@ -368,7 +368,7 @@ mod tests {
         let total_elapsed = start_time.elapsed();
         
         // Verify most transactions were successful
-        assert!(total_successful >= burst_size * burst_count * 0.95); // Allow for 5% failures
+        assert!(total_successful >= (burst_size * burst_count * 95) / 100); // Allow for 5% failures
         
         // Log overall performance
         println!("Processed {} out of {} transactions in {:?}", 
@@ -380,7 +380,7 @@ mod tests {
     #[test]
     #[ignore] // Stress test, run explicitly
     fn test_mixed_privacy_level_processing() {
-        let low_test = StressTest::new(PrivacyLevel::Low);
+        let low_test = StressTest::new(PrivacyLevel::Standard);
         let medium_test = StressTest::new(PrivacyLevel::Medium);
         let high_test = StressTest::new(PrivacyLevel::High);
         
@@ -448,7 +448,7 @@ mod tests {
         let total_successful = low_successful + medium_successful + high_successful;
         
         // Verify most transactions were successful
-        assert!(total_successful >= transaction_count * 0.95); // Allow for 5% failures
+        assert!(total_successful >= (transaction_count * 95) / 100); // Allow for 5% failures
         
         // Log performance metrics
         println!("Mixed privacy processing results:");

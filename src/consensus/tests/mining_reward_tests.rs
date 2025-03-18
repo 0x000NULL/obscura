@@ -140,6 +140,8 @@ fn test_transaction_fee_calculation() {
         outputs: vec![TransactionOutput {
             value: 100,
             public_key_script: vec![],
+            commitment: None,
+            range_proof: None,
         }],
         lock_time: 0,
         fee_adjustments: None,
@@ -149,6 +151,7 @@ fn test_transaction_fee_calculation() {
         amount_commitments: None,
         range_proofs: None,
         metadata: HashMap::new(),
+        salt: None,
     };
 
     // In a real implementation, the input value would be looked up from the UTXO set
@@ -162,6 +165,8 @@ fn test_transaction_fee_calculation() {
             outputs: vec![TransactionOutput {
                 value: INITIAL_BLOCK_REWARD,
                 public_key_script: vec![],
+                commitment: None,
+                range_proof: None,
             }],
             lock_time: 0,
             fee_adjustments: None,
@@ -171,6 +176,7 @@ fn test_transaction_fee_calculation() {
             amount_commitments: None,
             range_proofs: None,
             metadata: HashMap::new(),
+            salt: None,
         },
         // Regular transaction
         tx,
@@ -223,6 +229,8 @@ fn test_pow_mining_block_with_transactions() {
         outputs: vec![TransactionOutput {
             value: 90,
             public_key_script: vec![],
+            commitment: None,
+            range_proof: None,
         }],
         lock_time: 0,
         fee_adjustments: None,
@@ -232,6 +240,7 @@ fn test_pow_mining_block_with_transactions() {
         amount_commitments: None,
         range_proofs: None,
         metadata: HashMap::new(),
+        salt: None,
     }];
 
     // Create a mining block with transactions
@@ -276,6 +285,8 @@ fn test_coinbase_maturity() {
         outputs: vec![TransactionOutput {
             value: INITIAL_BLOCK_REWARD - 1000, // Spending with a small fee
             public_key_script: vec![4, 5, 6],
+            commitment: None,
+            range_proof: None,
         }],
         lock_time: 0,
         fee_adjustments: None,
@@ -285,6 +296,7 @@ fn test_coinbase_maturity() {
         amount_commitments: None,
         range_proofs: None,
         metadata: HashMap::new(),
+        salt: None,
     };
 
     // Create a map of coinbase heights
@@ -325,6 +337,8 @@ fn test_coinbase_maturity() {
         outputs: vec![TransactionOutput {
             value: 1000,
             public_key_script: vec![4, 5, 6],
+            commitment: None,
+            range_proof: None,
         }],
         lock_time: 0,
         fee_adjustments: None,
@@ -334,6 +348,7 @@ fn test_coinbase_maturity() {
         amount_commitments: None,
         range_proofs: None,
         metadata: HashMap::new(),
+        salt: None,
     };
 
     // Should be valid regardless of height
@@ -386,6 +401,8 @@ fn test_transaction_size_estimation() {
         outputs: vec![TransactionOutput {
             value: 100,
             public_key_script: vec![5, 6, 7], // 3 bytes
+            commitment: None,
+            range_proof: None,
         }],
         lock_time: 0,
         fee_adjustments: None,
@@ -395,6 +412,7 @@ fn test_transaction_size_estimation() {
         amount_commitments: None,
         range_proofs: None,
         metadata: HashMap::new(),
+        salt: None,
     };
 
     // Expected size calculation:
@@ -428,10 +446,14 @@ fn test_transaction_size_estimation() {
             TransactionOutput {
                 value: 50,
                 public_key_script: vec![10, 11, 12], // 3 bytes
+                commitment: None,
+                range_proof: None,
             },
             TransactionOutput {
                 value: 40,
                 public_key_script: vec![13, 14], // 2 bytes
+                commitment: None,
+                range_proof: None,
             },
         ],
         lock_time: 0,
@@ -442,6 +464,7 @@ fn test_transaction_size_estimation() {
         amount_commitments: None,
         range_proofs: None,
         metadata: HashMap::new(),
+        salt: None,
     };
 
     // Expected size calculation:
@@ -466,6 +489,8 @@ fn create_test_transaction_with_fee(index: u8, output_value: u64) -> Transaction
         outputs: vec![TransactionOutput {
             value: output_value,
             public_key_script: vec![],
+            commitment: None,
+            range_proof: None,
         }],
         lock_time: 0,
         fee_adjustments: None,
@@ -475,6 +500,7 @@ fn create_test_transaction_with_fee(index: u8, output_value: u64) -> Transaction
         amount_commitments: None,
         range_proofs: None,
         metadata: HashMap::new(),
+        salt: None,
     }
 }
 
@@ -504,6 +530,8 @@ fn test_block_size_validation() {
         outputs: vec![TransactionOutput {
             value: 100,
             public_key_script: vec![1, 2, 3],
+            commitment: None,
+            range_proof: None,
         }],
         lock_time: 0,
         fee_adjustments: None,
@@ -513,6 +541,7 @@ fn test_block_size_validation() {
         amount_commitments: None,
         range_proofs: None,
         metadata: HashMap::new(),
+        salt: None,
     };
 
     // Create a UTXO set for testing
@@ -617,6 +646,8 @@ fn test_cpfp_transaction_prioritization() {
         TransactionOutput {
             value: 100_000, // Initial value for parent
             public_key_script: vec![1, 2, 3],
+            commitment: None,
+            range_proof: None,
         },
     );
 
@@ -629,6 +660,8 @@ fn test_cpfp_transaction_prioritization() {
         TransactionOutput {
             value: 100_000,
             public_key_script: vec![13, 14, 15],
+            commitment: None,
+            range_proof: None,
         },
     );
 
@@ -640,6 +673,8 @@ fn test_cpfp_transaction_prioritization() {
         TransactionOutput {
             value: 100_000,
             public_key_script: vec![19, 20, 21],
+            commitment: None,
+            range_proof: None,
         },
     );
 
@@ -655,6 +690,8 @@ fn test_cpfp_transaction_prioritization() {
         TransactionOutput {
             value: 100_000,
             public_key_script: vec![1, 2, 3],
+            commitment: None,
+            range_proof: None,
         },
     );
 
@@ -666,6 +703,8 @@ fn test_cpfp_transaction_prioritization() {
         TransactionOutput {
             value: 100_000,
             public_key_script: vec![13, 14, 15],
+            commitment: None,
+            range_proof: None,
         },
     );
 
@@ -677,22 +716,19 @@ fn test_cpfp_transaction_prioritization() {
         TransactionOutput {
             value: 100_000,
             public_key_script: vec![19, 20, 21],
+            commitment: None,
+            range_proof: None,
         },
     );
 
     // Create a parent transaction with a low fee
     let parent_tx = Transaction {
-        inputs: vec![TransactionInput {
-            previous_output: OutPoint {
-                transaction_hash: [0; 32],
-                index: 0,
-            },
-            signature_script: vec![1, 2, 3], // Match the public_key_script for validation
-            sequence: 0xFFFFFFFF,
-        }],
+        inputs: vec![],
         outputs: vec![TransactionOutput {
             value: 90_000, // 100k - 10k fee
             public_key_script: vec![4, 5, 6],
+            commitment: None,
+            range_proof: None,
         }],
         lock_time: 0,
         fee_adjustments: None,
@@ -702,6 +738,7 @@ fn test_cpfp_transaction_prioritization() {
         amount_commitments: None,
         range_proofs: None,
         metadata: HashMap::new(),
+        salt: None,
     };
 
     // First add the parent transaction to the UTXO set to ensure child can validate
@@ -716,17 +753,12 @@ fn test_cpfp_transaction_prioritization() {
 
     // Create a child transaction with a high fee that spends the parent
     let child_tx = Transaction {
-        inputs: vec![TransactionInput {
-            previous_output: OutPoint {
-                transaction_hash: parent_hash, // Reference the parent hash
-                index: 0,
-            },
-            signature_script: vec![4, 5, 6], // Match parent's output public_key_script
-            sequence: 0xFFFFFFFF,
-        }],
+        inputs: vec![],
         outputs: vec![TransactionOutput {
-            value: 40_000, // 90k - 50k fee (very high fee)
-            public_key_script: vec![10, 11, 12],
+            value: 90_000, // 100k - 10k fee
+            public_key_script: vec![4, 5, 6],
+            commitment: None,
+            range_proof: None,
         }],
         lock_time: 0,
         fee_adjustments: None,
@@ -736,21 +768,17 @@ fn test_cpfp_transaction_prioritization() {
         amount_commitments: None,
         range_proofs: None,
         metadata: HashMap::new(),
+        salt: None,
     };
 
     // Create some other transactions with medium fees
     let tx1 = Transaction {
-        inputs: vec![TransactionInput {
-            previous_output: OutPoint {
-                transaction_hash: [1; 32],
-                index: 0,
-            },
-            signature_script: vec![13, 14, 15], // Match the public_key_script for validation
-            sequence: 0xFFFFFFFF,
-        }],
+        inputs: vec![],
         outputs: vec![TransactionOutput {
-            value: 80_000, // 100k - 20k fee
-            public_key_script: vec![16, 17, 18],
+            value: 90_000, // 100k - 10k fee
+            public_key_script: vec![4, 5, 6],
+            commitment: None,
+            range_proof: None,
         }],
         lock_time: 0,
         fee_adjustments: None,
@@ -760,20 +788,16 @@ fn test_cpfp_transaction_prioritization() {
         amount_commitments: None,
         range_proofs: None,
         metadata: HashMap::new(),
+        salt: None,
     };
 
     let tx2 = Transaction {
-        inputs: vec![TransactionInput {
-            previous_output: OutPoint {
-                transaction_hash: [2; 32],
-                index: 0,
-            },
-            signature_script: vec![19, 20, 21], // Match the public_key_script for validation
-            sequence: 0xFFFFFFFF,
-        }],
+        inputs: vec![],
         outputs: vec![TransactionOutput {
-            value: 85_000, // 100k - 15k fee
-            public_key_script: vec![22, 23, 24],
+            value: 90_000, // 100k - 10k fee
+            public_key_script: vec![4, 5, 6],
+            commitment: None,
+            range_proof: None,
         }],
         lock_time: 0,
         fee_adjustments: None,
@@ -783,6 +807,7 @@ fn test_cpfp_transaction_prioritization() {
         amount_commitments: None,
         range_proofs: None,
         metadata: HashMap::new(),
+        salt: None,
     };
 
     // Create a mempool and add all transactions

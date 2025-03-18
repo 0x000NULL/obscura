@@ -403,11 +403,59 @@ impl SideChannelProtection {
         point: &JubjubPoint,
         scalar: &JubjubScalar,
     ) -> JubjubPoint {
-        self.protected_operation(|| {
-            // We can't use masked_scalar_operation here because it returns a JubjubScalar
-            // but we need a JubjubPoint. Instead, we'll use constant_time_scalar_mul directly.
-            self.constant_time_scalar_mul(point, scalar)
-        })
+        self.protected_operation(|| self.constant_time_scalar_mul(point, scalar))
+    }
+
+    /// Apply side-channel protection measures to a transaction
+    pub fn protect_transaction(&self, tx: &mut crate::blockchain::Transaction) {
+        // Add timing jitter
+        self.add_jitter();
+        
+        // Apply cache protection while processing
+        self.with_cache_protection(|| {
+            // For each input, apply protected operations
+            for input in &mut tx.inputs {
+                // In a real implementation, this would apply masking to signatures
+                // and other operations that might leak information
+                if !input.signature_script.is_empty() {
+                    // Example of applying some protection
+                    let len = input.signature_script.len();
+                    
+                    // Create a dummy operation for demonstration purposes
+                    let mut dummy_data = vec![0u8; len];
+                    let mut rng = thread_rng();
+                    rng.fill(&mut dummy_data[..]);
+                    
+                    // XOR with original in a constant-time manner
+                    for i in 0..len {
+                        input.signature_script[i] ^= dummy_data[i];
+                        input.signature_script[i] ^= dummy_data[i];
+                    }
+                }
+            }
+            
+            // Similar protections could be applied to outputs
+            for output in &mut tx.outputs {
+                // Apply similar protections to output scripts
+                if !output.public_key_script.is_empty() {
+                    let len = output.public_key_script.len();
+                    
+                    // Example of applying some protection
+                    let mut dummy_data = vec![0u8; len];
+                    let mut rng = thread_rng();
+                    rng.fill(&mut dummy_data[..]);
+                    
+                    // XOR with original in a constant-time manner
+                    for i in 0..len {
+                        output.public_key_script[i] ^= dummy_data[i];
+                        output.public_key_script[i] ^= dummy_data[i];
+                    }
+                }
+            }
+        });
+        
+        // Flush any pending operations in the batch
+        let _ = self.flush_batch();
     }
 }
 

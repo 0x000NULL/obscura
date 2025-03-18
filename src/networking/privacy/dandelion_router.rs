@@ -4,14 +4,15 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use log::{debug, info, warn, error};
 use rand::{thread_rng, Rng};
-use rand::distributions::{Distribution, Bernoulli};
+use rand_distr::{Distribution, Normal};
+use rand::distributions::{Distribution as RandDistribution, Bernoulli};
 use rand_chacha::{ChaCha20Rng, rand_core::SeedableRng};
 use rand::prelude::SliceRandom;
-
+use crate::config::presets::PrivacyLevel;
+use crate::config::privacy_registry;
+use crate::config::privacy_registry::PrivacySettingsRegistry;
 use crate::blockchain::Transaction;
-use crate::config::privacy_registry::{PrivacySettingsRegistry, ComponentType};
-use crate::networking::dandelion::{PropagationState, DandelionManager};
-use crate::networking::privacy::NetworkPrivacyLevel;
+use crate::networking::dandelion::{DandelionManager, PropagationState};
 
 // Constants for Dandelion routing
 const STEM_PHASE_MIN_TIMEOUT: Duration = Duration::from_secs(10);
@@ -28,6 +29,7 @@ const USE_DECOY_TRANSACTIONS: bool = true;
 const BATCH_TRANSACTIONS_BEFORE_FLUFF: bool = true;
 const MAX_BATCH_SIZE: usize = 5;
 const MAX_BATCH_WAIT_MS: u64 = 5000;
+const STEM_PHASE_PROBABILITY: f64 = 0.7;
 
 /// Transaction propagation metadata
 #[derive(Debug, Clone)]
@@ -81,8 +83,8 @@ pub struct DandelionRouter {
     /// Configuration registry
     config_registry: Arc<PrivacySettingsRegistry>,
     
-    /// Current privacy level
-    privacy_level: RwLock<NetworkPrivacyLevel>,
+    /// Privacy level
+    privacy_level: RwLock<PrivacyLevel>,
     
     /// Transaction propagation metadata
     transactions: Mutex<HashMap<[u8; 32], TransactionPropagationMetadata>>,
@@ -122,18 +124,11 @@ pub struct DandelionRouter {
 }
 
 impl DandelionRouter {
-    /// Create a new DandelionRouter with the given configuration registry
+    /// Create a new DandelionRouter
     pub fn new(config_registry: Arc<PrivacySettingsRegistry>) -> Self {
-        let privacy_level = config_registry
-            .get_setting_for_component(
-                ComponentType::Network,
-                "privacy_level",
-                crate::config::presets::PrivacyLevel::Medium,
-            ).into();
-        
         Self {
             config_registry,
-            privacy_level: RwLock::new(privacy_level),
+            privacy_level: RwLock::new(PrivacyLevel::Medium),
             transactions: Mutex::new(HashMap::new()),
             stem_successors: Mutex::new(HashMap::new()),
             multi_hop_paths: Mutex::new(HashMap::new()),
@@ -155,23 +150,23 @@ impl DandelionRouter {
             return Ok(());
         }
         
-        // Initialize the router based on the current privacy level
+        // Initial setup based on privacy level
         let privacy_level = *self.privacy_level.read().unwrap();
         
         // Configure based on privacy level
         match privacy_level {
-            NetworkPrivacyLevel::Standard => {
-                // Basic configuration for standard privacy
+            PrivacyLevel::Standard => {
                 debug!("Initializing DandelionRouter with standard privacy settings");
             },
-            NetworkPrivacyLevel::Enhanced => {
-                // Enhanced configuration for better privacy
-                debug!("Initializing DandelionRouter with enhanced privacy settings");
+            PrivacyLevel::Medium => {
+                debug!("Initializing DandelionRouter with medium privacy settings");
             },
-            NetworkPrivacyLevel::Maximum => {
-                // Maximum privacy configuration
-                debug!("Initializing DandelionRouter with maximum privacy settings");
+            PrivacyLevel::High => {
+                debug!("Initializing DandelionRouter with high privacy settings");
             },
+            PrivacyLevel::Custom => {
+                debug!("Initializing DandelionRouter with custom privacy settings");
+            }
         }
         
         *self.initialized.write().unwrap() = true;
@@ -179,25 +174,31 @@ impl DandelionRouter {
     }
     
     /// Set the privacy level
-    pub fn set_privacy_level(&self, level: NetworkPrivacyLevel) {
+    pub fn set_privacy_level(&self, level: PrivacyLevel) {
+        debug!("Setting DandelionRouter privacy level to {:?}", level);
         *self.privacy_level.write().unwrap() = level;
         
-        // Reconfigure based on new privacy level
+        // Update the routing with new privacy settings
         if *self.initialized.read().unwrap() {
-            debug!("Updating DandelionRouter privacy level to {:?}", level);
+            // Update stem probability based on privacy level
+            let stem_prob = match level {
+                PrivacyLevel::Standard => 0.3,
+                PrivacyLevel::Medium => 0.5,
+                PrivacyLevel::High => 0.7,
+                PrivacyLevel::Custom => 0.5, // Default to medium
+            };
             
-            // Update configuration based on privacy level
-            match level {
-                NetworkPrivacyLevel::Standard => {
-                    // Basic configuration for standard privacy
-                },
-                NetworkPrivacyLevel::Enhanced => {
-                    // Enhanced configuration for better privacy
-                },
-                NetworkPrivacyLevel::Maximum => {
-                    // Maximum privacy configuration
-                },
-            }
+            *self.stem_probability.write().unwrap() = stem_prob;
+            
+            // Update fluff probability based on privacy level
+            let fluff_prob = match level {
+                PrivacyLevel::Standard => 0.5,
+                PrivacyLevel::Medium => 0.3,
+                PrivacyLevel::High => 0.1,
+                PrivacyLevel::Custom => 0.3, // Default to medium
+            };
+            
+            *self.fluff_probability.write().unwrap() = fluff_prob;
         }
     }
     
@@ -218,9 +219,10 @@ impl DandelionRouter {
         
         let privacy_level = *self.privacy_level.read().unwrap();
         let stem_probability = match privacy_level {
-            NetworkPrivacyLevel::Standard => STEM_PROBABILITY,
-            NetworkPrivacyLevel::Enhanced => STEM_PROBABILITY + 0.05,
-            NetworkPrivacyLevel::Maximum => STEM_PROBABILITY + 0.09,
+            PrivacyLevel::Standard => STEM_PROBABILITY,
+            PrivacyLevel::Medium => STEM_PROBABILITY + 0.05,
+            PrivacyLevel::High => STEM_PROBABILITY + 0.09,
+            PrivacyLevel::Custom => STEM_PROBABILITY + 0.05, // Default to medium for custom
         };
         
         // Determine if we should use stem phase
@@ -479,7 +481,7 @@ impl DandelionRouter {
         }
         
         let privacy_level = *self.privacy_level.read().unwrap();
-        if privacy_level == NetworkPrivacyLevel::Standard {
+        if privacy_level == PrivacyLevel::Standard {
             return None;
         }
         
@@ -534,9 +536,7 @@ impl DandelionRouter {
         // If we have a Dandelion manager, maintain it
         if let Some(manager) = &self.dandelion_manager {
             let mut manager = manager.lock().unwrap();
-            if let Err(e) = manager.maintain_dandelion() {
-                return Err(format!("Error maintaining Dandelion manager: {:?}", e));
-            }
+            manager.maintain_dandelion();
         }
         
         Ok(())
@@ -557,7 +557,7 @@ impl DandelionRouter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::privacy_registry::PrivacySettingsRegistry;
+    use bincode::config::privacy_registry::PrivacySettingsRegistry;
     
     #[test]
     fn test_add_transaction() {
@@ -566,7 +566,7 @@ mod tests {
         let tx_hash = tx.hash();
         
         // Create the router
-        let config_registry = Arc::new(PrivacySettingsRegistry::new());
+        let config_registry = Arc::new(privacy_registry::PrivacySettingsRegistry::new());
         let router = DandelionRouter::new(config_registry);
         
         // Add the transaction
@@ -589,7 +589,7 @@ mod tests {
     #[test]
     fn test_batch_processing() {
         // Create the router
-        let config_registry = Arc::new(PrivacySettingsRegistry::new());
+        let config_registry = Arc::new(privacy_registry::PrivacySettingsRegistry::new());
         let router = DandelionRouter::new(config_registry);
         
         // Add transactions to a batch
@@ -654,7 +654,7 @@ mod tests {
     #[test]
     fn test_stem_path_calculation() {
         // Create the router
-        let config_registry = Arc::new(PrivacySettingsRegistry::new());
+        let config_registry = Arc::new(privacy_registry::PrivacySettingsRegistry::new());
         let router = DandelionRouter::new(config_registry);
         
         // Create some peer addresses

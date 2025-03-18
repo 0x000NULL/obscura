@@ -615,12 +615,16 @@ mod tests {
         // Add a dummy output to each transaction
         let output1 = TransactionOutput {
             value: 100,
-            public_key_script: vec![7, 8, 9], // dummy public key
+            public_key_script: vec![1, 2, 3],
+            commitment: None,
+            range_proof: None,
         };
 
         let output2 = TransactionOutput {
             value: 200,
-            public_key_script: vec![10, 11, 12], // dummy public key
+            public_key_script: vec![4, 5, 6],
+            commitment: None,
+            range_proof: None,
         };
 
         // Add inputs and outputs to transactions

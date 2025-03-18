@@ -69,6 +69,48 @@ pub struct JubjubSignature {
     pub s: Fr,
 }
 
+impl JubjubSignature {
+    /// Convert the signature to bytes
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&self.r.to_bytes().as_ref());
+        bytes.extend_from_slice(&self.s.to_bytes().as_ref());
+        bytes
+    }
+    
+    /// Create a signature from bytes
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() < 64 {
+            return None;
+        }
+        
+        let r_bytes = &bytes[0..32];
+        let s_bytes = &bytes[32..64];
+        
+        let r = EdwardsProjective::from_bytes(r_bytes)?;
+        let s = Fr::from_bytes(s_bytes)?;
+        
+        Some(Self { r, s })
+    }
+    
+    /// Verify a signature against a message and public key
+    pub fn verify(&self, pubkey: &EdwardsProjective, message: &[u8]) -> bool {
+        // Hash the message
+        let mut hasher = Sha256::new();
+        hasher.update(message);
+        let hash = hasher.finalize();
+        
+        // Convert the hash to a scalar
+        let e = Fr::from_bytes(&hash).unwrap_or_default();
+        
+        // Verify the signature
+        let lhs = <EdwardsProjective as JubjubPointExt>::generator() * self.s;
+        let rhs = *pubkey * e + self.r;
+        
+        lhs == rhs
+    }
+}
+
 /// A Jubjub keypair
 #[derive(Clone, Debug)]
 pub struct JubjubKeypair {

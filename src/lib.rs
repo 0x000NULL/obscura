@@ -20,8 +20,9 @@ pub use networking::{Node, NodeError};
 pub use crypto::privacy::{ConfidentialTransactions, StealthAddressing, TransactionObfuscator};
 
 // Re-export configuration
-pub use config::privacy_registry::PrivacySettingsRegistry;
-pub use config::presets::{PrivacyLevel, PrivacyPreset};
+// Ensure config module exports are available
+pub use crate::config::privacy_registry::PrivacySettingsRegistry;
+pub use crate::config::presets::{PrivacyLevel, PrivacyPreset};
 
 // Re-export key types for convenience
 pub use consensus::pos;

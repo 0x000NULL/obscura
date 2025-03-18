@@ -1,18 +1,18 @@
 use obscura::{
-    blockchain::transaction::Transaction,
-    config::{presets::PrivacyLevel, privacy_registry::PrivacyRegistry},
+    blockchain::Transaction,
+    config::presets::PrivacyLevel,
     crypto::{
         bulletproofs::RangeProof,
         pedersen::PedersenCommitment,
         privacy::{SenderPrivacy, ReceiverPrivacy},
-        view_key::ViewKey,
+        view_key::{ViewKey, ViewKeyPermissions},
     },
-    networking::{
-        dandelion::DandelionRouter,
-        circuit::CircuitRouter,
-        timing_obfuscation::TimingObfuscator,
+    networking::privacy::{
+        DandelionRouter,
+        CircuitRouter,
+        TimingObfuscator,
     },
-    wallet::stealth_address::StealthAddress,
+    wallet::StealthAddress,
 };
 
 use std::sync::{Arc, Mutex};
@@ -20,7 +20,7 @@ use std::time::Duration;
 
 /// Test fixture for privacy workflow tests
 struct PrivacyWorkflowTest {
-    privacy_config: PrivacyRegistry,
+    privacy_config: Arc<obscura::config::privacy_registry::PrivacySettingsRegistry>,
     dandelion_router: DandelionRouter,
     circuit_router: CircuitRouter,
     timing_obfuscator: TimingObfuscator,
@@ -28,19 +28,13 @@ struct PrivacyWorkflowTest {
 
 impl PrivacyWorkflowTest {
     fn new(privacy_level: PrivacyLevel) -> Self {
-        let privacy_config = PrivacyRegistry::from_preset(privacy_level);
+        let privacy_config = Arc::new(obscura::config::privacy_registry::PrivacySettingsRegistry::new());
         
-        let dandelion_router = DandelionRouter::new(
-            privacy_config.get_dandelion_config().clone(),
-        );
+        let dandelion_router = DandelionRouter::new(privacy_config.clone());
         
-        let circuit_router = CircuitRouter::new(
-            privacy_config.get_circuit_config().clone(),
-        );
+        let circuit_router = CircuitRouter::new(privacy_config.clone());
         
-        let timing_obfuscator = TimingObfuscator::new(
-            privacy_config.get_timing_config().clone(),
-        );
+        let timing_obfuscator = TimingObfuscator::new(privacy_config.clone());
         
         Self {
             privacy_config,
@@ -61,12 +55,13 @@ impl PrivacyWorkflowTest {
         tx.apply_receiver_privacy(receiver_privacy);
         
         // Create Pedersen commitment for the amount
-        let (commitment, blinding_factor) = PedersenCommitment::commit(amount);
-        tx.set_amount_commitment(commitment);
+        let blinding_factor = obscura::crypto::pedersen::generate_random_jubjub_scalar();
+        let commitment = PedersenCommitment::commit(amount, blinding_factor);
+        tx.set_amount_commitment(0, commitment.to_bytes());
         
         // Create range proof to prove amount is positive without revealing it
-        let range_proof = RangeProof::prove(amount, blinding_factor);
-        tx.set_range_proof(range_proof);
+        let range_proof = RangeProof::new(amount, 64).unwrap();
+        tx.set_range_proof(0, range_proof.to_bytes());
         
         tx
     }
@@ -97,8 +92,8 @@ mod tests {
         // Create a private transaction
         let tx = test.create_private_transaction(
             100,
-            SenderPrivacy::default(),
-            ReceiverPrivacy::default(),
+            SenderPrivacy::new(),
+            ReceiverPrivacy::new(),
         );
         
         // Verify transaction has privacy features applied
@@ -155,12 +150,13 @@ mod tests {
         // Create a private transaction
         let tx = test.create_private_transaction(
             250,
-            SenderPrivacy::default(),
-            ReceiverPrivacy::default(),
+            SenderPrivacy::new(),
+            ReceiverPrivacy::new(),
         );
         
         // Create a view key for the transaction
-        let view_key = ViewKey::create_for_transaction(&tx);
+        let keypair = obscura::crypto::jubjub::generate_keypair();
+        let view_key = ViewKey::new(&keypair);
         
         // Verify view key can decrypt transaction details
         let decrypted_amount = view_key.decrypt_amount(&tx);
@@ -189,7 +185,7 @@ mod tests {
         // Create transaction to stealth address
         let tx = test.create_private_transaction(
             1000,
-            SenderPrivacy::default(),
+            SenderPrivacy::new(),
             receiver_privacy,
         );
         
@@ -236,8 +232,15 @@ mod tests {
         // Set stealth address as recipient
         tx.set_stealth_recipient(stealth_address.clone());
         
-        // Create view key with limited permissions
-        let view_key = ViewKey::create_with_permissions(&tx, true, false, false);
+        // Create a view key with specific permissions
+        let keypair = obscura::crypto::jubjub::generate_keypair();
+        let permissions = ViewKeyPermissions {
+            view_incoming: true,
+            view_outgoing: false,
+            view_amounts: false,
+            ..ViewKeyPermissions::default()
+        };
+        let view_key = ViewKey::with_permissions(&keypair, permissions);
         
         // Propagate transaction through privacy-enhanced network
         let result = test.propagate_transaction(tx.clone());

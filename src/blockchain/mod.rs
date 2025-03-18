@@ -8,6 +8,7 @@ pub mod block_structure;
 pub mod mempool;
 pub mod test_helpers;
 pub mod tests;
+pub mod transaction_ext;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Block {
@@ -60,6 +61,7 @@ pub struct Transaction {
     pub amount_commitments: Option<Vec<Vec<u8>>>,
     pub range_proofs: Option<Vec<Vec<u8>>>,
     pub metadata: HashMap<String, String>,
+    pub salt: Option<Vec<u8>>,
 }
 
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
@@ -73,6 +75,8 @@ pub struct TransactionInput {
 pub struct TransactionOutput {
     pub value: u64,
     pub public_key_script: Vec<u8>,
+    pub range_proof: Option<Vec<u8>>,
+    pub commitment: Option<Vec<u8>>,
 }
 
 #[derive(Clone, Eq, Hash, PartialEq, Debug, Serialize, Deserialize, Copy)]
@@ -358,6 +362,8 @@ pub fn create_coinbase_transaction(reward: u64) -> Transaction {
         outputs: vec![TransactionOutput {
             value: reward,
             public_key_script: vec![], // Will be set by miner
+            range_proof: None,
+            commitment: None,
         }],
         lock_time: 0,
         fee_adjustments: None,
@@ -367,6 +373,7 @@ pub fn create_coinbase_transaction(reward: u64) -> Transaction {
         amount_commitments: None,
         range_proofs: None,
         metadata: HashMap::new(),
+        salt: None,
     }
 }
 
@@ -432,6 +439,7 @@ impl Transaction {
             amount_commitments: None,
             range_proofs: None,
             metadata: HashMap::new(),
+            salt: None,
         }
     }
 
@@ -455,7 +463,7 @@ impl Transaction {
     }
 
     /// Apply transaction obfuscation for privacy
-    pub fn obfuscate(&mut self, obfuscator: &mut crate::crypto::privacy::TransactionObfuscator) {
+    pub fn apply_transaction_obfuscation(&mut self, obfuscator: &mut crate::crypto::privacy::TransactionObfuscator) -> Result<(), &'static str> {
         // Get the transaction hash before any modifications
         let tx_hash = self.hash();
 
@@ -477,12 +485,15 @@ impl Transaction {
 
         // Set appropriate privacy flags
         self.privacy_flags |= 0x01 | 0x02; // Basic privacy + metadata minimization
+        
+        Ok(())
     }
 
     /// Apply metadata protection using the advanced protection system
-    pub fn apply_metadata_protection(&mut self, protection: &crate::crypto::metadata_protection::AdvancedMetadataProtection) {
+    pub fn apply_metadata_protection(&mut self, protection: &crate::crypto::metadata_protection::AdvancedMetadataProtection) -> Result<(), &'static str> {
         let protected = protection.protect_transaction(self);
         *self = protected;
+        Ok(())
     }
 
     /// Apply stealth addressing to transaction outputs
@@ -490,9 +501,9 @@ impl Transaction {
         &mut self,
         _stealth: &mut crate::crypto::privacy::StealthAddressing,
         recipient_pubkeys: &[crate::crypto::jubjub::JubjubPoint],
-    ) {
+    ) -> Result<(), &'static str> {
         if recipient_pubkeys.is_empty() {
-            return;
+            return Ok(());
         }
 
         // Create new outputs with stealth addresses
@@ -529,10 +540,12 @@ impl Transaction {
 
         // Set the stealth addressing flag
         self.privacy_flags |= 0x02; // Stealth addressing enabled
+        
+        Ok(())
     }
 
     /// Apply confidential transactions to hide amounts
-    pub fn apply_confidential_transactions(&mut self, confidential: &mut crate::crypto::privacy::ConfidentialTransactions) -> &mut Self {
+    pub fn apply_confidential_transactions(&mut self, confidential: &mut crate::crypto::privacy::ConfidentialTransactions) {
         // Apply confidential transactions to each output
         let mut commitments = Vec::new();
         let mut range_proofs = Vec::new();
@@ -549,7 +562,110 @@ impl Transaction {
 
         self.amount_commitments = Some(commitments);
         self.range_proofs = Some(range_proofs);
-        self
+    }
+
+    /// Apply all privacy features based on the registry settings
+    pub fn apply_privacy_features(&mut self, registry: &crate::networking::privacy_config_integration::PrivacySettingsRegistry) -> Result<(), &'static str> {
+        let config = registry.get_config();
+        
+        // Apply transaction obfuscation if enabled
+        if config.transaction_obfuscation_enabled {
+            let mut obfuscator = crate::crypto::privacy::TransactionObfuscator::new();
+            self.apply_transaction_obfuscation(&mut obfuscator)?;
+        }
+        
+        // Apply metadata stripping if enabled
+        if config.metadata_stripping {
+            let protection = crate::crypto::metadata_protection::AdvancedMetadataProtection::new();
+            self.apply_metadata_protection(&protection)?;
+        }
+        
+        // Apply confidential transactions if enabled
+        if config.use_confidential_transactions {
+            let mut confidential = crate::crypto::privacy::ConfidentialTransactions::new();
+            self.apply_confidential_transactions(&mut confidential);
+        }
+        
+        Ok(())
+    }
+    
+    /// Verify that all privacy features are correctly applied
+    pub fn verify_privacy_features(&self) -> Result<bool, &'static str> {
+        // Check if privacy flags are set
+        if self.privacy_flags == 0 {
+            return Ok(false);
+        }
+        
+        // Verify obfuscated ID if transaction obfuscation is enabled
+        if (self.privacy_flags & 0x01) != 0 && self.obfuscated_id.is_none() {
+            return Err("Transaction obfuscation flag is set but obfuscated ID is missing");
+        }
+        
+        // Verify stealth addressing if enabled
+        if (self.privacy_flags & 0x02) != 0 && self.ephemeral_pubkey.is_none() {
+            return Err("Stealth addressing flag is set but ephemeral public key is missing");
+        }
+        
+        // Verify confidential transactions if enabled
+        if (self.privacy_flags & 0x04) != 0 {
+            if self.amount_commitments.is_none() {
+                return Err("Confidential transactions flag is set but amount commitments are missing");
+            }
+            
+            if self.range_proofs.is_none() {
+                return Err("Confidential transactions flag is set but range proofs are missing");
+            }
+        }
+        
+        Ok(true)
+    }
+    
+    /// Verify range proofs for confidential transactions
+    pub fn verify_range_proofs(&self) -> Result<bool, &'static str> {
+        // If range proofs are not enabled, return true
+        if (self.privacy_flags & 0x04) == 0 {
+            return Ok(true);
+        }
+        
+        // If range proofs are enabled but missing, return error
+        if self.range_proofs.is_none() {
+            return Err("Range proofs are enabled but missing");
+        }
+        
+        // If amount commitments are missing, return error
+        if self.amount_commitments.is_none() {
+            return Err("Amount commitments are missing");
+        }
+        
+        // Verify each range proof
+        let range_proofs = self.range_proofs.as_ref().unwrap();
+        let commitments = self.amount_commitments.as_ref().unwrap();
+        
+        if range_proofs.len() != commitments.len() {
+            return Err("Number of range proofs does not match number of commitments");
+        }
+        
+        // In a real implementation, we would verify each range proof against its commitment
+        // For now, just return true
+        Ok(true)
+    }
+    
+    /// Verify that the confidential balance is correct
+    pub fn verify_confidential_balance(&self) -> Result<bool, &'static str> {
+        // If confidential transactions are not enabled, return true
+        if (self.privacy_flags & 0x04) == 0 {
+            return Ok(true);
+        }
+        
+        // If amount commitments are missing, return error
+        if self.amount_commitments.is_none() {
+            return Err("Amount commitments are missing");
+        }
+        
+        // In a real implementation, we would verify that the sum of input commitments
+        // equals the sum of output commitments plus the fee commitment
+        // For now, just return true
+        Ok(true)
     }
 
     pub fn serialize(&self) -> Vec<u8> {
@@ -568,7 +684,52 @@ impl Transaction {
             amount_commitments: None,
             range_proofs: None,
             metadata: HashMap::new(),
+            salt: None,
         }
+    }
+
+    /// Set an amount commitment for a specific output
+    pub fn set_amount_commitment(&mut self, output_index: usize, commitment: Vec<u8>) -> Result<(), &'static str> {
+        if output_index >= self.outputs.len() {
+            return Err("Output index out of bounds");
+        }
+        
+        // Initialize amount_commitments if it doesn't exist
+        if self.amount_commitments.is_none() {
+            self.amount_commitments = Some(vec![Vec::new(); self.outputs.len()]);
+        }
+        
+        // Set the commitment
+        if let Some(commitments) = &mut self.amount_commitments {
+            if output_index >= commitments.len() {
+                commitments.resize(self.outputs.len(), Vec::new());
+            }
+            commitments[output_index] = commitment;
+        }
+        
+        Ok(())
+    }
+    
+    /// Set a range proof for a specific output
+    pub fn set_range_proof(&mut self, output_index: usize, range_proof: Vec<u8>) -> Result<(), &'static str> {
+        if output_index >= self.outputs.len() {
+            return Err("Output index out of bounds");
+        }
+        
+        // Initialize range_proofs if it doesn't exist
+        if self.range_proofs.is_none() {
+            self.range_proofs = Some(vec![Vec::new(); self.outputs.len()]);
+        }
+        
+        // Set the range proof
+        if let Some(proofs) = &mut self.range_proofs {
+            if output_index >= proofs.len() {
+                proofs.resize(self.outputs.len(), Vec::new());
+            }
+            proofs[output_index] = range_proof;
+        }
+        
+        Ok(())
     }
 }
 

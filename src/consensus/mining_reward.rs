@@ -281,6 +281,8 @@ pub fn create_mining_pool_coinbase(
             crate::blockchain::TransactionOutput {
                 value: participant_reward,
                 public_key_script: participant.public_key.clone(),
+                range_proof: None,
+                commitment: None,
             }
         })
         .collect();
@@ -296,6 +298,7 @@ pub fn create_mining_pool_coinbase(
         amount_commitments: None,
         range_proofs: None,
         metadata: std::collections::HashMap::new(),
+        salt: None,
     }
 }
 
@@ -365,6 +368,8 @@ pub fn create_mining_pool_coinbase_with_utxo(
             crate::blockchain::TransactionOutput {
                 value: participant_reward,
                 public_key_script: participant.public_key.clone(),
+                range_proof: None,
+                commitment: None,
             }
         })
         .collect();
@@ -380,6 +385,7 @@ pub fn create_mining_pool_coinbase_with_utxo(
         amount_commitments: None,
         range_proofs: None,
         metadata: std::collections::HashMap::new(),
+        salt: None,
     }
 }
 
@@ -862,6 +868,8 @@ pub fn create_coinbase_transaction(reward: u64) -> crate::blockchain::Transactio
             crate::blockchain::TransactionOutput {
                 value: reward,
                 public_key_script: Vec::new(),
+                range_proof: None,
+                commitment: None,
             },
         ],
         lock_time: 0,
@@ -872,6 +880,7 @@ pub fn create_coinbase_transaction(reward: u64) -> crate::blockchain::Transactio
         amount_commitments: None,
         range_proofs: None,
         metadata: std::collections::HashMap::new(),
+        salt: None,
     }
 }
 
@@ -881,7 +890,9 @@ pub fn create_test_transaction(value: u64) -> crate::blockchain::Transaction {
         outputs: vec![
             crate::blockchain::TransactionOutput {
                 value,
-                public_key_script: Vec::new(),
+                public_key_script: vec![1, 2, 3, 4],
+                range_proof: None,
+                commitment: None,
             },
         ],
         lock_time: 0,
@@ -892,6 +903,7 @@ pub fn create_test_transaction(value: u64) -> crate::blockchain::Transaction {
         amount_commitments: None,
         range_proofs: None,
         metadata: std::collections::HashMap::new(),
+        salt: None,
     }
 }
 
@@ -937,6 +949,8 @@ mod tests {
             outputs: vec![TransactionOutput {
                 value: INITIAL_BLOCK_REWARD,
                 public_key_script: vec![1, 2, 3], // Dummy public key
+                range_proof: None,
+                commitment: None,
             }],
             lock_time: 0,
             fee_adjustments: None,
@@ -946,6 +960,7 @@ mod tests {
             amount_commitments: None,
             range_proofs: None,
             metadata: std::collections::HashMap::new(),
+            salt: None,
         };
 
         // Test valid coinbase
@@ -960,6 +975,8 @@ mod tests {
             outputs: vec![TransactionOutput {
                 value: INITIAL_BLOCK_REWARD + 1, // Wrong reward
                 public_key_script: vec![1, 2, 3],
+                range_proof: None,
+                commitment: None,
             }],
             lock_time: 0,
             fee_adjustments: None,
@@ -969,6 +986,7 @@ mod tests {
             amount_commitments: None,
             range_proofs: None,
             metadata: std::collections::HashMap::new(),
+            salt: None,
         };
 
         // Test invalid reward
@@ -983,6 +1001,8 @@ mod tests {
             outputs: vec![TransactionOutput {
                 value: INITIAL_BLOCK_REWARD / 2,
                 public_key_script: vec![1, 2, 3],
+                range_proof: None,
+                commitment: None,
             }],
             lock_time: 0,
             fee_adjustments: None,
@@ -992,6 +1012,7 @@ mod tests {
             amount_commitments: None,
             range_proofs: None,
             metadata: std::collections::HashMap::new(),
+            salt: None,
         };
 
         assert!(validate_coinbase_transaction(

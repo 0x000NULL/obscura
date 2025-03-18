@@ -27,15 +27,16 @@ fn create_test_transaction() -> Transaction {
 // Setup test network message with metadata
 fn create_test_message() -> Message {
     // Create a message with payload that could contain metadata
-    // In a real implementation, metadata would be serialized in the payload
-    Message {
-        message_type: MessageType::Transactions, // Use an actual message type
-        payload: vec![1, 2, 3, 4, 5],
-        is_padded: false,
-        padding_size: 0,
-        is_morphed: false,
-        morph_type: None,
-    }
+    let mut message = Message::new(MessageType::Transactions, vec![1, 2, 3, 4, 5]);
+    
+    // Add metadata for testing
+    let mut metadata = HashMap::new();
+    metadata.insert("tx_id".to_string(), "test123".to_string());
+    metadata.insert("ip".to_string(), "192.168.1.100".to_string());
+    metadata.insert("timestamp".to_string(), "1628346271".to_string());
+    
+    message.metadata = Some(metadata);
+    message
 }
 
 // Setup test block with metadata
@@ -299,12 +300,8 @@ fn test_end_to_end_privacy_workflow() {
     message_metadata.insert("tx_id".to_string(), "tx1".to_string());
     message_metadata.insert("ip".to_string(), "192.168.1.200".to_string());
     
-    let tx_message = Message {
-        message_type: 2, // Transaction message
-        payload: bincode::serialize(&retrieved_tx).unwrap(),
-        metadata: Some(message_metadata),
-        signature: None,
-    };
+    let mut tx_message = Message::new(MessageType::Transactions, bincode::serialize(&retrieved_tx).unwrap());
+    tx_message.metadata = Some(message_metadata);
     
     // 9. Apply protection to the message before transmission
     let protected_message = protection.protect_message(&tx_message);

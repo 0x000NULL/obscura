@@ -1,22 +1,23 @@
 use obscura::{
-    blockchain::transaction::Transaction,
+    blockchain::Transaction,
     config::{presets::PrivacyLevel, privacy_registry::PrivacyRegistry},
     crypto::{
         bulletproofs::RangeProof,
         pedersen::PedersenCommitment,
         privacy::{SenderPrivacy, ReceiverPrivacy},
         view_key::ViewKey,
-        metadata_protection::MetadataProtector,
+        metadata_protection::MetadataProtection,
         side_channel_protection::SideChannelProtection,
+        jubjub::{generate_keypair, ViewKeyPermissions},
     },
-    networking::{
-        dandelion::DandelionRouter,
-        circuit::CircuitRouter,
-        timing_obfuscation::TimingObfuscator,
-        fingerprinting_protection::FingerprintingProtection,
-        tor::TorConnection,
+    networking::privacy::{
+        DandelionRouter,
+        CircuitRouter,
+        TimingObfuscator,
+        FingerprintingProtection,
+        TorConnection,
     },
-    wallet::stealth_address::StealthAddress,
+    wallet::StealthAddress,
 };
 
 use std::sync::{Arc, Mutex};
@@ -28,7 +29,7 @@ struct CrossComponentTest {
     dandelion_router: DandelionRouter,
     circuit_router: CircuitRouter,
     timing_obfuscator: TimingObfuscator,
-    metadata_protector: MetadataProtector,
+    metadata_protector: MetadataProtection,
     side_channel_protection: SideChannelProtection,
     fingerprinting_protection: FingerprintingProtection,
     tor_connection: Option<TorConnection>,
@@ -50,7 +51,7 @@ impl CrossComponentTest {
             privacy_config.get_timing_config().clone(),
         );
         
-        let metadata_protector = MetadataProtector::new(
+        let metadata_protector = MetadataProtection::new(
             privacy_config.get_metadata_config().clone(),
         );
         
@@ -87,18 +88,19 @@ impl CrossComponentTest {
         let mut tx = Transaction::new();
         
         // Apply sender privacy features
-        tx.apply_sender_privacy(SenderPrivacy::default());
+        tx.apply_sender_privacy(SenderPrivacy::new());
         
         // Apply receiver privacy features
-        tx.apply_receiver_privacy(ReceiverPrivacy::default());
+        tx.apply_receiver_privacy(ReceiverPrivacy::new());
         
         // Create Pedersen commitment for the amount
-        let (commitment, blinding_factor) = PedersenCommitment::commit(amount);
-        tx.set_amount_commitment(commitment);
+        let blinding_factor = obscura::crypto::pedersen::generate_random_jubjub_scalar();
+        let commitment = PedersenCommitment::commit(amount, blinding_factor);
+        tx.set_amount_commitment(0, commitment.to_bytes());
         
         // Create range proof to prove amount is positive without revealing it
-        let range_proof = RangeProof::prove(amount, blinding_factor);
-        tx.set_range_proof(range_proof);
+        let range_proof = RangeProof::new(amount, 64).unwrap();
+        tx.set_range_proof(0, range_proof.to_bytes());
         
         // Apply metadata protection
         self.metadata_protector.protect_transaction_metadata(&mut tx);
@@ -194,7 +196,8 @@ mod tests {
         test.side_channel_protection.protect_transaction(&mut tx);
         
         // Create a view key for the transaction
-        let view_key = ViewKey::create_for_transaction(&tx);
+        let keypair = generate_keypair();
+        let view_key = ViewKey::new(&keypair);
         
         // Verify view key can still decrypt transaction details despite side channel protection
         let decrypted_amount = view_key.decrypt_amount(&tx);
@@ -256,8 +259,15 @@ mod tests {
         // Set stealth address as recipient
         tx.set_stealth_recipient(stealth_address.clone());
         
-        // Create a view key with limited permissions
-        let view_key = ViewKey::create_with_permissions(&tx, true, false, false);
+        // Create a view key with specific permissions
+        let keypair = generate_keypair();
+        let permissions = ViewKeyPermissions {
+            view_incoming: true,
+            view_outgoing: false,
+            view_amounts: false,
+            ..ViewKeyPermissions::default()
+        };
+        let view_key = ViewKey::with_permissions(&keypair, permissions);
         
         // Propagate transaction through all privacy components
         let result = test.propagate_transaction(tx.clone());

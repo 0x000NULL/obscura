@@ -15,6 +15,7 @@ fn test_merkle_tree_creation() {
         amount_commitments: None,
         range_proofs: None,
         metadata: HashMap::new(),
+        salt: None,
     };
     let tx2 = Transaction {
         inputs: vec![],
@@ -27,6 +28,7 @@ fn test_merkle_tree_creation() {
         amount_commitments: None,
         range_proofs: None,
         metadata: HashMap::new(),
+        salt: None,
     };
     let transactions = vec![tx1, tx2];
 
@@ -67,7 +69,9 @@ fn test_transaction_hash() {
         inputs: vec![],
         outputs: vec![TransactionOutput {
             value: 100,
-            public_key_script: vec![],
+            public_key_script: vec![1, 2, 3],
+            commitment: None,
+            range_proof: None,
         }],
         lock_time: 0,
         fee_adjustments: None,
@@ -77,13 +81,16 @@ fn test_transaction_hash() {
         amount_commitments: None,
         range_proofs: None,
         metadata: HashMap::new(),
+        salt: None,
     };
 
     let tx2 = Transaction {
         inputs: vec![],
         outputs: vec![TransactionOutput {
             value: 100,
-            public_key_script: vec![],
+            public_key_script: vec![1, 2, 3],
+            commitment: None,
+            range_proof: None,
         }],
         lock_time: 0,
         fee_adjustments: None,
@@ -93,6 +100,7 @@ fn test_transaction_hash() {
         amount_commitments: None,
         range_proofs: None,
         metadata: HashMap::new(),
+        salt: None,
     };
 
     assert_eq!(hash_transaction(&tx1), tx1.hash());

@@ -3,8 +3,7 @@ use crate::blockchain::{Transaction, TransactionInput, TransactionOutput, OutPoi
 use crate::crypto::privacy::{TransactionObfuscator, StealthAddressing, ConfidentialTransactions};
 use crate::crypto::metadata_protection::AdvancedMetadataProtection;
 use crate::crypto::jubjub::{JubjubPoint, JubjubScalar, generate_keypair};
-use crate::config::privacy_registry::PrivacySettingsRegistry;
-use crate::config::presets::PrivacyPreset;
+use crate::networking::privacy_config_integration::{PrivacySettingsRegistry, PrivacyPreset};
 
 /// Creates a test transaction with basic inputs and outputs
 fn create_test_transaction() -> Transaction {
@@ -23,6 +22,8 @@ fn create_test_transaction() -> Transaction {
             TransactionOutput {
                 value: 100,
                 public_key_script: vec![4, 5, 6],
+                range_proof: None,
+                commitment: None,
             }
         ],
         lock_time: 0,
@@ -32,11 +33,8 @@ fn create_test_transaction() -> Transaction {
         ephemeral_pubkey: None,
         amount_commitments: None,
         range_proofs: None,
-        metadata: {
-            let mut metadata = HashMap::new();
-            metadata.insert("test".to_string(), "value".to_string());
-            metadata
-        },
+        metadata: HashMap::new(),
+        salt: None,
     }
 }
 
@@ -182,7 +180,7 @@ fn test_confidential_transactions_integration() {
     let mut confidential = ConfidentialTransactions::new();
     
     // Apply confidential transactions
-    tx.apply_confidential_transactions(&mut confidential).unwrap();
+    tx.apply_confidential_transactions(&mut confidential);
     
     // Verify that the amount commitments were created
     assert!(tx.amount_commitments.is_some());
@@ -212,7 +210,8 @@ fn test_stealth_addressing_integration() {
     let mut stealth = StealthAddressing::new();
     
     // Generate a recipient keypair
-    let (_, recipient_pubkey) = generate_keypair();
+    let recipient_keypair = generate_keypair();
+    let recipient_pubkey = recipient_keypair.public;
     
     // Apply stealth addressing
     tx.apply_stealth_addressing(&mut stealth, &[recipient_pubkey]).unwrap();
@@ -260,7 +259,8 @@ fn test_full_privacy_pipeline() {
     let mut confidential = ConfidentialTransactions::new();
     
     // Generate a recipient keypair
-    let (_, recipient_pubkey) = generate_keypair();
+    let recipient_keypair = generate_keypair();
+    let recipient_pubkey = recipient_keypair.public;
     
     // Apply all privacy features in the correct order
     
@@ -274,7 +274,7 @@ fn test_full_privacy_pipeline() {
     tx.apply_stealth_addressing(&mut stealth, &[recipient_pubkey]).unwrap();
     
     // 4. Apply confidential transactions
-    tx.apply_confidential_transactions(&mut confidential).unwrap();
+    tx.apply_confidential_transactions(&mut confidential);
     
     // Verify that all privacy features were applied
     assert!(tx.obfuscated_id.is_some());

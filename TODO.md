@@ -435,107 +435,217 @@
     - [x] Add transaction scanning functionality
     - [x] Create amount decryption methods
 
-- [ ] Integration Testing
-  - [x] Develop comprehensive integration test suite
-    - [x] Create end-to-end privacy workflow tests
-    - [x] Implement cross-component interaction tests
-    - [x] Add boundary condition tests
-    - [x] Create long-running integration scenarios
-    - [x] Implement stress tests for privacy features
-  - [ ] Create multi-feature privacy tests
-    - [ ] Implement Dandelion + Tor integration tests
-    - [ ] Add stealth addressing + confidential transactions tests
-    - [ ] Create view key + metadata protection tests
-    - [ ] Implement circuit routing + timing obfuscation tests
-    - [ ] Add multi-hop routing + transaction batching tests
-  - [ ] Develop adversarial integration tests
-    - [ ] Create correlation attack simulations
-    - [ ] Implement timing leak tests across boundaries
-    - [ ] Add metadata leakage detection across components
-    - [ ] Create integration fuzzing for privacy boundaries
-    - [ ] Implement adversarial network simulation
+## Fix Network Privacy Component Implementation Issues
+- [ ] Update NetworkPrivacyManager integration with registry
+  - [ ] Fix constructor to properly use Arc-wrapped registry
+    - [ ] Modify NetworkPrivacyManager::new to accept Arc<PrivacySettingsRegistry>
+    - [ ] Update all constructor calls to properly unwrap or clone the Arc
+    - [ ] Implement appropriate error handling for registry access failures
+    - [ ] Add unit tests to verify correct registry integration
+  - [ ] Replace NetworkPrivacyLevel enum with PrivacyLevel
+    - [ ] Remove NetworkPrivacyLevel enum completely
+    - [ ] Update all function signatures to use config::PrivacyLevel
+    - [ ] Add appropriate imports for PrivacyLevel
+    - [ ] Update all match statements to handle all PrivacyLevel variants
+  - [ ] Update privacy level match statements with Custom variant
+    - [ ] Add Custom variant handling in all privacy level match expressions
+    - [ ] Implement reasonable defaults for custom privacy configurations
+    - [ ] Create helper methods for custom privacy level interpretation
+    - [ ] Add detailed logging for custom privacy settings
 
-- [ ] Performance Optimization
-  - [ ] Profile privacy feature integration points
-    - [ ] Benchmark cryptographic operations across boundaries
-    - [ ] Measure transaction processing pipeline
-    - [ ] Profile network message propagation
-    - [ ] Analyze memory usage patterns during privacy operations
-    - [ ] Identify concurrency bottlenecks
-  - [ ] Implement cross-component optimizations
-    - [ ] Create shared cryptographic operation cache
-    - [ ] Implement batched signature verification across components
-    - [ ] Add parallel processing for privacy-intensive operations
-    - [ ] Create privacy computation scheduling system
-    - [ ] Implement optimized serialization for privacy structures
-  - [ ] Develop adaptive performance scaling
-    - [ ] Create load-based privacy level adjustments
-    - [ ] Implement prioritization framework for privacy operations
-    - [ ] Add resource allocation optimization for privacy features
-    - [ ] Create context-aware privacy computation
-    - [ ] Implement predictive resource allocation
+- [ ] Fix CircuitRouter structural issues
+  - [ ] Redesign CircuitRouter data structures for proper circuit info storage
+    - [ ] Create proper Circuit struct with all required fields
+    - [ ] Define appropriate types for circuit endpoints and relays
+    - [ ] Implement serialization/deserialization for circuit data
+    - [ ] Add versioning support for circuit structures
+  - [ ] Update HashMap fields to store correct types
+    - [ ] Modify circuit_map to use appropriate key/value types
+    - [ ] Update all HashMap access methods to handle the new types
+    - [ ] Implement type conversion where necessary
+    - [ ] Add validation for stored circuit data
+  - [ ] Improve circuit management logic
+    - [ ] Implement proper circuit cleanup for expired circuits
+    - [ ] Add circuit rotation based on time and usage metrics
+    - [ ] Create circuit health monitoring
+    - [ ] Implement circuit selection algorithm based on privacy needs
+    - [ ] Add fallback mechanisms for circuit failures
 
-- [ ] Error Handling
-  - [ ] Develop comprehensive error management framework
-    - [ ] Create privacy-specific error taxonomy
-    - [ ] Implement error propagation standards
-    - [ ] Add error severity classification
-    - [ ] Create recovery strategy definitions
-    - [ ] Implement circuit breaker patterns for privacy features
-  - [ ] Implement graceful degradation for privacy features
-    - [ ] Create fallback mechanisms for critical privacy components
-    - [ ] Implement partial privacy preservation under failure
-    - [ ] Add privacy level downgrade paths
-    - [ ] Create user notification system for privacy compromises
-    - [ ] Implement automatic recovery mechanisms
-  - [ ] Enhance error boundary protection
-    - [ ] Create privacy boundary guardians
-    - [ ] Implement privacy invariant validation
-    - [ ] Add transaction privacy verification before broadcast
-    - [ ] Create metadata leakage prevention under errors
-    - [ ] Implement post-recovery privacy validation
+- [ ] Update DandelionRouter implementation
+  - [ ] Add missing stem_probability and fluff_probability fields
+    - [ ] Define stem_probability and fluff_probability as configurable parameters
+    - [ ] Add default values based on privacy level
+    - [ ] Implement getters and setters with appropriate validation
+    - [ ] Connect probability fields to privacy settings registry
+  - [ ] Implement probability-based routing decisions
+    - [ ] Create weighted random selection algorithm for stem/fluff decision
+    - [ ] Implement adaptive probability adjustment based on network conditions
+    - [ ] Add entropy sources for randomization
+    - [ ] Create deterministic testing mode for probabilities
+  - [ ] Fix transaction propagation logic
+    - [ ] Update stem phase transaction handling
+    - [ ] Fix fluff phase broadcast implementation
+    - [ ] Implement proper transaction aggregation
+    - [ ] Add timeout handling for stem phase
+    - [ ] Create retry mechanism for failed propagation
 
-- [ ] Metrics and Monitoring
-  - [ ] Implement privacy metrics collection system
-    - [ ] Create anonymity set size monitoring
-    - [ ] Add statistical transaction graph monitoring
-    - [ ] Implement timing correlation detection
-    - [ ] Create peer connection privacy metrics
-    - [ ] Add metadata protection effectiveness measurement
-  - [ ] Develop privacy health dashboard
-    - [ ] Create real-time privacy status visualization
-    - [ ] Implement historical privacy metrics tracking
-    - [ ] Add privacy regression alerts
-    - [ ] Create component integration health status
-    - [ ] Implement privacy attack early warning system
-  - [ ] Create performance impact monitoring
-    - [ ] Implement resource usage tracking for privacy features
-    - [ ] Add transaction processing delay attribution
-    - [ ] Create privacy/performance correlation visualization
-    - [ ] Implement adaptive threshold monitoring
-    - [ ] Add predictive performance impact analysis
+- [ ] Fix TorConnection configuration
+  - [ ] Update TorConfig struct with missing fields
+    - [ ] Add circuit_rotation_interval field to TorConfig
+    - [ ] Implement connection timeout configuration
+    - [ ] Add relay selection strategy parameters
+    - [ ] Create bandwidth throttling configuration
+  - [ ] Add circuit_rotation_interval to TorConfig
+    - [ ] Implement time-based circuit rotation
+    - [ ] Create adaptive rotation based on traffic volume
+    - [ ] Add randomization to prevent timing analysis
+    - [ ] Implement circuit preemptive creation
+  - [ ] Improve Tor circuit management
+    - [ ] Create circuit pool with multiple available circuits
+    - [ ] Implement circuit health monitoring
+    - [ ] Add circuit selection based on transaction privacy requirements
+    - [ ] Create fallback mechanisms for circuit failures
+    - [ ] Implement stream isolation for different transaction types
 
-- [ ] Develop Privacy Testing and Measurement Framework
-  - [ ] Create privacy analysis toolkit
-    - [ ] Implement transaction graph analysis tools
-    - [ ] Add network traffic analysis framework
-    - [ ] Create privacy score metrics and reporting
-    - [ ] Implement anonymity set measurement
-    - [ ] Add side-channel vulnerability scanning
-  - [ ] Implement privacy regression testing
-    - [ ] Create automated privacy feature verification
-    - [ ] Add differential privacy testing
-    - [ ] Implement transaction unlinkability testing
-    - [ ] Create metadata leakage detection
-    - [ ] Add comprehensive deanonymization attempt simulation
-  - [ ] Develop privacy attack simulation
-    - [ ] Implement Sybil attack testing
-    - [ ] Create transaction correlation attacks
-    - [ ] Add timing analysis attack simulation
-    - [ ] Implement network-level deanonymization attempts
-    - [ ] Create long-term correlation attack modeling
+- [ ] Add BurstAndWait connection pattern to FingerprintingProtection
+  - [ ] Implement burst and wait behavior logic
+    - [ ] Create configurable burst size parameter
+    - [ ] Implement variable wait period calculation
+    - [ ] Add randomization to burst timing
+    - [ ] Create traffic volume-based burst adjustments
+  - [ ] Update connection pattern rotation logic
+    - [ ] Add BurstAndWait to rotation options
+    - [ ] Implement appropriate selection probability based on privacy level
+    - [ ] Create smooth transitions between patterns
+    - [ ] Add pattern mixing strategies for improved privacy
+  - [ ] Add proper timing controls for burst patterns
+    - [ ] Implement precise timing mechanism for bursts
+    - [ ] Create adaptive timing based on network conditions
+    - [ ] Add jitter to prevent fingerprinting
+    - [ ] Implement backpressure handling for network congestion
+    - [ ] Create traffic shaping to normalize burst profiles
 
-### Wallet Development
+- [ ] Implement Comprehensive Testing for Privacy Components
+  - [ ] Create unit tests for all privacy components
+    - [ ] Implement NetworkPrivacyManager test suite
+    - [ ] Add CircuitRouter comprehensive tests
+    - [ ] Create DandelionRouter test scenarios
+    - [ ] Implement TorConnection mocked tests
+    - [ ] Add FingerprintingProtection pattern tests
+  - [ ] Develop integration tests for privacy component interactions
+    - [ ] Test NetworkPrivacyManager with real registry
+    - [ ] Create end-to-end transaction privacy tests
+    - [ ] Implement network simulation for privacy routing
+    - [ ] Add cross-component interactions tests
+    - [ ] Create timing and latency tests for privacy features
+  - [ ] Implement privacy metrics collection and verification
+    - [ ] Create anonymity set measurement tests
+    - [ ] Implement traffic pattern analysis
+    - [ ] Add fingerprinting resistance verification
+    - [ ] Create privacy score calculation for network transactions
+    - [ ] Implement transaction graph analysis tests
+
+## Integration Testing
+- [x] Develop comprehensive integration test suite
+  - [x] Create end-to-end privacy workflow tests
+  - [x] Implement cross-component interaction tests
+  - [x] Add boundary condition tests
+  - [x] Create long-running integration scenarios
+  - [x] Implement stress tests for privacy features
+- [ ] Create multi-feature privacy tests
+  - [ ] Implement Dandelion + Tor integration tests
+  - [ ] Add stealth addressing + confidential transactions tests
+  - [ ] Create view key + metadata protection tests
+  - [ ] Implement circuit routing + timing obfuscation tests
+  - [ ] Add multi-hop routing + transaction batching tests
+- [ ] Develop adversarial integration tests
+  - [ ] Create correlation attack simulations
+  - [ ] Implement timing leak tests across boundaries
+  - [ ] Add metadata leakage detection across components
+  - [ ] Create integration fuzzing for privacy boundaries
+  - [ ] Implement adversarial network simulation
+
+## Performance Optimization
+- [ ] Profile privacy feature integration points
+  - [ ] Benchmark cryptographic operations across boundaries
+  - [ ] Measure transaction processing pipeline
+  - [ ] Profile network message propagation
+  - [ ] Analyze memory usage patterns during privacy operations
+  - [ ] Identify concurrency bottlenecks
+- [ ] Implement cross-component optimizations
+  - [ ] Create shared cryptographic operation cache
+  - [ ] Implement batched signature verification across components
+  - [ ] Add parallel processing for privacy-intensive operations
+  - [ ] Create privacy computation scheduling system
+  - [ ] Implement optimized serialization for privacy structures
+- [ ] Develop adaptive performance scaling
+  - [ ] Create load-based privacy level adjustments
+  - [ ] Implement prioritization framework for privacy operations
+  - [ ] Add resource allocation optimization for privacy features
+  - [ ] Create context-aware privacy computation
+  - [ ] Implement predictive resource allocation
+
+## Error Handling
+- [ ] Develop comprehensive error management framework
+  - [ ] Create privacy-specific error taxonomy
+  - [ ] Implement error propagation standards
+  - [ ] Add error severity classification
+  - [ ] Create recovery strategy definitions
+  - [ ] Implement circuit breaker patterns for privacy features
+- [ ] Implement graceful degradation for privacy features
+  - [ ] Create fallback mechanisms for critical privacy components
+  - [ ] Implement partial privacy preservation under failure
+  - [ ] Add privacy level downgrade paths
+  - [ ] Create user notification system for privacy compromises
+  - [ ] Implement automatic recovery mechanisms
+- [ ] Enhance error boundary protection
+  - [ ] Create privacy boundary guardians
+  - [ ] Implement privacy invariant validation
+  - [ ] Add transaction privacy verification before broadcast
+  - [ ] Create metadata leakage prevention under errors
+  - [ ] Implement post-recovery privacy validation
+
+## Metrics and Monitoring
+- [ ] Implement privacy metrics collection system
+  - [ ] Create anonymity set size monitoring
+  - [ ] Add statistical transaction graph monitoring
+  - [ ] Implement timing correlation detection
+  - [ ] Create peer connection privacy metrics
+  - [ ] Add metadata protection effectiveness measurement
+- [ ] Develop privacy health dashboard
+  - [ ] Create real-time privacy status visualization
+  - [ ] Implement historical privacy metrics tracking
+  - [ ] Add privacy regression alerts
+  - [ ] Create component integration health status
+  - [ ] Implement privacy attack early warning system
+- [ ] Create performance impact monitoring
+  - [ ] Implement resource usage tracking for privacy features
+  - [ ] Add transaction processing delay attribution
+  - [ ] Create privacy/performance correlation visualization
+  - [ ] Implement adaptive threshold monitoring
+  - [ ] Add predictive performance impact analysis
+
+## Develop Privacy Testing and Measurement Framework
+- [ ] Create privacy analysis toolkit
+  - [ ] Implement transaction graph analysis tools
+  - [ ] Add network traffic analysis framework
+  - [ ] Create privacy score metrics and reporting
+  - [ ] Implement anonymity set measurement
+  - [ ] Add side-channel vulnerability scanning
+- [ ] Implement privacy regression testing
+  - [ ] Create automated privacy feature verification
+  - [ ] Add differential privacy testing
+  - [ ] Implement transaction unlinkability testing
+  - [ ] Create metadata leakage detection
+  - [ ] Add comprehensive deanonymization attempt simulation
+- [ ] Develop privacy attack simulation
+  - [ ] Implement Sybil attack testing
+  - [ ] Create transaction correlation attacks
+  - [ ] Add timing analysis attack simulation
+  - [ ] Implement network-level deanonymization attempts
+  - [ ] Create long-term correlation attack modeling
+
+## Wallet Development
 - [ ] CLI Wallet
   - [ ] Basic key generation
     - [ ] Implement BIP39 mnemonic generation
@@ -683,7 +793,7 @@
     - [ ] Implement visual mempool explorer
     - [ ] Add rich search functionality
 
-### Testing Infrastructure
+## Testing Infrastructure
 - [ ] Testnet Setup
   - [ ] Create genesis block configuration
     - [ ] Define initial parameters
@@ -735,7 +845,7 @@
     - [ ] Implement privacy feature test acceleration
     - [ ] Add privacy regression test suite
 
-### Testing and Quality Assurance
+## Testing and Quality Assurance
 - [ ] Enhance PoS testing framework
   - [ ] Implement comprehensive test scenarios for edge cases
   - [ ] Create simulation tools for staking behaviors
@@ -755,7 +865,7 @@
   - [ ] Add network partition simulation
   - [ ] Create tools for visualizing staking metrics
 
-### Documentation
+## Documentation
 - [ ] Create comprehensive PoS documentation
   - [ ] Write technical specification for the PoS mechanism
   - [ ] Create user guides for staking and delegation
@@ -776,7 +886,7 @@
   - [ ] Add documentation for governance proposals affecting PoS
   - [ ] Document network upgrades related to PoS
 
-### Monitoring and Analytics
+## Monitoring and Analytics
 - [ ] Implement PoS monitoring system
   - [ ] Create validator performance metrics
   - [ ] Add staking statistics collection
@@ -1511,3 +1621,4 @@
 - [ ] Benchmark performance of BLS12-381 and Jubjub operations
 - [ ] Implement zk-SNARK circuits for enhanced privacy features
 - [ ] Update atomic swap functionality for cross-chain compatibility 
+

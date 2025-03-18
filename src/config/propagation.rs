@@ -29,13 +29,25 @@ pub enum ConfigPropagationError {
     
     #[error("Validation failed: {0}")]
     ValidationFailed(String),
+    
+    #[error("Version mismatch: {0}")]
+    VersionMismatch(String),
+    
+    #[error("Network error: {0}")]
+    NetworkError(String),
+    
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+    
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
 /// Result of a configuration propagation operation
 pub type ConfigPropagationResult = Result<(), ConfigPropagationError>;
 
 /// Configuration version information
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ConfigVersion {
     /// Semantic version of the configuration
     pub version: Version,
@@ -62,6 +74,12 @@ impl ConfigVersion {
             created_by: created_by.to_string(),
             description,
         }
+    }
+}
+
+impl fmt::Display for ConfigVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.version)
     }
 }
 
@@ -162,24 +180,36 @@ pub enum ConflictResolutionStrategy {
     /// Use the version with highest priority
     Priority,
     
-    /// Merge changes from both versions
+    /// Keep the local configuration
+    KeepLocal,
+    
+    /// Accept the remote configuration
+    AcceptRemote,
+    
+    /// Merge configurations, preferring local values in conflicts
+    MergePreferLocal,
+    
+    /// Merge configurations, preferring remote values in conflicts
+    MergePreferRemote,
+    
+    /// Merge configurations
     Merge,
     
-    /// Ask user for resolution
-    AskUser,
-    
-    /// Reject the conflicting changes
+    /// Reject the new configuration
     Reject,
 }
 
 impl fmt::Display for ConflictResolutionStrategy {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ConflictResolutionStrategy::Latest => write!(f, "Latest"),
-            ConflictResolutionStrategy::Priority => write!(f, "Priority"),
-            ConflictResolutionStrategy::Merge => write!(f, "Merge"),
-            ConflictResolutionStrategy::AskUser => write!(f, "AskUser"),
-            ConflictResolutionStrategy::Reject => write!(f, "Reject"),
+            Self::Latest => write!(f, "Latest"),
+            Self::Priority => write!(f, "Priority"),
+            Self::KeepLocal => write!(f, "Keep Local"),
+            Self::AcceptRemote => write!(f, "Accept Remote"),
+            Self::MergePreferLocal => write!(f, "Merge (Prefer Local)"),
+            Self::MergePreferRemote => write!(f, "Merge (Prefer Remote)"),
+            Self::Merge => write!(f, "Merge"),
+            Self::Reject => write!(f, "Reject"),
         }
     }
 }
@@ -499,7 +529,17 @@ impl ConfigPropagator {
                     "Conflict resolution strategy is set to reject".to_string()
                 ))
             },
-            ConflictResolutionStrategy::Priority | ConflictResolutionStrategy::AskUser => {
+            ConflictResolutionStrategy::KeepLocal => {
+                // Keep the local configuration
+                Ok(current_config.clone())
+            },
+            ConflictResolutionStrategy::AcceptRemote => {
+                // Accept the remote configuration
+                Ok(new_config.clone())
+            },
+            ConflictResolutionStrategy::Priority | 
+            ConflictResolutionStrategy::MergePreferLocal | 
+            ConflictResolutionStrategy::MergePreferRemote => {
                 // These strategies require external input, so we can't fully resolve automatically
                 Err(ConfigPropagationError::VersionConflict(
                     format!("Conflict resolution strategy {} requires manual intervention", strategy)
@@ -773,14 +813,14 @@ impl ConfigObserverRegistry {
             strategies.push(observer.on_conflict(current, new));
         }
         
-        // If any observer chooses Reject, reject the change
-        if strategies.contains(&ConflictResolutionStrategy::Reject) {
-            return ConflictResolutionStrategy::Reject;
+        // If any observer chooses KeepLocal, keep the local version
+        if strategies.contains(&ConflictResolutionStrategy::KeepLocal) {
+            return ConflictResolutionStrategy::KeepLocal;
         }
         
-        // If any observer chooses AskUser, ask the user
-        if strategies.contains(&ConflictResolutionStrategy::AskUser) {
-            return ConflictResolutionStrategy::AskUser;
+        // If any observer chooses AcceptRemote, accept the remote version
+        if strategies.contains(&ConflictResolutionStrategy::AcceptRemote) {
+            return ConflictResolutionStrategy::AcceptRemote;
         }
         
         // If any observer chooses Priority, use priority
@@ -788,9 +828,14 @@ impl ConfigObserverRegistry {
             return ConflictResolutionStrategy::Priority;
         }
         
-        // If any observer chooses Merge, merge the configurations
-        if strategies.contains(&ConflictResolutionStrategy::Merge) {
-            return ConflictResolutionStrategy::Merge;
+        // If any observer chooses MergePreferLocal, merge with local preference
+        if strategies.contains(&ConflictResolutionStrategy::MergePreferLocal) {
+            return ConflictResolutionStrategy::MergePreferLocal;
+        }
+        
+        // If any observer chooses MergePreferRemote, merge with remote preference
+        if strategies.contains(&ConflictResolutionStrategy::MergePreferRemote) {
+            return ConflictResolutionStrategy::MergePreferRemote;
         }
         
         // Default to Latest

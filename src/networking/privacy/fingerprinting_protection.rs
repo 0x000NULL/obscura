@@ -1,15 +1,20 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use log::{debug, info, warn, error};
-use rand::{thread_rng, Rng, seq::SliceRandom};
+use rand::{thread_rng, Rng};
+use rand::prelude::SliceRandom;
+use rand::distributions::{Distribution, Uniform};
+use std::net::IpAddr;
 
-use crate::config::privacy_registry::{PrivacySettingsRegistry, ComponentType};
-use crate::networking::privacy::NetworkPrivacyLevel;
+use crate::blockchain::Transaction;
+use crate::config::presets::PrivacyLevel;
+use crate::config::privacy_registry;
+use crate::config::privacy_registry::PrivacySettingsRegistry;
 
 // Constants for fingerprinting protection
-const USER_AGENT_ROTATION_INTERVAL: Duration = Duration::from_secs(3600); // 1 hour
+const USER_AGENT_ROTATION_INTERVAL_HOURS: u64 = 24;
 const CONNECTION_PATTERN_ROTATION_INTERVAL: Duration = Duration::from_secs(1800); // 30 minutes
 const MIN_PRIVACY_CONNECTIONS: usize = 8;
 const MESSAGE_TIMING_JITTER_MS: u64 = 100;
@@ -48,7 +53,10 @@ pub enum ConnectionPattern {
     /// Gradually increase and decrease connections
     Breathing,
     
-    /// Random connection pattern
+    /// Connect in bursts and then wait
+    BurstAndWait,
+    
+    /// Completely random connection pattern
     Random,
 }
 
@@ -58,7 +66,7 @@ pub struct FingerprintingProtection {
     config_registry: Arc<PrivacySettingsRegistry>,
     
     /// Current privacy level
-    privacy_level: RwLock<NetworkPrivacyLevel>,
+    privacy_level: RwLock<PrivacyLevel>,
     
     /// User agent strings to cycle through
     user_agents: Mutex<Vec<String>>,
@@ -91,87 +99,63 @@ pub struct FingerprintingProtection {
 impl FingerprintingProtection {
     /// Create a new FingerprintingProtection with the given configuration registry
     pub fn new(config_registry: Arc<PrivacySettingsRegistry>) -> Self {
-        let privacy_level = config_registry
-            .get_setting_for_component(
-                ComponentType::Network,
-                "privacy_level",
-                crate::config::presets::PrivacyLevel::Medium,
-            ).into();
-        
-        let enabled = match privacy_level {
-            NetworkPrivacyLevel::Standard => false,
-            NetworkPrivacyLevel::Enhanced | NetworkPrivacyLevel::Maximum => true,
-        };
-        
-        // Default user agents
-        let user_agents = vec![
-            "Obscura/1.0".to_string(),
-            "Obscura/1.0 (Compatible)".to_string(),
-            "Obscura/1.0.1".to_string(),
-            "Obscura/0.9.9".to_string(),
-            "Obscura/1.1-dev".to_string(),
-        ];
-        
-        // Default TCP parameters
-        let tcp_parameters = TcpParameterSettings {
-            window_size: 65535,
-            ttl: 64,
-            mss: 1460,
-            use_timestamps: true,
-            use_window_scaling: true,
-            window_scaling_factor: 7,
-        };
-        
         Self {
             config_registry,
-            privacy_level: RwLock::new(privacy_level),
-            user_agents: Mutex::new(user_agents),
+            privacy_level: RwLock::new(PrivacyLevel::Standard),
+            user_agents: Mutex::new(Vec::new()),
             current_user_agent: Mutex::new(0),
             last_user_agent_rotation: Mutex::new(Instant::now()),
-            tcp_parameters: Mutex::new(tcp_parameters),
+            tcp_parameters: Mutex::new(TcpParameterSettings {
+                window_size: 65535,
+                ttl: 64,
+                mss: 1460,
+                use_timestamps: true,
+                use_window_scaling: true,
+                window_scaling_factor: 7,
+            }),
             last_tcp_randomization: Mutex::new(Instant::now()),
             connection_pattern: Mutex::new(ConnectionPattern::Constant),
             last_pattern_rotation: Mutex::new(Instant::now()),
-            enabled: RwLock::new(enabled),
+            enabled: RwLock::new(false),
             initialized: RwLock::new(false),
         }
     }
     
-    /// Initialize the FingerprintingProtection
+    /// Initialize the fingerprinting protection
     pub fn initialize(&self) -> Result<(), String> {
         if *self.initialized.read().unwrap() {
             return Ok(());
         }
         
-        // Initialize the protection based on the current privacy level
+        debug!("Initializing FingerprintingProtection");
+        
+        // Initial setup based on privacy level
         let privacy_level = *self.privacy_level.read().unwrap();
         
         // Configure based on privacy level
         match privacy_level {
-            NetworkPrivacyLevel::Standard => {
+            PrivacyLevel::Standard => {
                 debug!("Initializing FingerprintingProtection with standard privacy settings");
                 *self.enabled.write().unwrap() = false;
             },
-            NetworkPrivacyLevel::Enhanced => {
+            PrivacyLevel::Medium | PrivacyLevel::High => {
                 debug!("Initializing FingerprintingProtection with enhanced privacy settings");
                 *self.enabled.write().unwrap() = true;
-                self.randomize_tcp_parameters();
-                *self.connection_pattern.lock().unwrap() = ConnectionPattern::Rotating;
-            },
-            NetworkPrivacyLevel::Maximum => {
-                debug!("Initializing FingerprintingProtection with maximum privacy settings");
-                *self.enabled.write().unwrap() = true;
-                self.randomize_tcp_parameters();
-                *self.connection_pattern.lock().unwrap() = ConnectionPattern::Random;
                 
-                // Add more user agents for maximum privacy
-                let mut user_agents = self.user_agents.lock().unwrap();
-                user_agents.push("Obscura/1.0.2-beta".to_string());
-                user_agents.push("Obscura/1.0.3-rc1".to_string());
-                user_agents.push("Obscura/1.0 (Linux; x86_64)".to_string());
-                user_agents.push("Obscura/1.0 (Windows; x86_64)".to_string());
-                user_agents.push("Obscura/1.0 (macOS; arm64)".to_string());
+                // Setup the fingerprinting protection
+                self.randomize_tcp_parameters();
+                self.rotate_user_agent();
+                self.rotate_connection_pattern();
             },
+            PrivacyLevel::Custom => {
+                debug!("Initializing FingerprintingProtection with custom privacy settings");
+                *self.enabled.write().unwrap() = true;
+                
+                // Setup with default medium settings for custom level
+                self.randomize_tcp_parameters();
+                self.rotate_user_agent();
+                self.rotate_connection_pattern();
+            }
         }
         
         *self.initialized.write().unwrap() = true;
@@ -179,35 +163,14 @@ impl FingerprintingProtection {
     }
     
     /// Set the privacy level
-    pub fn set_privacy_level(&self, level: NetworkPrivacyLevel) {
+    pub fn set_privacy_level(&self, level: PrivacyLevel) {
+        debug!("Setting fingerprinting protection privacy level to {:?}", level);
         *self.privacy_level.write().unwrap() = level;
         
-        // Reconfigure based on new privacy level
-        if *self.initialized.read().unwrap() {
-            debug!("Updating FingerprintingProtection privacy level to {:?}", level);
-            
-            // Update enabled state based on privacy level
-            let enabled = match level {
-                NetworkPrivacyLevel::Standard => false,
-                NetworkPrivacyLevel::Enhanced | NetworkPrivacyLevel::Maximum => true,
-            };
-            
-            *self.enabled.write().unwrap() = enabled;
-            
-            // Update connection pattern based on privacy level
-            let pattern = match level {
-                NetworkPrivacyLevel::Standard => ConnectionPattern::Constant,
-                NetworkPrivacyLevel::Enhanced => ConnectionPattern::Rotating,
-                NetworkPrivacyLevel::Maximum => ConnectionPattern::Random,
-            };
-            
-            *self.connection_pattern.lock().unwrap() = pattern;
-            
-            // Randomize TCP parameters if enabled
-            if enabled {
-                self.randomize_tcp_parameters();
-            }
-        }
+        // Update settings based on privacy level
+        self.randomize_tcp_parameters();
+        self.rotate_user_agent();
+        self.rotate_connection_pattern();
     }
     
     /// Get the current user agent
@@ -231,7 +194,7 @@ impl FingerprintingProtection {
         let mut last_rotation = self.last_user_agent_rotation.lock().unwrap();
         
         // Check if it's time to rotate
-        if last_rotation.elapsed() < USER_AGENT_ROTATION_INTERVAL {
+        if last_rotation.elapsed() < Duration::from_secs(USER_AGENT_ROTATION_INTERVAL_HOURS * 3600) {
             return;
         }
         
@@ -247,7 +210,7 @@ impl FingerprintingProtection {
         debug!("Rotated user agent to: {}", user_agents[*current_index]);
     }
     
-    /// Randomize TCP parameters
+    /// Randomize TCP parameters for fingerprinting protection
     pub fn randomize_tcp_parameters(&self) {
         if !*self.enabled.read().unwrap() {
             return;
@@ -258,27 +221,30 @@ impl FingerprintingProtection {
         
         // Randomize window size
         tcp_params.window_size = match *self.privacy_level.read().unwrap() {
-            NetworkPrivacyLevel::Standard => 65535,
-            NetworkPrivacyLevel::Enhanced => rng.gen_range(32768..=65535),
-            NetworkPrivacyLevel::Maximum => rng.gen_range(16384..=65535),
+            PrivacyLevel::Standard => 65535,
+            PrivacyLevel::Medium => rng.gen_range(32768..=65535),
+            PrivacyLevel::High => rng.gen_range(16384..=65535),
+            PrivacyLevel::Custom => rng.gen_range(32768..=65535), // Default to medium for custom
         };
         
         // Randomize TTL
         tcp_params.ttl = match *self.privacy_level.read().unwrap() {
-            NetworkPrivacyLevel::Standard => 64,
-            NetworkPrivacyLevel::Enhanced => rng.gen_range(48..=64),
-            NetworkPrivacyLevel::Maximum => rng.gen_range(32..=128),
+            PrivacyLevel::Standard => 64,
+            PrivacyLevel::Medium => rng.gen_range(48..=64),
+            PrivacyLevel::High => rng.gen_range(32..=128),
+            PrivacyLevel::Custom => rng.gen_range(48..=64), // Default to medium for custom
         };
         
         // Randomize MSS
         tcp_params.mss = match *self.privacy_level.read().unwrap() {
-            NetworkPrivacyLevel::Standard => 1460,
-            NetworkPrivacyLevel::Enhanced => rng.gen_range(1400..=1460),
-            NetworkPrivacyLevel::Maximum => rng.gen_range(1200..=1460),
+            PrivacyLevel::Standard => 1460,
+            PrivacyLevel::Medium => rng.gen_range(1400..=1460),
+            PrivacyLevel::High => rng.gen_range(1200..=1460),
+            PrivacyLevel::Custom => rng.gen_range(1400..=1460), // Default to medium for custom
         };
         
         // Randomize other TCP options
-        if *self.privacy_level.read().unwrap() == NetworkPrivacyLevel::Maximum {
+        if *self.privacy_level.read().unwrap() == PrivacyLevel::High {
             tcp_params.use_timestamps = rng.gen_bool(0.7);
             tcp_params.use_window_scaling = rng.gen_bool(0.9);
             tcp_params.window_scaling_factor = rng.gen_range(1..=14);
@@ -296,7 +262,7 @@ impl FingerprintingProtection {
         self.tcp_parameters.lock().unwrap().clone()
     }
     
-    /// Rotate connection pattern
+    /// Rotate the connection pattern
     pub fn rotate_connection_pattern(&self) {
         if !*self.enabled.read().unwrap() {
             return;
@@ -314,28 +280,34 @@ impl FingerprintingProtection {
         
         // Rotate to a different pattern based on privacy level
         match privacy_level {
-            NetworkPrivacyLevel::Standard => {
+            PrivacyLevel::Standard => {
                 *pattern = ConnectionPattern::Constant;
             },
-            NetworkPrivacyLevel::Enhanced => {
+            PrivacyLevel::Medium => {
                 // Cycle between Constant and Rotating
                 *pattern = match *pattern {
                     ConnectionPattern::Constant => ConnectionPattern::Rotating,
-                    _ => ConnectionPattern::Constant,
+                    ConnectionPattern::Rotating => ConnectionPattern::Constant,
+                    _ => ConnectionPattern::Rotating,
                 };
             },
-            NetworkPrivacyLevel::Maximum => {
+            PrivacyLevel::High => {
                 // Choose a random pattern
                 let patterns = [
-                    ConnectionPattern::Constant,
                     ConnectionPattern::Rotating,
-                    ConnectionPattern::Breathing,
+                    ConnectionPattern::BurstAndWait,
                     ConnectionPattern::Random,
                 ];
-                
-                let mut rng = thread_rng();
-                *pattern = *patterns.choose(&mut rng).unwrap();
+                *pattern = *patterns.choose(&mut thread_rng()).unwrap();
             },
+            PrivacyLevel::Custom => {
+                // Default to medium behavior for custom
+                *pattern = match *pattern {
+                    ConnectionPattern::Constant => ConnectionPattern::Rotating,
+                    ConnectionPattern::Rotating => ConnectionPattern::Constant,
+                    _ => ConnectionPattern::Rotating,
+                };
+            }
         }
         
         // Update last rotation time
@@ -359,9 +331,10 @@ impl FingerprintingProtection {
         let privacy_level = *self.privacy_level.read().unwrap();
         
         let base_connections = match privacy_level {
-            NetworkPrivacyLevel::Standard => MIN_PRIVACY_CONNECTIONS,
-            NetworkPrivacyLevel::Enhanced => MIN_PRIVACY_CONNECTIONS + 4,
-            NetworkPrivacyLevel::Maximum => MIN_PRIVACY_CONNECTIONS + 8,
+            PrivacyLevel::Standard => MIN_PRIVACY_CONNECTIONS,
+            PrivacyLevel::Medium => MIN_PRIVACY_CONNECTIONS + 4,
+            PrivacyLevel::High => MIN_PRIVACY_CONNECTIONS + 8,
+            PrivacyLevel::Custom => MIN_PRIVACY_CONNECTIONS + 4, // Default to medium for custom
         };
         
         match pattern {
@@ -390,7 +363,7 @@ impl FingerprintingProtection {
     
     /// Calculate message timing jitter
     pub fn calculate_timing_jitter(&self) -> Duration {
-        if !*self.enabled.read().unwrap() {
+        if !*self.initialized.read().unwrap() {
             return Duration::from_millis(0);
         }
         
@@ -398,9 +371,10 @@ impl FingerprintingProtection {
         let mut rng = thread_rng();
         
         let jitter_ms = match privacy_level {
-            NetworkPrivacyLevel::Standard => 0,
-            NetworkPrivacyLevel::Enhanced => rng.gen_range(0..=MESSAGE_TIMING_JITTER_MS / 2),
-            NetworkPrivacyLevel::Maximum => rng.gen_range(0..=MESSAGE_TIMING_JITTER_MS),
+            PrivacyLevel::Standard => 0,
+            PrivacyLevel::Medium => rng.gen_range(0..=MESSAGE_TIMING_JITTER_MS / 2),
+            PrivacyLevel::High => rng.gen_range(0..=MESSAGE_TIMING_JITTER_MS),
+            PrivacyLevel::Custom => rng.gen_range(0..=MESSAGE_TIMING_JITTER_MS / 2), // Default to Medium for custom
         };
         
         Duration::from_millis(jitter_ms)
@@ -503,7 +477,7 @@ mod tests {
         
         // Force enabled and maximum privacy for this test
         *protection.enabled.write().unwrap() = true;
-        *protection.privacy_level.write().unwrap() = NetworkPrivacyLevel::Maximum;
+        *protection.privacy_level.write().unwrap() = PrivacyLevel::High;
         
         // Get initial connection pattern
         let initial_pattern = protection.get_connection_pattern();

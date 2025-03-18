@@ -251,6 +251,14 @@ impl Wallet {
         self.keypair.as_ref().map(|kp| kp.public)
     }
 
+    pub fn get_public_key_bytes(&self) -> Vec<u8> {
+        if let Some(keypair) = &self.keypair {
+            jubjub_point_to_bytes(&keypair.public)
+        } else {
+            Vec::new()
+        }
+    }
+
     pub fn enable_privacy(&mut self) {
         self.privacy_enabled = true;
         // Initialize stealth addressing if not already done
@@ -487,6 +495,8 @@ impl Wallet {
         let payment_output = TransactionOutput {
             value: amount,
             public_key_script: recipient_bytes,
+            range_proof: None,
+            commitment: None,
         };
 
         tx.outputs.push(payment_output);
@@ -497,6 +507,8 @@ impl Wallet {
             let change_output = TransactionOutput {
                 value: change,
                 public_key_script: jubjub_point_to_bytes(&keypair.public),
+                range_proof: None,
+                commitment: None,
             };
 
             tx.outputs.push(change_output);
@@ -601,6 +613,8 @@ impl Wallet {
         let payment_output = TransactionOutput {
             value: amount,
             public_key_script: recipient_bytes,
+            range_proof: None,
+            commitment: None,
         };
 
         tx.outputs.push(payment_output);
@@ -609,7 +623,9 @@ impl Wallet {
         if self.balance > amount {
             let change_output = TransactionOutput {
                 value: self.balance - amount,
-                public_key_script: jubjub_point_to_bytes(&keypair.public),
+                public_key_script: self.get_public_key_bytes(),
+                range_proof: None,
+                commitment: None,
             };
 
             tx.outputs.push(change_output);
@@ -1076,6 +1092,8 @@ impl Wallet {
         let output = TransactionOutput {
             value: amount,
             public_key_script: jubjub_point_to_bytes(&keypair.public),
+            range_proof: None,
+            commitment: None,
         };
 
         tx.outputs.push(output);
@@ -1390,6 +1408,8 @@ impl Wallet {
             let output = TransactionOutput {
                 value: utxo.value,
                 public_key_script: utxo.script,
+                range_proof: None,
+                commitment: None,
             };
 
             self.utxos.insert(outpoint, output);
@@ -1662,6 +1682,8 @@ impl Wallet {
         TransactionOutput {
             value: amount,
             public_key_script: address,
+            range_proof: None,
+            commitment: None,
         }
     }
 
@@ -1776,7 +1798,7 @@ impl Wallet {
     /// @param amount The amount to send
     /// @return The privacy-enhanced transaction or an error message
     pub fn create_private_transaction(
-        &self,
+        &mut self,
         recipient: &JubjubPoint,
         amount: u64
     ) -> Result<Transaction, String> {
@@ -1812,19 +1834,14 @@ impl Wallet {
         let fee = (estimated_size as u64 * fee_per_kb) / 1000;
         
         // Generate a one-time stealth address for the recipient
-        let stealth_address = if let Some(ref stealth) = self.stealth_addressing {
+        let stealth_address = if let Some(ref mut stealth) = self.stealth_addressing {
             // Create a stealth address for the recipient to enhance privacy
             let recipient_pubkey_bytes = recipient.to_bytes();
             let recipient_pubkey = JubjubPoint::from_bytes(&recipient_pubkey_bytes)
                 .ok_or_else(|| "Invalid recipient public key".to_string())?;
             
             // Generate stealth address if stealth addressing is enabled
-            let stealth_address = if let Some(ref mut stealth) = self.stealth_addressing {
-                stealth.generate_one_time_address(&recipient_pubkey)
-            } else {
-                // Fall back to regular addressing if stealth is not available
-                recipient_pubkey.to_bytes()
-            };
+            stealth.generate_one_time_address(&recipient_pubkey)
         } else {
             // Fallback if stealth addressing not available
             recipient.to_bytes().to_vec()
@@ -1923,6 +1940,7 @@ impl Wallet {
             amount_commitments: None,
             range_proofs: None,
             metadata: HashMap::new(),
+            salt: None,
         };
         
         // Sign the transaction
@@ -2049,3 +2067,6 @@ impl Wallet {
         self.transaction_timestamps = timestamps;
     }
 }
+
+// For test compatibility - aliasing existing types to match test expectations
+pub type StealthAddress = Vec<u8>;

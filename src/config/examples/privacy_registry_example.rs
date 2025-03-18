@@ -4,6 +4,7 @@ use std::sync::Arc;
 use crate::config::privacy_registry::{ComponentType, PrivacySettingsRegistry, ConfigUpdateListener, ConfigChangeEvent};
 use crate::config::validation::{ValidationRule, ValidationResult, ConfigValidationError};
 use crate::config::presets::{PrivacyLevel, PrivacyPreset};
+use crate::config::validation::ConfigValidator;
 
 // Example validator implementation
 struct ExampleValidator {}
@@ -21,11 +22,12 @@ impl ValidationRule for ExampleValidator {
             ));
         }
         
+        // All checks passed
         Ok(())
     }
     
     fn description(&self) -> &str {
-        "Validates basic compatibility of privacy settings"
+        "Example validator that checks for basic configuration consistency"
     }
     
     fn suggest_fix(&self, config: &PrivacyPreset) -> Option<HashMap<String, String>> {
@@ -61,7 +63,12 @@ impl crate::config::privacy_registry::ConfigUpdateListener for ExampleListener {
 
 pub fn run_example() {
     // Create a validator
-    let validator = Arc::new(ExampleValidator {});
+    let example_validator = Arc::new(ExampleValidator {});
+    
+    // Create a ConfigValidator with our example rule
+    let mut validator = ConfigValidator::new();
+    validator.add_rule(Box::new(ExampleValidator {}));
+    let validator = Arc::new(validator);
     
     // Create a registry with standard privacy preset
     let registry = PrivacySettingsRegistry::new_with_preset(
@@ -89,10 +96,12 @@ pub fn run_example() {
     
     // Get component-specific configuration
     println!("\nWallet component configuration:");
-    if let Some(wallet_config) = registry.get_component_config(ComponentType::Wallet) {
+    if let Some(wallet_config) = registry.get_component_config::<HashMap<String, String>>(ComponentType::Wallet, "default") {
         for (key, value) in wallet_config {
             println!("  {}: {}", key, value);
         }
+    } else {
+        println!("No wallet configuration found");
     }
     
     // Check if specific features are enabled
@@ -119,7 +128,7 @@ pub fn run_example() {
             if validation.is_valid {
                 println!("Settings updated successfully");
             } else {
-                println!("Settings update failed validation: {:?}", validation.validation_errors);
+                println!("Settings update failed validation: {:?}", validation.errors);
             }
         },
         Err(e) => println!("Error updating settings: {}", e),

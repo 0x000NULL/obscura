@@ -27,6 +27,8 @@ pub fn create_test_transaction() -> Transaction {
         outputs: vec![TransactionOutput {
             value: 100,
             public_key_script: vec![],
+            commitment: None,
+            range_proof: None,
         }],
         lock_time: 0,
         fee_adjustments: None,
@@ -36,6 +38,7 @@ pub fn create_test_transaction() -> Transaction {
         amount_commitments: None,
         range_proofs: None,
         metadata: std::collections::HashMap::new(),
+        salt: Some(vec![0u8; 32]),
     }
 }
 

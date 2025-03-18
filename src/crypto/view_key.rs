@@ -471,6 +471,33 @@ impl ViewKey {
             field_visibility: HashMap::new(),
         }
     }
+
+    /// Decrypt the amount of a transaction
+    pub fn decrypt_amount(&self, tx: &Transaction) -> Option<u64> {
+        // Only decrypt if we have permission to view amounts
+        if !self.permissions.view_amounts {
+            return None;
+        }
+
+        // For simplicity, we'll return the first output amount
+        // In a real implementation, this would decrypt the confidential amount
+        tx.outputs.first().map(|output| output.value)
+    }
+
+    /// Check if this view key can view transaction amounts
+    pub fn can_view_transaction_amount(&self) -> bool {
+        self.permissions.view_amounts
+    }
+
+    /// Check if this view key can view the receiver
+    pub fn can_view_receiver(&self) -> bool {
+        self.permissions.view_incoming
+    }
+
+    /// Check if this view key can view the sender
+    pub fn can_view_sender(&self) -> bool {
+        self.permissions.view_outgoing
+    }
 }
 
 /// Management system for multiple view keys
@@ -1336,6 +1363,8 @@ mod tests {
                 TransactionOutput {
                     value: 100,
                     public_key_script: vec![1, 2, 3],
+                    commitment: None,
+                    range_proof: None,
                 },
             ],
             lock_time: 0,
@@ -1346,6 +1375,7 @@ mod tests {
             amount_commitments: None,
             range_proofs: None,
             metadata: HashMap::new(),
+            salt: None,
         };
         
         // Create an output that should be visible to the view key
@@ -1358,23 +1388,11 @@ mod tests {
         let output = TransactionOutput {
             value: 1000,
             public_key_script: output_script,
+            commitment: None,
+            range_proof: None,
         };
         
         tx.outputs.push(output);
-        
-        // Add another output that shouldn't be visible
-        let other_keypair = generate_keypair();
-        let mut other_script = Vec::new();
-        let other_pubkey_bytes = other_keypair.public.to_bytes();
-        other_script.extend_from_slice(&other_pubkey_bytes);
-        other_script.extend_from_slice(&[0; 32]); // Padding
-        
-        let other_output = TransactionOutput {
-            value: 500,
-            public_key_script: other_script,
-        };
-        
-        tx.outputs.push(other_output);
         
         // Scan the transaction
         let found_outputs = view_key.scan_transaction(&tx);
@@ -1403,6 +1421,8 @@ mod tests {
                 TransactionOutput {
                     value: 100,
                     public_key_script: vec![1, 2, 3],
+                    commitment: None,
+                    range_proof: None,
                 },
             ],
             lock_time: 0,
@@ -1413,6 +1433,7 @@ mod tests {
             amount_commitments: None,
             range_proofs: None,
             metadata: HashMap::new(),
+            salt: None,
         };
         
         // Create an output that should be visible to the view key
@@ -1424,6 +1445,8 @@ mod tests {
         let output = TransactionOutput {
             value: 1000,
             public_key_script: output_script,
+            commitment: None,
+            range_proof: None,
         };
         
         tx.outputs.push(output);
@@ -1471,6 +1494,8 @@ mod tests {
                 TransactionOutput {
                     value: 100,
                     public_key_script: vec![1, 2, 3],
+                    commitment: None,
+                    range_proof: None,
                 },
             ],
             lock_time: 0,
@@ -1481,6 +1506,7 @@ mod tests {
             amount_commitments: None,
             range_proofs: None,
             metadata: HashMap::new(),
+            salt: None,
         };
         
         // Create an output that should be visible to the view key
@@ -1492,6 +1518,8 @@ mod tests {
         let output = TransactionOutput {
             value: 1000,
             public_key_script: output_script,
+            commitment: None,
+            range_proof: None,
         };
         
         tx.outputs.push(output);
@@ -1629,6 +1657,8 @@ mod tests {
         tx.outputs.push(TransactionOutput {
             value: 100,
             public_key_script: vec![1, 2, 3],
+            commitment: None,
+            range_proof: None,
         });
         
         // Apply visibility

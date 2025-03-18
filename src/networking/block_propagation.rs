@@ -1023,6 +1023,8 @@ mod tests {
                 TransactionOutput {
                     value: 100,
                     public_key_script: vec![1, 2, 3],
+                    commitment: None,
+                    range_proof: None,
                 },
             ],
             lock_time: 0,
@@ -1033,6 +1035,7 @@ mod tests {
             amount_commitments: None,
             range_proofs: None,
             metadata: std::collections::HashMap::new(),
+            salt: None,
         };
 
         Block {

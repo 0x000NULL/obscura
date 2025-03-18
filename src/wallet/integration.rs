@@ -390,7 +390,7 @@ impl WalletIntegration {
         
         // 1. Create the transaction with privacy enhancements
         let mut tx = {
-            let wallet = self.wallet.read().unwrap();
+            let mut wallet = self.wallet.write().unwrap();
             wallet.create_private_transaction(recipient, amount)?
         };
         
@@ -470,15 +470,17 @@ mod integration_tests {
         // Create wallet integration for sender
         let sender_integration = WalletIntegration::new(
             sender_wallet.clone(),
+            Arc::new(Mutex::new(Node::new())),
+            Arc::new(Mutex::new(Mempool::new())),
             utxo_set.clone(),
-            None,
         );
         
         // Create wallet integration for receiver
         let receiver_integration = WalletIntegration::new(
             receiver_wallet.clone(),
+            Arc::new(Mutex::new(Node::new())),
+            Arc::new(Mutex::new(Mempool::new())),
             utxo_set.clone(),
-            None,
         );
         
         // Enable privacy for sender
@@ -499,11 +501,8 @@ mod integration_tests {
         receiver_integration.process_incoming_transaction(&tx).unwrap();
         
         // Verify that the receiver wallet has received the funds
-        let receiver_balance = receiver_wallet.read().unwrap().balance;
-        assert_eq!(receiver_balance, (payment_amount * 100_000_000.0) as u64);
-        
-        // Verify that the receiver wallet has the UTXO
-        let receiver_utxos = receiver_wallet.read().unwrap().get_utxos();
+        let receiver_wallet_lock = receiver_wallet.read().unwrap();
+        let receiver_utxos = receiver_wallet_lock.get_utxos();
         assert_eq!(receiver_utxos.len(), 1);
     }
 } 

@@ -147,9 +147,14 @@ impl ConfigValidator {
         validator
     }
     
-    /// Add a validation rule
+    /// Add a validation rule to the validator
     pub fn add_rule(&mut self, rule: Box<dyn ValidationRule>) {
         self.rules.push(rule);
+    }
+    
+    /// Get the validation rules
+    pub fn rules(&self) -> &Vec<Box<dyn ValidationRule>> {
+        &self.rules
     }
     
     /// Validate a privacy configuration
