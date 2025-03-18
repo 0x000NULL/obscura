@@ -275,45 +275,51 @@ impl FingerprintingProtection {
             return;
         }
         
+        let mut rng = thread_rng();
+        let mut connection_pattern = self.connection_pattern.lock().unwrap();
         let privacy_level = *self.privacy_level.read().unwrap();
-        let mut pattern = self.connection_pattern.lock().unwrap();
         
-        // Rotate to a different pattern based on privacy level
-        match privacy_level {
-            PrivacyLevel::Standard => {
-                *pattern = ConnectionPattern::Constant;
-            },
-            PrivacyLevel::Medium => {
-                // Cycle between Constant and Rotating
-                *pattern = match *pattern {
-                    ConnectionPattern::Constant => ConnectionPattern::Rotating,
-                    ConnectionPattern::Rotating => ConnectionPattern::Constant,
-                    _ => ConnectionPattern::Rotating,
-                };
-            },
-            PrivacyLevel::High => {
-                // Choose a random pattern
-                let patterns = [
-                    ConnectionPattern::Rotating,
-                    ConnectionPattern::BurstAndWait,
-                    ConnectionPattern::Random,
-                ];
-                *pattern = *patterns.choose(&mut thread_rng()).unwrap();
-            },
-            PrivacyLevel::Custom => {
-                // Default to medium behavior for custom
-                *pattern = match *pattern {
-                    ConnectionPattern::Constant => ConnectionPattern::Rotating,
-                    ConnectionPattern::Rotating => ConnectionPattern::Constant,
-                    _ => ConnectionPattern::Rotating,
-                };
+        // Define available patterns based on privacy level
+        let available_patterns = match privacy_level {
+            PrivacyLevel::Standard => vec![
+                ConnectionPattern::Constant,
+                ConnectionPattern::Rotating,
+            ],
+            PrivacyLevel::Medium => vec![
+                ConnectionPattern::Constant,
+                ConnectionPattern::Rotating,
+                ConnectionPattern::Breathing,
+                ConnectionPattern::BurstAndWait,
+            ],
+            PrivacyLevel::High => vec![
+                ConnectionPattern::Rotating,
+                ConnectionPattern::Breathing,
+                ConnectionPattern::BurstAndWait,
+                ConnectionPattern::Random,
+            ],
+            PrivacyLevel::Custom => vec![
+                ConnectionPattern::Constant,
+                ConnectionPattern::Rotating,
+                ConnectionPattern::Breathing,
+                ConnectionPattern::BurstAndWait,
+            ], // Default to medium for custom
+        };
+        
+        // Select a new pattern, different from the current one
+        let mut new_pattern = *connection_pattern;
+        if available_patterns.len() > 1 {
+            while new_pattern == *connection_pattern {
+                let idx = rng.gen_range(0..available_patterns.len());
+                new_pattern = available_patterns[idx];
             }
+        } else if !available_patterns.is_empty() {
+            new_pattern = available_patterns[0];
         }
         
-        // Update last rotation time
+        *connection_pattern = new_pattern;
         *last_rotation = Instant::now();
         
-        debug!("Rotated connection pattern to: {:?}", *pattern);
+        debug!("Rotated connection pattern to: {:?}", new_pattern);
     }
     
     /// Get the current connection pattern
@@ -323,61 +329,121 @@ impl FingerprintingProtection {
     
     /// Calculate the target number of connections based on the current pattern
     pub fn calculate_target_connections(&self) -> usize {
-        if !*self.enabled.read().unwrap() {
-            return MIN_PRIVACY_CONNECTIONS;
-        }
-        
-        let pattern = *self.connection_pattern.lock().unwrap();
         let privacy_level = *self.privacy_level.read().unwrap();
         
+        // Calculate the base number of connections
         let base_connections = match privacy_level {
-            PrivacyLevel::Standard => MIN_PRIVACY_CONNECTIONS,
-            PrivacyLevel::Medium => MIN_PRIVACY_CONNECTIONS + 4,
-            PrivacyLevel::High => MIN_PRIVACY_CONNECTIONS + 8,
-            PrivacyLevel::Custom => MIN_PRIVACY_CONNECTIONS + 4, // Default to medium for custom
+            PrivacyLevel::Standard => 8,
+            PrivacyLevel::Medium => 12,
+            PrivacyLevel::High => 16,
+            PrivacyLevel::Custom => {
+                // Instead of using get_int, use a default value for custom level
+                12 // Default to medium level connections
+            }
         };
         
-        match pattern {
+        // Adjust based on the connection pattern
+        let connection_pattern = *self.connection_pattern.lock().unwrap();
+        let adjusted_connections = match connection_pattern {
             ConnectionPattern::Constant => base_connections,
-            ConnectionPattern::Rotating => {
-                // Vary between base and base+4
-                let elapsed = self.last_pattern_rotation.lock().unwrap().elapsed();
-                let cycle_position = (elapsed.as_secs() % 600) as f64 / 600.0; // 10-minute cycle
-                let variation = (cycle_position * std::f64::consts::PI * 2.0).sin() * 2.0;
-                (base_connections as f64 + variation) as usize
+            ConnectionPattern::Random => {
+                // Add some randomness
+                let mut rng = thread_rng();
+                let variance = (base_connections as i32 / 4).max(1); // Convert to i32 for safe arithmetic
+                let adjustment = rng.gen_range(-variance..=variance);
+                let adjusted = (base_connections as i32 + adjustment).max(3) as usize; // Ensure at least 3 connections
+                adjusted
             },
             ConnectionPattern::Breathing => {
-                // Gradually increase and decrease
-                let elapsed = self.last_pattern_rotation.lock().unwrap().elapsed();
-                let cycle_position = (elapsed.as_secs() % 1200) as f64 / 1200.0; // 20-minute cycle
-                let variation = (cycle_position * std::f64::consts::PI * 2.0).sin() * 4.0;
-                (base_connections as f64 + variation) as usize
+                // Breathing pattern: cyclic variation over time
+                let now = Instant::now();
+                let elapsed_secs = now.elapsed().as_secs() % 600; // 10-minute cycle
+                let phase = (elapsed_secs as f64) / 600.0 * 2.0 * std::f64::consts::PI;
+                let sin_value = phase.sin();
+                
+                let variance = match privacy_level {
+                    PrivacyLevel::Standard => 2,
+                    PrivacyLevel::Medium => 4,
+                    PrivacyLevel::High => 6,
+                    PrivacyLevel::Custom => 4, // Default to medium for custom
+                };
+                
+                let variation = (sin_value * variance as f64).round() as i32;
+                let adjusted = base_connections as i32 + variation;
+                adjusted.max(MIN_PRIVACY_CONNECTIONS as i32) as usize
             },
-            ConnectionPattern::Random => {
-                // Random number of connections
-                let mut rng = thread_rng();
-                rng.gen_range(base_connections..=base_connections + 8)
+            ConnectionPattern::BurstAndWait => {
+                // Either very few or many connections based on current phase
+                let elapsed = self.last_pattern_rotation.lock().unwrap().elapsed().as_secs() % 600; // 10 min cycle
+                if elapsed < 120 { // 2 min burst phase
+                    base_connections + 4 // Burst phase - more connections
+                } else {
+                    base_connections - 2 // Wait phase - fewer connections
+                }.max(MIN_PRIVACY_CONNECTIONS)
             },
-        }
+            ConnectionPattern::Rotating => {
+                // Rotating pattern: vary slightly around the base
+                let variance = match privacy_level {
+                    PrivacyLevel::Standard => 1,
+                    PrivacyLevel::Medium => 2,
+                    PrivacyLevel::High => 3,
+                    PrivacyLevel::Custom => 2, // Default to medium for custom
+                };
+                
+                // Use i32 to safely handle negative values, then convert back to usize
+                let variation = rng.gen_range(-variance..=variance);
+                let adjusted = base_connections as i32 + variation;
+                adjusted.max(MIN_PRIVACY_CONNECTIONS as i32) as usize
+            },
+        };
+        
+        adjusted_connections
     }
     
     /// Calculate message timing jitter
     pub fn calculate_timing_jitter(&self) -> Duration {
-        if !*self.initialized.read().unwrap() {
-            return Duration::from_millis(0);
-        }
-        
         let privacy_level = *self.privacy_level.read().unwrap();
-        let mut rng = thread_rng();
         
-        let jitter_ms = match privacy_level {
-            PrivacyLevel::Standard => 0,
-            PrivacyLevel::Medium => rng.gen_range(0..=MESSAGE_TIMING_JITTER_MS / 2),
-            PrivacyLevel::High => rng.gen_range(0..=MESSAGE_TIMING_JITTER_MS),
-            PrivacyLevel::Custom => rng.gen_range(0..=MESSAGE_TIMING_JITTER_MS / 2), // Default to Medium for custom
+        // Base jitter value in milliseconds
+        let base_jitter_ms = match privacy_level {
+            PrivacyLevel::Standard => 100,
+            PrivacyLevel::Medium => 250,
+            PrivacyLevel::High => 500,
+            PrivacyLevel::Custom => {
+                // Instead of using get_int, use a default value for custom level
+                250 // Default to medium level jitter
+            }
         };
         
-        Duration::from_millis(jitter_ms)
+        // Adjust based on connection pattern
+        let connection_pattern = *self.connection_pattern.lock().unwrap();
+        let adjusted_jitter_ms = match connection_pattern {
+            ConnectionPattern::Constant => base_jitter_ms,
+            ConnectionPattern::Random => {
+                // Add randomness
+                let mut rng = thread_rng();
+                let variance = base_jitter_ms / 2;
+                base_jitter_ms + rng.gen_range(0..=variance)
+            },
+            ConnectionPattern::Breathing => {
+                let elapsed = self.last_pattern_rotation.lock().unwrap().elapsed();
+                let cycle_position = (elapsed.as_secs() % 300) as f64 / 300.0; // 5-minute cycle
+                let jitter_f64 = (cycle_position * std::f64::consts::PI * 2.0).sin().abs() * (base_jitter_ms as f64);
+                jitter_f64 as u64
+            },
+            ConnectionPattern::BurstAndWait => {
+                // Different jitter based on cycle phase
+                let elapsed = self.last_pattern_rotation.lock().unwrap().elapsed().as_secs() % 600; // 10 min cycle
+                if elapsed < 120 { // 2 min burst phase
+                    base_jitter_ms / 2 // Lower jitter during burst
+                } else {
+                    base_jitter_ms * 2 // Higher jitter during wait
+                }
+            },
+            ConnectionPattern::Rotating => base_jitter_ms,
+        };
+        
+        Duration::from_millis(adjusted_jitter_ms)
     }
     
     /// Maintain the fingerprinting protection
@@ -410,6 +476,48 @@ impl FingerprintingProtection {
     /// Check if the protection is initialized
     pub fn is_initialized(&self) -> bool {
         *self.initialized.read().unwrap()
+    }
+    
+    /// Calculate padding for handshake pattern
+    fn calculate_padding_for_pattern(&self, pattern: ConnectionPattern) -> usize {
+        // Base padding size
+        let base_padding = match *self.privacy_level.read().unwrap() {
+            PrivacyLevel::Standard => 32,
+            PrivacyLevel::Medium => 64,
+            PrivacyLevel::High => 128,
+            PrivacyLevel::Custom => 64,
+        };
+        
+        // Adjust based on connection pattern
+        match pattern {
+            ConnectionPattern::Constant => base_padding,
+            ConnectionPattern::Random => {
+                // Random padding
+                let mut rng = thread_rng();
+                rng.gen_range(base_padding/2..=base_padding*2)
+            },
+            ConnectionPattern::Breathing => {
+                // Gradually increase padding
+                let uptime = self.last_pattern_rotation.lock().unwrap().elapsed();
+                let target_time = Duration::from_secs(3600); // 1 hour
+                let ratio = uptime.as_secs_f64() / target_time.as_secs_f64();
+                let ratio = ratio.min(1.0);
+                (base_padding as f64 * (1.0 + ratio)) as usize
+            },
+            ConnectionPattern::BurstAndWait => {
+                // Different padding based on phase
+                let elapsed = self.last_pattern_rotation.lock().unwrap().elapsed().as_secs() % 600; // 10 min cycle
+                if elapsed < 120 { // 2 min burst phase
+                    base_padding / 2 // Less padding during burst
+                } else {
+                    base_padding * 2 // More padding during wait
+                }
+            },
+            ConnectionPattern::Rotating => {
+                // Always maximum padding for rotating pattern
+                base_padding * 3
+            }
+        }
     }
 }
 

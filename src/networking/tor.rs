@@ -60,6 +60,9 @@ pub struct TorConfig {
     pub connection_timeout_secs: u64,
     pub circuit_build_timeout_secs: u64,
     
+    /// Circuit rotation interval for enhanced security
+    pub circuit_rotation_interval: std::time::Duration,
+    
     /// Local hidden service configuration
     pub hidden_service_enabled: bool,
     pub hidden_service_dir: Option<String>,
@@ -95,6 +98,7 @@ impl Default for TorConfig {
             control_password: None,
             connection_timeout_secs: 60,
             circuit_build_timeout_secs: 120,
+            circuit_rotation_interval: Duration::from_secs(300),
             hidden_service_enabled: false,
             hidden_service_dir: None,
             hidden_service_port: None,

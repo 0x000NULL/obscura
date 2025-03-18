@@ -1394,10 +1394,3 @@ mod tests {
         assert_eq!(morphed.payload, original_payload);
     }
 } 
-} 
-        
-        assert!(!morphed.is_morphed);
-        assert_eq!(morphed.morph_type, None);
-        assert_eq!(morphed.payload, original_payload);
-    }
-} 

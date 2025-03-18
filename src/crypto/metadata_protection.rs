@@ -1075,24 +1075,6 @@ impl MessageProtectionExt for MetadataProtection {
         // Set privacy flags to indicate protection has been applied
         protected_tx.privacy_flags |= 0x02; // Flag for metadata minimization
         
-        protected_tx
-    }
-} 
-    fn protect_transaction(&self, tx: &Transaction) -> Transaction {
-        // Create a new transaction with potential metadata protection
-        let mut protected_tx = tx.clone();
-        
-        // Apply basic protection by filtering metadata
-        for sensitive_field in SENSITIVE_METADATA_FIELDS.iter() {
-            protected_tx.metadata.remove(*sensitive_field);
-        }
-        
-        // Set privacy flags to indicate protection has been applied
-        protected_tx.privacy_flags |= 0x02; // Flag for metadata minimization
-        
-        protected_tx
-    }
-} 
         protected_tx = self.broadcast_cleaner.clean_transaction_metadata(&protected_tx);
         
         // Apply additional ZK protections if necessary
@@ -1115,88 +1097,6 @@ impl MessageProtectionExt for MetadataProtection {
                 protected_tx.inputs[0].signature_script = extra_data;
             }
         }
-        
-        protected_tx
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    
-    #[test]
-    fn test_forward_secrecy() {
-        let provider = ForwardSecrecyProvider::new();
-        
-        // Generate keypair
-        let (public_key, _) = provider.generate_ephemeral_keypair().unwrap();
-        
-        // Create a dummy peer key
-        let peer_key = vec![1u8; 32];
-        
-        // Derive shared secret
-        let shared_secret = provider.derive_shared_secret(&public_key, &peer_key).unwrap();
-        
-        // Encrypt a message
-        let message = b"Hello, world!";
-        let encrypted = provider.encrypt_message(message, &shared_secret).unwrap();
-        
-        // Decrypt the message
-        let decrypted = provider.decrypt_message(&encrypted, &shared_secret).unwrap();
-        
-        assert_eq!(message.to_vec(), decrypted);
-    }
-    
-    #[test]
-    fn test_metadata_protection() {
-        let protection = MetadataProtection::new();
-        let config = ProtectionConfig::default();
-        
-        // Create a dummy transaction
-        let tx = Transaction::default();
-        
-        // Protect transaction metadata
-        let protected = protection.protect_transaction_metadata(&tx, &config).unwrap();
-        
-        // Check that protection was applied
-        assert_eq!(protected.protection_level, config.protection_level);
-        assert!(protected.minimized.contains_key("tx_type"));
-    }
-}
-
-/// Extension trait for handling network messages and transactions
-pub trait MessageProtectionExt {
-    /// Protect a network message
-    fn protect_network_message(&self, message: &Message) -> Message;
-    
-    /// Protect a full transaction
-    fn protect_transaction(&self, tx: &Transaction) -> Transaction;
-}
-
-impl MessageProtectionExt for MetadataProtection {
-    fn protect_network_message(&self, message: &Message) -> Message {
-        // Create a new message with same data but potential metadata cleaning
-        Message {
-            message_type: message.message_type,
-            payload: message.payload.clone(),
-            is_padded: message.is_padded,
-            padding_size: message.padding_size,
-            is_morphed: message.is_morphed,
-            morph_type: message.morph_type.clone(),
-        }
-    }
-    
-    fn protect_transaction(&self, tx: &Transaction) -> Transaction {
-        // Create a new transaction with potential metadata protection
-        let mut protected_tx = tx.clone();
-        
-        // Apply basic protection by filtering metadata
-        for sensitive_field in SENSITIVE_METADATA_FIELDS.iter() {
-            protected_tx.metadata.remove(*sensitive_field);
-        }
-        
-        // Set privacy flags to indicate protection has been applied
-        protected_tx.privacy_flags |= 0x02; // Flag for metadata minimization
         
         protected_tx
     }
