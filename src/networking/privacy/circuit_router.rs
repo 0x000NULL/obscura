@@ -569,7 +569,7 @@ impl CircuitRouter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::privacy_registry::PrivacySettingsRegistry;
+    use crate::networking::privacy_config_integration::PrivacySettingsRegistry;
     
     #[test]
     fn test_create_circuit() {

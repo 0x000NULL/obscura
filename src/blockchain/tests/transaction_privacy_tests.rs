@@ -235,6 +235,8 @@ fn test_metadata_protection_integration() {
     tx.metadata.insert("ip".to_string(), "127.0.0.1".to_string());
     tx.metadata.insert("timestamp".to_string(), "1234567890".to_string());
     tx.metadata.insert("user-agent".to_string(), "test-agent".to_string());
+    // Add non-sensitive metadata that should be preserved
+    tx.metadata.insert("test".to_string(), "test-value".to_string());
     
     // Apply metadata protection
     tx.apply_metadata_protection(&protection).unwrap();

@@ -307,7 +307,7 @@ impl DandelionRouter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::privacy_registry;
+    use crate::networking::privacy_config_integration::PrivacySettingsRegistry;
     
     #[test]
     fn test_add_transaction() {
@@ -316,7 +316,7 @@ mod tests {
         let tx_hash = tx.hash();
         
         // Create the router
-        let config_registry = Arc::new(privacy_registry::PrivacySettingsRegistry::new());
+        let config_registry = Arc::new(PrivacySettingsRegistry::new());
         let router = DandelionRouter::new(config_registry);
         
         // Add the transaction

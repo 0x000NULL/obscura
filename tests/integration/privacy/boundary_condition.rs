@@ -40,10 +40,10 @@ mod tests {
             let privacy_config = Arc::new(PrivacySettingsRegistry::new());
             // Convert from obscura::PrivacyLevel to the type expected by set_privacy_level
             let config_level = match privacy_level {
-                obscura::PrivacyLevel::Standard => PrivacyLevel::Standard,
-                obscura::PrivacyLevel::Medium => PrivacyLevel::Medium,
-                obscura::PrivacyLevel::High => PrivacyLevel::High,
-                obscura::PrivacyLevel::Custom => PrivacyLevel::Custom,
+                obscura::PrivacyLevel::Standard => obscura::networking::privacy_config_integration::PrivacyLevel::Standard,
+                obscura::PrivacyLevel::Medium => obscura::networking::privacy_config_integration::PrivacyLevel::Medium,
+                obscura::PrivacyLevel::High => obscura::networking::privacy_config_integration::PrivacyLevel::High,
+                obscura::PrivacyLevel::Custom => obscura::networking::privacy_config_integration::PrivacyLevel::Custom,
             };
             privacy_config.set_privacy_level(config_level);
             

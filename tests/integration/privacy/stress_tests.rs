@@ -36,7 +36,16 @@ impl PrivacyStressTest {
     /// Create a new test instance with the specified privacy level
     fn new(privacy_level: PrivacyLevel) -> Self {
         let privacy_config = Arc::new(PrivacySettingsRegistry::new());
-        privacy_config.set_privacy_level(privacy_level);
+
+        // Convert from config::presets::PrivacyLevel to networking::privacy_config_integration::PrivacyLevel
+        let network_privacy_level = match privacy_level {
+            PrivacyLevel::Standard => obscura::networking::privacy_config_integration::PrivacyLevel::Standard,
+            PrivacyLevel::Medium => obscura::networking::privacy_config_integration::PrivacyLevel::Medium,
+            PrivacyLevel::High => obscura::networking::privacy_config_integration::PrivacyLevel::High,
+            PrivacyLevel::Custom => obscura::networking::privacy_config_integration::PrivacyLevel::Custom,
+        };
+        
+        privacy_config.set_privacy_level(network_privacy_level);
         
         let dandelion_router = DandelionRouter::new(
             privacy_config.clone(),
@@ -121,7 +130,17 @@ impl PrivacyStressTest {
             // Create a new test instance for each thread
             let mut new_config = PrivacySettingsRegistry::new();
             new_config.set_privacy_level(self.privacy_config.get_privacy_level());
-            let test_clone = Self::new(new_config.get_privacy_level());
+            
+            // Convert from networking::privacy_config_integration::PrivacyLevel to config::presets::PrivacyLevel
+            let privacy_level = match self.privacy_config.get_privacy_level() {
+                obscura::networking::privacy_config_integration::PrivacyLevel::Standard => PrivacyLevel::Standard,
+                obscura::networking::privacy_config_integration::PrivacyLevel::Medium => PrivacyLevel::Medium,
+                obscura::networking::privacy_config_integration::PrivacyLevel::High => PrivacyLevel::High,
+                obscura::networking::privacy_config_integration::PrivacyLevel::Custom => PrivacyLevel::Custom,
+            };
+            
+            // Use the converted privacy level
+            let test_clone = Self::new(privacy_level);
             
             let handle = thread::spawn(move || {
                 let mut rng = StdRng::seed_from_u64(thread_id as u64);

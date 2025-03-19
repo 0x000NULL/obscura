@@ -63,6 +63,33 @@ pub struct PrivacyPreset {
     pub metadata_stripping: bool,
 }
 
+impl PrivacyPreset {
+    /// Creates a preset with high privacy settings
+    pub fn high() -> Self {
+        Self {
+            level: PrivacyLevel::High,
+            use_tor: true,
+            tor_stream_isolation: true,
+            tor_only_connections: true,
+            use_i2p: true,
+            use_dandelion: true,
+            dandelion_stem_phase_hops: 10,
+            dandelion_traffic_analysis_protection: true,
+            use_circuit_routing: true,
+            circuit_min_hops: 8,
+            circuit_max_hops: 12,
+            connection_obfuscation_enabled: true,
+            traffic_pattern_obfuscation: true,
+            use_bridge_relays: true,
+            transaction_obfuscation_enabled: true,
+            use_stealth_addresses: true,
+            use_confidential_transactions: true,
+            use_range_proofs: true,
+            metadata_stripping: true,
+        }
+    }
+}
+
 impl Default for PrivacyPreset {
     fn default() -> Self {
         Self {
@@ -121,6 +148,15 @@ impl PrivacySettingsRegistry {
         Self {
             privacy_level: RwLock::new(PrivacyLevel::Standard),
             config: RwLock::new(PrivacyPreset::default()),
+            listeners: RwLock::new(Vec::new()),
+        }
+    }
+    
+    /// Create a new registry with the specified preset
+    pub fn with_preset(preset: PrivacyPreset) -> Self {
+        Self {
+            privacy_level: RwLock::new(preset.level),
+            config: RwLock::new(preset),
             listeners: RwLock::new(Vec::new()),
         }
     }
