@@ -1,5 +1,5 @@
 use obscura::{
-    blockchain::Transaction,
+    blockchain::{Transaction, TransactionOutput},
     config::presets::PrivacyLevel,
     crypto::{
         bulletproofs::RangeProof,
@@ -72,9 +72,20 @@ impl PrivacyStressTest {
     
     /// Create a transaction with random privacy features
     fn create_random_transaction(&self, rng: &mut StdRng) -> Transaction {
-        let mut tx = Transaction::new(Vec::new(), Vec::new());
+        // Create a basic transaction with random inputs and outputs
+        // For testing, keep it simple with just one output
+        let amount = rng.gen_range(1..1_000_000);
+        let mut tx = Transaction::new(
+            Vec::new(),
+            vec![TransactionOutput {
+                value: amount,
+                public_key_script: Vec::new(),
+                range_proof: None,
+                commitment: None,
+            }]
+        );
         
-        // Randomly apply privacy features
+        // Apply privacy features with some randomness
         if rng.gen_bool(0.8) {
             tx.apply_sender_privacy(SenderPrivacy::new());
         }
@@ -84,7 +95,6 @@ impl PrivacyStressTest {
         }
         
         // Add random amount commitment
-        let amount = rng.gen_range(1..1_000_000);
         let blinding_factor = obscura::crypto::pedersen::generate_random_jubjub_scalar();
         let commitment = PedersenCommitment::commit(amount, blinding_factor);
         tx.set_amount_commitment(0, commitment.to_bytes()).unwrap();

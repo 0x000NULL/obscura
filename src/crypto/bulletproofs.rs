@@ -187,7 +187,13 @@ impl RangeProof {
             return Err(BulletproofsError::InvalidBitsize);
         }
         
-        let max_value = (1u64 << bits) - 1;
+        // For bits=64, we need to handle it specially to avoid overflow
+        let max_value = if bits == 64 {
+            u64::MAX
+        } else {
+            (1u64 << bits) - 1
+        };
+        
         if value > max_value {
             return Err(BulletproofsError::InvalidRange(format!(
                 "Value {} exceeds maximum allowed for {} bits",
@@ -422,7 +428,13 @@ impl MultiOutputRangeProof {
             panic!("Bit size cannot exceed 64");
         }
 
-        let max_value = (1u64 << bits) - 1;
+        // Handle bits=64 specially to avoid overflow
+        let max_value = if bits == 64 {
+            u64::MAX
+        } else {
+            (1u64 << bits) - 1
+        };
+        
         for &value in values {
             if value > max_value {
                 panic!("Value {} exceeds maximum allowed for {} bits", value, bits);

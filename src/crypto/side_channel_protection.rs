@@ -3,8 +3,9 @@ use std::thread;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use rand::{thread_rng, Rng};
-use ark_ed_on_bls12_381::{EdwardsProjective as JubjubPoint, Fr as JubjubScalar};
 use ark_ff::PrimeField;
+use crate::crypto::jubjub::JubjubScalarExt;
+use crate::crypto::{JubjubPoint, JubjubScalar};
 
 /// Configuration for side-channel attack protection measures
 #[derive(Debug, Clone)]

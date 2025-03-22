@@ -1,5 +1,6 @@
 use crate::crypto::side_channel_protection::{SideChannelProtection, SideChannelProtectionConfig, SideChannelError};
-use crate::crypto::{JubjubPoint, JubjubScalar, JubjubScalarExt};
+use crate::crypto::jubjub::{JubjubPoint, JubjubScalar, JubjubScalarExt};
+use ark_ff::PrimeField;
 use ark_std::UniformRand;
 use std::sync::Arc;
 use std::thread;

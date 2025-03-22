@@ -1,13 +1,13 @@
 use obscura::{
-    blockchain::Transaction,
+    blockchain::{Transaction, TransactionOutput},
     config::presets::PrivacyLevel,
     crypto::{
-        bulletproofs::RangeProof,
+        bulletproofs::{MultiOutputRangeProof, RangeProof},
         jubjub::{JubjubKeypair, generate_keypair},
         pedersen::PedersenCommitment,
-        privacy::{SenderPrivacy, ReceiverPrivacy},
-        metadata_protection::{MetadataProtection, MessageProtection},
-        side_channel_protection::SideChannelProtectionConfig,
+        privacy::{ReceiverPrivacy, SenderPrivacy},
+        metadata_protection::MetadataProtection,
+        ProtectionConfig
     },
     networking::{
         privacy::{
@@ -71,7 +71,16 @@ mod tests {
         }
         
         fn create_transaction(&self, amount: u64) -> Transaction {
-            let mut tx = Transaction::new(Vec::new(), Vec::new());
+            // Create a transaction with one output
+            let mut tx = Transaction::new(
+                Vec::new(), 
+                vec![TransactionOutput {
+                    value: amount,
+                    public_key_script: Vec::new(),
+                    range_proof: None,
+                    commitment: None,
+                }]
+            );
             
             // Apply privacy features
             tx.apply_sender_privacy(SenderPrivacy::new());

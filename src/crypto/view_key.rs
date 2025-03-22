@@ -123,8 +123,8 @@ impl ViewKey {
         hasher.update(&wallet_scalar.to_bytes());
         let hash_result = hasher.finalize().as_bytes().to_vec();
         
-        // Create the view scalar from the hash
-        let view_scalar = JubjubScalar::from_bytes(&hash_result[0..32]).unwrap_or_else(|| JubjubScalar::zero());
+        // Create the view scalar from the hash using from_le_bytes_mod_order for reliability
+        let view_scalar = JubjubScalar::from_le_bytes_mod_order(&hash_result[0..32]);
         
         // Create the view public key by multiplying the generator by the view scalar
         let view_point = JubjubPoint::generator() * view_scalar;

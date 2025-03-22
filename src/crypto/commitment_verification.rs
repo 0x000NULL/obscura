@@ -8,6 +8,7 @@ use crate::crypto::pedersen::{
     bls_get_g, bls_get_h, get_blinding_store, jubjub_get_g, jubjub_get_h, BlsPedersenCommitment,
     DualCurveCommitment, PedersenCommitment,
 };
+use crate::crypto::errors::{CryptoError, CryptoResult};
 
 use blstrs::Scalar as BlsScalar;
 use log::{debug, error, warn};
@@ -59,6 +60,34 @@ impl std::error::Error for VerificationError {}
 impl From<String> for VerificationError {
     fn from(error: String) -> Self {
         VerificationError::Other(error)
+    }
+}
+
+// Convert VerificationError to our standardized CryptoError
+impl From<VerificationError> for CryptoError {
+    fn from(err: VerificationError) -> Self {
+        match err {
+            VerificationError::InvalidCommitment(msg) => CryptoError::CommitmentError(msg),
+            VerificationError::RangeProofError(msg) => CryptoError::ZkProofError(msg),
+            VerificationError::CryptoError(msg) => CryptoError::UnexpectedError(msg),
+            VerificationError::BlindingStoreError(msg) => CryptoError::CommitmentError(msg),
+            VerificationError::MissingData(msg) => CryptoError::ValidationError(msg),
+            VerificationError::TransactionError(msg) => CryptoError::ValidationError(msg),
+            VerificationError::BalanceError(msg) => CryptoError::ValidationError(msg),
+            VerificationError::Other(msg) => CryptoError::UnexpectedError(msg),
+        }
+    }
+}
+
+// Convert CryptoError to VerificationError (for backward compatibility)
+impl From<CryptoError> for VerificationError {
+    fn from(err: CryptoError) -> Self {
+        match err {
+            CryptoError::CommitmentError(msg) => VerificationError::InvalidCommitment(msg),
+            CryptoError::ZkProofError(msg) => VerificationError::RangeProofError(msg),
+            CryptoError::ValidationError(msg) => VerificationError::MissingData(msg),
+            _ => VerificationError::Other(err.to_string()),
+        }
     }
 }
 

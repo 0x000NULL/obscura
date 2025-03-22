@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 use log::info;
 use ark_std::{Zero, One, UniformRand};
 use hex;
+use crate::crypto::side_channel_protection::{SideChannelProtection, SideChannelProtectionConfig};
 
 #[cfg(test)]
 #[macro_export]
@@ -22,14 +23,14 @@ macro_rules! test_log {
 #[cfg(test)]
 use crate::test_log;
 
-/// Constants for DKG protocol
-const DKG_TIMEOUT_SECONDS: u64 = 60; // Timeout for DKG protocol phases
-const DEFAULT_THRESHOLD: usize = 2;  // Default threshold for t-of-n sharing
+/// Default constants for the DKG protocol
+pub const DEFAULT_THRESHOLD: usize = 3;
+pub const MAX_PARTICIPANTS: usize = 10;
+pub const DKG_TIMEOUT_SECONDS: u64 = 300; // 5 minutes default timeout
+pub const DEFAULT_VERIFICATION_TIMEOUT_SECONDS: u64 = 60; // 1 minute default verification timeout
 const COMMITMENT_VERIFICATION_RETRIES: usize = 3; // Number of retries for commitment verification
-const MAX_PARTICIPANTS: usize = 100; // Maximum number of participants in a DKG round
 const MIN_PARTICIPANTS: usize = 3;   // Minimum number of participants in a DKG round
 const DKG_PROTOCOL_VERSION: u8 = 1;  // Protocol version for compatibility
-const DEFAULT_VERIFICATION_TIMEOUT_SECONDS: u64 = 10; // Default timeout for verification step
 
 /// Represents a participant in the DKG protocol
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -50,6 +51,196 @@ impl Participant {
             public_key,
             address,
         }
+    }
+}
+
+/// Timeout configuration for the DKG protocol
+#[derive(Debug, Clone)]
+pub struct DkgTimeoutConfig {
+    /// Base timeout for the entire protocol in seconds
+    pub base_timeout_seconds: u64,
+    /// Timeout for the verification step in seconds
+    pub verification_timeout_seconds: u64,
+    /// Timeout factor for high-latency networks (multiplier)
+    pub high_latency_factor: f64,
+    /// Whether to use adaptive timeouts based on network conditions
+    pub use_adaptive_timeouts: bool,
+}
+
+impl Default for DkgTimeoutConfig {
+    fn default() -> Self {
+        Self {
+            base_timeout_seconds: DKG_TIMEOUT_SECONDS,
+            verification_timeout_seconds: DEFAULT_VERIFICATION_TIMEOUT_SECONDS,
+            high_latency_factor: 1.5,
+            use_adaptive_timeouts: true,
+        }
+    }
+}
+
+impl DkgTimeoutConfig {
+    /// Create a new timeout configuration with specific values
+    pub fn new(
+        base_timeout_seconds: u64,
+        verification_timeout_seconds: u64,
+        high_latency_factor: f64,
+        use_adaptive_timeouts: bool,
+    ) -> Self {
+        Self {
+            base_timeout_seconds,
+            verification_timeout_seconds,
+            high_latency_factor,
+            use_adaptive_timeouts,
+        }
+    }
+    
+    /// Create a timeout configuration for high-latency networks
+    pub fn high_latency() -> Self {
+        Self {
+            base_timeout_seconds: DKG_TIMEOUT_SECONDS * 2,
+            verification_timeout_seconds: DEFAULT_VERIFICATION_TIMEOUT_SECONDS * 2,
+            high_latency_factor: 2.0,
+            use_adaptive_timeouts: true,
+        }
+    }
+    
+    /// Create a timeout configuration for low-latency networks
+    pub fn low_latency() -> Self {
+        Self {
+            base_timeout_seconds: DKG_TIMEOUT_SECONDS / 2,
+            verification_timeout_seconds: DEFAULT_VERIFICATION_TIMEOUT_SECONDS / 2,
+            high_latency_factor: 1.0,
+            use_adaptive_timeouts: false,
+        }
+    }
+    
+    /// Calculate an appropriate timeout based on the current network conditions
+    pub fn calculate_timeout(&self, network_latency_ms: Option<u64>) -> Duration {
+        let mut base_timeout = self.base_timeout_seconds;
+        
+        // Apply adaptive timeouts if enabled and network latency is available
+        if self.use_adaptive_timeouts && network_latency_ms.is_some() {
+            let latency_ms = network_latency_ms.unwrap();
+            // If latency is significant (> 100ms), apply the high latency factor
+            if latency_ms > 100 {
+                let factor = (latency_ms as f64 / 100.0).min(3.0); // Cap at 3x
+                base_timeout = (base_timeout as f64 * self.high_latency_factor * factor) as u64;
+            }
+        }
+        
+        Duration::from_secs(base_timeout)
+    }
+    
+    /// Calculate an appropriate verification timeout based on the current network conditions
+    pub fn calculate_verification_timeout(&self, network_latency_ms: Option<u64>) -> Duration {
+        let mut verification_timeout = self.verification_timeout_seconds;
+        
+        // Apply adaptive timeouts if enabled and network latency is available
+        if self.use_adaptive_timeouts && network_latency_ms.is_some() {
+            let latency_ms = network_latency_ms.unwrap();
+            // If latency is significant (> 100ms), apply the high latency factor
+            if latency_ms > 100 {
+                let factor = (latency_ms as f64 / 100.0).min(3.0); // Cap at 3x
+                verification_timeout = (verification_timeout as f64 * self.high_latency_factor * factor) as u64;
+            }
+        }
+        
+        Duration::from_secs(verification_timeout)
+    }
+}
+
+/// Configuration for a DKG session
+#[derive(Debug, Clone)]
+pub struct DkgConfig {
+    /// Threshold for secret sharing
+    pub threshold: usize,
+    /// Timeout configuration for the DKG session
+    pub timeout_config: DkgTimeoutConfig,
+    /// Custom verification function
+    pub custom_verification: Option<fn(&[Share], &[Commitment]) -> bool>,
+    /// Whether to use forward secrecy
+    pub use_forward_secrecy: bool,
+    /// Maximum number of participants
+    pub max_participants: usize,
+    /// Our participant ID
+    pub our_id: Vec<u8>,
+    /// Session ID
+    pub session_id: Option<SessionId>,
+    /// Current network latency estimate in milliseconds (for adaptive timeouts)
+    pub network_latency_ms: Option<u64>,
+}
+
+impl Default for DkgConfig {
+    fn default() -> Self {
+        Self {
+            threshold: DEFAULT_THRESHOLD,
+            timeout_config: DkgTimeoutConfig::default(),
+            custom_verification: None,
+            use_forward_secrecy: true,
+            max_participants: MAX_PARTICIPANTS,
+            our_id: Vec::new(),
+            session_id: None,
+            network_latency_ms: None,
+        }
+    }
+}
+
+impl DkgConfig {
+    /// Create a new DKG configuration
+    pub fn new(
+        threshold: usize,
+        timeout_config: DkgTimeoutConfig,
+        forward_secrecy: bool,
+        max_participants: usize,
+    ) -> Self {
+        Self {
+            threshold,
+            timeout_config,
+            custom_verification: None,
+            use_forward_secrecy: forward_secrecy,
+            max_participants,
+            our_id: Vec::new(),
+            session_id: None,
+            network_latency_ms: None,
+        }
+    }
+}
+
+/// The result of a DKG session
+#[derive(Debug, Clone)]
+pub struct DkgResult {
+    /// The generated public key
+    pub public_key: JubjubPoint,
+    /// The participant's share of the private key
+    pub share: Option<Share>,
+    /// The list of participants
+    pub participants: Vec<Participant>,
+    /// The verification data
+    pub verification_data: Vec<JubjubPoint>,
+}
+
+/// The session identifier for a DKG instance
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SessionId(Vec<u8>);
+
+impl SessionId {
+    /// Create a new random session ID
+    pub fn new() -> Self {
+        // Use a more compatible approach to generate random bytes
+        let mut rng = rand::thread_rng();
+        let scalar = JubjubScalar::random(&mut rng);
+        let bytes = scalar.to_bytes();
+        Self(bytes.to_vec())
+    }
+    
+    /// Create a session ID from existing bytes
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        Self(bytes.to_vec())
+    }
+    
+    /// Get the bytes of this session ID
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
     }
 }
 
@@ -85,8 +276,8 @@ impl Polynomial {
     /// Evaluate the polynomial at a point x
     /// Note: x is expected to be a 1-based index
     fn evaluate(&self, x: &JubjubScalar) -> JubjubScalar {
-        // Convert 1-based index to 0-based for evaluation
-        let x_zero_based = *x - JubjubScalar::one();
+        // Validate and convert 1-based index to 0-based for evaluation
+        let x_zero_based = self.validate_and_convert_index(x);
         
         let mut result = JubjubScalar::zero();  // Start with zero
         let mut power = JubjubScalar::one();  // Start with x^0
@@ -97,6 +288,23 @@ impl Polynomial {
         }
         
         result
+    }
+    
+    /// Validate an index and convert from 1-based to 0-based
+    /// Returns the 0-based index for computation
+    fn validate_and_convert_index(&self, one_based_index: &JubjubScalar) -> JubjubScalar {
+        let zero = JubjubScalar::zero();
+        let one = JubjubScalar::one();
+        
+        // Check if index is zero, which is invalid for 1-based indices
+        if *one_based_index == zero {
+            log::error!("Invalid polynomial index: received 0 for 1-based index");
+            // For security, we'll return a safe default rather than panicking
+            return zero; // This will make the polynomial evaluate to the constant term
+        }
+        
+        // Convert to 0-based by subtracting 1
+        *one_based_index - one
     }
     
     /// Get the commitment to this polynomial (i.e., the public coefficients)
@@ -133,8 +341,8 @@ impl Commitment {
     /// Evaluate the commitment at a point x
     /// Note: x is expected to be a 1-based index
     pub fn evaluate(&self, x: &JubjubScalar) -> JubjubPoint {
-        // Convert 1-based index to 0-based for evaluation
-        let x_zero_based = *x - JubjubScalar::one();
+        // Validate and convert 1-based index to 0-based for evaluation
+        let x_zero_based = self.validate_and_convert_index(x);
         
         let mut result = JubjubPoint::zero();  // Start with zero
         let mut power = JubjubScalar::one();  // Start with x^0
@@ -150,18 +358,25 @@ impl Commitment {
     /// Evaluate the commitment at a point x, matching polynomial evaluation
     /// Note: x is expected to be a 1-based index
     pub fn evaluate_at(&self, x: &JubjubScalar) -> JubjubPoint {
-        // Convert 1-based index to 0-based for evaluation
-        let x_zero_based = *x - JubjubScalar::one();
+        // Use the main evaluate method for consistency and maintainability
+        self.evaluate(x)
+    }
+    
+    /// Validate an index and convert from 1-based to 0-based
+    /// Returns the 0-based index for computation
+    fn validate_and_convert_index(&self, one_based_index: &JubjubScalar) -> JubjubScalar {
+        let zero = JubjubScalar::zero();
+        let one = JubjubScalar::one();
         
-        let mut result = JubjubPoint::zero();  // Start with zero
-        let mut power = JubjubScalar::one();  // Start with x^0
-        
-        for value in self.values.iter() {
-            result = result + (*value * power);  // Add C_i * x^i
-            power = power * x_zero_based;  // Calculate x^(i+1) for next term using 0-based index
+        // Check if index is zero, which is invalid for 1-based indices
+        if *one_based_index == zero {
+            log::error!("Invalid commitment index: received 0 for 1-based index");
+            // For security, we'll return a safe default rather than panicking
+            return zero; // This will make the commitment evaluate using the constant term only
         }
         
-        result
+        // Convert to 0-based by subtracting 1
+        *one_based_index - one
     }
 }
 
@@ -222,7 +437,7 @@ impl StateTransition {
     }
 }
 
-/// Enhanced wrapper for state management with better lock handling
+/// Enhanced wrapper for state management with better lock handling and atomic transitions
 struct StateMachine {
     /// Current state
     state: RwLock<DkgState>,
@@ -234,10 +449,14 @@ struct StateMachine {
     verification_start: RwLock<Option<Instant>>,
     /// Verification timeout duration
     verification_timeout: Duration,
+    /// Pending state change for atomic transitions
+    pending_state: RwLock<Option<DkgState>>,
+    /// Rollback state for failed transitions
+    rollback_state: RwLock<Option<DkgState>>,
 }
 
 impl StateMachine {
-    /// Create a new state machine
+    /// Create a new state machine with default timeout values
     fn new(timeout: Duration, verification_timeout: Duration) -> Self {
         Self {
             state: RwLock::new(DkgState::Initialized),
@@ -245,7 +464,17 @@ impl StateMachine {
             timeout,
             verification_start: RwLock::new(None),
             verification_timeout,
+            pending_state: RwLock::new(None),
+            rollback_state: RwLock::new(None),
         }
+    }
+
+    /// Create a new state machine with the given timeout configuration
+    fn new_with_config(timeout_config: &DkgTimeoutConfig, network_latency_ms: Option<u64>) -> Self {
+        let timeout = timeout_config.calculate_timeout(network_latency_ms);
+        let verification_timeout = timeout_config.calculate_verification_timeout(network_latency_ms);
+        
+        Self::new(timeout, verification_timeout)
     }
     
     /// Get the current state
@@ -256,8 +485,8 @@ impl StateMachine {
         }
     }
     
-    /// Try to transition to a new state
-    fn transition_to(&self, new_state: DkgState) -> Result<bool, String> {
+    /// Begin an atomic state transition
+    fn begin_atomic_transition(&self, new_state: DkgState) -> Result<bool, String> {
         // First check if we're timed out without holding locks
         if self.is_timed_out() {
             // Only allow transition to TimedOut state
@@ -266,13 +495,19 @@ impl StateMachine {
             }
         }
         
-        // Acquire write lock to perform the transition
-        let mut state = match self.state.write() {
+        // Acquire write lock for the pending state
+        let mut pending = match self.pending_state.write() {
             Ok(guard) => guard,
-            Err(e) => return Err(format!("Failed to acquire state lock: {:?}", e)),
+            Err(e) => return Err(format!("Failed to acquire pending state lock: {:?}", e)),
         };
         
-        let current_state = state.clone();
+        // Check if there's already a pending transition
+        if pending.is_some() {
+            return Err("Another state transition is already in progress".to_string());
+        }
+        
+        // Get current state
+        let current_state = self.get_state()?;
         
         // Check if the transition is valid
         if !StateTransition::is_valid(&current_state, &new_state) {
@@ -283,47 +518,60 @@ impl StateMachine {
             return Ok(false);
         }
         
-        // Special case for Failed state - always allow with reason
-        if let DkgState::Failed(_) = new_state {
-            *state = new_state.clone();
-            
-            // Update last change timestamp
-            if let Ok(mut last_changed) = self.last_changed.write() {
-                *last_changed = Instant::now();
-            }
-            
-            #[cfg(test)]
-            test_log!("DKG StateMachine: Transitioned from {:?} to {:?}: {}", 
-                     current_state, new_state, StateTransition::describe(&current_state, &new_state));
-            
-            return Ok(true);
-        }
+        // Save the current state for rollback
+        let mut rollback = match self.rollback_state.write() {
+            Ok(guard) => guard,
+            Err(e) => return Err(format!("Failed to acquire rollback state lock: {:?}", e)),
+        };
         
-        // Special case for TimedOut state - handle timeout
-        if new_state == DkgState::TimedOut {
-            // Only transition if we're actually timed out
-            if self.is_timed_out() {
-                *state = DkgState::TimedOut;
-                
-                // Update last change timestamp
-                if let Ok(mut last_changed) = self.last_changed.write() {
-                    *last_changed = Instant::now();
-                }
-                
-                #[cfg(test)]
-                test_log!("DKG StateMachine: Transitioned from {:?} to TimedOut", current_state);
-                
-                return Ok(true);
-            }
-            return Ok(false);
-        }
+        *rollback = Some(current_state.clone());
+        
+        // Set the pending state
+        *pending = Some(new_state);
+        
+        Ok(true)
+    }
+    
+    /// Commit an atomic state transition
+    fn commit_atomic_transition(&self) -> Result<bool, String> {
+        // Acquire pending state for reading
+        let pending_guard = match self.pending_state.read() {
+            Ok(guard) => guard,
+            Err(e) => return Err(format!("Failed to acquire pending state lock: {:?}", e)),
+        };
+        
+        // Check if there's a pending state
+        let new_state = match *pending_guard {
+            Some(ref state) => state.clone(),
+            None => return Err("No pending state transition to commit".to_string()),
+        };
+        
+        // Drop the pending guard to avoid deadlock
+        drop(pending_guard);
+        
+        // Acquire state for writing
+        let mut state_guard = match self.state.write() {
+            Ok(guard) => guard,
+            Err(e) => return Err(format!("Failed to acquire state lock: {:?}", e)),
+        };
+        
+        let current_state = state_guard.clone();
         
         // Perform the transition
-        *state = new_state.clone();
+        *state_guard = new_state.clone();
         
         // Update last change timestamp
         if let Ok(mut last_changed) = self.last_changed.write() {
             *last_changed = Instant::now();
+        }
+        
+        // Clear the pending and rollback states
+        if let Ok(mut pending) = self.pending_state.write() {
+            *pending = None;
+        }
+        
+        if let Ok(mut rollback) = self.rollback_state.write() {
+            *rollback = None;
         }
         
         #[cfg(test)]
@@ -331,6 +579,82 @@ impl StateMachine {
                  current_state, new_state, StateTransition::describe(&current_state, &new_state));
         
         Ok(true)
+    }
+    
+    /// Rollback an atomic state transition
+    fn rollback_atomic_transition(&self) -> Result<bool, String> {
+        // Check if there's a rollback state
+        let rollback_guard = match self.rollback_state.read() {
+            Ok(guard) => guard,
+            Err(e) => return Err(format!("Failed to acquire rollback state lock: {:?}", e)),
+        };
+        
+        if rollback_guard.is_none() {
+            // Nothing to rollback
+            return Ok(false);
+        }
+        
+        // Clear the pending state
+        if let Ok(mut pending) = self.pending_state.write() {
+            *pending = None;
+        }
+        
+        // Clear the rollback state
+        if let Ok(mut rollback) = self.rollback_state.write() {
+            *rollback = None;
+        }
+        
+        #[cfg(test)]
+        test_log!("DKG StateMachine: Rolled back state transition");
+        
+        Ok(true)
+    }
+    
+    /// Try to transition to a new state using the atomic transition mechanism
+    fn transition_to(&self, new_state: DkgState) -> Result<bool, String> {
+        // Special case for Failed state - always allow with reason
+        if let DkgState::Failed(_) = new_state {
+            // Directly update state
+            if let Ok(mut state) = self.state.write() {
+                *state = new_state.clone();
+                
+                // Update last change timestamp
+                if let Ok(mut last_changed) = self.last_changed.write() {
+                    *last_changed = Instant::now();
+                }
+                
+                return Ok(true);
+            }
+        }
+        
+        // Special case for TimedOut state - handle timeout
+        if new_state == DkgState::TimedOut {
+            // Only transition if we're actually timed out
+            if self.is_timed_out() {
+                if let Ok(mut state) = self.state.write() {
+                    *state = DkgState::TimedOut;
+                    
+                    // Update last change timestamp
+                    if let Ok(mut last_changed) = self.last_changed.write() {
+                        *last_changed = Instant::now();
+                    }
+                    
+                    #[cfg(test)]
+                    test_log!("DKG StateMachine: Transitioned to TimedOut state");
+                    
+                    return Ok(true);
+                }
+            }
+            return Ok(false);
+        }
+        
+        // For normal transitions, use the atomic mechanism
+        if self.begin_atomic_transition(new_state)? {
+            self.commit_atomic_transition()?;
+            return Ok(true);
+        }
+        
+        Ok(false)
     }
     
     /// Check if we've timed out
@@ -435,102 +759,6 @@ impl StateMachine {
     }
 }
 
-/// Configuration for a DKG session
-#[derive(Debug, Clone)]
-pub struct DkgConfig {
-    /// Threshold for secret sharing
-    pub threshold: usize,
-    /// Timeout for the DKG session in seconds
-    pub timeout_seconds: u64,
-    /// Custom verification function
-    pub custom_verification: Option<fn(&[Share], &[Commitment]) -> bool>,
-    /// Whether to use forward secrecy
-    pub use_forward_secrecy: bool,
-    /// Maximum number of participants
-    pub max_participants: usize,
-    /// Timeout specifically for the verification step in seconds
-    pub verification_timeout_seconds: u64,
-    /// Our participant ID
-    pub our_id: Vec<u8>,
-    /// Session ID
-    pub session_id: Option<SessionId>,
-}
-
-impl Default for DkgConfig {
-    fn default() -> Self {
-        Self {
-            threshold: DEFAULT_THRESHOLD,
-            timeout_seconds: DKG_TIMEOUT_SECONDS,
-            custom_verification: None,
-            use_forward_secrecy: true,
-            max_participants: MAX_PARTICIPANTS,
-            verification_timeout_seconds: DEFAULT_VERIFICATION_TIMEOUT_SECONDS,
-            our_id: Vec::new(),
-            session_id: None,
-        }
-    }
-}
-
-impl DkgConfig {
-    /// Create a new DKG configuration
-    pub fn new(
-        threshold: usize,
-        timeout_seconds: u64,
-        verification_timeout_seconds: u64,
-        forward_secrecy: bool,
-        max_participants: usize,
-    ) -> Self {
-        Self {
-            threshold,
-            timeout_seconds,
-            custom_verification: None,
-            use_forward_secrecy: forward_secrecy,
-            max_participants,
-            verification_timeout_seconds,
-            our_id: Vec::new(),
-            session_id: None,
-        }
-    }
-}
-
-/// The result of a DKG session
-#[derive(Debug, Clone)]
-pub struct DkgResult {
-    /// The generated public key
-    pub public_key: JubjubPoint,
-    /// The participant's share of the private key
-    pub share: Option<Share>,
-    /// The list of participants
-    pub participants: Vec<Participant>,
-    /// The verification data
-    pub verification_data: Vec<JubjubPoint>,
-}
-
-/// The session identifier for a DKG instance
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SessionId(Vec<u8>);
-
-impl SessionId {
-    /// Create a new random session ID
-    pub fn new() -> Self {
-        // Use a more compatible approach to generate random bytes
-        let mut rng = rand::thread_rng();
-        let scalar = JubjubScalar::random(&mut rng);
-        let bytes = scalar.to_bytes();
-        Self(bytes.to_vec())
-    }
-    
-    /// Create a session ID from existing bytes
-    pub fn from_bytes(bytes: &[u8]) -> Self {
-        Self(bytes.to_vec())
-    }
-    
-    /// Get the bytes of this session ID
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.0
-    }
-}
-
 /// A distributed key generation (DKG) protocol implementation
 pub struct DistributedKeyGeneration {
     /// The configuration for this DKG instance
@@ -569,8 +797,8 @@ impl DistributedKeyGeneration {
         session_id: Option<SessionId>,
         config: DkgConfig,
     ) -> Self {
-        let timeout = Duration::from_secs(config.timeout_seconds);
-        let verification_timeout = Duration::from_secs(config.verification_timeout_seconds);
+        let timeout = Duration::from_secs(config.timeout_config.base_timeout_seconds);
+        let verification_timeout = Duration::from_secs(config.timeout_config.verification_timeout_seconds);
         let state_machine = Arc::new(StateMachine::new(timeout, verification_timeout));
         
         // Initialize forward secrecy provider if enabled
@@ -1160,29 +1388,58 @@ impl DistributedKeyGeneration {
             }
         };
         
-        #[cfg(test)]
-        test_log!("DKG IMPL: Verifying share - index: {:?}, value: {:?}", share.index, share.value);
-        #[cfg(test)]
-        test_log!("DKG IMPL: Commitment values: {:?}", commitment.values);
+        // Create constant-time verification configuration
+        let config = SideChannelProtectionConfig {
+            constant_time_enabled: true,
+            operation_masking_enabled: true,
+            timing_jitter_enabled: true,
+            min_jitter_us: 5,
+            max_jitter_us: 50,
+            operation_batching_enabled: false, // Disabling as not needed here
+            min_batch_size: 0,
+            max_batch_size: 0,
+            cache_mitigation_enabled: true,
+            cache_filling_size_kb: 64,
+        };
         
-        // Verify the share against the commitment
+        let protection = SideChannelProtection::new(config);
+        
+        // Verify the share against the commitment using constant-time operations
         let lhs = JubjubPoint::generator() * share.value;
         let rhs = commitment.evaluate_at(&share.index);
+        
+        // Use constant-time comparison to prevent timing attacks
+        // Instead of returning early on verification failure, we'll record the result 
+        // and continue with the same operations regardless of outcome
+        let is_valid = protection.protected_operation(|| {
+            // Comparison of points with timing protection
+            lhs == rhs
+        });
         
         #[cfg(test)]
         test_log!("DKG IMPL: Share verification - LHS: {:?}, RHS: {:?}", lhs, rhs);
         
-        if lhs != rhs {
+        // Create a verification error message, but only use it if verification fails
+        // This avoids timing differences between success and failure paths
+        let verification_error_msg = format!(
+            "Share verification failed for share from participant '{}' at index '{}': commitment verification failed (g^share != Π(C_i * x^i)). Share value: {:?}, Commitment values: {:?}",
+            hex::encode(&from_participant),
+            share.index,
+            share.value,
+            commitment.values
+        );
+        
+        // Apply constant time verification result handling
+        // Add some timing jitter to make the verification time consistent 
+        // regardless of whether verification succeeded or failed
+        protection.add_jitter();
+        
+        // Conditional check after all operations have been performed with constant time
+        if !is_valid {
             #[cfg(test)]
             test_log!("DKG IMPL: Share verification failed. LHS: {:?}, RHS: {:?}", lhs, rhs);
             
-            return Err(format!(
-                "Share verification failed for share from participant '{}' at index '{}': commitment verification failed (g^share != Π(C_i * x^i)). Share value: {:?}, Commitment values: {:?}",
-                hex::encode(&from_participant),
-                share.index,
-                share.value,
-                commitment.values
-            ));
+            return Err(verification_error_msg);
         }
         
         #[cfg(test)]
@@ -1670,13 +1927,18 @@ impl DistributedKeyGeneration {
             // Create config with longer timeout for testing and no forward secrecy
             let config = DkgConfig {
                 threshold,
-                timeout_seconds: 10, // Use longer timeout for testing
+                timeout_config: DkgTimeoutConfig {
+                    base_timeout_seconds: 10, // Use longer timeout for testing
+                    verification_timeout_seconds: 5,
+                    high_latency_factor: 1.5,
+                    use_adaptive_timeouts: true,
+                },
                 use_forward_secrecy: false, // Disable for testing to avoid potential hangs
                 custom_verification: None,
                 max_participants: MAX_PARTICIPANTS,
-                verification_timeout_seconds: 5,
                 our_id: participant.id.clone(),
                 session_id: None,
+                network_latency_ms: None,
             };
             
             // Create DKG instance

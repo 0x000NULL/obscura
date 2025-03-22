@@ -1,5 +1,441 @@
 # Release Notes
 
+## [0.7.15] - 2025-04-02
+
+### Crypto Module Improvements
+
+This release includes significant architectural and code quality improvements to the cryptographic module, enhancing maintainability, consistency, and reliability:
+
+#### Eliminated Duplicate Functionality
+
+The implementation consolidates duplicate cryptographic implementations, particularly in the Pedersen commitment system:
+
+**Key Improvements:**
+- **Consolidated Implementation Pattern**: Established `PedersenCommitment` as the primary implementation with `LocalPedersenCommitment` as a lightweight wrapper
+- **Cross-Implementation Compatibility**: Added bidirectional conversion methods between different commitment implementations
+- **Delegation Pattern**: Implemented proper delegation in `LocalPedersenCommitment::commit` to the canonical implementation in pedersen.rs
+- **Enhanced Test Coverage**: Added comprehensive tests to verify that different implementations produce consistent results
+
+**Technical Implementation:**
+- Updated `LocalPedersenCommitment` to delegate to the main `PedersenCommitment` implementation
+- Added `from_pedersen_commitment` and `to_pedersen_commitment` conversion methods
+- Improved blinding factor handling consistency across implementations
+- Added interoperability tests to ensure consistent cryptographic properties across implementations
+
+#### Standardized Naming Conventions
+
+The implementation establishes consistent naming patterns across the entire cryptographic module:
+
+**Standardization Approach:**
+- **Logical Categorization**: Reorganized module exports into functional categories
+- **Consistent Prefixing**: Standardized type prefixes based on cryptographic primitives
+- **Namespace Cleanup**: Eliminated redundant self:: prefixes and improved import clarity
+- **Export Organization**: Grouped related exports together with clear category comments
+
+**Implementation Details:**
+- Reorganized `mod.rs` with clear category divisions for different cryptographic primitives
+- Standardized exports with detailed documentation comments for each category
+- Applied consistent naming conventions across curve-specific and cross-curve implementations
+- Improved module documentation with clear type groupings
+
+#### Code Cleanup and Documentation
+
+The implementation addresses technical debt and improves code clarity:
+
+**Code Quality Improvements:**
+- **Commented Code Resolution**: Removed unnecessary commented-out code blocks
+- **Future Module Documentation**: Added clear documentation for planned cryptographic modules
+- **Enhanced Inline Documentation**: Improved function and type documentation with security considerations
+- **Test Case Enhancement**: Added comprehensive test cases for cross-implementation verification
+
+**Security and Reliability:**
+- Ensured consistent error handling across different commitment implementations
+- Applied proper documentation for security-critical operations
+- Added compatibility verification to prevent cross-implementation inconsistencies
+- Improved readability of cryptographic code for easier security auditing
+
+### Standardized Error Handling in Crypto Module
+
+This release implements a comprehensive standardized error handling system for the crypto module, significantly improving reliability, debugging capabilities, and code maintainability.
+
+#### Standardized Error Architecture
+
+The implementation introduces a well-structured error handling architecture that provides consistent, informative, and actionable error information across the entire crypto module.
+
+**Key Components:**
+- **CryptoError Enum**: A central error type that categorizes all possible errors in the crypto module with specific variants
+- **CryptoResult Type**: A standardized Result type that simplifies function signatures and enables consistent error propagation
+- **Error Conversion Layer**: A comprehensive set of `From` implementations for seamless error conversion between specialized and standard error types
+- **Context-Rich Error Messages**: Detailed error information that provides both what went wrong and why
+
+**Technical Implementation:**
+- Created `src/crypto/errors.rs` with a complete error classification system
+- Updated all crypto module functions to use the new error types
+- Implemented conversions between error types for backward compatibility
+- Added comprehensive error context throughout the module
+
+#### Module-Specific Error Integration
+
+The implementation systematically integrates the new error system into all crypto submodules, ensuring consistent error handling across the entire module.
+
+**Submodule Integration:**
+- **Atomic Swap**: Converted from string-based errors to typed `CryptoError` variants
+- **Verifiable Secret Sharing**: Implemented error conversion between `VerificationError` and `CryptoError`
+- **Commitment Verification**: Enhanced error reporting with detailed context and categorization
+- **Encryption/Decryption**: Improved error handling for key management and cipher operations
+- **Core Cryptographic Operations**: Enhanced error context for all fundamental operations
+
+**Integration Benefits:**
+- Consistent error patterns across all submodules
+- Clear error propagation paths through the module hierarchy
+- Improved debugging with standardized error information
+- Enhanced maintainability with centralized error definition
+
+#### Enhanced Error Context and Information
+
+The implementation significantly improves error information quality, providing detailed context that helps with debugging and troubleshooting.
+
+**Context Improvements:**
+- **Operation Details**: Errors now include information about the specific operation that failed
+- **Parameter Validation**: Enhanced validation errors with details about expected and actual values
+- **Error Categories**: Structured categorization of errors by type and severity
+- **Actionable Information**: Error messages include suggestions for possible resolution when appropriate
+- **Secure Error Design**: Error handling designed to prevent information leakage while maintaining debuggability
+
+**Developer Benefits:**
+- Faster problem identification and resolution
+- Clearer understanding of error conditions
+- Improved logging and monitoring capabilities
+- Enhanced ability to recover from error states
+
+#### Documentation and Best Practices
+
+The implementation includes comprehensive documentation that establishes best practices for error handling throughout the codebase.
+
+**Documentation Components:**
+- **Error Handling Guidelines**: A detailed guide for consistent error handling approaches
+- **Migration Guide**: Step-by-step instructions for converting existing code to use the new error system
+- **Error Patterns**: Documentation of recommended error patterns for different scenarios
+- **Testing Strategies**: Guidance on testing error conditions effectively
+- **Usage Examples**: Clear examples of proper error handling in various contexts
+
+**Best Practices Established:**
+- Using typed errors instead of strings
+- Providing appropriate context in error messages
+- Proper error propagation using the `?` operator
+- Converting between error types when crossing module boundaries
+- Consistent logging at appropriate levels
+
+#### Analysis and Maintenance Tools
+
+The implementation includes tools for analyzing error usage and maintaining error consistency across the codebase.
+
+**Tool Capabilities:**
+- **Error Variant Analysis**: Detection of unused or redundant error variants
+- **Error Message Normalization**: Tools for ensuring consistent terminology and style in error messages
+- **Error Coverage Analysis**: Identification of code paths that need improved error handling
+- **Error Pattern Enforcement**: Validation of adherence to established error handling patterns
+
+**Maintenance Benefits:**
+- Simplified ongoing error system maintenance
+- Automated detection of error handling issues
+- Consistent error messages throughout the codebase
+- Prevention of error handling degradation over time
+
+#### Security and Reliability Improvements
+
+The standardized error handling system significantly enhances the security and reliability of the crypto module.
+
+**Security Enhancements:**
+- **Reduced Information Leakage**: Careful error design prevents leaking sensitive information
+- **Safe Error Recovery**: Improved ability to safely recover from error conditions
+- **Consistent Error States**: Prevention of inconsistent or undefined states after errors
+- **Error Validation**: Comprehensive checking of error conditions and appropriate responses
+
+**Reliability Improvements:**
+- **Predictable Error Behavior**: Consistent error handling across the module
+- **Appropriate Error Propagation**: Errors properly propagate to the right level for handling
+- **Enhanced Recoverability**: Better ability to recover from non-fatal errors
+- **Improved Error Visibility**: Clearer indication of error conditions for monitoring and alerting
+- **Comprehensive Error Coverage**: All error conditions properly identified and handled
+
+#### Future-Proof Design
+
+The error handling system is designed to be extensible and adaptable to future requirements.
+
+**Forward-Looking Features:**
+- **Extensible Error Types**: Easy addition of new error variants as needed
+- **Flexible Conversion System**: Adaptable error conversion for new modules and types
+- **Compatibility Layer**: Support for both new and legacy error handling approaches
+- **Gradual Migration Path**: Ability to incrementally adopt the new error system
+- **Framework for Extension**: Foundation for extending standardized error handling to other modules
+
+This standardized error handling implementation represents a significant enhancement to the Obscura codebase, establishing a foundation for robust, maintainable, and developer-friendly error handling throughout the project.
+
+## [0.7.14] - 2025-03-22
+
+### Cross-Platform Memory Protection APIs
+
+This release implements a comprehensive cross-platform memory protection system that provides a unified interface for secure memory operations across different operating systems. This enhancement significantly improves the security posture of the Obscura blockchain by offering consistent memory protection capabilities regardless of the underlying platform.
+
+#### Unified Memory Protection Interface
+
+The implementation provides a platform-agnostic API for memory operations that abstracts away operating system differences while leveraging platform-specific optimizations when available.
+
+**Key Features:**
+- **Platform-Agnostic API**: A unified interface through the `PlatformMemory` struct that works consistently across Windows, Unix/Linux, macOS, and other platforms
+- **Protection Level Management**: Comprehensive protection levels including NoAccess, ReadOnly, ReadWrite, Execute, ReadExecute, and ReadWriteExecute
+- **Allocation Types**: Support for Regular, Secure, and LargePage allocation types with appropriate platform-specific implementations
+- **Comprehensive Memory Operations**: Unified methods for allocation, freeing, protection changes, locking, unlocking, and secure clearing
+
+**Technical Implementation:**
+- Created the `platform_memory.rs` module providing the core unified API
+- Implemented platform-specific detection using conditional compilation
+- Added fallback implementations for platforms without specific optimizations
+- Ensured consistent behavior across all supported platforms
+- Created comprehensive error types with detailed context information
+
+#### Platform-Specific Optimizations
+
+The implementation leverages platform-specific APIs to provide optimized memory protection operations on each supported platform.
+
+**Windows Implementation:**
+- Utilizes Windows Memory Management APIs (`VirtualAlloc`, `VirtualProtect`, `VirtualLock`)
+- Implements optimized guard page protection using PAGE_NOACCESS
+- Provides detailed Windows-specific error information
+- Adds special handling for Windows-specific security features
+- Completes the previously missing guard page implementation for Windows
+
+**Unix/Linux Implementation:**
+- Leverages POSIX memory APIs (`mmap`, `mprotect`, `mlock`)
+- Implements advanced memory features like MADV_DONTDUMP and MADV_DONTFORK
+- Adds special handling for permission-related errors
+- Provides efficient implementation of guard pages
+- Includes Linux-specific optimizations when available
+
+**macOS Implementation:**
+- Uses Mach VM APIs for enhanced memory protection
+- Implements macOS-specific memory management features
+- Provides consistent behavior with other platforms
+- Adds special handling for macOS security features
+- Creates foundation for future macOS-specific enhancements
+
+#### Security Enhancements
+
+This implementation significantly improves the security of sensitive cryptographic operations by providing robust memory protection across all platforms.
+
+**Key Security Improvements:**
+- **Guard Page Protection**: Enhanced protection against buffer overflows and memory corruption with optimized guard pages
+- **Secure Memory Clearing**: Comprehensive multi-pass secure memory clearing with proper memory barriers
+- **Memory Locking**: Prevention of sensitive data being swapped to disk through optimized memory locking
+- **Access Control**: Fine-grained memory access control to prevent unauthorized reads or writes
+- **Side-Channel Protection**: Enhanced protection against memory-based side-channel attacks
+
+**Implementation Details:**
+- Three-pass secure memory clearing (0x00, 0xFF, 0x00) with memory barriers
+- Comprehensive pre-guard and post-guard page setup
+- Proper error handling for security-critical operations
+- Enhanced memory protection change capabilities
+- Secure verification of memory protection operations
+
+#### Integration with Existing Systems
+
+The new cross-platform memory protection APIs are fully integrated with Obscura's existing memory protection systems, providing a seamless upgrade path while maintaining compatibility.
+
+**Integration Points:**
+- Updated `MemoryProtection` to use the new platform APIs
+- Enhanced `allocate_with_guard_pages_cross_platform` with platform-specific optimizations
+- Improved secure memory clearing with platform-aware implementations
+- Added seamless fallback mechanisms for platform-specific features
+- Created comprehensive logging for security-critical operations
+
+**Compatibility Considerations:**
+- Full backward compatibility with existing code
+- No breaking changes to public APIs
+- Graceful degradation on unsupported platforms
+- Consistent behavior across all supported environments
+- Detailed error information for troubleshooting
+
+#### Comprehensive Documentation and Testing
+
+The implementation includes extensive documentation and testing to ensure correctness, security, and usability.
+
+**Documentation:**
+- Created detailed `memory_protection_cross_platform.md` documentation
+- Added comprehensive API documentation with examples
+- Provided platform-specific considerations and best practices
+- Included security guidelines for memory protection
+- Added migration guide for internal consumers
+
+**Testing:**
+- Comprehensive test suite for all memory operations
+- Platform-specific tests for optimized implementations
+- Security validation tests for protection features
+- Cross-platform compatibility testing
+- Error handling and edge case testing
+
+#### Future Considerations
+
+This implementation lays the groundwork for future enhancements to Obscura's memory protection capabilities:
+
+- Additional platform support for less common operating systems
+- Hardware-specific optimizations for memory protection
+- Integration with secure enclaves and trusted execution environments
+- Enhanced protection against emerging side-channel attacks
+- Additional memory protection primitives for specialized use cases
+
+### Security Profile Enhancements
+
+This release introduces a comprehensive security profile system that enables more selective memory protection based on environment-specific security requirements. This feature provides flexible and adaptive security configurations while maintaining strong protection for sensitive cryptographic operations.
+
+#### Security Profile Implementation
+
+The implementation adds a new `SecurityProfile` enum with predefined security levels and a customizable option:
+
+**Security Profile Levels:**
+- **Standard**: Basic security level for normal usage with balanced performance
+- **Medium**: Enhanced security with moderate performance impact
+- **High**: Maximum security for sensitive operations with potential performance impact
+- **Testing**: Minimal protection optimized for testing environments
+- **Custom**: User-defined security profile with full customization
+
+**Technical Implementation:**
+- Created `SecurityProfile` enum with five security levels
+- Implemented profile-specific configuration generators
+- Added environment detection for automatic profile selection
+- Enhanced `MemoryProtectionConfig` to include security profile information
+- Created seamless migration path from previous configuration system
+
+#### Environment-Specific Security Configuration
+
+The system automatically detects the appropriate security profile based on the execution environment:
+
+**Environment Detection Features:**
+- Test mode detection for development environments
+- Production mode identification
+- Environment variable support for explicit profile selection
+- Security-level environment variable (`OBSCURA_SECURITY_LEVEL`)
+- Optional configuration file integration
+
+**Implementation Details:**
+- `detect_environment` method analyzes runtime environment
+- TEST_MODE environment flag detection
+- Security level environment variable parsing
+- Default to Medium security when environment is ambiguous
+- Automatic test profile selection in test environments
+
+#### Default Configuration Improvements
+
+The default configuration system has been enhanced to be more selective about which protections are enabled:
+
+**Selective Protection Features:**
+- Environment-appropriate guard page configuration
+- Conditional encryption for sensitive memory
+- Adaptive access pattern obfuscation
+- Context-sensitive ASLR integration
+- Resource-conscious security features in constrained environments
+
+**Implementation Benefits:**
+- Better performance in non-critical environments
+- Enhanced security in high-security contexts
+- Appropriate protection level for testing environments
+- Development-friendly configurations for testing
+- Production-optimized security for deployed systems
+
+#### Configuration Switching
+
+The implementation includes mechanisms for dynamically switching between security profiles:
+
+**Dynamic Configuration Features:**
+- Runtime security profile switching
+- Graceful transition between profile settings
+- Profile-specific configuration validation
+- Resource adjustment during profile transitions
+- Comprehensive logging of profile changes
+
+**Technical Implementation:**
+- `from_profile` method generates appropriate configuration
+- Seamless profile transition handling
+- Resource cleanup during profile changes
+- Comprehensive validation of profile transitions
+- Thread-safe profile switching implementation
+
+### Configurable Timeout Enhancements
+
+This release implements comprehensive timeout configuration systems for both atomic swaps and distributed key generation (DKG) processes. These enhancements significantly improve reliability and adaptability under varying network conditions while maintaining security.
+
+#### Atomic Swap Configurable Timeouts
+
+Replaces hardcoded timeout constants with a flexible configuration system that adapts to network conditions:
+
+**Key Features:**
+- **SwapConfig Structure**: Comprehensive configuration with base, minimum, and maximum timeout values
+- **Network Condition Awareness**: Tracks network congestion and latency for adaptive timeouts
+- **Adaptive Calculation**: Intelligent timeout calculation based on current network conditions
+- **Dynamic Adjustment**: Support for runtime timeout updates as conditions change
+- **Extension Capability**: Allows manual timeout extension with proper bounds checking
+
+**Technical Implementation:**
+- Replaced fixed `SWAP_TIMEOUT_SECONDS` with configurable parameters
+- Added network congestion tracking (0.0-1.0 scale)
+- Implemented rolling average for network latency
+- Created adaptive timeout calculation algorithm
+- Added methods for updating network conditions
+- Implemented proper bounds checking and validation
+
+#### DKG Timeout Configuration
+
+Adds a dedicated timeout configuration system for the Distributed Key Generation (DKG) module:
+
+**Key Features:**
+- **DkgTimeoutConfig Structure**: Specialized configuration for DKG protocol timeouts
+- **Verification-Specific Timeouts**: Separate timeout configuration for the verification phase
+- **Network Adaptation**: Automatic timeout adjustment based on network latency
+- **Preset Configurations**: Ready-to-use configurations for different network environments (high-latency, low-latency)
+- **Custom Configuration**: Support for fine-tuned manual configuration
+
+**Technical Implementation:**
+- Created dedicated `DkgTimeoutConfig` structure
+- Implemented separate base and verification timeout settings
+- Added high-latency factor for network condition adjustment
+- Created environment-specific preset configurations
+- Added adaptive timeout calculation methods
+- Integrated with DKG session and state machine components
+
+#### Comprehensive Security Fixes Testing
+
+This release includes a comprehensive test suite for all security fixes, ensuring thorough validation of all implemented security features:
+
+**Test Coverage:**
+- **Memory Protection Cleanup**: Validates proper memory allocation/deallocation after protection changes
+- **Security Profile Testing**: Verifies correct configuration generation for different security profiles
+- **Polynomial Index Validation**: Tests proper validation of 1-based to 0-based index conversion
+- **Timing Attack Resistance**: Measures execution time differences to validate constant-time operations
+- **Atomic State Transitions**: Verifies correct state management during critical operations
+- **Configurable Timeout Tests**: Validates timeout calculations under different network conditions
+
+**Test Implementation:**
+- Created dedicated `security_fixes_tests.rs` module
+- Implemented controlled test environments for each security feature
+- Added precise timing measurements for side-channel tests
+- Created network condition simulation for timeout testing
+- Implemented comprehensive assertion validation for all security features
+- Added edge case testing for all security-critical components
+
+#### Future Security Roadmap
+
+The security enhancements in this release complete a significant portion of the planned security improvements for the Obscura blockchain. The security architecture continues to evolve with these and upcoming features:
+
+- Further security profile enhancements with machine learning-based adaptation
+- Advanced side-channel protection with hardware-specific optimizations
+- Enhanced timeout systems with predictive network condition modeling
+- Expanded security test suite with automated attack simulation
+- Integration with hardware security modules for critical operations
+
+#### Conclusion
+
+The cross-platform memory protection APIs represent a significant enhancement to Obscura's security architecture, providing consistent, robust protection for sensitive cryptographic material across all supported platforms. This implementation completes an important item from our security roadmap and establishes a foundation for future security enhancements.
+
 ## [0.7.13] - 2025-03-20
 
 ### Proper Authenticated Encryption for Keypair Management

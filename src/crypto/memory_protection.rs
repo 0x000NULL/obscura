@@ -5,10 +5,17 @@ use std::ptr::{self, NonNull};
 use rand::thread_rng;
 use rand::Rng;
 use std::sync::Arc;
-use log::{debug, error};
+use log::{debug, error, warn};
 use serde::{Serialize, Deserialize};
 use std::sync::atomic::{AtomicBool, Ordering};
 use once_cell::sync::Lazy;
+use crate::crypto::platform_memory::{PlatformMemory, MemoryProtection as MemoryProtectionLevel, AllocationType};
+#[cfg(windows)]
+use crate::crypto::platform_memory_impl::WindowsMemoryProtection;
+#[cfg(unix)]
+use crate::crypto::platform_memory_impl::UnixMemoryProtection;
+#[cfg(target_os = "macos")]
+use crate::crypto::platform_memory_impl::MacOSMemoryProtection;
 
 // Global flag to check if we're in a test environment
 // This allows us to bypass expensive operations across the entire module
@@ -46,9 +53,27 @@ use winapi::shared::minwindef::{DWORD, LPVOID};
 #[cfg(windows)]
 use winapi::um::sysinfoapi::{GetSystemInfo, SYSTEM_INFO};
 
+/// Security environment profiles for memory protection
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SecurityProfile {
+    /// Standard security level - basic protections for normal usage
+    Standard,
+    /// Medium security level - balanced performance and security
+    Medium,
+    /// High security level - maximum protection for sensitive environments
+    High,
+    /// Testing environment - minimal protection for test environments
+    Testing,
+    /// Custom configured profile
+    Custom,
+}
+
 /// Configuration for memory protection features
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryProtectionConfig {
+    /// The security profile this configuration is based on
+    pub security_profile: SecurityProfile,
+    
     /// Enable secure memory clearing
     pub secure_clearing_enabled: bool,
     
@@ -79,13 +104,40 @@ pub struct MemoryProtectionConfig {
     pub decoy_access_percentage: u8,
 }
 
-impl Default for MemoryProtectionConfig {
-    fn default() -> Self {
+impl MemoryProtectionConfig {
+    /// Create a configuration for the standard security profile
+    pub fn standard() -> Self {
         Self {
+            security_profile: SecurityProfile::Standard,
+            
+            secure_clearing_enabled: true,
+            
+            aslr_integration_enabled: false, // Rely on OS default ASLR
+            allocation_randomization_range_kb: 64,
+            
+            guard_pages_enabled: false, // Disabled for standard profile
+            pre_guard_pages: 0,
+            post_guard_pages: 0,
+            
+            encrypted_memory_enabled: false, // Disabled for standard profile
+            auto_encrypt_after_ms: 60000, // 1 minute
+            key_rotation_interval_ms: 3600000, // 1 hour
+            
+            access_pattern_obfuscation_enabled: false, // Disabled for standard profile
+            decoy_buffer_size_kb: 32,
+            decoy_access_percentage: 10,
+        }
+    }
+    
+    /// Create a configuration for the medium security profile
+    pub fn medium() -> Self {
+        Self {
+            security_profile: SecurityProfile::Medium,
+            
             secure_clearing_enabled: true,
             
             aslr_integration_enabled: true,
-            allocation_randomization_range_kb: 1024, // 1MB range
+            allocation_randomization_range_kb: 512,
             
             guard_pages_enabled: true,
             pre_guard_pages: 1,
@@ -93,12 +145,116 @@ impl Default for MemoryProtectionConfig {
             
             encrypted_memory_enabled: true,
             auto_encrypt_after_ms: 30000, // 30 seconds
-            key_rotation_interval_ms: 3600000, // 1 hour
+            key_rotation_interval_ms: 1800000, // 30 minutes
             
             access_pattern_obfuscation_enabled: true,
             decoy_buffer_size_kb: 64,
-            decoy_access_percentage: 20, // 20% decoy accesses
+            decoy_access_percentage: 20,
         }
+    }
+    
+    /// Create a configuration for the high security profile
+    pub fn high() -> Self {
+        Self {
+            security_profile: SecurityProfile::High,
+            
+            secure_clearing_enabled: true,
+            
+            aslr_integration_enabled: true,
+            allocation_randomization_range_kb: 2048,
+            
+            guard_pages_enabled: true,
+            pre_guard_pages: 2,
+            post_guard_pages: 2,
+            
+            encrypted_memory_enabled: true,
+            auto_encrypt_after_ms: 10000, // 10 seconds
+            key_rotation_interval_ms: 900000, // 15 minutes
+            
+            access_pattern_obfuscation_enabled: true,
+            decoy_buffer_size_kb: 128,
+            decoy_access_percentage: 30,
+        }
+    }
+    
+    /// Create a configuration for testing environments
+    pub fn testing() -> Self {
+        Self {
+            security_profile: SecurityProfile::Testing,
+            
+            secure_clearing_enabled: false,
+            
+            aslr_integration_enabled: false,
+            allocation_randomization_range_kb: 0,
+            
+            guard_pages_enabled: false,
+            pre_guard_pages: 0,
+            post_guard_pages: 0,
+            
+            encrypted_memory_enabled: false,
+            auto_encrypt_after_ms: 0,
+            key_rotation_interval_ms: 0,
+            
+            access_pattern_obfuscation_enabled: false,
+            decoy_buffer_size_kb: 0,
+            decoy_access_percentage: 0,
+        }
+    }
+    
+    /// Create a custom configuration based on a specific profile
+    pub fn from_profile(profile: SecurityProfile) -> Self {
+        match profile {
+            SecurityProfile::Standard => Self::standard(),
+            SecurityProfile::Medium => Self::medium(),
+            SecurityProfile::High => Self::high(),
+            SecurityProfile::Testing => Self::testing(),
+            SecurityProfile::Custom => Self::default(),
+        }
+    }
+    
+    /// Determine the appropriate security profile based on environment detection
+    pub fn detect_environment() -> SecurityProfile {
+        // Check for test environment
+        if is_test_mode() {
+            return SecurityProfile::Testing;
+        }
+        
+        // Check for environment variables that might indicate security level
+        if let Ok(security_level) = std::env::var("SECURITY_LEVEL") {
+            match security_level.to_lowercase().as_str() {
+                "high" => return SecurityProfile::High,
+                "medium" => return SecurityProfile::Medium,
+                "standard" | "low" => return SecurityProfile::Standard,
+                _ => {} // Continue checking other environment factors
+            }
+        }
+        
+        // Check for server environment
+        #[cfg(target_os = "linux")]
+        {
+            // On Linux, we can check for Docker/container environment
+            if std::path::Path::new("/.dockerenv").exists() {
+                // In containerized environments, use medium by default
+                return SecurityProfile::Medium;
+            }
+            
+            // Check if we're running in a headless server
+            if std::env::var("DISPLAY").is_err() {
+                // Headless servers likely need higher security
+                return SecurityProfile::Medium;
+            }
+        }
+        
+        // Default to standard profile if environment detection is inconclusive
+        SecurityProfile::Standard
+    }
+}
+
+impl Default for MemoryProtectionConfig {
+    fn default() -> Self {
+        // Use environment detection to choose the right profile
+        let profile = Self::detect_environment();
+        Self::from_profile(profile)
     }
 }
 
@@ -387,6 +543,7 @@ impl MemoryProtection {
         if is_test_mode() {
             return Self {
                 config: MemoryProtectionConfig {
+                    security_profile: SecurityProfile::Testing,
                     secure_clearing_enabled: false,
                     aslr_integration_enabled: false,
                     allocation_randomization_range_kb: 0,
@@ -483,6 +640,7 @@ impl MemoryProtection {
                 guard_info: None,
                 // Use minimal config
                 config: MemoryProtectionConfig {
+                    security_profile: SecurityProfile::Testing,
                     secure_clearing_enabled: false,
                     aslr_integration_enabled: false,
                     allocation_randomization_range_kb: 0,
@@ -514,7 +672,8 @@ impl MemoryProtection {
         let layout = Layout::new::<T>();
         
         let (ptr, guard_info) = if self.config.guard_pages_enabled {
-            self.allocate_with_guard_pages::<T>()?
+            // Use the cross-platform implementation instead of the platform-specific one
+            self.allocate_with_guard_pages_cross_platform::<T>()?
         } else if self.config.aslr_integration_enabled {
             (self.allocate_with_aslr::<T>()?, None)
         } else {
@@ -556,183 +715,130 @@ impl MemoryProtection {
         Ok(secure_memory)
     }
     
-    /// Allocate memory with guard pages
-    fn allocate_with_guard_pages<T>(&self) -> Result<(NonNull<T>, Option<GuardPageInfo>), MemoryProtectionError> {
-        let _page_size = Self::get_page_size();
+    /// Allocate memory with guard pages using cross-platform APIs
+    fn allocate_with_guard_pages_cross_platform<T>(&self) -> Result<(NonNull<T>, Option<GuardPageInfo>), MemoryProtectionError> {
         let data_size = mem::size_of::<T>();
-        
-        // Calculate total allocation size including guard pages
-        let pre_guard_size = self.config.pre_guard_pages * _page_size;
-        let post_guard_size = self.config.post_guard_pages * _page_size;
-        let total_size = pre_guard_size + data_size + post_guard_size;
-        
-        // Create layout with proper alignment
         let align = mem::align_of::<T>();
-        let total_layout = match Layout::from_size_align(total_size, align) {
-            Ok(layout) => layout,
-            Err(_) => return Err(MemoryProtectionError::GuardPageError(
-                "Failed to create memory layout for guard pages".to_string())),
-        };
         
-        // Allocate memory
-        let base_ptr = unsafe {
-            let ptr = if self.config.aslr_integration_enabled {
-                self.allocate_with_aslr_raw(total_layout)?
-            } else {
-                alloc(total_layout)
-            };
-            
-            if ptr.is_null() {
-                return Err(MemoryProtectionError::AllocationError(
-                    "Failed to allocate memory for guard pages".to_string()));
-            }
-            
-            ptr
-        };
-        
-        // Setup guard pages
-        self.setup_guard_pages(base_ptr, pre_guard_size, data_size, post_guard_size)?;
-        
-        // Calculate data pointer
-        let data_ptr = unsafe { base_ptr.add(pre_guard_size) as *mut T };
-        
-        // Create guard page info
-        let guard_info = GuardPageInfo {
-            base_ptr,
-            total_layout,
-            data_offset: pre_guard_size,
-        };
-        
-        Ok((NonNull::new(data_ptr).unwrap(), Some(guard_info)))
-    }
-    
-    /// Setup guard pages by marking them as non-accessible
-    #[cfg(unix)]
-    fn setup_guard_pages(
-        &self,
-        base_ptr: *mut u8,
-        pre_guard_size: usize,
-        data_size: usize,
-        post_guard_size: usize,
-    ) -> Result<(), MemoryProtectionError> {
-        use libc::{mprotect, PROT_NONE, PROT_READ, PROT_WRITE};
-        
-        let _page_size = Self::get_page_size();
-        
-        // Protect pre-guard pages
-        if pre_guard_size > 0 {
-            let result = unsafe {
-                mprotect(
-                    base_ptr as *mut libc::c_void,
-                    pre_guard_size,
-                    PROT_NONE,
-                )
-            };
-            
-            if result != 0 {
-                return Err(MemoryProtectionError::GuardPageError(
-                    "Failed to protect pre-guard pages".to_string()));
-            }
-        }
-        
-        // Protect post-guard pages
-        if post_guard_size > 0 {
-            let post_guard_ptr = unsafe { base_ptr.add(pre_guard_size + data_size) };
-            let result = unsafe {
-                mprotect(
-                    post_guard_ptr as *mut libc::c_void,
-                    post_guard_size,
-                    PROT_NONE,
-                )
-            };
-            
-            if result != 0 {
-                return Err(MemoryProtectionError::GuardPageError(
-                    "Failed to protect post-guard pages".to_string()));
-            }
-        }
-        
-        Ok(())
-    }
-    
-    /// Setup guard pages by marking them as non-accessible (Windows version)
-    #[cfg(windows)]
-    fn setup_guard_pages(
-        &self,
-        base_ptr: *mut u8,
-        pre_guard_size: usize,
-        data_size: usize,
-        post_guard_size: usize,
-    ) -> Result<(), MemoryProtectionError> {
-        // Fast path for test mode
+        // Skip the entire function in test mode
         if is_test_mode() {
-            return Ok(());
-        }
-        
-        // Fast path for testing - if guard pages are disabled, just return success
-        if !self.config.guard_pages_enabled || pre_guard_size == 0 && post_guard_size == 0 {
-            return Ok(());
-        }
-        
-        let _page_size = Self::get_page_size();
-        let mut old_protect: DWORD = 0;
-        
-        // Ensure the pointer and sizes are aligned to page boundaries for VirtualProtect
-        let aligned_base_ptr = base_ptr;
-        
-        // Protect pre-guard pages
-        if pre_guard_size > 0 {
-            // Explicitly ensure the data section is writable
-            let data_ptr = unsafe { base_ptr.add(pre_guard_size) };
-            let data_result = unsafe {
-                VirtualProtect(
-                    data_ptr as LPVOID,
-                    data_size,
-                    PAGE_READWRITE,
-                    &mut old_protect,
-                )
+            let layout = Layout::new::<T>();
+            let ptr = unsafe {
+                let ptr = alloc(layout);
+                if ptr.is_null() {
+                    return Err(MemoryProtectionError::AllocationError(
+                        "Failed to allocate memory".to_string()));
+                }
+                NonNull::new(ptr as *mut T).unwrap()
             };
             
-            if data_result == 0 {
-                return Err(MemoryProtectionError::GuardPageError(
-                    "Failed to set data pages as readable/writable".to_string()));
-            }
+            return Ok((ptr, None));
+        }
+        
+        #[cfg(windows)]
+        {
+            // Use Windows-specific optimized implementation
+            let (base_ptr, data_ptr, layout) = WindowsMemoryProtection::allocate_with_guard_pages(
+                data_size,
+                self.config.pre_guard_pages,
+                self.config.post_guard_pages,
+                align
+            )?;
             
-            // Now set the guard pages
-            let result = unsafe {
-                VirtualProtect(
-                    aligned_base_ptr as LPVOID,
+            // Create guard page info
+            let guard_info = GuardPageInfo {
+                base_ptr,
+                total_layout: layout,
+                data_offset: self.config.pre_guard_pages * PlatformMemory::page_size(),
+            };
+            
+            let typed_ptr = data_ptr as *mut T;
+            Ok((NonNull::new(typed_ptr).unwrap(), Some(guard_info)))
+        }
+        
+        #[cfg(unix)]
+        {
+            // Use Unix-specific optimized implementation
+            let (base_ptr, data_ptr, layout) = UnixMemoryProtection::allocate_with_guard_pages(
+                data_size,
+                self.config.pre_guard_pages,
+                self.config.post_guard_pages,
+                align
+            )?;
+            
+            // Create guard page info
+            let guard_info = GuardPageInfo {
+                base_ptr,
+                total_layout: layout,
+                data_offset: self.config.pre_guard_pages * PlatformMemory::page_size(),
+            };
+            
+            let typed_ptr = data_ptr as *mut T;
+            Ok((NonNull::new(typed_ptr).unwrap(), Some(guard_info)))
+        }
+        
+        #[cfg(not(any(windows, unix)))]
+        {
+            // Fallback to the generic implementation for other platforms
+            let page_size = PlatformMemory::page_size();
+            let pre_guard_size = self.config.pre_guard_pages * page_size;
+            let post_guard_size = self.config.post_guard_pages * page_size;
+            let total_size = pre_guard_size + data_size + post_guard_size;
+            
+            // Create layout with proper alignment
+            let total_layout = match Layout::from_size_align(total_size, align) {
+                Ok(layout) => layout,
+                Err(_) => return Err(MemoryProtectionError::GuardPageError(
+                    "Failed to create memory layout for guard pages".to_string())),
+            };
+            
+            // Allocate entire memory region
+            let base_ptr = PlatformMemory::allocate(
+                total_size,
+                align,
+                MemoryProtectionLevel::ReadWrite,
+                AllocationType::Regular
+            )?;
+            
+            // Protect pre-guard pages
+            if pre_guard_size > 0 {
+                if let Err(e) = PlatformMemory::protect(
+                    base_ptr,
                     pre_guard_size,
-                    PAGE_NOACCESS,
-                    &mut old_protect,
-                )
-            };
-            
-            if result == 0 {
-                return Err(MemoryProtectionError::GuardPageError(
-                    "Failed to protect pre-guard pages".to_string()));
+                    MemoryProtectionLevel::NoAccess
+                ) {
+                    // If protection fails, free the memory and return error
+                    let _ = PlatformMemory::free(base_ptr, total_size, total_layout);
+                    return Err(e);
+                }
             }
-        }
-        
-        // Protect post-guard pages
-        if post_guard_size > 0 {
-            let post_guard_ptr = unsafe { base_ptr.add(pre_guard_size + data_size) };
-            let result = unsafe {
-                VirtualProtect(
-                    post_guard_ptr as LPVOID,
+            
+            // Protect post-guard pages
+            if post_guard_size > 0 {
+                let post_guard_ptr = unsafe { base_ptr.add(pre_guard_size + data_size) };
+                if let Err(e) = PlatformMemory::protect(
+                    post_guard_ptr,
                     post_guard_size,
-                    PAGE_NOACCESS,
-                    &mut old_protect,
-                )
+                    MemoryProtectionLevel::NoAccess
+                ) {
+                    // If protection fails, free the memory and return error
+                    let _ = PlatformMemory::free(base_ptr, total_size, total_layout);
+                    return Err(e);
+                }
+            }
+            
+            // Calculate data pointer
+            let data_ptr = unsafe { base_ptr.add(pre_guard_size) as *mut T };
+            
+            // Create guard page info
+            let guard_info = GuardPageInfo {
+                base_ptr,
+                total_layout,
+                data_offset: pre_guard_size,
             };
             
-            if result == 0 {
-                return Err(MemoryProtectionError::GuardPageError(
-                    "Failed to protect post-guard pages".to_string()));
-            }
+            Ok((NonNull::new(data_ptr).unwrap(), Some(guard_info)))
         }
-        
-        Ok(())
     }
     
     /// Allocate memory with ASLR randomization
@@ -789,47 +895,18 @@ impl MemoryProtection {
     // Secure Memory Clearing
     //------------------------
     
-    /// Securely clear a region of memory
-    /// 
-    /// This function fills the memory with patterns that ensure all bits are overwritten,
-    /// and adds barriers to prevent compiler optimizations from removing the clearing.
+    /// Securely clear memory to prevent leakage
     pub fn secure_clear(&self, ptr: *mut u8, size: usize) {
-        // Skip entirely in test mode
-        if is_test_mode() {
+        // Skip in test mode
+        if is_test_mode() || ptr.is_null() || size == 0 {
             return;
         }
         
-        if !self.config.secure_clearing_enabled {
-            return;
+        // Use the cross-platform secure clear implementation
+        if let Err(e) = PlatformMemory::secure_clear(ptr, size) {
+            // Log error but continue - we did our best
+            error!("Error during secure memory clearing: {}", e);
         }
-        
-        if ptr.is_null() || size == 0 {
-            return;
-        }
-        
-        // Fill with zeros
-        unsafe {
-            ptr::write_bytes(ptr, 0, size);
-        }
-        
-        // Add memory barrier to prevent compiler optimizations
-        std::sync::atomic::fence(std::sync::atomic::Ordering::SeqCst);
-        
-        // Fill with ones (0xFF)
-        unsafe {
-            ptr::write_bytes(ptr, 0xFF, size);
-        }
-        
-        // Add memory barrier
-        std::sync::atomic::fence(std::sync::atomic::Ordering::SeqCst);
-        
-        // Fill with zeros again
-        unsafe {
-            ptr::write_bytes(ptr, 0, size);
-        }
-        
-        // Final memory barrier
-        std::sync::atomic::fence(std::sync::atomic::Ordering::SeqCst);
     }
     
     //------------------------

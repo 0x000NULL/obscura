@@ -472,6 +472,12 @@ impl PrivacySettingsRegistry {
         
         // Memory protection configuration
         let memory_protection_config = crypto::memory_protection::MemoryProtectionConfig {
+            security_profile: match config.level {
+                PrivacyLevel::Standard => crypto::memory_protection::SecurityProfile::Standard,
+                PrivacyLevel::Medium => crypto::memory_protection::SecurityProfile::Medium,
+                PrivacyLevel::High => crypto::memory_protection::SecurityProfile::High,
+                PrivacyLevel::Custom => crypto::memory_protection::SecurityProfile::Custom,
+            },
             secure_clearing_enabled: config.secure_memory_clearing,
             aslr_integration_enabled: config.level != PrivacyLevel::Standard,
             allocation_randomization_range_kb: match config.level {
@@ -668,6 +674,7 @@ impl PrivacySettingsRegistry {
             // Add minimal configurations for testing - these avoid expensive operations
             // Create a minimal memory protection config that skips expensive operations
             let memory_protection_config = crypto::memory_protection::MemoryProtectionConfig {
+                security_profile: crypto::memory_protection::SecurityProfile::Testing,
                 secure_clearing_enabled: false,
                 aslr_integration_enabled: false,
                 allocation_randomization_range_kb: 0,

@@ -97,8 +97,8 @@ impl Transaction {
     
     /// Check if the transaction has metadata protection
     pub fn has_metadata_protection(&self) -> bool {
-        // Placeholder implementation
-        !self.metadata.is_empty()
+        // Check if metadata protection flag is set (bit 0x02)
+        (self.privacy_flags & 0x02) != 0
     }
     
     /// Check if the transaction has side channel protection

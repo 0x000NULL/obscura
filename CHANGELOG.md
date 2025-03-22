@@ -1,5 +1,193 @@
 # Changelog
 
+## [0.7.15] - 2025-04-02
+
+### Crypto Module Improvements
+
+This release includes significant improvements to the crypto module's structure, consistency, and reliability:
+
+#### Eliminated Duplicate Functionality
+- Removed redundant Pedersen commitment implementations
+- Established proper delegation pattern between `LocalPedersenCommitment` and `PedersenCommitment`
+- Added conversion utilities to ensure interoperability between different implementations
+- Improved test coverage to verify cross-implementation compatibility
+
+#### Standardized Naming Conventions
+- Reorganized module exports with logical categorization
+- Applied consistent naming patterns across all cryptographic components
+- Eliminated redundant namespace prefixes
+- Improved module organization for better discoverability and maintainability
+
+#### Code Cleanup and Documentation
+- Resolved commented-out code blocks
+- Added clear documentation for future module development
+- Enhanced inline documentation for cryptographic operations
+- Added compatibility tests to ensure cross-implementation consistency
+
+### Standardized Error Handling in Crypto Module
+
+This release implements a comprehensive standardized error handling system for the crypto module, significantly improving reliability, debugging capabilities, and code maintainability.
+
+#### Standardized Error Types
+
+- **CryptoError Enum**: Created a centralized error type that categorizes all possible errors in the crypto module
+  - Validation errors for input parameters
+  - Encryption/decryption failures
+  - Key management errors
+  - Commitment verification errors
+  - Secret sharing errors
+  - Various operation-specific errors
+
+- **CryptoResult Type**: Implemented a type alias for `Result<T, CryptoError>` to standardize return types across the module
+
+- **Error Conversion**: Added comprehensive `From` implementations for converting between specific error types and the standardized `CryptoError`
+
+#### Enhanced Error Context
+
+- **Detailed Error Messages**: Improved all error messages with specific, actionable information
+- **Contextual Information**: Added relevant context to errors, such as which operation failed and why
+- **Error Categories**: Categorized errors by type for easier debugging and handling
+- **Consistent Error Patterns**: Standardized error handling patterns across all crypto operations
+
+#### Integration with Existing Systems
+
+- **Operation-Specific Errors**: Updated all crypto operations to use the new error system
+  - Atomic swaps
+  - Verifiable secret sharing
+  - Commitment verification
+  - Encryption and decryption
+  - Key management functions
+
+- **Backward Compatibility**: Maintained compatibility with existing code while improving error handling
+- **Error Propagation**: Enhanced error propagation through the `?` operator for cleaner, more readable code
+
+#### Documentation and Best Practices
+
+- **Error Handling Guidelines**: Created comprehensive documentation for error handling best practices
+- **Migration Path**: Provided clear guidelines for transitioning legacy code to the new error system
+- **Error Logging**: Standardized logging of errors with appropriate context and verbosity
+- **Testing Approaches**: Documented testing strategies for error conditions
+
+#### Tools and Scripts
+
+- **Error Analysis**: Created a script for detecting and analyzing unused error variants
+- **Error Normalization**: Added tools for normalizing error messages across the codebase
+
+#### Security and Reliability Benefits
+
+- **Robust Error Recovery**: Improved ability to recover from error conditions
+- **Enhanced Security**: Better error handling prevents information leakage and improper error states
+- **Improved Debuggability**: Detailed error information speeds up debugging
+- **System Stability**: More robust handling of error conditions enhances overall system stability
+- **Future-Proof Design**: Extensible design simplifies adding new error types and handling
+
+## [0.7.14] - 2025-03-22
+
+### Added
+- **Cross-Platform Memory Protection APIs**
+  - Implemented unified platform-agnostic memory protection interface:
+    - Created `PlatformMemory` struct with platform-independent API for memory operations
+    - Added memory allocation, freeing, protection, locking, and secure clearing operations
+    - Implemented `MemoryProtectionLevel` enum for protection level configuration (NoAccess, ReadOnly, ReadWrite, etc.)
+    - Created `AllocationType` enum with Regular, Secure, and LargePage options
+    - Implemented comprehensive error handling with detailed error messages
+  - Added platform-specific optimized implementations:
+    - Windows: Implemented `WindowsMemoryProtection` with VirtualAlloc/VirtualProtect-based APIs
+    - Unix/Linux: Added `UnixMemoryProtection` with mmap/mprotect-based implementation
+    - macOS: Created basic MacOSMemoryProtection with Mach VM API support
+    - Added fallback implementations for other platforms
+  - Enhanced security through proper guard page implementation:
+    - Completed guard page protection implementation for Windows
+    - Added optimized guard page setup with both pre/post guard pages
+    - Implemented secure memory clearing with memory barriers
+    - Created proper guard page verification and validation
+  - Integrated with existing memory protection system:
+    - Updated `MemoryProtection` to use the new platform APIs
+    - Added cross-platform memory allocation with guard pages
+    - Implemented platform-independent secure memory clearing
+    - Created seamless fallback mechanisms between platforms
+  - Added comprehensive documentation and testing:
+    - Created detailed documentation for cross-platform memory protection APIs
+    - Added usage examples for all major functionality
+    - Implemented platform-specific feature documentation
+    - Added comprehensive test suite for all memory operations
+    - Created cross-platform compatibility tests
+- **Environment-Specific Security Profiles**
+  - Implemented `SecurityProfile` enum with predefined security levels:
+    - Added Standard, Medium, High, Testing, and Custom security profiles
+    - Created profile-specific configuration generators for each security level
+    - Implemented automatic profile selection based on environment detection
+    - Added environment variable support for explicit profile selection
+    - Created seamless migration path from previous configuration system
+  - Enhanced `MemoryProtectionConfig` with security profile support:
+    - Added security profile field to track configuration source
+    - Implemented profile-specific default configurations
+    - Created methods for generating configurations from profiles
+    - Added validation for profile-specific settings
+    - Implemented proper documentation for all security profiles
+  - Added environment detection capabilities:
+    - Implemented test mode detection for development environments
+    - Created production environment identification
+    - Added support for environment variables to select security level
+    - Implemented fallback to sensible defaults when environment is ambiguous
+    - Created comprehensive logging of security profile selection
+  - Implemented configuration switching support:
+    - Added runtime security profile switching capability
+    - Created graceful transition between profile settings
+    - Implemented resource cleanup during profile changes
+    - Added validation for profile transitions
+    - Created thread-safe profile switching implementation
+- **Configurable Timeout Systems**
+  - Implemented configurable timeout for atomic swaps:
+    - Created `SwapConfig` structure with comprehensive timeout configuration
+    - Added network condition tracking for congestion and latency
+    - Implemented adaptive timeout calculation based on network conditions
+    - Added support for runtime timeout updates as conditions change
+    - Created timeout extension capability with proper bounds checking
+    - Implemented proper integration with swap lifecycle management
+  - Added configurable timeout for Distributed Key Generation (DKG):
+    - Created `DkgTimeoutConfig` structure for DKG protocol timeouts
+    - Implemented separate timeouts for different protocol phases
+    - Added network latency adaptation for timeout calculations
+    - Created preset configurations for different network environments
+    - Implemented integration with DKG session and state machine
+    - Added comprehensive documentation and test coverage
+  - Enhanced network adaptability for both systems:
+    - Implemented congestion tracking on 0.0-1.0 scale
+    - Added rolling average calculations for network latency
+    - Created adaptive timeout calculations for varying conditions
+    - Implemented proper bounds checking and validation
+    - Added support for manual timeout adjustments with validation
+- **Comprehensive Security Fix Testing**
+  - Created dedicated `security_fixes_tests.rs` test module with tests for:
+    - Memory protection cleanup validation
+    - Security profile configuration testing
+    - Polynomial index conversion validation
+    - Timing attack resistance verification
+    - Atomic state transition testing
+    - Configurable timeout calculation validation
+  - Implemented comprehensive test infrastructure:
+    - Added controlled test environments for each security feature
+    - Created precise timing measurements for side-channel tests
+    - Implemented network condition simulation for timeout testing
+    - Added comprehensive assertion validation for all security features
+    - Created edge case testing for security-critical components
+
+### Improved
+- Enhanced memory protection security across all platforms
+- Improved resistance to memory-based side-channel attacks
+- Added consistent secure memory management across Windows, Unix, and macOS
+- Enhanced guard page implementation for sensitive cryptographic data
+- Created more reliable protection against memory-based vulnerabilities
+- Added better integration with existing cryptographic operations
+- Improved security profile selection based on execution environment
+- Enhanced performance in non-critical environments through selective protection
+- Added more effective security in high-security contexts
+- Improved reliability of atomic swaps and DKG under varying network conditions
+- Enhanced adaptability to changing network congestion and latency
+- Created more comprehensive test coverage for security-critical components
+- Added better validation of security feature implementation
+
 ## [0.7.13] - 2025-03-20
 
 ### Added

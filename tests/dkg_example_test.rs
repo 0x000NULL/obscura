@@ -1,4 +1,4 @@
-use obscura::crypto::zk_key_management::{DkgConfig, DkgManager, DkgState, Participant, DistributedKeyGeneration};
+use obscura::crypto::zk_key_management::{DkgConfig, DkgManager, DkgState, Participant, DistributedKeyGeneration, DkgTimeoutConfig};
 use obscura::crypto::jubjub::{JubjubPointExt, JubjubScalarExt};
 use std::time::Duration;
 use std::thread;
@@ -74,7 +74,10 @@ fn test_dkg_flow_part1_through_share_exchange() {
     // Configure the DKG session with a shorter timeout for testing
     let config = DkgConfig {
         threshold: 2, // 2-of-3 threshold for better redundancy
-        timeout_seconds: 10, // Short timeout to fail fast if something goes wrong
+        timeout_config: DkgTimeoutConfig {
+            base_timeout_seconds: 10, // Short timeout to fail fast if something goes wrong
+            ..Default::default()
+        },
         ..Default::default()
     };
     
@@ -267,7 +270,10 @@ fn test_dkg_flow_with_three_participants() {
     // Configure the DKG session with a shorter timeout for testing
     let coordinator_config = DkgConfig {
         threshold: 2, // 2-of-3 threshold
-        timeout_seconds: 10, // Short timeout to fail fast if something goes wrong
+        timeout_config: DkgTimeoutConfig {
+            base_timeout_seconds: 10, // Short timeout to fail fast
+            ..Default::default()
+        },
         our_id: participant_ids[0].clone(), // Set the correct our_id for the coordinator
         ..Default::default()
     };
@@ -293,7 +299,10 @@ fn test_dkg_flow_with_three_participants() {
         // Create a config with the correct our_id for this participant
         let participant_config = DkgConfig {
             threshold: 2, // 2-of-3 threshold
-            timeout_seconds: 10, // Short timeout to fail fast
+            timeout_config: DkgTimeoutConfig {
+                base_timeout_seconds: 10, // Short timeout to fail fast
+                ..Default::default()
+            },
             our_id: participant_ids[i+1].clone(), // Set the correct our_id for this participant (i+1 because we're skipping the first one)
             ..Default::default()
         };
@@ -541,10 +550,13 @@ fn test_dkg_with_different_threshold() {
     println!("DEBUG: Configuring DKG session");
     let config = DkgConfig {
         threshold: 3, // 3-of-5 threshold
-        timeout_seconds: 120,
+        timeout_config: DkgTimeoutConfig {
+            base_timeout_seconds: 120,
+            ..Default::default()
+        },
         ..Default::default()
     };
-    println!("DEBUG: DKG Configuration - Threshold: {}, Timeout: {}s", config.threshold, config.timeout_seconds);
+    println!("DEBUG: DKG Configuration - Threshold: {}, Timeout: {}s", config.threshold, config.timeout_config.base_timeout_seconds);
     
     // Coordinator creates the session
     println!("DEBUG: Coordinator creating session");
@@ -619,11 +631,16 @@ fn test_dkg_timeout_handling() {
     println!("DEBUG: Configuring DKG session with short timeout");
     let config = DkgConfig {
         threshold: 2,
-        timeout_seconds: 1, // Very short timeout
+        timeout_config: DkgTimeoutConfig {
+            base_timeout_seconds: 1, // Shorter timeout (1 second instead of 10)
+            verification_timeout_seconds: 1, // Short verification timeout
+            high_latency_factor: 1.0, // No latency factor
+            use_adaptive_timeouts: false, // No adaptive timeouts
+        },
         our_id: participant_ids[0].clone(), // Set the correct our_id for the coordinator
         ..Default::default()
     };
-    println!("DEBUG: DKG Configuration - Threshold: {}, Timeout: {}s", config.threshold, config.timeout_seconds);
+    println!("DEBUG: DKG Configuration - Threshold: {}, Timeout: {}s", config.threshold, config.timeout_config.base_timeout_seconds);
     
     // Coordinator creates the session
     println!("DEBUG: Coordinator creating session");
@@ -701,10 +718,13 @@ fn test_dkg_insufficient_participants() {
     println!("DEBUG: Configuring DKG session with invalid threshold");
     let config = DkgConfig {
         threshold: 3, // This exceeds the number of participants
-        timeout_seconds: 120,
+        timeout_config: DkgTimeoutConfig {
+            base_timeout_seconds: 120,
+            ..Default::default()
+        },
         ..Default::default()
     };
-    println!("DEBUG: DKG Configuration - Threshold: {}, Timeout: {}s", config.threshold, config.timeout_seconds);
+    println!("DEBUG: DKG Configuration - Threshold: {}, Timeout: {}s", config.threshold, config.timeout_config.base_timeout_seconds);
     
     // Coordinator creates the session
     println!("DEBUG: Coordinator creating session");
@@ -780,11 +800,14 @@ fn test_complete_dkg_example_simulation() {
     println!("DEBUG: Configuring DKG session");
     let config = DkgConfig {
         threshold: 2, // 2-of-3 threshold
-        timeout_seconds: 60, // Reduced timeout for faster testing
+        timeout_config: DkgTimeoutConfig {
+            base_timeout_seconds: 60, // Reduced timeout for faster testing
+            ..Default::default()
+        },
         our_id: participant_ids[0].clone(), // Set the correct our_id for the coordinator
         ..Default::default()
     };
-    println!("DEBUG: DKG Configuration - Threshold: {}, Timeout: {}s", config.threshold, config.timeout_seconds);
+    println!("DEBUG: DKG Configuration - Threshold: {}, Timeout: {}s", config.threshold, config.timeout_config.base_timeout_seconds);
     
     // Coordinator creates the session
     println!("DEBUG: Coordinator creating session");
@@ -1032,11 +1055,14 @@ fn test_dkg_fixed_simulation() {
     println!("DEBUG: Configuring DKG session");
     let config = DkgConfig {
         threshold: 2, // 2-of-3 threshold
-        timeout_seconds: 60, // Reasonable timeout for testing
+        timeout_config: DkgTimeoutConfig {
+            base_timeout_seconds: 60, // Reasonable timeout for testing
+            ..Default::default()
+        },
         our_id: participant_ids[0].clone(), // Coordinator ID
         ..Default::default()
     };
-    println!("DEBUG: DKG Configuration - Threshold: {}, Timeout: {}s", config.threshold, config.timeout_seconds);
+    println!("DEBUG: DKG Configuration - Threshold: {}, Timeout: {}s", config.threshold, config.timeout_config.base_timeout_seconds);
     
     // Coordinator creates the session
     println!("DEBUG: Coordinator creating session");
@@ -1063,7 +1089,10 @@ fn test_dkg_fixed_simulation() {
         // Create config with proper our_id for this participant
         let participant_config = DkgConfig {
             threshold: 2,
-            timeout_seconds: 60,
+            timeout_config: DkgTimeoutConfig {
+                base_timeout_seconds: 60,
+                ..Default::default()
+            },
             our_id: id.clone(), // Set correct ID for this participant
             ..Default::default()
         };
@@ -1300,11 +1329,14 @@ fn test_dkg_verification_debug() {
     println!("DEBUG: Configuring DKG session");
     let config = DkgConfig {
         threshold: 2, // 2-of-3 threshold
-        timeout_seconds: 60, // Reasonable timeout for testing
+        timeout_config: DkgTimeoutConfig {
+            base_timeout_seconds: 60, // Reasonable timeout for testing
+            ..Default::default()
+        },
         our_id: participant_ids[0].clone(), // Coordinator ID
         ..Default::default()
     };
-    println!("DEBUG: DKG Configuration - Threshold: {}, Timeout: {}s", config.threshold, config.timeout_seconds);
+    println!("DEBUG: DKG Configuration - Threshold: {}, Timeout: {}s", config.threshold, config.timeout_config.base_timeout_seconds);
     
     // Coordinator creates the session
     println!("DEBUG: Coordinator creating session");
@@ -1331,7 +1363,10 @@ fn test_dkg_verification_debug() {
         // Create config with proper our_id for this participant
         let participant_config = DkgConfig {
             threshold: 2,
-            timeout_seconds: 60,
+            timeout_config: DkgTimeoutConfig {
+                base_timeout_seconds: 60,
+                ..Default::default()
+            },
             our_id: id.clone(), // Set correct ID for this participant
             ..Default::default()
         };
@@ -1542,7 +1577,10 @@ fn test_dkg_state_transition_debug() {
     println!("Configuring DKG session");
     let config = DkgConfig {
         threshold: 2, // 2-of-3 threshold
-        timeout_seconds: 120,
+        timeout_config: DkgTimeoutConfig {
+            base_timeout_seconds: 120,
+            ..Default::default()
+        },
         our_id: participant_ids[0].clone(), // Set the correct our_id for the coordinator
         ..Default::default()
     };
@@ -1569,7 +1607,10 @@ fn test_dkg_state_transition_debug() {
         // Create a config with the correct our_id for this participant
         let participant_config = DkgConfig {
             threshold: 2, // 2-of-3 threshold
-            timeout_seconds: 120,
+            timeout_config: DkgTimeoutConfig {
+                base_timeout_seconds: 120,
+                ..Default::default()
+            },
             our_id: participant_ids[i].clone(), // Set the correct our_id for this participant 
             ..Default::default()
         };
@@ -1756,7 +1797,10 @@ fn test_dkg_minimal_non_hanging() {
     // Configure the DKG session with a very short timeout for testing
     let coordinator_config = DkgConfig {
         threshold: 2, // 2-of-3 threshold
-        timeout_seconds: 5, // Very short timeout to fail fast
+        timeout_config: DkgTimeoutConfig {
+            base_timeout_seconds: 5, // Very short timeout to fail fast
+            ..Default::default()
+        },
         our_id: participant_ids[0].clone(), // Set the correct our_id for the coordinator
         ..Default::default()
     };
@@ -1782,7 +1826,10 @@ fn test_dkg_minimal_non_hanging() {
         // Create a config with the correct our_id for this participant
         let participant_config = DkgConfig {
             threshold: 2, // 2-of-3 threshold
-            timeout_seconds: 5, // Very short timeout to fail fast
+            timeout_config: DkgTimeoutConfig {
+                base_timeout_seconds: 5, // Very short timeout to fail fast
+                ..Default::default()
+            },
             our_id: participant_ids[i+1].clone(), // Set the correct our_id for this participant (i+1 because we're skipping the first one)
             ..Default::default()
         };

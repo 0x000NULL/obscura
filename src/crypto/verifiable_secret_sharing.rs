@@ -1,5 +1,6 @@
 use crate::crypto::{JubjubPoint, JubjubScalar, JubjubPointExt};
 use crate::crypto::zk_key_management::{Participant, Share};
+use crate::crypto::errors::{CryptoError, CryptoResult};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
@@ -259,44 +260,44 @@ impl VerifiableSecretSharingSession {
     }
     
     /// Start the VSS session
-    pub fn start(&self) -> Result<(), String> {
-        let state = self.state.write().unwrap();
+    pub fn start(&self) -> CryptoResult<()> {
+        let mut state = self.state.write().map_err(|_| 
+            CryptoError::SideChannelProtectionError("Failed to acquire state lock".to_string()))?;
         
         if *state != VssState::Initialized {
-            return Err("VSS session already started".to_string());
+            return Err(CryptoError::SecretSharingError(
+                format!("Cannot start session in current state: {:?}", *state)
+            ));
         }
         
-        if self.is_dealer {
-            info!("Starting VSS session as dealer with session ID: {:?}", self.session_id.as_bytes());
-        } else {
-            info!("Joining VSS session with session ID: {:?}", self.session_id.as_bytes());
-        }
-        
+        *state = VssState::Initialized;
         Ok(())
     }
     
     /// Add a participant to the session
-    pub fn add_participant(&self, participant: Participant) -> Result<(), String> {
-        let mut participants = self.participants.write().unwrap();
-        let state = self.state.read().unwrap();
-        
-        if *state != VssState::Initialized {
-            return Err("Cannot add participants in the current state".to_string());
+    pub fn add_participant(&self, participant: Participant) -> CryptoResult<()> {
+        // Validate participant ID is not empty
+        if participant.id.is_empty() {
+            return Err(CryptoError::ValidationError("Participant ID cannot be empty".to_string()));
         }
+        
+        // Validate against max participants
+        let participants = self.participants.read().map_err(|_| 
+            CryptoError::SideChannelProtectionError("Failed to acquire participants lock".to_string()))?;
         
         if participants.len() >= MAX_VSS_PARTICIPANTS {
-            return Err(format!("Maximum number of participants ({}) reached", MAX_VSS_PARTICIPANTS));
+            return Err(CryptoError::ValidationError(
+                format!("Maximum number of participants ({}) exceeded", MAX_VSS_PARTICIPANTS)
+            ));
         }
         
-        // Check if this participant already exists
-        if participants.contains_key(&participant.id) {
-            return Err("Participant with this ID already exists".to_string());
-        }
+        drop(participants); // Release the read lock
+        
+        // Add the participant
+        let mut participants = self.participants.write().map_err(|_| 
+            CryptoError::SideChannelProtectionError("Failed to acquire participants write lock".to_string()))?;
         
         participants.insert(participant.id.clone(), participant);
-        
-        debug!("Added participant. Total participants: {}", participants.len());
-        
         Ok(())
     }
     

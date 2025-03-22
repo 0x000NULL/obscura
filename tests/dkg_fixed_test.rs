@@ -1,4 +1,4 @@
-use obscura::crypto::zk_key_management::{DkgConfig, DkgManager, DkgState, Participant};
+use obscura::crypto::zk_key_management::{DkgConfig, DkgManager, DkgState, Participant, DkgTimeoutConfig};
 use obscura::crypto::jubjub::{JubjubPoint, JubjubScalar, JubjubPointExt};
 
 /// Create a set of participants for testing
@@ -40,13 +40,17 @@ fn test_dkg_fixed_simulation() {
     println!("Configuring DKG session");
     let config = DkgConfig {
         threshold: 2,
-        timeout_seconds: 60,
+        timeout_config: DkgTimeoutConfig {
+            base_timeout_seconds: 60,
+            verification_timeout_seconds: 30,
+            ..Default::default()
+        },
         use_forward_secrecy: false, // Disable for testing
         custom_verification: None,
         max_participants: 100,
-        verification_timeout_seconds: 30,
         our_id: participant_ids[0].clone(),
         session_id: None,
+        network_latency_ms: None,
     };
     
     // Create participants
@@ -70,13 +74,17 @@ fn test_dkg_fixed_simulation() {
         // Create config with proper our_id for this participant
         let participant_config = DkgConfig {
             threshold: 2,
-            timeout_seconds: 60,
+            timeout_config: DkgTimeoutConfig {
+                base_timeout_seconds: 60,
+                verification_timeout_seconds: 30,
+                ..Default::default()
+            },
             use_forward_secrecy: false,
             custom_verification: None,
             max_participants: 100,
-            verification_timeout_seconds: 30,
             our_id: participant_ids[i].clone(),
             session_id: None,
+            network_latency_ms: None,
         };
         
         managers[i].join_session(session_id.clone(), Some(participant_config)).unwrap();

@@ -1,4 +1,4 @@
-use obscura::crypto::zk_key_management::{DkgConfig, DkgManager, Participant};
+use obscura::crypto::zk_key_management::{DkgConfig, DkgManager, Participant, DkgTimeoutConfig};
 use std::io::Write;
 use std::thread;
 use std::time::Duration;
@@ -48,13 +48,18 @@ fn main() {
     // Configure the DKG session
     let config = DkgConfig {
         threshold: 2, // 2-of-3 threshold
-        timeout_seconds: 120,
+        timeout_config: DkgTimeoutConfig {
+            base_timeout_seconds: 120,
+            verification_timeout_seconds: 60,
+            high_latency_factor: 1.5,
+            use_adaptive_timeouts: true,
+        },
         ..Default::default()
     };
     
     println!("DKG Configuration:");
     println!("- Threshold: {}", config.threshold);
-    println!("- Timeout: {} seconds", config.timeout_seconds);
+    println!("- Timeout: {} seconds", config.timeout_config.base_timeout_seconds);
     
     // Coordinator creates the session
     println!("\nCoordinator creating session...");

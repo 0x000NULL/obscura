@@ -1,5 +1,5 @@
 use crate::crypto::zk_key_management::{
-    Commitment, DkgConfig, DkgManager, Participant, SessionId, Share
+    Commitment, DkgConfig, DkgManager, Participant, SessionId, Share, DkgTimeoutConfig, DEFAULT_VERIFICATION_TIMEOUT_SECONDS
 };
 use crate::crypto::jubjub::JubjubKeypair;
 use std::collections::HashMap;
@@ -48,7 +48,12 @@ impl SimulatedNetwork {
         // Create configuration
         let config = DkgConfig {
             threshold,
-            timeout_seconds: 300, // Longer timeout for testing
+            timeout_config: DkgTimeoutConfig {
+                base_timeout_seconds: 300, // Longer timeout for testing
+                verification_timeout_seconds: DEFAULT_VERIFICATION_TIMEOUT_SECONDS,
+                high_latency_factor: 1.5,
+                use_adaptive_timeouts: true,
+            },
             ..Default::default()
         };
         
@@ -327,7 +332,12 @@ fn test_dkg_timeout() {
     // Create a configuration with a very short timeout
     let config = DkgConfig {
         threshold: 1, // Lower threshold to 1 so we don't need many participants
-        timeout_seconds: 1, // Very short timeout
+        timeout_config: DkgTimeoutConfig {
+            base_timeout_seconds: 1, // Very short timeout
+            verification_timeout_seconds: DEFAULT_VERIFICATION_TIMEOUT_SECONDS,
+            high_latency_factor: 1.5,
+            use_adaptive_timeouts: true,
+        },
         ..Default::default()
     };
     
@@ -371,7 +381,12 @@ fn test_dkg_failure_handling() {
     // Create a configuration
     let config = DkgConfig {
         threshold: 3,
-        timeout_seconds: 300,
+        timeout_config: DkgTimeoutConfig {
+            base_timeout_seconds: 300,
+            verification_timeout_seconds: DEFAULT_VERIFICATION_TIMEOUT_SECONDS,
+            high_latency_factor: 1.5,
+            use_adaptive_timeouts: true,
+        },
         ..Default::default()
     };
     

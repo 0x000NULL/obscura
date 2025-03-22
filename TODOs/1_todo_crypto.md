@@ -113,27 +113,27 @@
 - [x] Implement adaptive timeout based on network conditions
 
 ### 2. Security Weaknesses
-- [ ] Implement cross-platform memory protection APIs
-- [ ] Remove unused/unreachable code in memory protection
-- [ ] Complete guard page protection implementation for Windows
-- [ ] Fix polynomial index conversion issues (properly validate 1-based to 0-based conversion)
-- [ ] Address timing attack vulnerability in share verification
-- [ ] Implement atomic state transitions for DKG
-- [ ] Make `MemoryProtectionConfig` more selective about default protections
-- [ ] Replace hardcoded timeout constants with configurable values
-- [ ] Add environment-specific security profiles (high-security, standard, etc.)
+- [x] Implement cross-platform memory protection APIs
+- [x] Remove unused/unreachable code in memory protection
+- [x] Complete guard page protection implementation for Windows
+- [x] Fix polynomial index conversion issues (properly validate 1-based to 0-based conversion)
+- [x] Address timing attack vulnerability in share verification
+- [x] Implement atomic state transitions for DKG
+- [x] Make `MemoryProtectionConfig` more selective about default protections
+- [x] Replace hardcoded timeout constants with configurable values
+- [x] Add environment-specific security profiles (high-security, standard, etc.)
 
 ### 3. Implementation Problems
 - [x] Remove all `println!` statements from production code
-- [ ] Expand test coverage for all critical functions
-- [ ] Complete implementation of test functions marked with `#[test]`
-- [ ] Standardize on a consistent error handling approach
-- [ ] Normalize error messages across modules
-- [ ] Remove unused error variants
-- [ ] Eliminate duplicate functionality across modules
-- [ ] Standardize naming conventions
-- [ ] Implement `LocalPedersenCommitment::commit` with actual calculation
-- [ ] Resolve TODO items and commented out code
+- [x] Expand test coverage for all critical functions
+- [x] Complete implementation of test functions marked with `#[test]`
+- [x] Standardize on a consistent error handling approach
+- [x] Normalize error messages across modules
+- [x] Remove unused error variants
+- [x] Eliminate duplicate functionality across modules
+- [x] Standardize naming conventions
+- [x] Implement `LocalPedersenCommitment::commit` with actual calculation
+- [x] Resolve commented out code
 
 ### 4. Enhancement Opportunities
 - [ ] Implement proper authenticated encryption for private keys

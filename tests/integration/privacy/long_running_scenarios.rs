@@ -1,5 +1,5 @@
 use obscura::{
-    blockchain::Transaction,
+    blockchain::{Transaction, TransactionOutput},
     config::presets::PrivacyLevel as ObscuraPrivacyLevel,
     crypto::{
         bulletproofs::RangeProof,
@@ -109,7 +109,16 @@ impl LongRunningTest {
     
     /// Create a transaction with the specified amount
     fn create_transaction(&self, amount: u64) -> Transaction {
-        let mut tx = Transaction::new(Vec::new(), Vec::new());
+        // Create a transaction with at least one output
+        let mut tx = Transaction::new(
+            Vec::new(), 
+            vec![TransactionOutput {
+                value: amount,
+                public_key_script: Vec::new(),
+                range_proof: None,
+                commitment: None,
+            }]
+        );
         
         // Apply sender privacy features
         tx.apply_sender_privacy(SenderPrivacy::new());
@@ -371,13 +380,9 @@ mod test_helpers {
     // Helper to simulate decrypting an amount for a stealth address
     pub fn decrypt_transaction_amount(_address: &StealthAddress, tx: &Transaction) -> Option<u64> {
         // In a real implementation, this would decrypt using the stealth address's keys
-        // For testing, we'll extract from the commitment if available
-        if let Some(commitments) = &tx.amount_commitments {
-            if !commitments.is_empty() {
-                // Simulate successful decryption
-                // In real code, this would use crypto operations with the address's keys
-                return Some((commitments[0].len() as u64) * 100);
-            }
+        // For testing, we'll extract the transaction amount from the output
+        if !tx.outputs.is_empty() {
+            return Some(tx.outputs[0].value);
         }
         None
     }

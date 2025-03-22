@@ -3,7 +3,7 @@ use obscura::crypto::{
     jubjub::{JubjubPoint, JubjubScalar, JubjubPointExt, JubjubScalarExt}
 };
 use obscura::crypto::zk_key_management::{
-    DkgManager, DkgConfig, Participant, DkgState, DkgResult, Share
+    DkgManager, DkgConfig, Participant, DkgState, DkgResult, Share, DkgTimeoutConfig
 };
 use obscura::crypto::threshold_signatures::{
     ThresholdSignatureManager
@@ -49,7 +49,12 @@ fn main() {
     for (i, id) in participant_ids.iter().enumerate() {
         let config = DkgConfig {
             threshold: 2, // 2-of-3 threshold
-            timeout_seconds: 60,
+            timeout_config: DkgTimeoutConfig {
+                base_timeout_seconds: 60,
+                verification_timeout_seconds: 30,
+                high_latency_factor: 1.5,
+                use_adaptive_timeouts: true,
+            },
             ..Default::default()
         };
         

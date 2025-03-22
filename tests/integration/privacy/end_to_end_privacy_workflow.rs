@@ -6,7 +6,7 @@ use obscura::{
         pedersen::PedersenCommitment,
         privacy::{SenderPrivacy, ReceiverPrivacy},
         view_key::ViewKey,
-        metadata_protection::{MetadataProtection, MessageProtection, ProtectionConfig},
+        metadata_protection::{MetadataProtection, MessageProtection, ProtectionConfig, MessageProtectionExt},
         side_channel_protection::{SideChannelProtection, SideChannelProtectionConfig},
         jubjub::{generate_keypair, JubjubKeypair},
         JubjubPoint,
@@ -247,7 +247,7 @@ mod tests {
         }
         
         // Apply metadata protection
-        let _ = test.metadata_protector.protect_transaction_metadata(&tx, &ProtectionConfig::default());
+        tx = test.metadata_protector.protect_transaction(&tx);
         
         // Apply side channel protection
         test.side_channel_protection.protect_transaction(&mut tx);
