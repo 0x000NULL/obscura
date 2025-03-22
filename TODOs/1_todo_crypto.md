@@ -98,19 +98,19 @@
 ## Todo Checklist
 
 ### 1. Critical Cryptographic Issues
-- [ ] Replace XOR-based encryption with proper authenticated encryption
-- [ ] Implement proper key derivation (Argon2/PBKDF2)
-- [ ] Add authenticated encryption (AES-GCM/ChaCha20-Poly1305)
-- [ ] Implement salt handling and nonce generation
-- [ ] Remove "WARNING: This is a simplified implementation" comments after fixing
-- [ ] Remove all debug print statements containing sensitive information
-- [ ] Replace with proper logging with appropriate log levels
-- [ ] Review and fix `constant_time_scalar_mul` to ensure operations aren't optimized away
-- [ ] Improve masking approach for scalar operations
-- [ ] Add tests to verify constant-time properties
-- [ ] Replace hardcoded timeout with configurable parameter
-- [ ] Add consideration for network delays or congestion
-- [ ] Implement adaptive timeout based on network conditions
+- [x] Replace XOR-based encryption with proper authenticated encryption
+- [x] Implement proper key derivation (Argon2/PBKDF2)
+- [x] Add authenticated encryption (AES-GCM/ChaCha20-Poly1305)
+- [x] Implement salt handling and nonce generation
+- [x] Remove "WARNING: This is a simplified implementation" comments after fixing
+- [x] Remove all debug print statements containing sensitive information
+- [x] Replace with proper logging with appropriate log levels
+- [x] Review and fix `constant_time_scalar_mul` to ensure operations aren't optimized away
+- [x] Improve masking approach for scalar operations
+- [x] Add tests to verify constant-time properties
+- [x] Replace hardcoded timeout with configurable parameter
+- [x] Add consideration for network delays or congestion
+- [x] Implement adaptive timeout based on network conditions
 
 ### 2. Security Weaknesses
 - [ ] Implement cross-platform memory protection APIs
@@ -124,7 +124,7 @@
 - [ ] Add environment-specific security profiles (high-security, standard, etc.)
 
 ### 3. Implementation Problems
-- [ ] Remove all `println!` statements from production code
+- [x] Remove all `println!` statements from production code
 - [ ] Expand test coverage for all critical functions
 - [ ] Complete implementation of test functions marked with `#[test]`
 - [ ] Standardize on a consistent error handling approach
@@ -155,8 +155,8 @@
 - [ ] Provide usage guidelines for secure implementation patterns
 
 ### Priority Tasks
-- [ ] Fix insecure keypair encryption in mod.rs
-- [ ] Remove debug print statements with sensitive information
-- [ ] Address constant-time implementation issues
+- [x] Fix insecure keypair encryption in mod.rs
+- [x] Remove debug print statements with sensitive information
+- [x] Address constant-time implementation issues
 - [ ] Standardize error handling
-- [ ] Expand test coverage for critical functions
+- [x] Expand test coverage for critical functions

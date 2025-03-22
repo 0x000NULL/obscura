@@ -4,7 +4,8 @@ use crate::crypto::pedersen::{DualCurveCommitment, PedersenCommitment, BlsPeders
 use ark_ec::CurveGroup;
 use merlin::Transcript;
 use sha2::{Digest, Sha256};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH, Duration, Instant};
+use std::sync::{Mutex, Arc};
 #[cfg(test)]
 use tempfile::tempdir;
 #[cfg(test)]
@@ -12,10 +13,136 @@ use rand::RngCore;
 #[cfg(test)]
 use rand::rngs::OsRng;
 
-// Constants for atomic swap timeouts and security parameters
-const SWAP_TIMEOUT_SECONDS: u64 = 3600; // 1 hour
+// Default values for atomic swap configuration
+const DEFAULT_BASE_TIMEOUT_SECONDS: u64 = 3600; // 1 hour
+const DEFAULT_MIN_TIMEOUT_SECONDS: u64 = 1800;  // 30 minutes
+const DEFAULT_MAX_TIMEOUT_SECONDS: u64 = 7200;  // 2 hours
+const DEFAULT_NETWORK_DELAY_BUFFER_SECONDS: u64 = 300; // 5 minutes
+const DEFAULT_CONGESTION_MULTIPLIER: f64 = 1.5; // 50% increase for congestion
 const MIN_CONFIRMATIONS: u32 = 6;
 const HASH_SIZE: usize = 32;
+
+/// Configuration for atomic swap timeouts and network conditions
+#[derive(Debug, Clone)]
+pub struct SwapConfig {
+    /// Base timeout in seconds (default: 1 hour)
+    pub base_timeout_seconds: u64,
+    
+    /// Minimum timeout in seconds (default: 30 minutes)
+    pub min_timeout_seconds: u64,
+    
+    /// Maximum timeout in seconds (default: 2 hours)
+    pub max_timeout_seconds: u64,
+    
+    /// Additional buffer time for network delays in seconds (default: 5 minutes)
+    pub network_delay_buffer_seconds: u64,
+    
+    /// Multiplier applied during network congestion (default: 1.5)
+    pub congestion_multiplier: f64,
+    
+    /// Current network congestion level (0.0 to 1.0, where 1.0 is highest congestion)
+    network_congestion_level: f64,
+    
+    /// Rolling average of recent network latencies in milliseconds
+    average_network_latency_ms: u64,
+    
+    /// Timestamp of the last network condition update
+    last_update: Instant,
+}
+
+impl Default for SwapConfig {
+    fn default() -> Self {
+        SwapConfig {
+            base_timeout_seconds: DEFAULT_BASE_TIMEOUT_SECONDS,
+            min_timeout_seconds: DEFAULT_MIN_TIMEOUT_SECONDS,
+            max_timeout_seconds: DEFAULT_MAX_TIMEOUT_SECONDS,
+            network_delay_buffer_seconds: DEFAULT_NETWORK_DELAY_BUFFER_SECONDS,
+            congestion_multiplier: DEFAULT_CONGESTION_MULTIPLIER,
+            network_congestion_level: 0.0,
+            average_network_latency_ms: 0,
+            last_update: Instant::now(),
+        }
+    }
+}
+
+impl SwapConfig {
+    /// Create a new SwapConfig with custom settings
+    pub fn new(
+        base_timeout_seconds: u64,
+        min_timeout_seconds: u64,
+        max_timeout_seconds: u64,
+        network_delay_buffer_seconds: u64,
+        congestion_multiplier: f64,
+    ) -> Self {
+        SwapConfig {
+            base_timeout_seconds,
+            min_timeout_seconds,
+            max_timeout_seconds,
+            network_delay_buffer_seconds,
+            congestion_multiplier,
+            network_congestion_level: 0.0,
+            average_network_latency_ms: 0,
+            last_update: Instant::now(),
+        }
+    }
+    
+    /// Update network conditions based on observed latency and congestion
+    pub fn update_network_conditions(&mut self, latency_ms: u64, congestion_level: f64) {
+        // Update rolling average of network latency (with 80% weight to new value)
+        let current_avg = self.average_network_latency_ms;
+        let new_avg = if current_avg == 0 {
+            latency_ms
+        } else {
+            ((current_avg as f64) * 0.8 + (latency_ms as f64) * 0.2) as u64
+        };
+        self.average_network_latency_ms = new_avg;
+        
+        // Update congestion level (0.0 to 1.0)
+        self.network_congestion_level = congestion_level.max(0.0).min(1.0);
+        
+        // Update timestamp of last update
+        self.last_update = Instant::now();
+    }
+    
+    /// Calculate an adaptive timeout based on current network conditions
+    pub fn calculate_adaptive_timeout(&self) -> u64 {
+        // Base timeout
+        let mut timeout = self.base_timeout_seconds;
+        
+        // Add buffer for network delays
+        timeout += self.network_delay_buffer_seconds;
+        
+        // Factor in network congestion
+        let congestion_factor = 1.0 + (self.congestion_multiplier - 1.0) * self.network_congestion_level;
+        timeout = (timeout as f64 * congestion_factor) as u64;
+        
+        // Factor in average latency (convert ms to seconds, add proportionally)
+        let latency_seconds = self.average_network_latency_ms / 1000;
+        if latency_seconds > 0 {
+            // Add proportional buffer based on latency (more latency = more buffer)
+            let latency_factor = (latency_seconds as f64 / 10.0).min(1.0); // Cap at 10s latency for max effect
+            timeout += (self.network_delay_buffer_seconds as f64 * latency_factor) as u64;
+        }
+        
+        // Ensure timeout is within min/max bounds
+        timeout.max(self.min_timeout_seconds).min(self.max_timeout_seconds)
+    }
+    
+    /// Get the current network congestion level (0.0 to 1.0)
+    pub fn get_congestion_level(&self) -> f64 {
+        self.network_congestion_level
+    }
+    
+    /// Get the current average network latency in milliseconds
+    pub fn get_average_latency_ms(&self) -> u64 {
+        self.average_network_latency_ms
+    }
+    
+    /// Check if network conditions should be considered stale
+    pub fn is_stale(&self, stale_threshold_seconds: u64) -> bool {
+        self.last_update.elapsed().as_secs() > stale_threshold_seconds
+    }
+}
 
 /// Represents the state of an atomic swap
 #[derive(Debug, Clone, PartialEq)]
@@ -49,6 +176,8 @@ pub struct CrossCurveSwap {
     pub initiator: BlsPublicKey,
     /// Participant's public key
     pub participant: Option<BlsPublicKey>,
+    /// Configuration for the swap (shared reference)
+    pub config: Arc<SwapConfig>,
 }
 
 impl CrossCurveSwap {
@@ -57,6 +186,22 @@ impl CrossCurveSwap {
         amount: u64,
         secret: &[u8; HASH_SIZE],
         initiator_keypair: &BlsKeypair,
+    ) -> Result<Self, &'static str> {
+        // Use default swap configuration
+        Self::initialize_with_config(
+            amount,
+            secret,
+            initiator_keypair,
+            Arc::new(SwapConfig::default())
+        )
+    }
+    
+    /// Initialize a new cross-curve atomic swap with custom configuration
+    pub fn initialize_with_config(
+        amount: u64,
+        secret: &[u8; HASH_SIZE],
+        initiator_keypair: &BlsKeypair,
+        config: Arc<SwapConfig>,
     ) -> Result<Self, &'static str> {
         // Validate amount
         if amount == 0 {
@@ -82,12 +227,15 @@ impl CrossCurveSwap {
         let mut swap_id = [0u8; 32];
         swap_id.copy_from_slice(&swap_id_hasher.finalize());
 
-        // Set timeout
+        // Calculate adaptive timeout based on configuration
+        let timeout_duration = config.calculate_adaptive_timeout();
+        
+        // Set timeout timestamp
         let timeout = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs()
-            + SWAP_TIMEOUT_SECONDS;
+            + timeout_duration;
 
         // Create dual-curve commitment
         let dual_commitment = match DualCurveCommitment::commit_with_storage(
@@ -109,6 +257,7 @@ impl CrossCurveSwap {
             bls_commitment: dual_commitment.bls_commitment,
             initiator: initiator_keypair.public_key,
             participant: None,
+            config,
         })
     }
 
@@ -144,6 +293,77 @@ impl CrossCurveSwap {
         self.state = SwapState::Committed;
 
         Ok(signature)
+    }
+
+    /// Extend the swap timeout by the specified number of seconds
+    pub fn extend_timeout(&mut self, extension_seconds: u64) -> Result<(), &'static str> {
+        // Only allow extension if the swap is not completed, refunded, or timed out
+        match self.state {
+            SwapState::Completed | SwapState::Refunded | SwapState::TimedOut => {
+                return Err("Cannot extend timeout for a completed, refunded, or timed out swap");
+            }
+            _ => {}
+        }
+        
+        // Verify the swap hasn't already timed out
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        if current_time >= self.timeout {
+            self.state = SwapState::TimedOut;
+            return Err("Swap has already timed out");
+        }
+        
+        // Extend the timeout, ensuring it doesn't exceed the maximum allowed timeout
+        let max_timeout = current_time + self.config.max_timeout_seconds;
+        self.timeout = (self.timeout + extension_seconds).min(max_timeout);
+        
+        Ok(())
+    }
+    
+    /// Update the swap timeout based on current network conditions
+    pub fn update_timeout_for_network_conditions(&mut self, 
+                                                latency_ms: u64, 
+                                                congestion_level: f64) -> Result<(), &'static str> {
+        // Only allow updates if the swap is not completed, refunded, or timed out
+        match self.state {
+            SwapState::Completed | SwapState::Refunded | SwapState::TimedOut => {
+                return Err("Cannot update timeout for a completed, refunded, or timed out swap");
+            }
+            _ => {}
+        }
+        
+        // Get a mutable reference to the config
+        let config_arc = Arc::get_mut(&mut self.config).ok_or("Cannot get mutable reference to config")?;
+        
+        // Update network conditions in the config
+        config_arc.update_network_conditions(latency_ms, congestion_level);
+        
+        // Calculate a new adaptive timeout
+        let adaptive_timeout = config_arc.calculate_adaptive_timeout();
+        
+        // Get current time
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+            
+        // Update the timeout if the swap hasn't already timed out
+        if current_time < self.timeout {
+            // Calculate remaining time in the current timeout
+            let remaining_time = self.timeout - current_time;
+            
+            // If the adaptive timeout is greater than the remaining time, extend the timeout
+            if adaptive_timeout > remaining_time {
+                self.timeout = current_time + adaptive_timeout;
+            }
+        } else {
+            self.state = SwapState::TimedOut;
+            return Err("Swap has already timed out");
+        }
+        
+        Ok(())
     }
 
     /// Reveal the secret and complete the swap
@@ -309,6 +529,7 @@ mod tests {
     use rand::RngCore;
     use rand::rngs::OsRng;
     use crate::crypto::pedersen::initialize_blinding_store;
+    use std::thread::sleep;
 
     #[test]
     fn test_cross_curve_swap_flow() {
@@ -372,9 +593,23 @@ mod tests {
         let initiator = BlsKeypair::generate();
         let participant = BlsKeypair::generate();
 
-        let mut swap = CrossCurveSwap::initialize(1000, &secret, &initiator).unwrap();
+        // Initialize swap with custom configuration
+        let config = Arc::new(SwapConfig::new(
+            60,     // base_timeout_seconds: Very short for testing
+            30,     // min_timeout_seconds
+            120,    // max_timeout_seconds
+            15,     // network_delay_buffer_seconds
+            1.5     // congestion_multiplier
+        ));
         
-        // Force timeout
+        let mut swap = CrossCurveSwap::initialize_with_config(
+            1000, 
+            &secret, 
+            &initiator,
+            config
+        ).unwrap();
+        
+        // Force timeout by setting it to current time
         swap.timeout = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -387,6 +622,83 @@ mod tests {
         
         // Cleanup
         temp_dir.close().unwrap();
+    }
+
+    #[test]
+    fn test_adaptive_timeout() {
+        // Create a temporary directory for the blinding store
+        let temp_dir = tempdir().unwrap();
+        
+        // Initialize the global blinding store
+        initialize_blinding_store(temp_dir.path(), "test_password").unwrap();
+        
+        let mut secret = [0u8; HASH_SIZE];
+        OsRng.fill_bytes(&mut secret);
+
+        let initiator = BlsKeypair::generate();
+        
+        // Initialize swap with custom configuration
+        let config = Arc::new(SwapConfig::new(
+            60,     // base_timeout_seconds: Very short for testing
+            30,     // min_timeout_seconds
+            300,    // max_timeout_seconds
+            15,     // network_delay_buffer_seconds
+            2.0     // congestion_multiplier
+        ));
+        
+        let mut swap = CrossCurveSwap::initialize_with_config(
+            1000, 
+            &secret, 
+            &initiator,
+            Arc::clone(&config)
+        ).unwrap();
+        
+        // Store the initial timeout
+        let initial_timeout = swap.timeout;
+        
+        // Update network conditions to simulate congestion
+        swap.update_timeout_for_network_conditions(500, 0.8).unwrap(); // High latency, high congestion
+        
+        // Verify timeout was extended
+        assert!(swap.timeout > initial_timeout);
+        
+        // Test timeout extension method
+        let before_extend = swap.timeout;
+        swap.extend_timeout(30).unwrap();
+        assert!(swap.timeout > before_extend);
+        assert!(swap.timeout <= before_extend + 30); // Should be less than or equal due to max cap
+        
+        // Cleanup
+        temp_dir.close().unwrap();
+    }
+
+    #[test]
+    fn test_network_condition_adaptation() {
+        // Create a SwapConfig with default values
+        let mut config = SwapConfig::default();
+        
+        // Initial timeout should be the base + buffer
+        let initial_timeout = config.calculate_adaptive_timeout();
+        assert_eq!(initial_timeout, DEFAULT_BASE_TIMEOUT_SECONDS + DEFAULT_NETWORK_DELAY_BUFFER_SECONDS);
+        
+        // Update with moderate congestion and latency
+        config.update_network_conditions(200, 0.5);
+        
+        // Timeout should increase due to congestion
+        let moderate_timeout = config.calculate_adaptive_timeout();
+        assert!(moderate_timeout > initial_timeout);
+        
+        // Update with high congestion and latency
+        config.update_network_conditions(800, 0.9);
+        
+        // Timeout should increase further
+        let high_timeout = config.calculate_adaptive_timeout();
+        assert!(high_timeout > moderate_timeout);
+        
+        // Verify the timeout is capped at the maximum
+        config.update_network_conditions(10000, 1.0);
+        let extreme_timeout = config.calculate_adaptive_timeout();
+        assert!(extreme_timeout <= config.max_timeout_seconds);
     }
 
     #[test]

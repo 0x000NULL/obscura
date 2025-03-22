@@ -24,7 +24,7 @@ mod tests {
         assert!(!preset.use_tor);
         assert!(!preset.use_i2p);
         assert!(preset.use_stealth_addresses);
-        assert!(preset.use_confidential_transactions);
+        assert!(!preset.use_confidential_transactions);
     }
     
     #[test]

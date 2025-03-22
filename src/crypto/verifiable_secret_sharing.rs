@@ -97,15 +97,15 @@ pub struct VerifiableShare {
 impl VerifiableShare {
     /// Create a new verifiable share
     pub fn new(index: JubjubScalar, value: JubjubScalar, commitment: PolynomialCommitment) -> Self {
-        println!("DEBUG: Creating new VerifiableShare");
-        println!("DEBUG: Index: {:?}", index);
-        println!("DEBUG: Commitment size: {}", commitment.commitments.len());
+        log::debug!("Creating new VerifiableShare");
+        log::trace!("Index: {:?}", index);
+        log::trace!("Commitment size: {}", commitment.commitments.len());
         let share = Self {
             index,
             value,
             commitment,
         };
-        println!("DEBUG: VerifiableShare created successfully");
+        log::debug!("VerifiableShare created successfully");
         share
     }
     
@@ -463,7 +463,7 @@ impl VerifiableSecretSharingSession {
             return Ok(false);
         }
         
-        println!("Share verification succeeded");
+        log::debug!("Share verification succeeded");
         
         // Store the share - acquire lock only for the insert operation
         {
@@ -475,7 +475,7 @@ impl VerifiableSecretSharingSession {
         {
             let mut state = self.state.write().unwrap();
             if *state == VssState::CommitmentsPublished {
-                println!("Transitioning state: CommitmentsPublished -> VerificationInProgress");
+                log::debug!("Transitioning state: CommitmentsPublished -> VerificationInProgress");
                 *state = VssState::VerificationInProgress;
             }
         }
@@ -517,7 +517,7 @@ impl VerifiableSecretSharingSession {
         };
         
         // For testing purposes, directly print counts for debugging
-        println!("Verification status: verified={}/{} participants", verified_count, participants_count);
+        log::info!("Verification status: verified={}/{} participants", verified_count, participants_count);
         
         // Calculate non-dealer count: total participants minus 1 (the dealer)
         let non_dealer_count = participants_count - 1;
@@ -526,13 +526,13 @@ impl VerifiableSecretSharingSession {
         if verified_count >= non_dealer_count {
             debug!("All participants verified ({}). Transitioning to Verified state.", verified_count);
             let mut state = self.state.write().unwrap();
-            println!("State transition: {:?} -> Verified", *state);
+            log::debug!("State transition: {:?} -> Verified", *state);
             *state = VssState::Verified;
         } else if current_state == VssState::SharesDistributed {
             // Only transition if we're still in SharesDistributed
             let mut state = self.state.write().unwrap();
             if *state == VssState::SharesDistributed {
-                println!("State transition: SharesDistributed -> VerificationInProgress");
+                log::debug!("State transition: SharesDistributed -> VerificationInProgress");
                 *state = VssState::VerificationInProgress;
             }
         }
@@ -1196,26 +1196,25 @@ mod tests {
             let participants = dealer_session.participants.read().unwrap();
             println!("Verified participants: {}/{}", verified.len(), participants.len());
             
-            // If not verified, force it for testing
             if dealer_session.get_state() != VssState::Verified {
-                println!("Forcing dealer session to Verified state");
+                log::debug!("Forcing dealer session to Verified state for testing purposes");
                 let mut state = dealer_session.state.write().unwrap();
                 *state = VssState::Verified;
             }
         }
         
-        println!("Completing dealer session");
+        log::debug!("Completing dealer session");
         match dealer_session.complete() {
-            Ok(result) => println!("Dealer session completed successfully. Public key: {:?}", result.public_key),
-            Err(e) => println!("Error completing dealer session: {}", e),
+            Ok(result) => log::debug!("Dealer session completed successfully. Public key available for verification"),
+            Err(e) => log::error!("Error completing dealer session: {}", e),
         }
         
-        println!("Completing participant session");
+        log::debug!("Completing participant session");
         match participant_session.complete() {
-            Ok(result) => println!("Participant session completed successfully. Public key: {:?}", result.public_key),
-            Err(e) => println!("Error completing participant session: {}", e),
+            Ok(result) => log::debug!("Participant session completed successfully. Public key available for verification"),
+            Err(e) => log::error!("Error completing participant session: {}", e),
         }
         
-        println!("=== END: test_vss_minimal ===");
+        log::info!("=== END: test_vss_minimal ===");
     }
 } 

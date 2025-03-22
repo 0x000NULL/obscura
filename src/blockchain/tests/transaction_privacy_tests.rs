@@ -56,6 +56,9 @@ fn test_transaction_obfuscation() {
     assert!(!tx.inputs.is_empty());
     assert!(!tx.outputs.is_empty());
     
+    // Make sure only the obfuscation flag is set, not other flags
+    assert_eq!(tx.privacy_flags, 0x01);
+    
     // Verify that the privacy features verify
     assert!(tx.verify_privacy_features().unwrap());
 }
@@ -68,18 +71,43 @@ fn test_amount_commitments() {
     let commitment = vec![1, 2, 3, 4]; // Dummy commitment
     tx.set_amount_commitment(0, commitment.clone()).unwrap();
     
+    // Set a range proof for the same output
+    let range_proof = vec![5, 6, 7, 8]; // Dummy range proof
+    tx.set_range_proof(0, range_proof.clone()).unwrap();
+    
     // Verify that the commitment was set
     assert!(tx.amount_commitments.is_some());
     assert_eq!(tx.amount_commitments.as_ref().unwrap()[0], commitment);
-    assert_eq!(tx.privacy_flags & 0x02, 0x02);
+    assert_eq!(tx.privacy_flags & 0x04, 0x04);
     
-    // Set a commitment for a non-existent output
-    let commitment2 = vec![5, 6, 7, 8];
+    // Verify that the range proof was set
+    assert!(tx.range_proofs.is_some());
+    assert_eq!(tx.range_proofs.as_ref().unwrap()[0], range_proof);
+    assert_eq!(tx.privacy_flags & 0x08, 0x08);
+    
+    // Add another output to the transaction
+    tx.outputs.push(TransactionOutput {
+        value: 50,
+        public_key_script: vec![7, 8, 9],
+        range_proof: None,
+        commitment: None,
+    });
+    
+    // Set a commitment for the new output
+    let commitment2 = vec![9, 10, 11, 12];
     tx.set_amount_commitment(1, commitment2.clone()).unwrap();
+    
+    // Set a range proof for the new output
+    let range_proof2 = vec![13, 14, 15, 16];
+    tx.set_range_proof(1, range_proof2.clone()).unwrap();
     
     // Verify that the commitment was set and the vector was expanded
     assert_eq!(tx.amount_commitments.as_ref().unwrap().len(), 2);
     assert_eq!(tx.amount_commitments.as_ref().unwrap()[1], commitment2);
+    
+    // Verify that the range proof was set and the vector was expanded
+    assert_eq!(tx.range_proofs.as_ref().unwrap().len(), 2);
+    assert_eq!(tx.range_proofs.as_ref().unwrap()[1], range_proof2);
     
     // Verify that the privacy features verify
     assert!(tx.verify_privacy_features().unwrap());
@@ -89,17 +117,36 @@ fn test_amount_commitments() {
 fn test_range_proofs() {
     let mut tx = create_test_transaction();
     
+    // Set a commitment for the output first (this sets the confidential transactions flag)
+    let commitment = vec![1, 2, 3, 4]; // Dummy commitment
+    tx.set_amount_commitment(0, commitment.clone()).unwrap();
+    
     // Set a range proof for the output
-    let range_proof = vec![1, 2, 3, 4]; // Dummy range proof
+    let range_proof = vec![5, 6, 7, 8]; // Dummy range proof
     tx.set_range_proof(0, range_proof.clone()).unwrap();
     
     // Verify that the range proof was set
     assert!(tx.range_proofs.is_some());
     assert_eq!(tx.range_proofs.as_ref().unwrap()[0], range_proof);
-    assert_eq!(tx.privacy_flags & 0x04, 0x04);
     
-    // Set a range proof for a non-existent output
-    let range_proof2 = vec![5, 6, 7, 8];
+    // Verify that both flags are set
+    assert_eq!(tx.privacy_flags & 0x04, 0x04); // Confidential transactions flag
+    assert_eq!(tx.privacy_flags & 0x08, 0x08); // Range proofs flag
+    
+    // Add another output to the transaction
+    tx.outputs.push(TransactionOutput {
+        value: 50,
+        public_key_script: vec![7, 8, 9],
+        range_proof: None,
+        commitment: None,
+    });
+    
+    // Set a commitment for the new output
+    let commitment2 = vec![9, 10, 11, 12];
+    tx.set_amount_commitment(1, commitment2.clone()).unwrap();
+    
+    // Set a range proof for the new output
+    let range_proof2 = vec![13, 14, 15, 16];
     tx.set_range_proof(1, range_proof2.clone()).unwrap();
     
     // Verify that the range proof was set and the vector was expanded
@@ -119,31 +166,33 @@ fn test_privacy_features_verification() {
     
     // Set the obfuscation flag without setting the obfuscated ID
     tx.privacy_flags |= 0x01;
-    assert!(!tx.verify_privacy_features().unwrap());
+    assert!(tx.verify_privacy_features().is_err());
     
     // Set the obfuscated ID
     tx.obfuscated_id = Some([0; 32]);
     assert!(tx.verify_privacy_features().unwrap());
     
     // Set the confidential amounts flag without setting the commitments
-    tx.privacy_flags |= 0x02;
-    assert!(!tx.verify_privacy_features().unwrap());
+    tx.privacy_flags |= 0x04;
+    assert!(tx.verify_privacy_features().is_err());
     
     // Set the commitments
     tx.amount_commitments = Some(vec![vec![1, 2, 3, 4]]);
-    assert!(tx.verify_privacy_features().unwrap());
+    // The verification will still fail because we need range proofs too
+    assert!(tx.verify_privacy_features().is_err());
     
-    // Set the range proofs flag without setting the proofs
-    tx.privacy_flags |= 0x04;
-    assert!(!tx.verify_privacy_features().unwrap());
+    // Set the range proofs flag 
+    tx.privacy_flags |= 0x08;
+    // Still fails because we haven't set the range proofs
+    assert!(tx.verify_privacy_features().is_err());
     
     // Set the range proofs
     tx.range_proofs = Some(vec![vec![5, 6, 7, 8]]);
     assert!(tx.verify_privacy_features().unwrap());
     
     // Set the stealth addressing flag without setting the ephemeral pubkey
-    tx.privacy_flags |= 0x08;
-    assert!(!tx.verify_privacy_features().unwrap());
+    tx.privacy_flags |= 0x02;
+    assert!(tx.verify_privacy_features().is_err());
     
     // Set the ephemeral pubkey
     tx.ephemeral_pubkey = Some([0; 32]);
@@ -191,8 +240,8 @@ fn test_confidential_transactions_integration() {
     assert_eq!(tx.range_proofs.as_ref().unwrap().len(), tx.outputs.len());
     
     // Verify that the privacy flags were set
-    assert_eq!(tx.privacy_flags & 0x02, 0x02); // Confidential amounts
-    assert_eq!(tx.privacy_flags & 0x04, 0x04); // Range proofs
+    assert_eq!(tx.privacy_flags & 0x04, 0x04); // Confidential amounts
+    assert_eq!(tx.privacy_flags & 0x08, 0x08); // Range proofs
     
     // Verify that the privacy features verify
     assert!(tx.verify_privacy_features().unwrap());
@@ -220,7 +269,7 @@ fn test_stealth_addressing_integration() {
     assert!(tx.ephemeral_pubkey.is_some());
     
     // Verify that the privacy flags were set
-    assert_eq!(tx.privacy_flags & 0x08, 0x08); // Stealth addressing
+    assert_eq!(tx.privacy_flags & 0x02, 0x02); // Stealth addressing
     
     // Verify that the privacy features verify
     assert!(tx.verify_privacy_features().unwrap());
@@ -286,9 +335,9 @@ fn test_full_privacy_pipeline() {
     
     // Verify that the privacy flags were set
     assert_eq!(tx.privacy_flags & 0x01, 0x01); // Transaction obfuscation
-    assert_eq!(tx.privacy_flags & 0x02, 0x02); // Confidential amounts
-    assert_eq!(tx.privacy_flags & 0x04, 0x04); // Range proofs
-    assert_eq!(tx.privacy_flags & 0x08, 0x08); // Stealth addressing
+    assert_eq!(tx.privacy_flags & 0x04, 0x04); // Confidential amounts
+    assert_eq!(tx.privacy_flags & 0x08, 0x08); // Range proofs
+    assert_eq!(tx.privacy_flags & 0x02, 0x02); // Stealth addressing
     
     // Verify that the privacy features verify
     assert!(tx.verify_privacy_features().unwrap());

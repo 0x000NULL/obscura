@@ -134,32 +134,52 @@ pub fn deserialize_keypair(bytes: &[u8]) -> Option<(jubjub::JubjubScalar, jubjub
     Some((secret, public))
 }
 
-#[allow(dead_code)]
 pub fn encrypt_keypair(
     keypair: &(jubjub::JubjubScalar, jubjub::JubjubPoint),
     password: &str,
 ) -> Vec<u8> {
-    // WARNING: This is a simplified implementation for development/testing only.
-    // DO NOT USE IN PRODUCTION.
-    // TODO: Replace with proper authenticated encryption using:
-    // - Proper key derivation (e.g., Argon2, PBKDF2)
-    // - Authenticated encryption (e.g., AES-GCM, ChaCha20-Poly1305)
-    // - Proper salt handling and nonce generation
+    use chacha20poly1305::{
+        aead::{Aead, AeadCore, KeyInit},
+        ChaCha20Poly1305, Nonce,
+    };
+    use rand::{rngs::OsRng, RngCore};
+    use ring::pbkdf2;
     
+    // Serialize the keypair
     let serialized = serialize_keypair(keypair);
 
-    // Derive an encryption key from the password
-    let mut hasher = Sha256::new();
-    hasher.update(password.as_bytes());
-    let key = hasher.finalize();
+    // Generate a random salt for key derivation (16 bytes)
+    let mut salt = [0u8; 16];
+    OsRng.fill_bytes(&mut salt);
 
-    // XOR the serialized keypair with the key (oversimplified!)
-    let mut encrypted = serialized.clone();
-    for i in 0..encrypted.len() {
-        encrypted[i] ^= key[i % 32];
-    }
-
-    encrypted
+    // Generate a random nonce for ChaCha20Poly1305 (12 bytes)
+    let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
+    
+    // Derive an encryption key using PBKDF2 (32 bytes for ChaCha20Poly1305)
+    let mut derived_key = [0u8; 32];
+    pbkdf2::derive(
+        pbkdf2::PBKDF2_HMAC_SHA256,
+        std::num::NonZeroU32::new(100_000).unwrap(), // 100,000 iterations for security
+        &salt,
+        password.as_bytes(),
+        &mut derived_key,
+    );
+    
+    // Create a ChaCha20Poly1305 cipher with the derived key
+    let cipher = ChaCha20Poly1305::new(derived_key.as_ref().into());
+    
+    // Encrypt the serialized keypair with authentication tag
+    let ciphertext = cipher
+        .encrypt(&nonce, serialized.as_ref())
+        .expect("Encryption failure");
+    
+    // Format: salt (16 bytes) + nonce (12 bytes) + ciphertext
+    let mut result = Vec::with_capacity(16 + 12 + ciphertext.len());
+    result.extend_from_slice(&salt);
+    result.extend_from_slice(nonce.as_slice());
+    result.extend_from_slice(&ciphertext);
+    
+    result
 }
 
 #[allow(dead_code)]
@@ -167,19 +187,46 @@ pub fn decrypt_keypair(
     encrypted: &[u8],
     password: &str,
 ) -> Option<(jubjub::JubjubScalar, jubjub::JubjubPoint)> {
-    // Derive the encryption key from the password
-    let mut hasher = Sha256::new();
-    hasher.update(password.as_bytes());
-    let key = hasher.finalize();
-
-    // XOR the encrypted keypair with the key (oversimplified!)
-    // In a real implementation, use proper authenticated encryption
-    let mut serialized = encrypted.to_vec();
-    for i in 0..serialized.len() {
-        serialized[i] ^= key[i % 32];
+    use chacha20poly1305::{
+        aead::{Aead, KeyInit},
+        ChaCha20Poly1305, Nonce,
+    };
+    use ring::pbkdf2;
+    
+    // Minimum length check: salt (16) + nonce (12) + authenticated ciphertext (at least 64 + 16)
+    if encrypted.len() < 16 + 12 + 64 + 16 {
+        return None;
     }
-
-    deserialize_keypair(&serialized)
+    
+    // Extract salt and nonce
+    let salt = &encrypted[0..16];
+    let nonce_bytes = &encrypted[16..28];
+    let ciphertext = &encrypted[28..];
+    
+    // Convert nonce bytes to a proper Nonce
+    let nonce = Nonce::from_slice(nonce_bytes);
+    
+    // Derive the encryption key using PBKDF2
+    let mut derived_key = [0u8; 32];
+    pbkdf2::derive(
+        pbkdf2::PBKDF2_HMAC_SHA256,
+        std::num::NonZeroU32::new(100_000).unwrap(),
+        salt,
+        password.as_bytes(),
+        &mut derived_key,
+    );
+    
+    // Create a ChaCha20Poly1305 cipher with the derived key
+    let cipher = ChaCha20Poly1305::new(derived_key.as_ref().into());
+    
+    // Decrypt the ciphertext
+    let plaintext = match cipher.decrypt(nonce, ciphertext) {
+        Ok(plaintext) => plaintext,
+        Err(_) => return None, // Authentication failed or decryption error
+    };
+    
+    // Deserialize the decrypted keypair
+    deserialize_keypair(&plaintext)
 }
 
 // Transaction-related cryptographic functions

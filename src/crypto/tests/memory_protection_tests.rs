@@ -101,6 +101,10 @@ fn test_secure_clearing() {
     config.guard_pages_enabled = false;
     config.aslr_integration_enabled = false;
     
+    // Temporarily disable test mode to ensure secure_clear works
+    let original_test_mode = crate::crypto::memory_protection::is_test_mode();
+    crate::crypto::memory_protection::set_test_mode(false);
+    
     let mp = MemoryProtection::new(config, None);
     
     // Create a buffer of non-zero data
@@ -115,6 +119,9 @@ fn test_secure_clearing() {
     for byte in buffer.iter() {
         assert_eq!(*byte, 0);
     }
+    
+    // Restore original test mode flag
+    crate::crypto::memory_protection::set_test_mode(original_test_mode);
 }
 
 #[test]

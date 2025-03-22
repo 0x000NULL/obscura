@@ -1033,8 +1033,9 @@ mod tests {
         let protection = MetadataProtection::new();
         let config = ProtectionConfig::default();
         
-        // Create a dummy transaction
-        let tx = Transaction::default();
+        // Create a dummy transaction with metadata
+        let mut tx = Transaction::default();
+        tx.metadata.insert("tx_type".to_string(), "regular".to_string());
         
         // Protect transaction metadata
         let protected = protection.protect_transaction_metadata(&tx, &config).unwrap();

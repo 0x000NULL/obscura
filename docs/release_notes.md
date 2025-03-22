@@ -1,5 +1,241 @@
 # Release Notes
 
+## [0.7.13] - 2025-03-20
+
+### Proper Authenticated Encryption for Keypair Management
+
+This release implements proper authenticated encryption for keypair management, replacing the previous XOR-based encryption mechanism with a robust, industry-standard approach. This addresses a critical security vulnerability in the cryptographic foundations of the Obscura blockchain and significantly enhances the protection of user keys.
+
+#### Comprehensive Security Enhancement
+
+This implementation replaces the insecure encryption method with a complete security solution that addresses multiple aspects of cryptographic protection.
+
+**Key Security Improvements:**
+- **Authenticated Encryption:** Implemented ChaCha20-Poly1305 for both confidentiality and integrity protection
+- **Secure Key Derivation:** Added PBKDF2-HMAC-SHA256 with 100,000 iterations to protect against brute force attacks
+- **Cryptographic Randomness:** Implemented secure random generation for salt (16 bytes) and nonce (12 bytes)
+- **Data Format Security:** Created a structured format (salt + nonce + ciphertext) for proper cryptographic material separation
+
+**Technical Implementation:**
+- Replaced XOR encryption with ChaCha20-Poly1305 from the `chacha20poly1305` crate
+- Implemented key derivation using Ring's PBKDF2 implementation
+- Added secure random generation using the OS's cryptographic random number generator
+- Created proper data structure for the encrypted output with all necessary cryptographic components
+
+#### Enhanced Security Guarantees
+
+The new implementation provides multiple layers of security guarantees that were absent in the previous implementation.
+
+**Security Properties:**
+- **Confidentiality:** ChaCha20 encryption prevents unauthorized access to keypair data
+- **Integrity and Authentication:** Poly1305 authentication tag protects against tampering and modification
+- **Brute Force Resistance:** Key derivation with high iteration count (100,000) makes password cracking computationally expensive
+- **Forward Security:** Unique random salt for each encryption ensures that different encryptions of the same data produce different outputs
+- **Replay Protection:** Random nonce prevents reuse attacks and ensures encryption uniqueness
+
+**Security Benefits:**
+- Protection against unauthorized access to private keys
+- Defense against data tampering and forgery
+- Resistance to offline brute force attacks on passwords
+- Prevention of correlation attacks between different encrypted keypairs
+- Protection against various cryptographic attacks on the encryption process
+
+#### Comprehensive Testing Framework
+
+The implementation includes an extensive testing framework to ensure correctness and security.
+
+**Test Coverage:**
+- Basic encryption and decryption functionality
+- Verification of authentication features (tampering detection)
+- Handling of incorrect passwords
+- Format validation and parsing
+
+### Enhanced Side-Channel Attack Protection
+
+This release also implements significant improvements to protect against side-channel attacks, which can extract sensitive information by analyzing physical characteristics of the system (timing, power consumption, etc.) during cryptographic operations.
+
+#### Secure Logging Implementation
+
+We've addressed critical information leakage vulnerabilities in the logging system:
+
+**Key Improvements:**
+- **Structured Logging:** Replaced all debug print statements with the proper `log` crate framework
+- **Log Level Management:** Implemented appropriate log levels (trace, debug, info, warn, error) based on information sensitivity
+- **Sensitive Data Protection:** Ensured that sensitive cryptographic material is never directly logged
+- **Context Without Exposure:** Added informative context to logs without revealing actual sensitive values
+
+**Technical Implementation:**
+- Removed all `println!` statements containing sensitive information from the codebase
+- Implemented proper logging practices in cryptographic operations, particularly in `verifiable_secret_sharing.rs`
+- Added tests to verify that sensitive data is not exposed in logs
+
+#### Constant-Time Cryptographic Operations
+
+We've significantly enhanced the constant-time implementations to protect against timing attacks:
+
+**Key Improvements:**
+- **Multiple Mask Strategy:** Implemented multiple distinct random masks to prevent compiler optimization
+- **Memory Barriers:** Added proper memory barriers using `std::sync::atomic::fence` with `SeqCst` ordering
+- **Volatile Operations:** Implemented volatile reads and writes to ensure operations can't be optimized away
+- **Defensive Dummy Operations:** Added multiple different operations with masked values to confuse timing analysis
+
+**Technical Implementation:**
+- Enhanced `constant_time_scalar_mul` with comprehensive protections against timing analysis
+- Improved `masked_scalar_operation` to better protect scalar values during processing
+- Implemented proper memory management to prevent leaks of sensitive information
+
+#### Comprehensive Side-Channel Testing
+
+The implementation includes extensive testing to verify resistance to side-channel attacks:
+
+**Test Coverage:**
+- **Optimization Resistance:** Tests to verify operations aren't optimized away by the compiler
+- **Timing Correlation Analysis:** Tests to ensure operation timing isn't correlated with input values
+- **Masked Operation Verification:** Tests for the effectiveness of masking techniques
+- **Sensitive Data Handling:** Tests to verify no sensitive data is exposed through logs or other channels
+
+#### Security Benefits
+
+These improvements provide significant protection against various side-channel attack vectors:
+
+- **Timing Attack Protection:** Operations take consistent time regardless of secret values
+- **Information Leakage Prevention:** Sensitive data is never exposed through logs or debug output
+- **Compiler Optimization Resistance:** Critical security operations can't be optimized away by the compiler
+- **Advanced Analysis Resistance:** Multiple layers of protection against sophisticated timing and power analysis
+- **Masking and Blinding:** Scalar operations are protected from revealing patterns related to their actual values
+
+#### Documentation and Best Practices
+
+Comprehensive documentation has been created to guide developers in maintaining side-channel resistance:
+
+- Detailed explanation of side-channel vulnerabilities and protection mechanisms
+- Guidelines for secure logging practices when handling cryptographic operations
+- Best practices for implementing new cryptographic functionality with side-channel resistance
+- Testing approaches to verify side-channel protection effectiveness
+
+### Adaptive Timeout for Atomic Swaps
+
+This release introduces a comprehensive adaptive timeout system for atomic swaps, replacing the previously hardcoded timeout value with a flexible, network-aware mechanism. This enhancement significantly improves the reliability and user experience of cross-chain atomic swaps by dynamically adjusting timeout periods based on actual network conditions.
+
+#### Configurable Timeout Parameters
+
+The implementation provides extensive configuration options to customize timeout behavior:
+
+**Key Parameters:**
+- **Base Timeout:** Configurable foundation timeout period (default: 1 hour)
+- **Minimum Timeout:** Safety threshold to prevent premature timeouts (default: 30 minutes)
+- **Maximum Timeout:** Upper limit to prevent indefinite asset locking (default: 2 hours)
+- **Network Delay Buffer:** Additional time allocation for network delays (default: 5 minutes)
+- **Congestion Multiplier:** Factor to increase timeout during congestion (default: 1.5)
+
+**Technical Implementation:**
+- Created `SwapConfig` structure with comprehensive configuration options
+- Implemented default configuration with sensible values for common use cases
+- Added custom configuration constructor for advanced customization
+- Created proper validation and boundary checking for all parameters
+- Implemented thread-safe configuration sharing through Arc
+
+#### Network Condition Monitoring
+
+The system actively monitors network conditions to make informed timeout decisions:
+
+**Monitoring Components:**
+- **Network Latency Tracking:** Maintains a rolling average of observed network latencies
+- **Congestion Level Monitoring:** Tracks network congestion on a normalized 0.0 to 1.0 scale
+- **Update Timestamp Tracking:** Records when network conditions were last measured
+- **Staleness Detection:** Identifies when network condition data is too old to be reliable
+
+**Technical Implementation:**
+- Implemented `update_network_conditions` method for condition updates
+- Created weighted rolling average for latency (80% history, 20% new values)
+- Added normalized congestion scale with proper boundary enforcement
+- Implemented timestamp tracking for staleness detection
+- Created efficient condition update mechanism with minimal overhead
+
+#### Adaptive Timeout Calculation
+
+The core of the implementation is an intelligent timeout calculation algorithm:
+
+**Calculation Process:**
+- Starts with the configured base timeout value
+- Adds the network delay buffer to account for basic network variation
+- Applies a variable congestion factor based on current network congestion level
+- Adds proportional additional time based on measured network latency
+- Ensures the final timeout remains within configured minimum and maximum bounds
+
+**Technical Implementation:**
+- Created `calculate_adaptive_timeout` method with comprehensive calculation logic
+- Implemented proportional congestion scaling with configurable multiplier
+- Added latency-based additional buffer calculation
+- Created proper boundary enforcement for calculated timeouts
+- Implemented efficient calculation with minimal overhead
+
+#### Dynamic Timeout Adjustment
+
+The system provides two methods for adjusting timeouts during active swaps:
+
+**Adjustment Methods:**
+- **Manual Extension:** Allows explicit extension of a timeout by a specified number of seconds
+- **Network-Based Adjustment:** Automatically recalculates timeout based on current network conditions
+
+**Technical Implementation:**
+- Implemented `extend_timeout` method for manual extension with proper validation
+- Created `update_timeout_for_network_conditions` method for automatic adjustment
+- Added comprehensive state validation to prevent inappropriate adjustments
+- Implemented proper error handling for all adjustment scenarios
+- Created atomic update operations for thread safety
+
+#### Integration with Atomic Swaps
+
+The implementation seamlessly integrates with the existing atomic swap infrastructure:
+
+**Integration Points:**
+- Enhanced `CrossCurveSwap` structure with configuration reference
+- Modified swap initialization to use adaptive timeout calculation
+- Added support for both default and custom timeout configurations
+- Implemented proper timeout validation during swap operations
+- Created automatic timeout checks before critical operations
+
+**Technical Benefits:**
+- No breaking changes to existing API
+- Backward compatibility with existing swap implementations
+- Gradual enhancement of timeout behavior
+- Minimal performance overhead for swap operations
+- Comprehensive error handling for all timeout scenarios
+
+#### Comprehensive Testing
+
+The implementation includes extensive testing to ensure correctness and reliability:
+
+**Test Coverage:**
+- **Basic Functionality:** Tests for initialization with both default and custom configurations
+- **Adaptive Calculation:** Tests for timeout calculation under various network conditions
+- **Dynamic Adjustment:** Tests for both manual and automatic timeout adjustments
+- **Boundary Conditions:** Tests for minimum and maximum timeout enforcement
+- **Integration Testing:** Tests for proper integration with the atomic swap lifecycle
+
+#### Security and Reliability Benefits
+
+This enhancement provides significant improvements to atomic swap security and reliability:
+
+**Key Benefits:**
+- **Reduced Timeout Failures:** Adaptive timeouts reduce swap failures due to temporary network issues
+- **Enhanced User Experience:** More reliable swaps with fewer unnecessary timeouts
+- **Network Resilience:** Better handling of varying network conditions and congestion
+- **Security Balance:** Maintains security by preventing indefinite asset locking while allowing sufficient time for legitimate operations
+- **Operational Flexibility:** Allows customization for different network environments and security requirements
+
+#### Future Enhancements
+
+The implementation lays the foundation for further improvements in future releases:
+
+**Potential Enhancements:**
+- Machine learning-based timeout prediction based on historical network data
+- Decentralized network condition monitoring from multiple nodes
+- Geographic location-based timeout customization
+- Chain-specific timeout adaptations for cross-chain swaps
+- On-chain congestion metrics incorporation for more accurate congestion estimation
+
 ## [0.7.12] - 2025-03-15
 
 ### Transaction Privacy Integration
@@ -730,802 +966,6 @@ deep_protocol_emulation = true
 # Traffic normalization
 normalization_enabled = true
 normalization_strategy = "Comprehensive"  # Options: ConstantPacketSize, ConstantRate, PaddingToFixedSize, PacketFragmentation, PacketAggregation, Comprehensive
-```
-
-### Circuit-Based Routing Implementation
-
-This release introduces circuit-based routing, a powerful network-level privacy enhancement that establishes encrypted virtual circuits through multiple nodes in the network. This implementation provides ephemeral circuit creation as a foundation for advanced privacy features, significantly improving resistance against network analysis and traffic correlation attacks.
-
-#### Ephemeral Circuit Creation
-
-- **Core Circuit Implementation**
-  - Implemented complete circuit-based routing system:
-    - Added `Circuit` abstraction for multi-hop routing paths
-    - Created `CircuitManager` for comprehensive circuit lifecycle management
-    - Implemented `CircuitParams` for flexible circuit configuration
-    - Added `CircuitStatus` tracking for robust state management
-  - Implemented secure circuit establishment protocol:
-    - Created random circuit ID generation (16 bytes)
-    - Added hop-by-hop circuit extension mechanism
-    - Implemented secure key exchange for each hop
-    - Created circuit heartbeat system for maintenance
-    - Added graceful circuit termination protocol
-
-- **Advanced Privacy Features**
-  - Implemented layered encryption for enhanced privacy:
-    - Added ChaCha20-Poly1305 encryption for each circuit layer
-    - Created unique encryption keys for each hop
-    - Implemented secure key derivation and management
-    - Added forward secrecy mechanisms for circuit data
-    - Created comprehensive error handling for encryption operations
-  - Enhanced traffic protection features:
-    - Implemented variable-size message padding (64-256 bytes)
-    - Added randomized circuit lifetimes (3-10 minutes)
-    - Created configurable circuit length (2-5 hops)
-    - Implemented circuit isolation for different traffic types
-    - Added traffic timing obfuscation mechanisms
-
-#### Circuit Management System
-
-- **Comprehensive Circuit Manager**
-  - Implemented the `CircuitManager` with complete circuit lifecycle capabilities:
-    - Added secure circuit creation with configurable parameters
-    - Created automatic circuit rotation based on configured lifetimes
-    - Implemented circuit status monitoring and statistics tracking
-    - Added circuit maintenance with periodic heartbeat messages
-    - Created efficient cleanup of expired circuits
-  - Enhanced circuit routing intelligence:
-    - Implemented intelligent node selection algorithms
-    - Added node preference and avoidance capabilities
-    - Created diversity-aware circuit path construction
-
-#### Multi-Hop Routing Paths
-
-- **Complete Onion Routing Implementation**
-  - Implemented full multi-hop routing capabilities:
-    - Created layered encryption system for onion routing
-    - Added `LayeredPayload` structure for secure message encapsulation
-    - Implemented hop-by-hop message forwarding with verification
-    - Created secure relay node functionality with strict isolation
-    - Added comprehensive error handling for routing operations
-  - Enhanced circuit relay functionality:
-    - Implemented `CircuitNode` trait for network participation
-    - Created relay information management system
-    - Added support for intermediate and exit relay roles
-    - Implemented relay statistics tracking and reporting
-    - Created secure relay setup protocol with key exchange
-  - Improved data security and privacy:
-    - Implemented ChaCha20Poly1305 encryption for each circuit layer
-    - Added random padding to prevent traffic analysis
-    - Created circuit isolation to prevent correlation attacks
-    - Implemented data validation at each routing hop
-    - Added comprehensive traffic obfuscation techniques
-
-#### Advanced Circuit Isolation Mechanisms
-
-- **Traffic Segregation System**
-  - Implemented comprehensive category-based circuit isolation:
-    - Added `CircuitCategory` enum with specialized traffic types
-    - Created isolation between transaction, block, and discovery traffic
-    - Implemented automatic circuit selection based on traffic type
-    - Added isolation enforcement with configurable settings
-    - Created metadata separation between different circuit types
-  - Enhanced privacy through traffic separation:
-    - Implemented distinct routing paths for different activities
-    - Created protection against timing correlation across traffic types
-    - Added automatic circuit creation per category on demand
-    - Implemented category tracking for enhanced circuit management
-    - Created traffic pattern separation for improved anonymity
-
-- **Isolation Management API**
-  - Implemented dedicated isolation-aware circuit API:
-    - Added `get_circuit_for_category()` for automatic circuit management
-    - Created `send_through_isolated_circuit()` for simplified routing
-    - Implemented isolation enforcement configuration
-    - Added comprehensive category-based circuit tracking
-    - Created isolation-aware circuit rotation and maintenance
-
-#### Circuit Rotation Strategies
-
-- **Comprehensive Rotation System**
-  - Implemented multiple circuit rotation strategies:
-    - Added time-based rotation with configurable lifetimes
-    - Created usage-based rotation to limit message count per circuit
-    - Implemented volume-based rotation with byte count thresholds
-    - Added randomized rotation with increasing probability over time
-    - Created combined rotation strategies for enhanced security
-  - Enhanced circuit lifecycle management:
-    - Implemented asynchronous circuit rotation without traffic disruption
-    - Added proactive circuit creation before expiration
-    - Created smooth transition between old and new circuits
-    - Implemented configurable rotation parameters
-    - Added rotation monitoring and statistics tracking
-
-- **Privacy-Enhancing Rotation Capabilities**
-  - Implemented privacy-focused rotation features:
-    - Added unpredictable but bounded circuit lifetimes
-    - Created automatic tracking of usage patterns and volume
-    - Implemented randomized rotation with controlled probability
-    - Added secure random number generation for timing decisions
-    - Created protection against predictable rotation patterns
-
-#### Padding Traffic for Circuit Obfuscation
-
-- **Comprehensive Traffic Padding System**
-  - Implemented multiple padding strategies:
-    - Added constant-rate padding with configurable intervals
-    - Created random-interval padding with bounded timing
-    - Implemented adaptive padding based on traffic patterns
-    - Added traffic normalization for consistent message frequency
-    - Created strategy customization for different privacy needs
-  - Enhanced traffic pattern obfuscation:
-    - Implemented variable-size padding with configurable ranges
-    - Added realistic traffic pattern mimicking
-    - Created padding for both active and idle circuits
-    - Implemented burst padding for enhanced pattern hiding
-    - Added statistical distribution matching for natural appearance
-
-- **Intelligent Padding Management**
-  - Implemented advanced padding control features:
-    - Added traffic pattern analysis for adaptive padding
-    - Created circuit-specific padding configuration
-    - Implemented global padding policy management
-    - Added padding statistics tracking and reporting
-    - Created resource-aware padding frequency control
-  - Enhanced resistance to traffic analysis:
-    - Implemented decoy messages during idle periods
-    - Added padding during heartbeat messages
-    - Created integrated padding with normal traffic flows
-    - Implemented padding traffic that mimics real transactions
-    - Added timing randomization to prevent correlation
-
-## [0.7.6] - 2025-03-08
-
-### BLS12-381 Pairing-based Cryptography Integration
-
-This release introduces a comprehensive implementation of BLS12-381 pairing-based cryptography, enabling powerful signature aggregation, threshold signatures, and enhanced consensus mechanisms. The BLS signature scheme provides significant security and performance advantages for validator consensus while maintaining compatibility with existing cryptographic systems.
-
-#### Comprehensive BLS Signature Implementation
-
-- **Core Cryptographic Components**
-  - Implemented complete BLS signature scheme on the BLS12-381 curve:
-    - Added `BlsKeypair` with robust key generation and management
-    - Created `BlsPublicKey` with secure serialization and validation
-    - Implemented `BlsSignature` for efficient signature operations
-    - Added `ProofOfPossession` to prevent rogue key attacks
-  - Implemented optimized elliptic curve operations:
-    - Created precomputation tables for G1 and G2 groups
-    - Added `optimized_g1_mul` and `optimized_g2_mul` for fast scalar multiplication
-    - Implemented `hash_to_g1` for secure, deterministic point generation
-    - Added optimized pairing calculations for signature verification
-  - Designed performance-focused verification systems:
-    - Created `verify_batch_parallel` for efficient multi-signature verification
-    - Implemented `aggregate_signatures` for compact signature representation
-    - Added `verify_batch` for optimized sequential verification
-    - Created thread-safe implementations for parallel processing
-
-- **Advanced Cryptographic Features**
-  - Implemented threshold signature schemes:
-    - Created t-of-n signature aggregation and verification
-    - Added secure share generation and distribution
-    - Implemented robust error handling for threshold operations
-    - Created share validation and combination mechanisms
-  - Added validator aggregation capabilities:
-    - Implemented signature aggregation for validator sets
-    - Created efficient consensus participation tracking
-    - Added support for dynamically sized validator groups
-    - Implemented secure validator rotation with signature updates
-
-#### Consensus Integration
-
-- **Enhanced Consensus Mechanisms**
-  - Implemented BLS-based Proof of Stake consensus:
-    - Created `BlsConsensus` for managing validator signatures
-    - Added support for 2/3 majority threshold validation
-    - Implemented efficient block finalization with aggregated signatures
-    - Added robust fault tolerance for validator failures
-  - Enhanced validator management:
-    - Created secure validator registration with proofs of possession
-    - Implemented comprehensive validator performance tracking
-    - Added reputation-based validator selection
-    - Created efficient validator set management
-  - Implemented optimized block validation:
-    - Added aggregated signature verification for blocks
-    - Created configurable threshold-based validation
-    - Implemented fast validation of validator participation
-    - Added support for multi-round consensus with signature aggregation
-
-- **Threshold Signature System**
-  - Enhanced threshold signature implementation:
-    - Updated `ThresholdSignature` to use BLS signatures
-    - Added support for dynamic threshold adjustment
-    - Implemented efficient signature aggregation
-    - Created secure threshold-based verification
-  - Improved validator aggregation:
-    - Enhanced `ValidatorAggregation` with BLS signatures
-    - Added support for large validator sets
-    - Implemented optimized signature combination
-    - Created comprehensive error handling for validation failures
-
-#### Blockchain Security Enhancements
-
-- **Block Validation Improvements**
-  - Enhanced block structure with BLS signatures:
-    - Added support for validator signature verification
-    - Implemented configurable threshold validation
-    - Created efficient signature aggregation for blocks
-    - Added protection against block forgery
-  - Improved blockchain security:
-    - Implemented secure block finalization with BLS signatures
-    - Added double-signing detection mechanisms
-    - Created robust validator accountability system
-    - Implemented comprehensive signature verification
-
-- **Validator Security**
-  - Implemented secure validator registration:
-    - Added proof of possession requirements
-    - Created secure key registration protocol
-    - Implemented validator identity verification
-    - Added protection against rogue key attacks
-  - Enhanced validator operations:
-    - Created secure signature propagation
-    - Implemented efficient signature sharing
-    - Added validator set management with BLS keys
-    - Created comprehensive validator activity monitoring
-
-#### Wallet Integration
-
-- **BLS Keypair Management**
-  - Added comprehensive wallet support for BLS keypairs:
-    - Implemented secure keypair generation
-    - Created encrypted keypair storage
-    - Added keypair import/export functionality
-    - Implemented comprehensive error handling
-  - Enhanced key security:
-    - Added robust password-based encryption
-    - Created secure key derivation options
-    - Implemented key validation mechanisms
-    - Added protection against key extraction
-
-- **Validator Participation**
-  - Implemented wallet support for validator operations:
-    - Created block signing capabilities
-    - Added proof of possession generation
-    - Implemented validator registration functions
-    - Created comprehensive validator management
-
-#### Performance Optimizations
-
-- **Signature Verification Efficiency**
-  - Implemented optimized verification algorithms:
-    - Added parallel batch verification for 50-80% speedup
-    - Created precomputation tables for common operations
-    - Implemented efficient point multiplication
-    - Added optimized pairing calculations
-  - Enhanced blockchain validation:
-    - Created single-pass verification of multiple signatures
-    - Implemented efficient validator set management
-    - Added optimized consensus verification
-    - Created scalable signature processing
-
-- **Memory and Computational Efficiency**
-  - Optimized cryptographic operations:
-    - Implemented efficient memory usage for curve points
-    - Added table-based multiplication for speed
-    - Created optimized hash-to-curve implementations
-    - Implemented efficient serialization formats
-
-This BLS12-381 integration represents a significant advancement in Obscura's cryptographic capabilities, enabling more efficient consensus, improved validator security, and enhanced performance for blockchain validation operations. The integration maintains compatibility with existing cryptographic systems while providing a path to advanced signature schemes for future protocol upgrades.
-
-### Complete Jubjub Cryptographic Integration
-
-This release completes the integration of the Jubjub elliptic curve cryptographic primitives throughout the Obscura codebase, enhancing security, privacy, and cryptographic robustness. The integration spans transaction verification, stealth addressing, transaction signing, and various privacy features, ensuring that all cryptographic operations utilize the secure and efficient Jubjub implementation.
-
-### Comprehensive Wallet Integration
-
-A major enhancement in this release is the full integration of the wallet system with the node and blockchain components. This ensures that all wallet functionality is properly utilized and accessible throughout the application, providing a cohesive user experience and improving overall security.
-
-#### Wallet Integration Architecture
-
-- **WalletIntegration Module**
-  - Created a dedicated integration layer that bridges between wallet, node, and blockchain:
-    - Implemented proper thread synchronization using Arc<Mutex<...>> 
-    - Added comprehensive error handling for all operations
-    - Created clean interface for wallet functionality
-    - Implemented proper resource management
-  - Added seamless cross-component communication:
-    - Transaction submission pipeline from wallet to network
-    - Block processing from blockchain to wallet
-    - UTXO set validation and consistency checking
-    - Mempool scanning for stealth transactions
-
-- **Background Processing Services**
-  - Implemented wallet service thread for background operations:
-    - Periodic scanning for stealth transactions in mempool
-    - Regular wallet activity reporting
-    - Automatic maintenance operations
-    - Transaction monitoring and verification
-  - Added proper synchronization with main application loop:
-    - Thread-safe data sharing between components
-    - Coordinated processing of shared resources
-    - Clean shutdown mechanisms
-    - Resource-efficient operation scheduling
-
-- **Enhanced Transaction Handling**
-  - Improved transaction creation and submission workflow:
-    - Proper fee calculation and validation
-    - Comprehensive error handling during submission
-    - Transaction verification before broadcast
-    - UTXO consistency validation
-  - Added staking operation integration:
-    - Secure stake creation process
-    - Robust unstaking mechanism
-    - Transaction verification for stake operations
-    - Stake-specific error handling
-
-- **View Key System Integration**
-  - Implemented full view key system integration:
-    - Thread-safe view key generation and management
-    - Proper error handling for view key operations
-    - View key revocation mechanism
-    - Clean interface for view key functionality
-
-#### Transaction Privacy Enhancements
-
-- **Stealth Transaction Detection**
-  - Enhanced stealth transaction scanning:
-    - Periodic mempool scanning for incoming transactions
-    - Efficient transaction filtering
-    - Comprehensive matching for stealth outputs
-    - Transaction processing upon detection
-  - Improved privacy mechanisms:
-    - Enhanced metadata protection during scanning
-    - Reduced timing side-channel leakage
-    - Optimized scanning performance
-    - Added proper synchronization with blockchain state
-
-- **Private Transaction Submission**
-  - Enhanced privacy in transaction submission:
-    - Integrated privacy features with network propagation
-    - Added transaction graph protection
-    - Implemented metadata stripping
-    - Created address reuse prevention
-  - Improved transaction correlation resistance:
-    - Enhanced obfuscation of transaction relationships
-    - Added timing randomization for submissions
-    - Implemented secure input selection
-    - Created output unlinkability features
-
-#### Security Improvements
-
-- **Wallet Data Protection**
-  - Enhanced wallet backup and restore capabilities:
-    - Secure wallet data export implementation
-    - Comprehensive import validation
-    - Periodic automated backup mechanisms
-    - Sensitive data protection
-  - Improved key management security:
-    - Enhanced private key handling
-    - Secure key derivation procedures
-    - Improved key compartmentalization
-    - Added key usage pattern protection
-
-- **Transaction Verification**
-  - Strengthened transaction verification:
-    - Added cross-component consistency validation
-    - Implemented comprehensive signature verification
-    - Enhanced UTXO validation procedures
-    - Added double-spend protection
-  - Improved error handling and reporting:
-    - Detailed error information for failed transactions
-    - Secure logging of sensitive operations
-    - Improved debugging capabilities
-    - Added graceful recovery mechanisms
-
-This wallet integration represents a significant advancement in the usability and security of the Obscura blockchain, ensuring that all wallet functionality is properly accessible and utilized throughout the application. The clean architecture, comprehensive error handling, and thread-safe design provide a solid foundation for future enhancements to the wallet system.
-
-#### Transaction Security Enhancements
-
-- **Comprehensive Transaction Verification**
-  - Enhanced verification using Jubjub's signature verification
-  - Implemented proper signature parsing and validation
-  - Added robust error handling for verification failures
-  - Created secure validation context with comprehensive checks
-  - Implemented efficient batch verification for multiple signatures
-  - Added protection against common signature attacks
-
-- **Advanced Transaction Signing**
-  - Implemented secure transaction signing with Jubjub keypairs
-  - Added comprehensive signing data structure:
-    - Transaction ID inclusion for replay protection
-    - Amount validation in signing data
-    - Operation type encoding (e.g., "UNSTAKE")
-    - Timestamp inclusion for freshness
-  - Created robust error handling for signing operations
-  - Implemented proper signature component extraction
-  - Added signature script construction with Jubjub components
-  - Enhanced unstaking security with comprehensive signature data
-
-- **Unstaking Operation Security**
-  - Improved security for unstaking operations:
-    - Enhanced signing data with stake ID inclusion
-    - Added amount verification in signatures
-    - Implemented timestamp-based freshness checks
-    - Created robust signature validation
-  - Added comprehensive error handling for unstaking
-  - Implemented secure signature script construction
-  - Created transaction verification integration
-
-#### Privacy Feature Integration
-
-- **Enhanced Stealth Addressing**
-  - Fully integrated Jubjub stealth addressing throughout the codebase:
-    - Updated `derive_stealth_address` with Jubjub key derivation
-    - Enhanced `scan_for_stealth_transactions` with proper Jubjub functions
-    - Improved `Transaction.apply_stealth_addressing` with direct Jubjub integration
-    - Updated `StealthAddressing` implementation with Jubjub primitives
-  - Implemented secure ephemeral key generation
-  - Added forward secrecy mechanisms for enhanced privacy
-  - Created robust error handling for stealth operations
-  - Implemented comprehensive stealth transaction scanning
-
-- **Optimized Privacy Features**
-  - Enhanced `apply_privacy_features` method with Jubjub integration:
-    - Improved blinding factor generation
-    - Enhanced transaction metadata protection
-    - Implemented secure ephemeral key management
-    - Added transaction graph protection improvements
-  - Created secure entropy sources for cryptographic operations
-  - Added improved validation for privacy-enhanced transactions
-  - Implemented efficient batch operations for privacy features
-  - Enhanced output management for privacy transactions
-
-#### Key Management Improvements
-
-- **Secure Key Generation and Management**
-  - Enhanced key generation with proper Jubjub implementation
-  - Improved key derivation with secure randomness
-  - Added comprehensive key validation
-  - Implemented secure key storage and retrieval
-  - Created robust error handling for key operations
-  - Added protection against key extraction attacks
-  - Implemented key usage pattern protection
-  - Enhanced key rotation mechanisms
-
-- **Forward Secrecy Implementation**
-  - Added comprehensive forward secrecy mechanisms:
-    - Enhanced ephemeral key generation
-    - Improved shared secret derivation
-    - Implemented secure key blinding
-    - Added multiple rounds of key derivation
-  - Created secure domain separation for cryptographic operations
-  - Implemented protection against key recovery attacks
-  - Added timing attack resistance measures
-  - Enhanced transaction privacy with forward secrecy
-
-#### Testing and Documentation
-
-- **Comprehensive Test Suite**
-  - Added extensive unit tests for all Jubjub integrations
-  - Implemented integration tests for complete workflows
-  - Created edge case testing for cryptographic operations
-  - Added performance benchmarks for critical operations
-  - Implemented validation tests for security properties
-  - Created comprehensive test coverage for all components
-
-- **Enhanced Documentation**
-  - Updated cryptographic implementation guides
-  - Added detailed API documentation for Jubjub functionality
-  - Created security considerations and best practices
-  - Updated integration examples and usage guides
-  - Enhanced troubleshooting information
-  - Added performance optimization guidelines
-
-This release significantly enhances the security and privacy of the Obscura blockchain by completing the integration of the Jubjub elliptic curve cryptographic system throughout the codebase. The comprehensive implementation ensures that all cryptographic operations leverage the robust security properties of Jubjub, providing strong guarantees for transaction privacy, signature security, and key management.
-
-## [0.7.5] - 2025-03-07
-
-### Enhanced Dandelion Protocol with Advanced Privacy Features
-
-This release significantly improves the Dandelion Protocol implementation with comprehensive privacy enhancements, including the complete Dandelion++ feature set, advanced timing obfuscation, and entropy-based path randomization. These enhancements strengthen the privacy guarantees of Obscura blockchain by making transaction propagation more resistant to timing analysis and network surveillance while maintaining reliable operation.
-
-#### Dandelion++ Enhancements
-
-- **Transaction Aggregation**
-  - Implemented configurable transaction aggregation (up to 10 transactions)
-  - Created dynamic timeout mechanism (2 seconds default)
-  - Added privacy-preserving batch formation
-  - Implemented secure aggregation state management
-  - Created efficient batch processing system
-
-- **Stem Transaction Batching**
-  - Added dynamic stem phase batching (2-5 second batches)
-  - Implemented configurable batch size limits (5 transactions default)
-  - Created randomized batch release timing
-  - Added batch privacy mode support
-  - Implemented secure batch state tracking
-
-- **Stem/Fluff Transition Randomization**
-  - Added randomized transition timing (1-5 second window)
-  - Implemented network condition-based adjustments
-  - Created secure transition state management
-  - Added transition entropy sources
-  - Implemented transition timing obfuscation
-
-- **Multiple Fluff Phase Entry Points**
-  - Added support for 2-4 entry points per transaction
-  - Implemented reputation-based entry point selection
-  - Created subnet diversity requirements
-  - Added entry point rotation mechanism
-  - Implemented secure entry point management
-
-- **Routing Table Inference Resistance**
-  - Created entropy-based routing table refresh (30 second intervals)
-  - Implemented routing entropy calculation
-  - Added subnet diversity tracking
-  - Created historical path analysis
-  - Implemented routing pattern detection
-
-#### Advanced Timing Obfuscation System
-
-- **Variable Delay Scheduling Based on Network Traffic**
-  - Implemented adaptive delay calculation based on network conditions
-  - Created dynamic delay ranges (10ms to 1000ms) based on traffic levels
-  - Added randomized jitter to prevent timing correlation
-  - Implemented network traffic monitoring and adaptation
-  - Created comprehensive delay calculation system
-  - Added traffic-aware timing adjustments
-
-- **Decoy Transaction Propagation**
-  - Implemented probabilistic decoy transaction generation (10% probability)
-  - Added configurable decoy generation intervals
-  - Created transaction batching with decoys
-  - Implemented decoy detection and filtering
-  - Created secure decoy transaction generation
-
-- **Randomized Batch Propagation**
-  - Added dynamic batch size calculation (2-10 transactions)
-  - Created traffic-based batch size adjustment
-  - Implemented variable batch release timing
-  - Added batch composition randomization
-  - Created secure batch management
-
-- **Statistical Timing Analysis Resistance**
-  - Implemented normal distribution noise generation
-  - Created configurable statistical parameters
-  - Added timing pattern analysis and randomization
-  - Implemented statistical noise calibration
-  - Created timing correlation protection
-
-#### Enhanced Path Selection and Diversity
-
-- **Adaptive Path Selection with Entropy**
-  - Added 64-byte entropy pool with secure refresh mechanism
-  - Created multiple entropy sources for path randomization
-  - Implemented cryptographic mixing using ChaCha20
-  - Added deterministic but unpredictable path selection
-  - Implemented 5-minute entropy refresh interval
-
-- **Intelligent Path Selection Weights**
-  - Implemented reputation-based selection factor
-  - Created network latency-based weighting
-  - Added subnet diversity preference
-  - Implemented combined weight calculation
-  - Created deterministic weight generation
-
-- **Route Diversity Enforcement**
-  - Implemented multi-dimensional diversity metrics
-  - Created weighted diversity scoring (40/30/30 split)
-  - Added path reuse prevention with XXHash
-  - Implemented adaptive privacy levels
-  - Created configurable diversity thresholds
-
-#### Advanced Security Features
-
-- **Anti-Fingerprinting Measures**
-  - Implemented path pattern tracking
-  - Created similarity scoring system
-  - Added pattern frequency monitoring
-  - Implemented timing obfuscation
-  - Created adaptive detection thresholds
-
-- **Node Reputation System**
-  - Created reputation-based routing
-  - Added reliability metrics tracking
-  - Implemented privacy-level thresholds
-  - Created performance-based bonuses
-  - Added secure fallback mechanisms
-
-#### Testing and Verification
-
-- Added comprehensive test suite for timing obfuscation
-- Implemented path diversity verification tests
-- Created reputation system validation tests
-- Added statistical analysis resistance tests
-- Implemented security measure verification
-
-This release represents a significant enhancement to transaction privacy in the Obscura network, making it substantially more resistant to timing analysis and network surveillance while maintaining efficient operation. The implementation of Dandelion++ features, combined with advanced timing obfuscation and path diversity mechanisms, provides a robust foundation for future privacy enhancements.
-
-## [0.7.4] - 2025-03-06
-
-### Comprehensive View Key System Implementation
-
-This release implements a complete view key system for Obscura blockchain, providing enhanced privacy with selective disclosure capabilities. View keys allow users to share transaction visibility without revealing spending capability, enabling secure auditing and account monitoring.
-
-#### View Key Generation and Management
-
-- **Secure View Key Derivation**
-  - Implemented deterministic view key generation from wallet keypairs
-  - Created secure scalar derivation with domain separation
-  - Added public key generation with proper curve operations
-  - Implemented association with original wallet keys
-  - Created comprehensive permission model
-  - Added serialization for secure key sharing
-
-- **Permission-Based Selective Disclosure**
-  - Implemented granular permission flags system:
-    - Incoming transaction visibility control
-    - Outgoing transaction visibility control
-    - Amount visibility management
-    - Timestamp visibility control
-    - Full audit capabilities
-  - Created permission serialization and validation
-  - Added secure permission updates
-  - Implemented permission enforcement during scanning
-  - Created default permission profiles for common use cases
-
-- **Time-Based Validity Controls**
-  - Implemented temporal restrictions for view keys:
-    - Configurable valid-from timestamps
-    - Expiration date support
-    - Time-limited key generation
-    - Automatic validity verification
-  - Added time-restricted audit capabilities
-  - Created validity period serialization
-  - Implemented current-time validity checking
-  - Added support for permanent and temporary keys
-
-- **View Key Management System**
-  - Created comprehensive management infrastructure:
-    - Multi-key registration and tracking
-    - Key revocation capabilities
-    - Historical revocation recording
-    - Secure permission updates
-    - Key lookup by public component
-  - Implemented batch operations for multiple keys
-  - Added validation during registration
-  - Created efficient key storage and retrieval
-  - Implemented secure key rotation support
-
-#### Transaction Privacy Features
-
-- **Transaction Scanning Capabilities**
-  - Implemented permission-based transaction scanning:
-    - Selective output identification
-    - Permission-enforced filtering
-    - Secure address extraction
-    - Recipient verification
-  - Added multi-transaction batch scanning
-  - Created efficient result aggregation
-  - Implemented output collection and reporting
-  - Added time-validity checking during scans
-
-- **Stealth Address Integration**
-  - Enhanced stealth addressing with view key support:
-    - Secure shared secret derivation
-    - View-only address generation
-    - Transaction matching with view keys
-    - Ephemeral public key extraction
-  - Created secure scanning procedure for one-time addresses
-  - Implemented view-only transaction identification
-  - Added metadata protection during scanning
-  - Created comprehensive stealth transaction tests
-
-- **Confidential Transaction Support**
-  - Added view key integration with confidential transactions:
-    - Secure amount revelation with view keys
-    - Permission-based amount visibility
-    - Commitment extraction and validation
-    - View key-based decryption
-  - Implemented transaction output decryption
-  - Created commitment verification with view keys
-  - Added secure value revelation with permissions
-  - Implemented batch decryption for transactions
-
-- **Auditing Capabilities**
-  - Created comprehensive audit functionality:
-    - Full audit view key generation
-    - Complete transaction history access
-    - Secure audit log creation
-    - Permission-based audit restrictions
-  - Implemented time-limited audit capabilities
-    - Created temporary audit key generation
-    - Added expiring audit permissions
-    - Implemented validity period enforcement
-  - Added audit permission validation
-  - Created secure audit result reporting
-
-#### Wallet Integration
-
-- **Wallet View Key Support**
-  - Implemented complete view key integration with wallet:
-    - View key generation methods
-    - Custom permission view key creation
-    - Time-limited view key support
-    - Audit view key generation
-  - Added view key registration in wallet
-  - Created view key revocation capabilities
-  - Implemented view key export functionality
-  - Added transaction scanning with view keys
-
-- **View Key Management Methods**
-  - Added comprehensive management functionality:
-    - View key creation methods
-    - Permission customization
-    - Time-limited key generation
-    - Audit key creation
-    - Key revocation handling
-  - Implemented view key listing and retrieval
-  - Created revocation status checking
-  - Added secure permission updates
-  - Implemented view key export for sharing
-
-#### Testing Infrastructure
-
-- **Comprehensive Test Suite**
-  - Implemented extensive view key testing:
-    - Key generation and validation tests
-    - Serialization and deserialization tests
-    - Permission-based filtering verification
-    - Time validity boundary testing
-    - View key management validation
-  - Added transaction scanning tests
-    - Permission enforcement verification
-    - Output identification testing
-    - Selective disclosure validation
-    - Batch scanning verification
-  - Created integration tests
-    - Stealth addressing integration
-    - Confidential transaction support
-    - Wallet functionality verification
-    - Complete workflow testing
-
-- **Edge Case Testing**
-  - Added comprehensive edge case validation:
-    - Invalid permission combinations
-    - Expired key handling
-    - Revoked key verification
-    - Malformed transaction handling
-    - Invalid output testing
-  - Implemented security boundary testing
-    - Permission enforcement validation
-    - Time restriction verification
-    - Revocation status checking
-    - Permission update validation
-
-#### Documentation
-
-- **View Key Documentation**
-  - Created comprehensive API documentation
-    - Detailed method descriptions
-    - Parameter explanations
-    - Return value documentation
-    - Error handling guidance
-  - Added usage examples for common scenarios
-    - Basic view key creation
-    - Custom permission configuration
-    - Time-limited key generation
-    - Audit key creation
-  - Implemented security considerations guide
-    - Best practices for key sharing
-    - Permission configuration guidance
-    - Revocation recommendations
-    - Time restriction guidelines
-  - Created integration examples
-    - Wallet integration patterns
-    - Transaction scanning examples
-    - Stealth address integration
-    - Confidential transaction support
 
 #### Future Considerations
 

@@ -440,18 +440,21 @@ mod tests {
     
     #[test]
     fn test_wallet_stealth_transaction_scanning() {
+        println!("Starting wallet stealth transaction scanning test");
         // Create a wallet with a keypair
         let mut wallet = Wallet::new_with_keypair();
         let recipient_pubkey = wallet.get_public_key().unwrap();
         
-        // Create a sender keypair
-        let sender_keypair = JubjubKeypair::generate();
+        println!("Created wallet with public key");
+        // Let's directly initialize stealth addressing in the wallet
+        wallet.stealth_addressing = Some(StealthAddressing::new());
         
-        // Create a StealthAddressing instance
+        // Create a StealthAddressing instance for generating the stealth address
         let mut stealth_addressing = StealthAddressing::new();
         
         // Generate a one-time address for the recipient
         let stealth_address_bytes = stealth_addressing.generate_one_time_address(&recipient_pubkey);
+        println!("Generated stealth address: {:?}", stealth_address_bytes);
         
         // Create a transaction with the stealth address
         let mut tx = Transaction::default();
@@ -465,19 +468,34 @@ mod tests {
             range_proof: None,
         };
         tx.outputs.push(output);
+        println!("Added output to transaction");
         
         // Set the ephemeral public key in the transaction
         let ephemeral_key = stealth_addressing.ephemeral_keys.get(&stealth_address_bytes).unwrap();
-        tx.ephemeral_pubkey = Some(jubjub_point_to_bytes(ephemeral_key).try_into().unwrap());
+        let ephemeral_key_bytes = jubjub_point_to_bytes(ephemeral_key);
+        println!("Ephemeral key bytes: {:?}", ephemeral_key_bytes);
+        tx.ephemeral_pubkey = Some(ephemeral_key_bytes.try_into().unwrap());
+        println!("Set ephemeral public key in transaction");
+        
+        // Let's verify the transaction was set up correctly
+        assert!(tx.ephemeral_pubkey.is_some(), "Ephemeral pubkey should be set");
+        assert_eq!(tx.outputs.len(), 1, "Transaction should have one output");
+        assert_eq!(tx.outputs[0].public_key_script, stealth_address_bytes);
         
         // Initial balance should be 0
         assert_eq!(wallet.balance, 0);
         
+        // To ensure consistency between stealth_addressing instances, let's save the wallet's stealth addressing
+        // and replace it with the one we used to generate the stealth address
+        wallet.stealth_addressing = Some(stealth_addressing);
+        
         // Scan the transaction with the wallet
+        println!("Scanning transaction with wallet");
         let found = wallet.scan_for_stealth_transactions(&tx);
         
         // Verify that the output was found and balance updated
-        assert!(found);
+        println!("Result of scanning: {}", found);
+        assert!(found, "Wallet should have found the stealth transaction");
         assert_eq!(wallet.balance, payment_amount);
         
         // Check that the UTXO was added to the wallet

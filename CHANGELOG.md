@@ -1,5 +1,79 @@
 # Changelog
 
+## [0.7.13] - 2025-03-20
+
+### Added
+- **Proper Authenticated Encryption for Keypair Management**
+  - Replaced insecure XOR-based encryption with ChaCha20-Poly1305 authenticated encryption:
+    - Implemented PBKDF2-HMAC-SHA256 with 100,000 iterations for secure key derivation
+    - Added cryptographically secure random salt generation (16 bytes)
+    - Implemented secure nonce handling with 12-byte random nonces
+    - Created properly formatted encryption output with salt + nonce + ciphertext
+  - Enhanced security architecture:
+    - Added authenticated encryption to protect against data tampering
+    - Implemented proper key derivation to protect against brute force attacks
+    - Created forward-secure design with unique salt per encryption
+    - Added comprehensive documentation of the encryption implementation
+  - Improved testing infrastructure:
+    - Added tests for successful encryption and decryption
+    - Implemented tests for wrong password scenarios
+    - Created data integrity verification tests
+    - Added tests for format correctness and multi-cycle encryption
+  - Enhanced security documentation:
+    - Created detailed documentation on the keypair encryption implementation
+    - Added explanations of security features and guarantees
+    - Documented proper usage patterns and security considerations
+    - Included future enhancement recommendations
+
+- **Enhanced Side-Channel Attack Protection**
+  - Implemented secure logging practices to prevent information leakage:
+    - Replaced debug print statements with structured logging via the `log` crate
+    - Added proper log level management based on information sensitivity
+    - Created guidelines for secure logging without exposing sensitive data
+  - Improved constant-time operations for cryptographic functions:
+    - Enhanced `constant_time_scalar_mul` with multiple masking and barriers
+    - Implemented volatile operations to prevent compiler optimization
+    - Added defensive dummy operations to confuse timing analysis
+  - Enhanced scalar operation masking approach:
+    - Implemented multiple-mask strategy with split-and-recombine approach
+    - Created counter-masks for consistent timing regardless of scalar values
+    - Added variable timing based on mask values rather than input values
+  - Added comprehensive testing for side-channel resistance:
+    - Created tests for optimization resistance
+    - Implemented timing correlation analysis tests
+    - Added tests for masking effectiveness and sensitive data handling
+  - Updated documentation with security best practices and implementation details
+
+- **Adaptive Timeout for Atomic Swaps**
+  - Replaced hardcoded timeout with configurable parameters:
+    - Added base timeout, minimum, and maximum bounds
+    - Implemented network delay buffer configuration
+    - Created congestion-based timeout adjustment
+  - Added network condition awareness:
+    - Implemented latency tracking with rolling average
+    - Created congestion level monitoring (0.0 to 1.0 scale)
+    - Added timestamp tracking for staleness detection
+  - Implemented adaptive timeout calculation:
+    - Created dynamic timeout based on network conditions
+    - Added proportional scaling for congestion levels
+    - Implemented latency-based buffer adjustment
+  - Enhanced swap operations:
+    - Added manual timeout extension capability
+    - Implemented automatic network-based adjustment
+    - Created proper bound checking and validation
+  - Improved testing and documentation:
+    - Added tests for timeout adaptation under various conditions
+    - Created comprehensive documentation on the implementation
+    - Added examples of timeout calculation in different scenarios
+
+### Improved
+- Enhanced cryptographic security by replacing XOR-based encryption
+- Increased resistance to brute force attacks through proper key derivation
+- Improved protection against data tampering with authenticated encryption
+- Enhanced test coverage for critical cryptographic functions
+- Reduced swap failures due to network delays through adaptive timeouts
+- Increased atomic swap reliability under varying network conditions
+
 ## [0.7.12] - 2025-03-15
 
 ### Added

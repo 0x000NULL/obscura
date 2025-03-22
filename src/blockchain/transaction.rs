@@ -135,7 +135,7 @@ impl crate::blockchain::Transaction {
         commitments[index] = commitment;
         
         // Set the privacy flags to indicate confidential amounts are used
-        self.privacy_flags |= 0x02; // 0x02 = Confidential amounts flag
+        self.privacy_flags |= 0x04; // 0x04 = Confidential amounts flag
         
         Ok(self)
     }
@@ -174,17 +174,12 @@ impl crate::blockchain::Transaction {
         Ok(self)
     }
     
-    /// Verifies all privacy features applied to this transaction
+    /// Verifies the privacy features of this transaction
     /// 
     /// # Returns
     /// 
-    /// * `Result<bool, ObscuraError>` - True if all features verify, false otherwise
+    /// * `Result<bool, ObscuraError>` - True if all privacy features verify, false otherwise
     pub fn verify_privacy_features(&self) -> Result<bool, ObscuraError> {
-        // Check if transaction has any privacy features
-        if self.privacy_flags == 0 {
-            return Ok(true); // No privacy features to verify
-        }
-        
         // Verify transaction obfuscation if applied
         if self.privacy_flags & 0x01 != 0 {
             if self.obfuscated_id.is_none() {
@@ -193,10 +188,18 @@ impl crate::blockchain::Transaction {
             }
         }
         
-        // Verify confidential amounts if applied
-        if self.privacy_flags & 0x02 != 0 {
+        // Verify stealth addressing if applied
+        if self.privacy_flags & 0x02 != 0 { // Updated from 0x08 to 0x02
+            if self.ephemeral_pubkey.is_none() {
+                error!("Transaction has stealth addressing flag but no ephemeral pubkey");
+                return Ok(false);
+            }
+        }
+        
+        // Verify confidential transactions if applied
+        if self.privacy_flags & 0x04 != 0 {
             if self.amount_commitments.is_none() {
-                error!("Transaction has confidential amounts flag but no commitments");
+                error!("Confidential transactions flag is set but amount commitments are missing");
                 return Ok(false);
             }
             
@@ -218,7 +221,7 @@ impl crate::blockchain::Transaction {
         }
         
         // Verify range proofs if applied
-        if self.privacy_flags & 0x04 != 0 {
+        if self.privacy_flags & 0x08 != 0 { // Updated from 0x04 to 0x08
             if self.range_proofs.is_none() {
                 error!("Transaction has range proofs flag but no proofs");
                 return Ok(false);
@@ -242,7 +245,7 @@ impl crate::blockchain::Transaction {
         }
         
         // Verify stealth addressing if applied
-        if self.privacy_flags & 0x08 != 0 { // 0x08 = Stealth addressing flag
+        if self.privacy_flags & 0x02 != 0 { // Already correct, but keeping for consistency with the other changes
             if self.ephemeral_pubkey.is_none() {
                 error!("Transaction has stealth addressing flag but no ephemeral pubkey");
                 return Ok(false);
@@ -259,7 +262,7 @@ impl crate::blockchain::Transaction {
     /// * `Result<bool, ObscuraError>` - True if all range proofs verify, false otherwise
     pub fn verify_range_proofs(&self) -> Result<bool, ObscuraError> {
         // Check if transaction has range proofs
-        if self.privacy_flags & 0x04 == 0 || self.range_proofs.is_none() || self.amount_commitments.is_none() {
+        if self.privacy_flags & 0x08 == 0 || self.range_proofs.is_none() || self.amount_commitments.is_none() {
             return Ok(true); // No range proofs to verify
         }
         
@@ -296,7 +299,7 @@ impl crate::blockchain::Transaction {
     /// * `Result<bool, ObscuraError>` - True if the balance verifies, false otherwise
     pub fn verify_confidential_balance(&self) -> Result<bool, ObscuraError> {
         // Check if transaction has confidential amounts
-        if self.privacy_flags & 0x02 == 0 || self.amount_commitments.is_none() {
+        if self.privacy_flags & 0x04 == 0 || self.amount_commitments.is_none() {
             return Ok(true); // No confidential amounts to verify
         }
         
@@ -365,7 +368,7 @@ mod tests {
         // Verify that the commitment was set
         assert!(tx.amount_commitments.is_some());
         assert_eq!(tx.amount_commitments.as_ref().unwrap()[0], commitment);
-        assert_eq!(tx.privacy_flags & 0x02, 0x02);
+        assert_eq!(tx.privacy_flags & 0x04, 0x04);
         
         // Set a range proof for the output
         let range_proof = vec![5, 6, 7, 8]; // Dummy range proof
