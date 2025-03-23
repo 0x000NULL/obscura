@@ -11,11 +11,15 @@ use crate::utils::{current_time, format_time_diff};
 use crypto::jubjub;
 use rand::rngs::OsRng;
 use rand::Rng;
-use rand_core::RngCore; // Add this import for RngCore trait
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use log::debug;
+use chacha20poly1305::{
+    aead::{Aead, KeyInit},
+    ChaCha20Poly1305, Nonce,
+};
+use ring::pbkdf2;
 
 #[derive(Debug, Clone)]
 pub struct Wallet {
@@ -885,12 +889,15 @@ impl Wallet {
         // Update our balance
         self.balance = self.balance + received - spent;
 
-        // Store the transaction for history
-        self.transactions.push(tx.clone());
-
-        // Add a timestamp for this transaction
-        self.transaction_timestamps
-            .insert(tx.hash(), current_time());
+        // Store the transaction for history if it's not already there
+        let tx_hash = tx.hash();
+        let transaction_already_exists = self.transactions.iter().any(|t| t.hash() == tx_hash);
+        if !transaction_already_exists {
+            self.transactions.push(tx.clone());
+            
+            // Add a timestamp for this transaction
+            self.transaction_timestamps.insert(tx_hash, current_time());
+        }
 
         // Also check for stealth transactions
         self.scan_for_stealth_transactions(tx);
@@ -1117,8 +1124,8 @@ impl Wallet {
                 .insert(input.previous_output.clone());
         }
 
-        // Update our balance immediately (in real wallet, we'd wait for confirmation)
-        self.balance -= amount;
+        // Balance is already updated in create_transaction_with_fee, so we don't need to update it again
+        // self.balance -= amount;  // Remove this line
 
         Some(tx)
     }
@@ -1346,11 +1353,19 @@ impl Wallet {
 
     /// Export the BLS keypair as encrypted bytes
     pub fn export_bls_keypair(&self, password: &str) -> Option<Vec<u8>> {
-        // This is a placeholder - in a real implementation, you would properly encrypt the keypair
-        // using strong encryption (e.g., AES-GCM with proper key derivation)
+        use chacha20poly1305::{
+            aead::{Aead, KeyInit},
+            ChaCha20Poly1305, Nonce,
+        };
+        use ring::pbkdf2;
+        use rand::RngCore;
+        
+        if password.is_empty() {
+            return None;
+        }
         
         if let Some(keypair) = &self.bls_keypair {
-            // Serialize the keypair (this is simplified and NOT secure)
+            // Serialize the keypair
             let mut serialized = Vec::new();
             
             // Add the public key bytes
@@ -1358,21 +1373,45 @@ impl Wallet {
             serialized.extend_from_slice(&(public_key_bytes.len() as u32).to_le_bytes());
             serialized.extend_from_slice(&public_key_bytes);
             
-            // Add the secret key bytes (in a secure implementation, this would be encrypted)
-            let mut secret_key_bytes = [0u8; 32]; // Assuming 32-byte scalar
-            secret_key_bytes.copy_from_slice(&keypair.secret_key.to_bytes_le());
+            // Add the secret key bytes
+            let secret_key_bytes = keypair.secret_key.to_bytes_le();
             serialized.extend_from_slice(&secret_key_bytes);
             
-            // Encrypt with password (very simplified - do NOT use in production)
-            let mut hasher = Sha256::new();
-            hasher.update(password.as_bytes());
-            let key = hasher.finalize();
+            // Generate a random salt for key derivation (16 bytes)
+            let mut salt = [0u8; 16];
+            OsRng.fill_bytes(&mut salt);
             
-            for i in 0..serialized.len() {
-                serialized[i] ^= key[i % 32];
-            }
+            // Generate a random nonce for ChaCha20Poly1305 (12 bytes)
+            let mut nonce_bytes = [0u8; 12];
+            OsRng.fill_bytes(&mut nonce_bytes);
+            let nonce = Nonce::from_slice(&nonce_bytes);
             
-            Some(serialized)
+            // Derive an encryption key using PBKDF2 (32 bytes for ChaCha20Poly1305)
+            let mut derived_key = [0u8; 32];
+            pbkdf2::derive(
+                pbkdf2::PBKDF2_HMAC_SHA256,
+                std::num::NonZeroU32::new(100_000).unwrap(), // 100,000 iterations for security
+                &salt,
+                password.as_bytes(),
+                &mut derived_key,
+            );
+            
+            // Create a ChaCha20Poly1305 cipher with the derived key
+            let cipher = ChaCha20Poly1305::new(derived_key.as_ref().into());
+            
+            // Encrypt the serialized keypair with authentication tag
+            let ciphertext = match cipher.encrypt(&nonce, serialized.as_ref()) {
+                Ok(ciphertext) => ciphertext,
+                Err(_) => return None,
+            };
+            
+            // Format: salt (16 bytes) + nonce (12 bytes) + ciphertext
+            let mut result = Vec::with_capacity(16 + 12 + ciphertext.len());
+            result.extend_from_slice(&salt);
+            result.extend_from_slice(nonce.as_slice());
+            result.extend_from_slice(&ciphertext);
+            
+            Some(result)
         } else {
             None
         }
@@ -1380,29 +1419,54 @@ impl Wallet {
 
     /// Import a BLS keypair from encrypted bytes
     pub fn import_bls_keypair(&mut self, encrypted_bytes: &[u8], password: &str) -> Result<(), String> {
-        if encrypted_bytes.len() < 36 { // At minimum: 4 bytes length + public key + 32 bytes secret key
-            return Err("Invalid encrypted keypair data".to_string());
+        if encrypted_bytes.len() < 28 { // At minimum: salt(16) + nonce(12)
+            return Err("Invalid encrypted data format".to_string());
         }
         
-        // Decrypt with password (very simplified - do NOT use in production)
-        let mut decrypted = encrypted_bytes.to_vec();
-        let mut hasher = Sha256::new();
-        hasher.update(password.as_bytes());
-        let key = hasher.finalize();
+        if password.is_empty() {
+            return Err("Password cannot be empty".to_string());
+        }
         
-        for i in 0..decrypted.len() {
-            decrypted[i] ^= key[i % 32];
+        // Extract salt and nonce
+        let salt = &encrypted_bytes[0..16];
+        let nonce_bytes = &encrypted_bytes[16..28];
+        let ciphertext = &encrypted_bytes[28..];
+        
+        // Convert nonce bytes to a proper Nonce
+        let nonce = Nonce::from_slice(nonce_bytes);
+        
+        // Derive the encryption key using PBKDF2
+        let mut derived_key = [0u8; 32];
+        pbkdf2::derive(
+            pbkdf2::PBKDF2_HMAC_SHA256,
+            std::num::NonZeroU32::new(100_000).unwrap(),
+            salt,
+            password.as_bytes(),
+            &mut derived_key,
+        );
+        
+        // Create a ChaCha20Poly1305 cipher with the derived key
+        let cipher = ChaCha20Poly1305::new(derived_key.as_ref().into());
+        
+        // Decrypt the ciphertext
+        let plaintext = match cipher.decrypt(nonce, ciphertext) {
+            Ok(plaintext) => plaintext,
+            Err(_) => return Err("Authentication failed or decryption error".to_string()),
+        };
+        
+        if plaintext.len() < 4 {
+            return Err("Invalid decrypted data format".to_string());
         }
         
         // Parse the decrypted data
-        let pub_key_len = u32::from_le_bytes([decrypted[0], decrypted[1], decrypted[2], decrypted[3]]) as usize;
+        let pub_key_len = u32::from_le_bytes([plaintext[0], plaintext[1], plaintext[2], plaintext[3]]) as usize;
         
-        if 4 + pub_key_len + 32 > decrypted.len() {
+        if 4 + pub_key_len + 32 > plaintext.len() {
             return Err("Invalid keypair format".to_string());
         }
         
-        let public_key_bytes = &decrypted[4..4 + pub_key_len];
-        let secret_key_bytes = &decrypted[4 + pub_key_len..4 + pub_key_len + 32];
+        let public_key_bytes = &plaintext[4..4 + pub_key_len];
+        let secret_key_bytes = &plaintext[4 + pub_key_len..4 + pub_key_len + 32];
         
         // Attempt to reconstruct the keypair
         let public_key = BlsPublicKey::from_compressed(public_key_bytes)

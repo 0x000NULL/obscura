@@ -136,9 +136,8 @@
 - [x] Resolve commented out code
 
 ### 4. Enhancement Opportunities
-- [ ] Implement proper authenticated encryption for private keys
-- [ ] Standardize error handling patterns across the codebase
-- [ ] Convert inline TODOs to tracked issues
+- [x] Implement proper authenticated encryption for private keys
+- [x] Convert inline TODOs to tracked issues in @1_todo_crypto.md
 - [ ] Enhance memory protection with proper secure allocation/deallocation
 - [ ] Add cryptographic auditing and logging mechanisms
 - [ ] Improve constant-time implementations for all critical operations
