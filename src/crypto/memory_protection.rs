@@ -315,38 +315,45 @@ pub struct SecureMemory<T> {
 
 impl<T> Drop for SecureMemory<T> {
     fn drop(&mut self) {
-        // Fast path for test mode - just deallocate without any extra work
-        if is_test_mode() {
-            unsafe {
-                dealloc(self.ptr.as_ptr() as *mut u8, self.layout);
-            }
-            return;
+        // First, ensure data is decrypted so we can properly clean it
+        if self.is_encrypted {
+            let _ = self.decrypt();
         }
+
+        // Get the actual data pointer and securely clear it
+        let data_ptr = self.ptr.as_ptr() as *mut u8;
+        let size = std::mem::size_of::<T>();
         
-        // Securely clear memory before freeing
+        // If secure clearing is enabled, clear the memory
         if self.config.secure_clearing_enabled {
-            // Ensure memory is decrypted before clearing
-            if self.is_encrypted && self.config.encrypted_memory_enabled {
-                if let Err(e) = self.decrypt() {
-                    error!("Failed to decrypt memory during drop: {}", e);
-                }
-            }
-            
-            // Securely clear the memory
-            self.memory_protection.secure_clear(
-                self.ptr.as_ptr() as *mut u8,
-                mem::size_of::<T>(),
-            );
+            self.memory_protection.secure_clear(data_ptr, size);
         }
+
+        // Check if we have a secure allocator available
+        let has_secure_allocator = self.memory_protection.secure_allocator.is_some() && !is_test_mode();
         
-        // Free allocated memory including guard pages if enabled
+        // Deallocate the memory
         unsafe {
-            if let Some(guard_info) = &self.guard_info {
-                // Free the entire allocation including guard pages if enabled
-                dealloc(guard_info.base_ptr, guard_info.total_layout);
+            // Drop the actual value
+            ptr::drop_in_place(self.ptr.as_ptr());
+            
+            if has_secure_allocator {
+                // If we have a secure allocator, use it for deallocation
+                if let Some(allocator) = &self.memory_protection.secure_allocator {
+                    allocator.deallocate(
+                        NonNull::new_unchecked(data_ptr),
+                        self.layout
+                    );
+                }
             } else {
-                // Free just the allocation for the data
-                dealloc(self.ptr.as_ptr() as *mut u8, self.layout);
+                // Otherwise, use the traditional method
+                if let Some(guard_info) = &self.guard_info {
+                    // If we have guard pages, deallocate the entire region
+                    dealloc(guard_info.base_ptr, guard_info.total_layout);
+                } else {
+                    // Standard deallocation
+                    dealloc(data_ptr, self.layout);
+                }
             }
         }
     }
@@ -521,7 +528,7 @@ impl<T> SecureMemory<T> {
     }
 }
 
-/// Central memory protection system that manages secure memory allocations
+/// Memory protection system for secure operations
 pub struct MemoryProtection {
     /// Configuration for memory protection
     config: MemoryProtectionConfig,
@@ -531,60 +538,51 @@ pub struct MemoryProtection {
     decoy_buffer: Option<Vec<u8>>,
     /// Timestamp of last key rotation
     last_key_rotation: std::time::Instant,
+    /// Secure allocator for memory management
+    secure_allocator: Option<Arc<super::secure_allocator::SecureAllocator>>,
 }
 
 impl MemoryProtection {
-    /// Create a new memory protection instance with the specified configuration
+    /// Create a new memory protection system with the given configuration
     pub fn new(
         config: MemoryProtectionConfig,
         side_channel_protection: Option<Arc<SideChannelProtection>>,
     ) -> Self {
-        // If we're in test mode, always use minimal configuration
-        if is_test_mode() {
-            return Self {
-                config: MemoryProtectionConfig {
-                    security_profile: SecurityProfile::Testing,
-                    secure_clearing_enabled: false,
-                    aslr_integration_enabled: false,
-                    allocation_randomization_range_kb: 0,
-                    guard_pages_enabled: false,
-                    pre_guard_pages: 0,
-                    post_guard_pages: 0,
-                    encrypted_memory_enabled: false,
-                    auto_encrypt_after_ms: 0,
-                    key_rotation_interval_ms: 0,
-                    access_pattern_obfuscation_enabled: false,
-                    decoy_buffer_size_kb: 0,
-                    decoy_access_percentage: 0,
-                },
-                side_channel_protection: None,
-                decoy_buffer: None,
-                last_key_rotation: std::time::Instant::now(),
-            };
-        }
-
-        // Fast path for testing - if all protection features are disabled,
-        // we can skip creating expensive resources
-        let is_minimal_config = !config.guard_pages_enabled && 
-                               !config.encrypted_memory_enabled && 
-                               !config.secure_clearing_enabled && 
-                               !config.access_pattern_obfuscation_enabled;
-        
-        let decoy_buffer = if config.access_pattern_obfuscation_enabled && !is_minimal_config {
+        let decoy_buffer = if config.access_pattern_obfuscation_enabled {
             let size = config.decoy_buffer_size_kb * 1024;
-            let mut buffer = vec![0u8; size];
-            thread_rng().fill(&mut buffer[..]);
+            let mut buffer = Vec::with_capacity(size);
+            
+            // Fill buffer with random data
+            unsafe {
+                buffer.set_len(size);
+                let mut rng = thread_rng();
+                for byte in buffer.iter_mut() {
+                    *byte = rng.gen();
+                }
+            }
+            
             Some(buffer)
         } else {
             None
         };
         
-        Self {
+        let mut memory_protection = Self {
             config,
             side_channel_protection,
             decoy_buffer,
             last_key_rotation: std::time::Instant::now(),
+            secure_allocator: None,
+        };
+        
+        // Create secure allocator if not in test mode (to avoid circular dependency)
+        if !is_test_mode() {
+            let allocator = Arc::new(super::secure_allocator::SecureAllocator::new(
+                Arc::new(memory_protection.clone())
+            ));
+            memory_protection.secure_allocator = Some(allocator);
         }
+        
+        memory_protection
     }
     
     /// Create a new memory protection instance with default configuration
@@ -616,103 +614,130 @@ impl MemoryProtection {
     // Secure Memory Allocation
     //------------------------
     
-    /// Allocate secure memory for a value
+    /// Secure memory allocation with optimized allocation patterns
+    /// 
+    /// This method uses the secure allocator when available, otherwise falls back
+    /// to the previous implementation logic.
     pub fn secure_alloc<T>(&self, value: T) -> Result<SecureMemory<T>, MemoryProtectionError> {
-        // Direct bypass for test mode - use simplest possible allocation
-        if is_test_mode() {
-            let layout = Layout::new::<T>();
-            
-            // Regular allocation without special protection
-            let ptr = unsafe {
-                let ptr = alloc(layout);
-                if ptr.is_null() {
-                    return Err(MemoryProtectionError::AllocationError(
-                        "Failed to allocate memory".to_string()));
-                }
-                NonNull::new(ptr as *mut T).unwrap()
-            };
-            
-            // Create minimal SecureMemory instance
-            let mut secure_memory = SecureMemory {
-                ptr,
-                layout,
-                is_encrypted: false,
-                guard_info: None,
-                // Use minimal config
-                config: MemoryProtectionConfig {
-                    security_profile: SecurityProfile::Testing,
-                    secure_clearing_enabled: false,
-                    aslr_integration_enabled: false,
-                    allocation_randomization_range_kb: 0,
-                    guard_pages_enabled: false,
-                    pre_guard_pages: 0,
-                    post_guard_pages: 0,
-                    encrypted_memory_enabled: false,
-                    auto_encrypt_after_ms: 0,
-                    key_rotation_interval_ms: 0,
-                    access_pattern_obfuscation_enabled: false,
-                    decoy_buffer_size_kb: 0,
-                    decoy_access_percentage: 0,
-                },
-                encryption_key: None,
-                memory_protection: Arc::new(self.clone()),
-                last_access: std::time::Instant::now(),
-            };
-            
-            // Initialize memory with the value
-            unsafe {
-                ptr::write(secure_memory.ptr.as_ptr(), value);
-            }
-            
-            return Ok(secure_memory);
+        // If we have a secure allocator and we're not in test mode, use it
+        if !is_test_mode() && self.secure_allocator.is_some() {
+            return self.secure_alloc_with_allocator(value);
+        }
+        
+        // Otherwise, use the existing implementation
+        let size = std::mem::size_of::<T>();
+        let align = std::mem::align_of::<T>();
+
+        if size == 0 {
+            return Err(MemoryProtectionError::AllocationError(
+                "Cannot allocate zero-sized type".to_string()));
         }
 
-        // Original implementation for non-test mode
-        // Determine memory layout for the value
-        let layout = Layout::new::<T>();
-        
+        let layout = Layout::from_size_align(size, align)
+            .map_err(|_| MemoryProtectionError::AllocationError(
+                "Invalid size or alignment".to_string()))?;
+
         let (ptr, guard_info) = if self.config.guard_pages_enabled {
-            // Use the cross-platform implementation instead of the platform-specific one
             self.allocate_with_guard_pages_cross_platform::<T>()?
         } else if self.config.aslr_integration_enabled {
-            (self.allocate_with_aslr::<T>()?, None)
+            let ptr = self.allocate_with_aslr::<T>()?;
+            (ptr, None)
         } else {
-            // Regular allocation without special protection
-            unsafe {
-                let ptr = alloc(layout);
-                if ptr.is_null() {
-                    return Err(MemoryProtectionError::AllocationError(
-                        "Failed to allocate memory".to_string()));
-                }
-                (NonNull::new(ptr as *mut T).unwrap(), None)
+            // Standard allocation
+            let ptr = unsafe { alloc(layout) };
+            if ptr.is_null() {
+                return Err(MemoryProtectionError::AllocationError(
+                    "Failed to allocate memory".to_string()));
             }
+            
+            let ptr = NonNull::new(ptr as *mut T)
+                .ok_or_else(|| MemoryProtectionError::AllocationError(
+                    "Failed to convert pointer to NonNull".to_string()))?;
+            
+            (ptr, None)
         };
-        
-        // Create SecureMemory instance
-        let mut secure_memory = SecureMemory {
+
+        // Initialize with the value
+        unsafe {
+            ptr::write(ptr.as_ptr(), value);
+        }
+
+        // Generate encryption key if needed
+        let encryption_key = if self.config.encrypted_memory_enabled {
+            let mut key = vec![0u8; 32]; // 256-bit key
+            let mut rng = thread_rng();
+            rng.fill_bytes(&mut key);
+            Some(key)
+        } else {
+            None
+        };
+
+        Ok(SecureMemory {
             ptr,
             layout,
             is_encrypted: false,
             guard_info,
             config: self.config.clone(),
-            encryption_key: None,
+            encryption_key,
             memory_protection: Arc::new(self.clone()),
             last_access: std::time::Instant::now(),
-        };
+        })
+    }
+
+    /// Allocate secure memory using the secure allocator
+    fn secure_alloc_with_allocator<T>(&self, value: T) -> Result<SecureMemory<T>, MemoryProtectionError> {
+        // Get the secure allocator
+        let allocator = self.secure_allocator.as_ref()
+            .ok_or_else(|| MemoryProtectionError::AllocationError(
+                "Secure allocator not available".to_string()))?;
         
-        // Initialize memory with the value
+        let size = std::mem::size_of::<T>();
+        let align = std::mem::align_of::<T>();
+
+        if size == 0 {
+            return Err(MemoryProtectionError::AllocationError(
+                "Cannot allocate zero-sized type".to_string()));
+        }
+
+        let layout = Layout::from_size_align(size, align)
+            .map_err(|_| MemoryProtectionError::AllocationError(
+                "Invalid size or alignment".to_string()))?;
+        
+        // Use our secure allocator to allocate memory
+        let memory_ptr = allocator.allocate(layout)
+            .map_err(|_| MemoryProtectionError::AllocationError(
+                "Failed to allocate memory with secure allocator".to_string()))?;
+        
+        // Convert to the appropriate pointer type
+        let ptr = NonNull::new(memory_ptr.as_ptr() as *mut T)
+            .ok_or_else(|| MemoryProtectionError::AllocationError(
+                "Failed to convert pointer to NonNull".to_string()))?;
+        
+        // Initialize with the value
         unsafe {
-            ptr::write(secure_memory.ptr.as_ptr(), value);
+            ptr::write(ptr.as_ptr(), value);
         }
-        
+
         // Generate encryption key if needed
-        if self.config.encrypted_memory_enabled {
+        let encryption_key = if self.config.encrypted_memory_enabled {
             let mut key = vec![0u8; 32]; // 256-bit key
-            thread_rng().fill(&mut key[..]);
-            secure_memory.encryption_key = Some(key);
-        }
-        
-        Ok(secure_memory)
+            let mut rng = thread_rng();
+            rng.fill_bytes(&mut key);
+            Some(key)
+        } else {
+            None
+        };
+
+        Ok(SecureMemory {
+            ptr,
+            layout,
+            is_encrypted: false,
+            guard_info: None, // Guard pages are managed by the secure allocator
+            config: self.config.clone(),
+            encryption_key,
+            memory_protection: Arc::new(self.clone()),
+            last_access: std::time::Instant::now(),
+        })
     }
     
     /// Allocate memory with guard pages using cross-platform APIs
@@ -979,6 +1004,11 @@ impl MemoryProtection {
             4096
         }
     }
+
+    /// Get the secure allocator
+    pub fn secure_allocator(&self) -> Option<Arc<super::secure_allocator::SecureAllocator>> {
+        self.secure_allocator.clone()
+    }
 }
 
 impl Clone for MemoryProtection {
@@ -988,6 +1018,7 @@ impl Clone for MemoryProtection {
             side_channel_protection: self.side_channel_protection.clone(),
             decoy_buffer: self.decoy_buffer.clone(),
             last_key_rotation: self.last_key_rotation,
+            secure_allocator: self.secure_allocator.clone(),
         }
     }
 }

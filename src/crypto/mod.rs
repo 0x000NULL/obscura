@@ -106,6 +106,9 @@ pub use side_channel_protection::{
     SideChannelProtection, SideChannelProtectionConfig, SideChannelError
 };
 
+// Secure memory allocator
+pub mod secure_allocator;
+
 // Key management functions
 // These functions are intended for use in the wallet implementation
 #[allow(dead_code)] // Allow unused code as these are intended for future use
