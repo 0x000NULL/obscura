@@ -1,11 +1,12 @@
 use std::sync::{Arc, RwLock};
 use log::{debug, info};
 use std::fmt;
-use crate::networking::privacy::{
-    DandelionRouter as NetworkDandelionRouter,
-    CircuitRouter as NetworkCircuitRouter,
-    TimingObfuscator as NetworkTimingObfuscator
-};
+// Commented out unused imports
+// use crate::networking::privacy::{
+//     DandelionRouter as NetworkDandelionRouter,
+//     CircuitRouter as NetworkCircuitRouter,
+//     TimingObfuscator as NetworkTimingObfuscator
+// };
 
 // Local definitions to avoid import issues
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

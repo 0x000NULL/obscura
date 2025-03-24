@@ -11,4 +11,7 @@ pub mod privacy_primitives_tests;
 pub mod pedersen_commitment_tests;
 pub mod side_channel_protection_tests;
 pub mod memory_protection_tests;
-pub mod improved_side_channel_tests; 
+pub mod improved_side_channel_tests;
+pub mod audit_integration_tests;
+pub mod audit_tests;
+pub mod audit_external_tests; 

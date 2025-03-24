@@ -2,22 +2,37 @@ use crate::blockchain::Transaction;
 use sha2::{Sha256};
 use rand::rngs::OsRng;
 use rand_core::RngCore;
+use chacha20poly1305::Nonce;
 
 // Add the errors module
 pub mod errors;
 // Re-export error types
 pub use errors::{CryptoError, CryptoResult};
 
-// Cryptographic auditing and logging module
+// Cryptographic auditing and logging modules
 pub mod audit;
 pub use audit::{
     AuditConfig, AuditEntry, AuditLevel, CryptoAudit, CryptoOperationType,
     OperationStatus, OperationTracker, audit_crypto_operation
 };
+// New audit modules for enhanced auditing and logging
+pub mod audit_alerting;
+pub mod audit_analytics;
+pub mod audit_logging;
+pub mod audit_integration;
+pub mod audit_external;
+// Re-export integrated audit system
+pub use audit_integration::{
+    IntegratedAuditSystem, IntegratedAuditConfig, IntegratedOperationTracker,
+    audit_crypto_operation as integrated_audit_crypto_operation
+};
 
 // Core cryptographic modules
 pub mod privacy;
 pub mod blinding_store;
+
+// Bulletproofs implementation
+pub mod bulletproofs_impl;
 pub mod bulletproofs;
 pub mod commitment_verification;
 pub mod pedersen;
@@ -33,8 +48,7 @@ pub mod power_analysis_protection;
 pub mod metadata_protection;
 
 // Example and testing modules
-#[cfg(feature = "examples")]
-pub mod examples;
+pub mod examples_standalone;
 
 // Curve implementations
 pub mod bls12_381;
@@ -170,7 +184,7 @@ pub fn encrypt_keypair(
 ) -> CryptoResult<Vec<u8>> {
     use chacha20poly1305::{
         aead::{Aead, AeadCore, KeyInit},
-        ChaCha20Poly1305, Nonce,
+        ChaCha20Poly1305,
     };
     use ring::pbkdf2;
     
@@ -221,7 +235,7 @@ pub fn decrypt_keypair(
 ) -> CryptoResult<(jubjub::JubjubScalar, jubjub::JubjubPoint)> {
     use chacha20poly1305::{
         aead::{Aead, KeyInit},
-        ChaCha20Poly1305, Nonce,
+        ChaCha20Poly1305,
     };
     use ring::pbkdf2;
     

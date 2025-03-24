@@ -175,4 +175,10 @@ impl CryptoError {
     pub fn to_protocol_error<S: ToString>(msg: S) -> Self {
         CryptoError::ProtocolError(msg.to_string())
     }
+    
+    /// Helper for internal unexpected errors
+    /// Used as a replacement for the missing InternalError variant
+    pub fn internal_error<S: ToString>(msg: S) -> Self {
+        CryptoError::UnexpectedError(msg.to_string())
+    }
 } 

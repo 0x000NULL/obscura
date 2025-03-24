@@ -9,8 +9,9 @@ use rand::rngs::ThreadRng;
 use std::time::{Duration, Instant};
 use log::{debug, trace, warn};
 use std::sync::{Arc, Mutex};
-use crate::networking::message::MessageType;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+// Commented out unused import
+// use crate::networking::message::MessageType;
+// use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 /// Protocol types that Obscura traffic can be morphed to resemble
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1010,59 +1011,55 @@ impl ProtocolMorphingService {
     
     /// Remove MQTT morphing from a message
     fn remove_mqtt_morphing(&self, mut message: Message) -> Message {
-        // Check if this is a morphed MQTT message
-        if !message.is_morphed || message.morph_type != Some(ProtocolMorphType::Mqtt as u8) {
-            return message;
+        // Original message is in the payload after the MQTT header
+        // Skip MQTT header to get original message
+        let payload = message.payload.clone();
+        
+        if payload.len() < 2 {
+            return message; // Not enough data for MQTT header
         }
         
-        // Parse and remove MQTT framing
-        let payload = &message.payload;
-        if payload.is_empty() {
-            // Malformed packet
-            return message;
-        }
+        // Parse fixed header
+        let mut offset = 2;
+        let mut _remaining_length = 0;
         
-        // Extract packet type and flags
-        let packet_type = (payload[0] >> 4) & 0x0F;
-        let flags = payload[0] & 0x0F;
-        
-        // Parse remaining length
-        let mut idx = 1;
-        let mut multiplier = 1;
-        let mut remaining_length = 0;
-        
-        while idx < payload.len() {
-            let byte = payload[idx];
-            idx += 1;
-            
-            remaining_length += ((byte & 0x7F) as usize) * multiplier;
-            multiplier *= 128;
-            
-            if (byte & 0x80) == 0 {
-                break;
+        // Extract variable header + payload
+        if offset < payload.len() {
+            // Parse remaining length
+            let mut multiplier = 1;
+            while offset < payload.len() {
+                let byte = payload[offset];
+                offset += 1;
+                
+                _remaining_length += ((byte & 0x7F) as usize) * multiplier;
+                multiplier *= 128;
+                
+                if (byte & 0x80) == 0 {
+                    break;
+                }
+                
+                if multiplier > 128*128*128 {
+                    // Malformed packet
+                    return message;
+                }
             }
             
-            if multiplier > 128*128*128 {
-                // Malformed packet
-                return message;
-            }
-        }
-        
-        // For PUBLISH, skip topic name and optional packet ID
-        if packet_type == 3 && idx + 2 <= payload.len() {
-            // Topic length
-            let topic_len = ((payload[idx] as u16) << 8) | (payload[idx + 1] as u16);
-            idx += 2 + topic_len as usize;
-            
-            // Packet ID for QoS > 0
-            if (flags & 0x06) > 0 && idx + 2 <= payload.len() {
-                idx += 2;
+            // For PUBLISH, skip topic name and optional packet ID
+            if payload[0] == 3 && offset + 2 <= payload.len() {
+                // Topic length
+                let topic_len = ((payload[offset] as u16) << 8) | (payload[offset + 1] as u16);
+                offset += 2 + topic_len as usize;
+                
+                // Packet ID for QoS > 0
+                if (payload[0] & 0x06) > 0 && offset + 2 <= payload.len() {
+                    offset += 2;
+                }
             }
         }
         
         // Extract the original payload
-        if idx < payload.len() {
-            message.payload = payload[idx..].to_vec();
+        if offset < payload.len() {
+            message.payload = payload[offset..].to_vec();
         } else {
             // No payload or malformed packet
             message.payload = Vec::new();
@@ -1248,6 +1245,7 @@ fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::networking::MessageType;
     
     #[test]
     fn test_protocol_morphing_http() {

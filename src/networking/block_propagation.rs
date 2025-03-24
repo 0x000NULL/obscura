@@ -1,4 +1,4 @@
-use crate::blockchain::{Block, BlockHeader, Transaction, TransactionOutput};
+use crate::blockchain::{Block, BlockHeader, Transaction};
 use crate::networking::message::{Message, MessageType};
 use crate::networking::peer_manager::{PeerInfo, PeerManager};
 use log::error;
@@ -9,6 +9,7 @@ use std::hash::{Hash, Hasher};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
+use crate::blockchain::TransactionOutput;
 
 const BLOCK_ANNOUNCEMENT_DELAY: Duration = Duration::from_millis(100);
 const MAX_BLOCK_RELAY_TIME: Duration = Duration::from_secs(30);

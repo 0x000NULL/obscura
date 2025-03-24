@@ -11,9 +11,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 use subtle::ConstantTimeEq;
+use std::hash::Hash;
 
 /// The severity level of an audit event.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub enum AuditLevel {
     /// Informational events - normal operation
     Info,
@@ -48,7 +49,7 @@ impl From<AuditLevel> for Level {
 }
 
 /// Defines types of cryptographic operations that can be audited.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum CryptoOperationType {
     /// Key generation operations
     KeyGeneration,
@@ -111,7 +112,7 @@ impl fmt::Display for CryptoOperationType {
 }
 
 /// Status of a cryptographic operation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum OperationStatus {
     /// Operation started
     Started,
