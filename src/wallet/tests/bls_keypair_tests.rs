@@ -1,5 +1,7 @@
+// Remove unused imports
+// use crate::wallet::Wallet;
+// use crate::crypto::bls12_381::{BlsKeypair, BlsPublicKey};
 use crate::wallet::Wallet;
-use crate::crypto::bls12_381::{BlsKeypair, BlsPublicKey};
 
 /// Test the generation of a BLS keypair
 #[test]

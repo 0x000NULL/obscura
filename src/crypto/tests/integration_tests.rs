@@ -83,7 +83,7 @@ fn test_secure_allocator_with_side_channel_protection() {
     }
     
     // Deallocate
-    allocator.deallocate(ptr, layout);
+    allocator.deallocate_internal(ptr, layout).expect("Should deallocate successfully");
 }
 
 /// Test that the secure allocator's statistics tracking works correctly
@@ -119,7 +119,7 @@ fn test_secure_allocator_statistics() {
     for _ in 0..2 {
         let (ptr, layout) = allocations.pop().unwrap();
         total_bytes -= layout.size();
-        allocator.deallocate(ptr, layout);
+        allocator.deallocate_internal(ptr, layout).expect("Should deallocate successfully");
     }
     
     // Check stats after partial deallocation
@@ -129,7 +129,7 @@ fn test_secure_allocator_statistics() {
     
     // Deallocate the rest
     while let Some((ptr, layout)) = allocations.pop() {
-        allocator.deallocate(ptr, layout);
+        allocator.deallocate_internal(ptr, layout).expect("Should deallocate successfully");
     }
     
     // Check final stats
@@ -191,7 +191,7 @@ fn test_secure_allocator_various_sizes() {
         }
         
         // Free
-        allocator.deallocate(ptr, layout);
+        allocator.deallocate_internal(ptr, layout).expect("Should deallocate successfully");
     }
 }
 
@@ -221,7 +221,7 @@ fn test_secure_allocator_realistic_usage() {
     // Phase 2: Deallocate some
     for _ in 0..3 {
         if let Some((ptr, layout)) = allocations.pop() {
-            allocator.deallocate(ptr, layout);
+            allocator.deallocate_internal(ptr, layout).expect("Should deallocate successfully");
         }
     }
     
@@ -237,7 +237,7 @@ fn test_secure_allocator_realistic_usage() {
     if allocations.len() > 5 {
         let idx = allocations.len() / 2;
         let (ptr, layout) = allocations.remove(idx);
-        allocator.deallocate(ptr, layout);
+        allocator.deallocate_internal(ptr, layout).expect("Should deallocate successfully");
     }
     
     // Phase 5: Reallocate some memory
@@ -250,7 +250,7 @@ fn test_secure_allocator_realistic_usage() {
     
     // Final cleanup
     for (ptr, layout) in allocations {
-        allocator.deallocate(ptr, layout);
+        allocator.deallocate_internal(ptr, layout).expect("Should deallocate successfully");
     }
     
     // Verify final stats
@@ -310,6 +310,6 @@ fn test_secure_allocator_isolation() {
     
     // Clean up
     for ptr in allocated_ptrs {
-        allocator.deallocate(ptr, layout);
+        allocator.deallocate_internal(ptr, layout).expect("Should deallocate successfully");
     }
 } 

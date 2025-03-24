@@ -1,83 +1,84 @@
-# Crypto Module
+# Obscura Cryptography Module
 
-This module contains cryptographic primitives and security features for the Obscura project.
+This directory contains the cryptographic primitives and protocols used in the Obscura cryptocurrency. The implementation focuses on privacy, security, and resistance to various cryptographic attacks.
 
-## Components
+## Overview
 
-### Memory Protection
+The Obscura crypto module provides:
 
-The memory protection system provides tools to securely manage sensitive data in memory:
+- Privacy-focused cryptographic primitives
+- Memory protection mechanisms
+- Side-channel attack countermeasures
+- Zero-knowledge proof systems
+- Key management utilities
+- Cryptographic auditing and logging mechanisms
 
-- **Memory Protection Config**: Configure security profiles and protection features
-- **Secure Memory**: Handles sensitive data with encryption, access control and automatic zeroing
-- **Platform Memory**: Cross-platform memory protection primitives (Windows, Unix, macOS)
+## Key Components
 
-### Secure Memory Allocator
+- **JubJub Implementation**: Elliptic curve cryptography optimized for zero-knowledge proofs
+- **Bulletproofs**: Range proofs for confidential transactions
+- **Pedersen Commitments**: Homomorphic commitments for value hiding
+- **Memory Protection**: Secure memory handling with guard pages and encryption
+- **Side-Channel Protection**: Constant-time operations and blinding techniques
+- **Power Analysis Protection**: Countermeasures against power analysis attacks
+- **Cryptographic Auditing**: Comprehensive logging and auditing of crypto operations
 
-The secure memory allocator provides comprehensive memory management for sensitive data:
+## Cryptographic Auditing System
 
-- **Secure allocation and deallocation**: Enhanced memory allocation patterns with automatic zeroing
-- **Guard page protection**: Uses guard pages to protect against buffer overflows and underflows
-- **Memory locking**: Prevents sensitive data from being swapped to disk
-- **Allocation tracking**: Monitors memory usage and detects potential memory leaks
-- **Standard library integration**: Works with standard Rust collections like Vec, String, and HashMap
-- **Thread-local support**: Thread-specific secure allocators to isolate sensitive data
+The cryptographic auditing system provides a robust and secure way to track and log all cryptographic operations within the Obscura codebase. This is essential for:
 
-#### Usage Examples
+1. **Security Monitoring**: Detecting unusual or potentially malicious cryptographic operations
+2. **Compliance**: Meeting regulatory requirements for financial systems
+3. **Debugging**: Tracing issues in complex cryptographic protocols
+4. **Performance Analysis**: Measuring and optimizing cryptographic operations
+5. **Forensic Analysis**: Investigating security incidents
 
-```rust
-// Create a secure allocator with default settings
-let allocator = SecureAllocator::default();
+See the [audit-documentation.md](./audit-documentation.md) file for detailed information on how to use the cryptographic auditing system.
 
-// Allocate secure memory
-let layout = Layout::from_size_align(1024, 16).unwrap();
-let ptr = allocator.allocate(layout).expect("Allocation failed");
+## Memory Protection
 
-// Write sensitive data
-unsafe {
-    std::ptr::copy_nonoverlapping(
-        sensitive_data.as_ptr(),
-        ptr.as_ptr(),
-        sensitive_data.len()
-    );
-}
+The memory protection module provides tools to secure sensitive cryptographic material in memory:
 
-// Use with Rust collections
-let mut secure_vec: Vec<u8, &SecureAllocator> = Vec::new_in(&allocator);
-secure_vec.extend_from_slice(b"Sensitive data protected in memory");
+- Guard pages to detect unauthorized access
+- Secure memory wiping
+- Encrypted memory
+- Protection against memory dumps
 
-// Memory is automatically zeroed when deallocated
-allocator.deallocate(ptr, layout);
-```
+## Side-Channel Protection
 
-### Side Channel Protection
+Countermeasures against side-channel attacks include:
 
-This module provides defenses against side-channel attacks such as:
+- Constant-time implementations of critical operations
+- Secret blinding for scalar multiplication
+- Decoy operations and random timing delays
+- Memory access pattern obfuscation
 
-- **Timing attacks**: Using constant-time algorithms for cryptographic operations
-- **Power analysis**: Implementing power analysis countermeasures
-- **Cache attacks**: Techniques to mitigate cache-based side channels
+## Examples
 
-### Cryptographic Primitives
+The `examples.rs` file and `examples/` directory contain examples demonstrating how to use the various cryptographic components safely. These include:
 
-- **Elliptic Curve Cryptography**: Jubjub and BLS12-381 curve implementations
-- **Zero-Knowledge Proofs**: Bulletproofs and other ZK protocols
-- **Verifiable Secret Sharing**: Implementation of Shamir's Secret Sharing with verification
-- **Threshold Signatures**: Multi-party signature schemes
+- Basic cryptographic operations
+- Secure key management
+- Side-channel protected operations
+- Memory-protected storage
+- Integration with the audit system
 
-## Security Profiles
+## Security and Privacy Guarantees
 
-The crypto module supports different security profiles:
+The Obscura cryptography module aims to provide the following guarantees:
 
-- **Standard**: Basic protection for normal operations
-- **Medium**: Enhanced protection with moderate performance impact
-- **High**: Maximum protection for highly sensitive operations
-- **Testing**: Reduced security for testing environments
+- **Value Privacy**: Transaction amounts are hidden from third parties
+- **Sender/Receiver Privacy**: Transaction metadata is protected
+- **Forward Secrecy**: Compromise of keys doesn't expose past transactions
+- **Side-Channel Resistance**: Protection against timing, power, and cache attacks
+- **Secure Memory Handling**: Protection against memory-based attacks
 
-## Integration
+## Testing and Verification
 
-The crypto module integrates with other system components:
+The cryptographic components are extensively tested:
 
-- **Wallet**: Secures private keys and sensitive wallet data
-- **Networking**: Protects data in transit with secure channels
-- **Blockchain**: Ensures cryptographic operations maintain privacy and security 
+- Unit tests covering all core functionality
+- Integration tests for protocol-level correctness
+- Specific tests for security properties
+- Constant-time verification tests
+- Cross-implementation validation 

@@ -7,7 +7,7 @@ use std::alloc::Layout;
 use std::sync::Arc;
 use std::collections::HashMap;
 
-use crate::crypto::secure_allocator::{SecureAllocator, ThreadLocalSecureAllocator};
+use crate::crypto::secure_allocator::{SecureAllocator, ThreadLocalSecureAllocator, SecureAllocatable};
 use crate::crypto::memory_protection::{MemoryProtection, MemoryProtectionConfig, SecurityProfile};
 
 /// Example of using secure allocator with different security profiles
@@ -43,9 +43,9 @@ pub fn secure_allocator_profiles() {
     println!("  Custom security allocation succeeded");
     
     // Clean up
-    standard_allocator.deallocate(ptr1, layout);
-    high_security_allocator.deallocate(ptr2, layout);
-    custom_allocator.deallocate(ptr3, layout);
+    standard_allocator.deallocate_internal(ptr1, layout).expect("Should deallocate successfully");
+    high_security_allocator.deallocate_internal(ptr2, layout).expect("Should deallocate successfully");
+    custom_allocator.deallocate_internal(ptr3, layout).expect("Should deallocate successfully");
     
     println!("All allocations successfully deallocated");
 }
@@ -58,19 +58,23 @@ pub fn secure_collections() {
     println!("Creating secure collections...");
     
     // Create a secure Vec
-    let mut secure_vec: Vec<u8, &SecureAllocator> = Vec::new_in(&allocator);
+    let mut secure_vec: Vec<u8> = Vec::new_secure(&allocator);
     
     // Add some sensitive data
     secure_vec.extend_from_slice(b"Sensitive data that should be protected in memory");
     println!("  Created secure Vec with {} bytes", secure_vec.len());
     
     // Create a secure String
-    let mut secure_string = String::new_in(&allocator);
+    let mut secure_string = String::new_secure(&allocator);
     secure_string.push_str("Confidential user information");
     println!("  Created secure String with {} bytes", secure_string.len());
     
     // Create a secure HashMap
-    let mut secure_map = HashMap::new_in(&allocator);
+    let map_capacity = 16;
+    let mut secure_map = allocator.allocate_container(
+        map_capacity * std::mem::size_of::<(&str, &str)>(), 
+        |_, _| HashMap::<&str, &str>::with_capacity(map_capacity)
+    );
     secure_map.insert("username", "admin");
     secure_map.insert("password", "super_secret_password");
     secure_map.insert("api_key", "01234567890abcdef");
@@ -174,9 +178,8 @@ pub fn secure_allocator_api_usage() {
     allocator.clear_all_memory();
     println!("  Explicitly cleared all secure memory");
     
-    // Deallocate
-    allocator.deallocate(ptr, layout);
-    println!("  Deallocated memory");
+    // Deallocate the memory securely
+    allocator.deallocate_internal(ptr, layout).expect("Should deallocate successfully");
     
     // Check final stats
     let final_stats = allocator.stats();
@@ -222,9 +225,9 @@ pub fn custom_secure_allocator() {
     // In a real application, you'd store these pointers and layouts
     // in appropriate data structures for later use
     
-    // Clean up
-    secure_allocator.deallocate(password_ptr, password_layout);
-    secure_allocator.deallocate(key_ptr, key_layout);
+    // Clean up sensitive data
+    secure_allocator.deallocate_internal(password_ptr, password_layout).expect("Should deallocate successfully");
+    secure_allocator.deallocate_internal(key_ptr, key_layout).expect("Should deallocate successfully");
     
     println!("  Allocations deallocated securely");
 }

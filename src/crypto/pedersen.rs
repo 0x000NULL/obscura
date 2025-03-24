@@ -1,24 +1,22 @@
 use crate::blockchain::Transaction;
 use crate::crypto::jubjub::JubjubPointExt;
+use crate::crypto::blinding_store::BlindingStore;
 use ark_ed_on_bls12_381::{EdwardsAffine, EdwardsProjective as JubjubPoint, Fr as JubjubScalar};
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::UniformRand;
+use once_cell::sync::Lazy;
 use rand::rngs::OsRng;
+use rand_core::RngCore;
 use sha2::{Digest, Sha256};
+use std::path::Path;
 
 // Additional imports for BLS12-381
 use blstrs::{
     G1Projective as BlsG1, Scalar as BlsScalar,
 };
 use ff::Field;
-use group::{Group, GroupEncoding};
-use std::ops::Add;
-
-// Import the blinding store
-use crate::crypto::blinding_store::BlindingStore;
-use once_cell::sync::Lazy;
-use std::path::Path;
+use group::{Group};
 use std::sync::Arc;
 use std::sync::RwLock;
 
@@ -94,11 +92,14 @@ lazy_static::lazy_static! {
         scalar_bytes.copy_from_slice(&hash[0..32]);
 
         // Create a point by multiplying the base point
-        let scalar_opt = BlsScalar::from_bytes_le(&scalar_bytes);
-        let scalar = match scalar_opt.is_some().into() {
-            true => scalar_opt.unwrap(),
-            false => BlsScalar::from(1u64),  // Use from(1u64) instead of one()
+        let scalar_option = BlsScalar::from_bytes_le(&scalar_bytes);
+        let scalar = if scalar_option.is_some().into() {
+            scalar_option.unwrap()
+        } else {
+            // Use from(1u64) as a fallback
+            BlsScalar::from(1u64)
         };
+        
         BlsG1::generator() * scalar
     };
 }
@@ -489,10 +490,12 @@ impl DualCurveCommitment {
             let hash = hasher.finalize();
             let mut scalar_bytes = [0u8; 32];
             scalar_bytes.copy_from_slice(&hash[0..32]);
-            let scalar_opt = BlsScalar::from_bytes_le(&scalar_bytes);
-            match scalar_opt.is_some().into() {
-                true => scalar_opt.unwrap(),
-                false => BlsScalar::from(1u64), // Use from(1u64) instead of one()
+            let scalar_option = BlsScalar::from_bytes_le(&scalar_bytes);
+            if scalar_option.is_some().into() {
+                scalar_option.unwrap()
+            } else {
+                // Use zero as a fallback
+                BlsScalar::from(0u64)
             }
         };
 
@@ -692,10 +695,36 @@ pub fn generate_random_jubjub_scalar() -> JubjubScalar {
     JubjubScalar::rand(&mut rng)
 }
 
-// Generate a random BLS12-381 scalar
+// Generate a random BlsScalar for blinding factor if none is provided
 pub fn generate_random_bls_scalar() -> BlsScalar {
-    let mut rng = OsRng;
-    BlsScalar::random(&mut rng)
+    // Generate random bytes for a BlsScalar
+    let mut random_bytes = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut random_bytes);
+    
+    // Try to create a BlsScalar from the random bytes
+    let scalar_option = BlsScalar::from_bytes_le(&random_bytes);
+    if scalar_option.is_some().into() {
+        scalar_option.unwrap()
+    } else {
+        // Use zero as a fallback
+        BlsScalar::from(0u64)
+    }
+}
+
+pub fn bls_scalar_from_bytes(bytes: &[u8]) -> Result<BlsScalar, String> {
+    if bytes.len() != 32 {
+        return Err(format!("Invalid byte length for BlsScalar: {}", bytes.len()));
+    }
+    
+    let mut array = [0u8; 32];
+    array.copy_from_slice(bytes);
+    
+    let scalar_option = BlsScalar::from_bytes_le(&array);
+    if scalar_option.is_some().into() {
+        Ok(scalar_option.unwrap())
+    } else {
+        Err("Failed to deserialize BlsScalar".to_string())
+    }
 }
 
 #[cfg(test)]

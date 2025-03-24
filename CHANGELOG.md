@@ -1,5 +1,79 @@
 # Changelog
 
+## [0.7.16] - 2025-04-15
+
+### Added
+- **Secure Memory Allocator Implementation**
+  - Implemented comprehensive secure memory allocation and deallocation:
+    - Created `SecureAllocator` class with secure memory allocation patterns
+    - Added automatic memory zeroing on deallocation to prevent data leakage
+    - Implemented thread-local secure allocators for thread isolation
+    - Added comprehensive statistics tracking for memory resources
+    - Created background cleaning for stale allocations
+  - Enhanced memory protection integration:
+    - Integrated allocator with existing memory protection framework
+    - Added support for all security profiles (Standard, Medium, High, Testing)
+    - Implemented configurable guard page protection
+    - Added memory locking to prevent sensitive data from being swapped to disk
+    - Created platform-specific optimizations for Windows, Unix, and macOS
+  - Integrated with Rust standard library:
+    - Implemented the std::alloc::Allocator trait
+    - Added support for secure Vec, String, HashMap and other standard collections
+    - Created custom allocation and deallocation strategies
+    - Added secure reallocation with content preservation
+    - Implemented proper Drop behavior for automatic cleanup
+  - Comprehensive testing and documentation:
+    - Added extensive test suite for all allocator functionality
+    - Implemented integration tests with other crypto components
+    - Created detailed usage examples and documentation
+    - Added performance benchmarks and security validation
+    - Created memory usage and statistics tracking
+- **Cryptographic Auditing and Logging System**
+  - Implemented robust security-focused audit system:
+    - Created `AuditEntry` system with detailed metadata tracking
+    - Added unique identifiers and timestamps for audit correlation
+    - Implemented severity levels (Info, Warning, Critical, Fatal)
+    - Created 17 distinct operation types for comprehensive categorization
+    - Added status tracking (Started, Success, Failed, Denied, Expired)
+    - Implemented duration tracking for performance analysis
+  - Enhanced security features:
+    - Added parameter sanitization to prevent sensitive data exposure
+    - Implemented configurable redaction of sensitive fields
+    - Created secure log file handling with rotation capabilities
+    - Added thread-safe implementation for concurrent usage
+    - Implemented integration with existing logging infrastructure
+  - Added comprehensive API for developers:
+    - Created `OperationTracker` for start-to-finish monitoring
+    - Implemented wrapper function for simple one-line integration
+    - Added builder pattern for flexible audit entry creation
+    - Created filtering capabilities for audit log analysis
+    - Implemented in-memory and file-based audit storage
+  - Added examples and documentation:
+    - Created comprehensive audit system documentation
+    - Added basic usage examples and integration patterns
+    - Implemented integration examples with other security systems
+    - Created usage guides for different security contexts
+    - Added best practices for sensitive data handling
+
+### Improved
+- Enhanced security of memory handling for sensitive cryptographic operations
+- Improved defense against memory-based side-channel attacks
+- Added better protection for private keys and other sensitive data
+- Enhanced resource tracking and memory leak prevention
+- Improved integration between memory protection and allocation systems
+- Enhanced security monitoring with comprehensive cryptographic audit system
+- Improved debugging capabilities for cryptographic operations
+- Added better tracking of security-relevant events throughout the system
+- Enhanced compliance capabilities with detailed audit logs
+- Improved visibility into cryptographic operation patterns and performance
+
+### Fixed
+- Restored missing `clear_all_memory` function in `SecureAllocator` implementation
+- Removed background thread from `SecureAllocator` to fix thread safety issues with raw pointers
+- Improved memory management by performing periodic maintenance during normal operations
+- Enhanced thread safety across the secure memory allocation system
+- Fixed potential deadlocks in memory management operations
+
 ## [0.7.15] - 2025-04-02
 
 ### Crypto Module Improvements

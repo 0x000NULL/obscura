@@ -1,11 +1,41 @@
 [package]
 name = "obscura"
-version = "0.7.15"
+version = "0.7.16"
 authors = ["Obscura Team <ethan@obscura.org>"]
 description = "A privacy-focused cryptocurrency with stealth addresses and confidential transactions"
 repository = "https://github.com/obscura-org/obscura"
 edition = "2021"
 license = "MIT OR Apache-2.0"
+
+# Enable unstable features needed for implementation
+[package.metadata.rust-analyzer]
+rustc_private = true
+
+[lib]
+name = "obscura"
+crate-type = ["rlib", "cdylib"]
+
+# Add unstable features
+[features]
+default = ["parallel"]
+test-utils = []
+benchmarking = []
+# Storage backend features
+use-rocksdb = ["rocksdb"]
+parallel = ["ark-std/parallel"]
+# Privacy network features
+# Updated to use socks instead of arti-client for Tor connectivity
+use-tor = ["socks"]
+use-i2p = ["i2p"]
+# Feature flag for pluggable transports without associated crates
+use-pluggable-transports = []
+integration-tests = []
+# Monitoring features
+metrics = ["prometheus"]
+# Consensus features
+randomx = ["randomx-rs"]
+# Examples feature
+examples = []
 
 [dependencies]
 # Cryptography dependencies
@@ -90,7 +120,7 @@ env_logger = "0.10.0"
 yoke = "0.7.5"
 
 # Visualization and human-friendly output
-chrono = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
 colored = "2.0"
 prettytable-rs = "0.10"
 
@@ -129,27 +159,6 @@ opt-level = 0
 debug = true
 debug-assertions = true
 incremental = true
-
-[features]
-default = ["parallel"]
-test-utils = []
-benchmarking = []
-# Storage backend features
-use-rocksdb = ["rocksdb"]
-parallel = ["ark-std/parallel"]
-# Privacy network features
-# Updated to use socks instead of arti-client for Tor connectivity
-use-tor = ["socks"]
-use-i2p = ["i2p"]
-# Feature flag for pluggable transports without associated crates
-use-pluggable-transports = []
-integration-tests = []
-# Monitoring features
-metrics = ["prometheus"]
-# Consensus features
-randomx = ["randomx-rs"]
-# Examples feature
-examples = []
 
 [[bench]]
 name = "crypto_benchmarks"

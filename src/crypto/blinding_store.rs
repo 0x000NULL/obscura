@@ -12,7 +12,6 @@ use ring::aead::{self, Aad, LessSafeKey, Nonce, UnboundKey};
 use ring::pbkdf2;
 use ring::rand::{SecureRandom, SystemRandom};
 use serde::{Deserialize, Serialize};
-use sha2::Digest;
 use blstrs::Scalar;
 
 use crate::crypto::jubjub::JubjubScalar;

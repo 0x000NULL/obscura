@@ -4,6 +4,7 @@ use std::mem;
 use std::ptr::{self, NonNull};
 use rand::thread_rng;
 use rand::Rng;
+use rand_core::RngCore;
 use std::sync::Arc;
 use log::{debug, error, warn};
 use serde::{Serialize, Deserialize};
@@ -340,10 +341,12 @@ impl<T> Drop for SecureMemory<T> {
             if has_secure_allocator {
                 // If we have a secure allocator, use it for deallocation
                 if let Some(allocator) = &self.memory_protection.secure_allocator {
-                    allocator.deallocate(
+                    let _ = allocator.deallocate_internal(
                         NonNull::new_unchecked(data_ptr),
                         self.layout
-                    );
+                    ).map_err(|e| {
+                        error!("Error deallocating memory with secure allocator: {:?}", e);
+                    });
                 }
             } else {
                 // Otherwise, use the traditional method
@@ -704,9 +707,7 @@ impl MemoryProtection {
                 "Invalid size or alignment".to_string()))?;
         
         // Use our secure allocator to allocate memory
-        let memory_ptr = allocator.allocate(layout)
-            .map_err(|_| MemoryProtectionError::AllocationError(
-                "Failed to allocate memory with secure allocator".to_string()))?;
+        let memory_ptr = allocator.allocate(layout)?;
         
         // Convert to the appropriate pointer type
         let ptr = NonNull::new(memory_ptr.as_ptr() as *mut T)

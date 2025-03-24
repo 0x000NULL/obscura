@@ -12,7 +12,6 @@ use serde::{Serialize, Deserialize};
 use std::thread;
 use crate::networking::Node;
 use crate::blockchain::{Transaction, Block};
-use std::hash::{Hash, Hasher};
 use crate::networking::privacy::PrivacyLevel;
 use crate::networking::privacy_config_integration::PrivacySettingsRegistry;
 

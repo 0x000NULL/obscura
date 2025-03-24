@@ -12,7 +12,6 @@ use chacha20poly1305::{
 };
 use ring::agreement::{EphemeralPrivateKey, ECDH_P256};
 use blake2b_simd::Params as Blake2bParams;
-use std::hash::Hasher;
 use serde_json;
 
 // Constants for metadata protection

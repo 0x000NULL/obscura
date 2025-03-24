@@ -5,7 +5,6 @@ use crate::networking::dandelion::{DandelionManager, PropagationState};
 use rand;
 use rand::thread_rng;
 use rand::Rng;
-use rand_distr::Distribution;
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::net::SocketAddr;

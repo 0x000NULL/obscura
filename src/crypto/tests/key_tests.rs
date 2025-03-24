@@ -1,5 +1,7 @@
 use super::*;
 use crate::crypto::jubjub::{generate_keypair, JubjubKeypair};
+use crate::crypto::jubjub::{JubjubPointExt, JubjubScalarExt};
+use crate::crypto::{encrypt_keypair, decrypt_keypair};
 
 #[test]
 fn test_key_generation() {

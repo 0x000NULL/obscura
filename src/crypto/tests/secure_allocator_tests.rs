@@ -3,10 +3,10 @@
 //! These tests verify the functionality, security properties, and integration
 //! of the secure memory allocator with the rest of the system.
 
-use super::super::secure_allocator::{SecureAllocator, ThreadLocalSecureAllocator, SecureMemoryStats};
+use super::super::secure_allocator::{SecureAllocator, ThreadLocalSecureAllocator, SecureMemoryStats, SecureAllocatable};
 use super::super::memory_protection::{MemoryProtection, MemoryProtectionConfig, SecurityProfile};
 use super::super::platform_memory::{MemoryProtection as MemoryProtectionLevel, AllocationType};
-use std::alloc::{Allocator, Layout};
+use std::alloc::Layout;
 use std::ptr::{self, NonNull};
 use std::sync::Arc;
 use std::thread;
@@ -36,8 +36,8 @@ fn test_allocator_creation_with_profiles() {
     let ptr2 = high_security_allocator.allocate(layout).expect("Should allocate memory");
     
     // Clean up
-    standard_allocator.deallocate(ptr1, layout);
-    high_security_allocator.deallocate(ptr2, layout);
+    standard_allocator.deallocate_internal(ptr1, layout).expect("Should deallocate successfully");
+    high_security_allocator.deallocate_internal(ptr2, layout).expect("Should deallocate successfully");
 }
 
 #[test]
@@ -62,7 +62,7 @@ fn test_allocator_with_custom_memory_protection() {
     }
     
     // Clean up
-    allocator.deallocate(ptr, layout);
+    allocator.deallocate_internal(ptr, layout).expect("Should deallocate successfully");
 }
 
 #[test]
@@ -93,7 +93,7 @@ fn test_secure_clear_on_deallocation() {
     assert_eq!(buffer_copy[layout.size() - 1], 0xBB);
     
     // Deallocate - this should trigger secure clearing
-    allocator.deallocate(ptr, layout);
+    allocator.deallocate_internal(ptr, layout).expect("Should deallocate successfully");
     
     // In a real environment, we can't check if memory was cleared after deallocation
     // as it would be a use-after-free. This is just a test to verify our infrastructure.
@@ -128,7 +128,7 @@ fn test_allocator_stats_tracking() {
     assert_eq!(after_alloc_stats.allocated_bytes, initial_stats.allocated_bytes + 896); // 128 + 256 + 512
     
     // Deallocate one allocation
-    allocator.deallocate(ptrs[0], layouts[0]);
+    allocator.deallocate_internal(ptrs[0], layouts[0]).expect("Should deallocate successfully");
     
     // Check stats after partial deallocation
     let after_partial_dealloc_stats = allocator.stats();
@@ -136,8 +136,8 @@ fn test_allocator_stats_tracking() {
     assert_eq!(after_partial_dealloc_stats.allocated_bytes, initial_stats.allocated_bytes + 768); // 256 + 512
     
     // Deallocate remaining allocations
-    allocator.deallocate(ptrs[1], layouts[1]);
-    allocator.deallocate(ptrs[2], layouts[2]);
+    allocator.deallocate_internal(ptrs[1], layouts[1]).expect("Should deallocate successfully");
+    allocator.deallocate_internal(ptrs[2], layouts[2]).expect("Should deallocate successfully");
     
     // Check final stats
     let final_stats = allocator.stats();
@@ -177,14 +177,14 @@ fn test_allocator_reallocate_growth() {
     
     // Verify both halves have correct patterns
     unsafe {
-        assert_eq!(*new_ptr.as_ptr(), 0xCC);
+        assert_eq!(*new_ptr.as_ptr()), 0xCC);
         assert_eq!(*new_ptr.as_ptr().add(127), 0xCC);
         assert_eq!(*new_ptr.as_ptr().add(128), 0xDD);
         assert_eq!(*new_ptr.as_ptr().add(255), 0xDD);
     }
     
     // Clean up
-    allocator.deallocate(new_ptr, larger_layout);
+    allocator.deallocate_internal(new_ptr, larger_layout).expect("Should deallocate successfully");
 }
 
 #[test]
@@ -208,34 +208,39 @@ fn test_allocator_reallocate_shrink() {
         
     // Verify first half data was preserved
     unsafe {
-        assert_eq!(*new_ptr.as_ptr(), 0xAA);
+        assert_eq!(*new_ptr.as_ptr()), 0xAA);
         assert_eq!(*new_ptr.as_ptr().add(127), 0xAA);
     }
     
     // Clean up
-    allocator.deallocate(new_ptr, smaller_layout);
+    allocator.deallocate_internal(new_ptr, smaller_layout).expect("Should deallocate successfully");
 }
 
 #[test]
 fn test_allocator_with_standard_rust_collections() {
     let allocator = setup_test_allocator();
     
-    // Test with Vec
-    let mut vec = Vec::new_in(&allocator);
+    // Test with Vec using our new stable interface
+    let mut vec = Vec::<i32>::new_secure(&allocator);
     for i in 0..100 {
         vec.push(i);
     }
     assert_eq!(vec.len(), 100);
     assert_eq!(vec[42], 42);
     
-    // Test with String
-    let mut string = String::new_in(&allocator);
+    // Test with String using our new stable interface
+    let mut string = String::new_secure(&allocator);
     string.push_str("Hello, secure memory!");
     assert_eq!(string.len(), 21);
     assert_eq!(&string, "Hello, secure memory!");
     
-    // Test with HashMap
-    let mut map = std::collections::HashMap::new_in(&allocator);
+    // Test with HashMap using the allocate_container method
+    let map_capacity = 16;
+    let mut map = allocator.allocate_container(
+        map_capacity * std::mem::size_of::<(i32, i32)>(), 
+        |ptr, _| std::collections::HashMap::<i32, i32>::with_capacity(map_capacity)
+    );
+    
     for i in 0..10 {
         map.insert(i, i * i);
     }
@@ -307,12 +312,10 @@ fn test_thread_local_allocator_isolation() {
             
             // Deallocate thread's memory
             for (ptr, layout) in ptrs {
-                unsafe {
-                    thread_allocator.deallocate(
-                        NonNull::new_unchecked(ptr.as_ptr().cast::<u8>()),
-                        layout
-                    );
-                }
+                thread_allocator.deallocate(
+                    NonNull::new_unchecked(ptr.as_ptr().cast::<u8>()),
+                    layout
+                );
             }
             
             // Memory should be automatically cleared by ThreadLocalSecureAllocator's drop
@@ -360,7 +363,7 @@ fn test_clear_all_memory_functionality() {
     
     // Deallocate memory
     for ptr in ptrs {
-        allocator.deallocate(ptr, layout);
+        allocator.deallocate_internal(ptr, layout).expect("Should deallocate successfully");
     }
 }
 
@@ -397,13 +400,13 @@ fn test_secure_allocator_large_allocations() {
             *ptr.as_ptr().add(size - 1) = 0xCC;
             
             // Verify we can read the values back
-            assert_eq!(*ptr.as_ptr(), 0xAA);
+            assert_eq!(*ptr.as_ptr()), 0xAA);
             assert_eq!(*ptr.as_ptr().add(size / 2), 0xBB);
             assert_eq!(*ptr.as_ptr().add(size - 1), 0xCC);
         }
         
         // Deallocate
-        allocator.deallocate(ptr, layout);
+        allocator.deallocate_internal(ptr, layout).expect("Should deallocate successfully");
     }
 }
 
@@ -430,7 +433,7 @@ fn test_allocator_with_different_protection_levels() {
     // because it would cause a segmentation fault
     
     // Deallocate
-    allocator.deallocate(ptr, layout);
+    allocator.deallocate_internal(ptr, layout).expect("Should deallocate successfully");
 }
 
 #[test]
@@ -489,7 +492,7 @@ fn test_allocator_concurrency() {
                 }
                 
                 // Deallocate
-                allocator_clone.deallocate(ptr, layout);
+                allocator_clone.deallocate_internal(ptr, layout).expect("Should deallocate successfully");
             }
             
             // Return number of operations performed

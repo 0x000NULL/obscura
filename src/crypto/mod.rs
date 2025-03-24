@@ -1,10 +1,19 @@
 use crate::blockchain::Transaction;
-use sha2::{Digest, Sha256};
+use sha2::{Sha256};
+use rand::rngs::OsRng;
+use rand_core::RngCore;
 
 // Add the errors module
 pub mod errors;
 // Re-export error types
 pub use errors::{CryptoError, CryptoResult};
+
+// Cryptographic auditing and logging module
+pub mod audit;
+pub use audit::{
+    AuditConfig, AuditEntry, AuditLevel, CryptoAudit, CryptoOperationType,
+    OperationStatus, OperationTracker, audit_crypto_operation
+};
 
 // Core cryptographic modules
 pub mod privacy;
@@ -163,7 +172,6 @@ pub fn encrypt_keypair(
         aead::{Aead, AeadCore, KeyInit},
         ChaCha20Poly1305, Nonce,
     };
-    use rand::{rngs::OsRng, RngCore};
     use ring::pbkdf2;
     
     if password.is_empty() {
@@ -352,13 +360,24 @@ impl LocalPedersenCommitment {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::crypto::LocalPedersenCommitment;
+    use crate::blockchain::Transaction;
+    
     mod hash_tests;
+    #[allow(unused_imports)]
     mod key_tests;
+    #[allow(unused_imports)]
     pub mod vss_test;
+    #[allow(unused_imports)]
     mod side_channel_protection_tests;
+    #[allow(unused_imports)]
     mod memory_protection_tests;
+    #[allow(unused_imports)]
     mod power_analysis_protection_tests;
+    #[allow(unused_imports)]
     mod zk_key_management_tests;
+    #[allow(unused_imports)]
+    mod audit_tests;
     
     #[test]
     fn test_local_pedersen_commitment() {

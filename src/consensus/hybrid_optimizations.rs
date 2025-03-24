@@ -5,7 +5,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::pos_old::{StakeProof, StakingContract};
 use crate::blockchain::Block;
-use sha2::Digest;
 
 /// Manages the state of the hybrid consensus system with optimizations
 pub struct HybridStateManager {

@@ -7,9 +7,17 @@ use crate::crypto::pedersen::PedersenCommitment;
 use crate::crypto::memory_protection::{MemoryProtection, MemoryProtectionConfig, SecureMemory};
 use crate::crypto::power_analysis_protection::{PowerAnalysisProtection, PowerAnalysisConfig};
 use crate::crypto::bulletproofs::{JubjubBulletproofGens, JubjubPedersenGens, JubjubProver, JubjubVerifier, JubjubRangeProof};
+use crate::crypto::{
+    AuditConfig, AuditLevel, CryptoAudit, CryptoOperationType, 
+    audit_crypto_operation
+};
 use rand::thread_rng;
 use ark_std::UniformRand;
 use std::sync::Arc;
+
+// Import the audit example modules
+mod audit_example;
+mod audit_integration;
 
 /// Example of using side-channel protection with key generation
 pub fn example_protected_key_generation() {
@@ -758,4 +766,39 @@ pub fn example_memory_protection() {
     println!("Regular result: {:?}", expected);
     println!("Results match: {}", result == expected);
     println!();
+}
+
+/// Example of cryptographic auditing and logging mechanisms
+pub fn example_cryptographic_auditing() -> Result<(), Box<dyn std::error::Error>> {
+    println!("Running cryptographic auditing example...");
+    
+    // Run the basic audit example
+    audit_example::run_audit_example()?;
+    
+    Ok(())
+}
+
+/// Example of comprehensive audit integration with cryptographic systems
+pub fn example_audit_integration() -> Result<(), Box<dyn std::error::Error>> {
+    println!("Running comprehensive audit integration example...");
+    
+    // Run the integration example
+    audit_integration::run_audit_integration_example()?;
+    
+    Ok(())
+}
+
+// Place this at the end of the file with the other example categories
+pub fn example_audit_mechanisms() {
+    println!("\n=== Cryptographic Auditing and Logging Mechanisms ===\n");
+    
+    if let Err(e) = example_cryptographic_auditing() {
+        eprintln!("Error in audit example: {}", e);
+    }
+    
+    println!();
+    
+    if let Err(e) = example_audit_integration() {
+        eprintln!("Error in audit integration example: {}", e);
+    }
 } 

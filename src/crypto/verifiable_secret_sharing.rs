@@ -6,7 +6,6 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use rand::rngs::OsRng;
 use rand_core::RngCore;
-use sha2::Digest;
 use log::{debug, error, info, warn};
 use ark_std::{One, UniformRand, Zero};
 use crate::crypto::jubjub::generate_keypair;

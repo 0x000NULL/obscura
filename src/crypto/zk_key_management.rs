@@ -1,7 +1,6 @@
 use crate::crypto::{JubjubKeypair, JubjubPoint, JubjubScalar, JubjubPointExt, JubjubScalarExt};
 use crate::crypto::metadata_protection::ForwardSecrecyProvider;
 use rand::rngs::OsRng;
-use sha2::Digest;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
