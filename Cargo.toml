@@ -15,6 +15,10 @@ rustc_private = true
 name = "obscura"
 crate-type = ["rlib", "cdylib"]
 
+[[bin]]
+name = "obscura-bin"
+path = "src/main.rs"
+
 # Add unstable features
 [features]
 default = ["parallel"]

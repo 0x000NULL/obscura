@@ -53,12 +53,22 @@ impl Default for SideChannelProtectionConfig {
     }
 }
 
-/// SideChannelProtection manages protections against various side-channel attacks
-/// for cryptographic operations
+/// Side-channel attack protection implementation
 pub struct SideChannelProtection {
     config: SideChannelProtectionConfig,
     operation_counter: AtomicUsize,
     batch_queue: Arc<Mutex<Vec<Box<dyn FnOnce() + Send>>>>,
+}
+
+impl std::fmt::Debug for SideChannelProtection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SideChannelProtection")
+            .field("config", &self.config)
+            .field("operation_counter", &self.operation_counter)
+            .field("batch_queue", &format!("<{} batched operations>", 
+                   self.batch_queue.lock().unwrap().len()))
+            .finish()
+    }
 }
 
 /// Errors that can occur during side-channel protection operations

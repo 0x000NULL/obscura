@@ -177,7 +177,7 @@ impl CircuitRouter {
         // Update routing based on new privacy level
         if *self.initialized.read().unwrap() {
             // Re-establish circuits with new settings
-            self.rotate_circuits();
+            let _ = self.rotate_circuits();
         }
     }
     

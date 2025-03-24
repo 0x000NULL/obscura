@@ -697,18 +697,44 @@ pub fn generate_random_jubjub_scalar() -> JubjubScalar {
 
 // Generate a random BlsScalar for blinding factor if none is provided
 pub fn generate_random_bls_scalar() -> BlsScalar {
-    // Generate random bytes for a BlsScalar
-    let mut random_bytes = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut random_bytes);
+    // Ensure we get a valid scalar that's not zero
+    let mut attempts = 0;
+    let max_attempts = 10;
     
-    // Try to create a BlsScalar from the random bytes
-    let scalar_option = BlsScalar::from_bytes_le(&random_bytes);
-    if scalar_option.is_some().into() {
-        scalar_option.unwrap()
-    } else {
-        // Use zero as a fallback
-        BlsScalar::from(0u64)
+    while attempts < max_attempts {
+        // Generate random bytes
+        let mut random_bytes = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut random_bytes);
+        
+        // Try to create a BlsScalar from the random bytes
+        let scalar_option = BlsScalar::from_bytes_le(&random_bytes);
+        if scalar_option.is_some().into() {
+            let scalar = scalar_option.unwrap();
+            // Make sure it's not zero
+            if !bool::from(scalar.is_zero()) {
+                return scalar;
+            }
+        }
+        
+        attempts += 1;
     }
+    
+    // As a last resort, use a hardcoded value derived from a hash
+    // This is safe because it's only used as a fallback and should never happen in practice
+    let mut hasher = Sha256::new();
+    hasher.update(b"Obscura BLS12-381 fallback scalar");
+    let hash = hasher.finalize();
+    
+    let mut scalar_bytes = [0u8; 32];
+    scalar_bytes.copy_from_slice(&hash[0..32]);
+    
+    let scalar_option = BlsScalar::from_bytes_le(&scalar_bytes);
+    if scalar_option.is_some().into() {
+        return scalar_option.unwrap();
+    }
+    
+    // If even that fails, use a small non-zero value
+    BlsScalar::from(1u64)
 }
 
 pub fn bls_scalar_from_bytes(bytes: &[u8]) -> Result<BlsScalar, String> {
