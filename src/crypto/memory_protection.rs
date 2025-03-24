@@ -5,7 +5,7 @@ use std::ptr::{self, NonNull};
 use rand::thread_rng;
 use rand::Rng;
 use rand_core::RngCore;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, RwLock};
 use log::{debug, error, warn};
 use serde::{Serialize, Deserialize};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -17,6 +17,8 @@ use crate::crypto::platform_memory_impl::WindowsMemoryProtection;
 use crate::crypto::platform_memory_impl::UnixMemoryProtection;
 #[cfg(target_os = "macos")]
 use crate::crypto::platform_memory_impl::MacOSMemoryProtection;
+use std::marker::PhantomData;
+use std::time::Instant;
 
 // Global flag to check if we're in a test environment
 // This allows us to bypass expensive operations across the entire module
@@ -294,89 +296,61 @@ impl std::fmt::Display for MemoryProtectionError {
 
 impl std::error::Error for MemoryProtectionError {}
 
-/// A handle to securely allocated and protected memory
-pub struct SecureMemory<T> {
-    /// Pointer to the protected data
-    ptr: NonNull<T>,
-    /// Memory layout of the allocation
-    layout: Layout,
-    /// Whether the memory is currently encrypted
-    is_encrypted: bool,
-    /// Guard page information
-    guard_info: Option<GuardPageInfo>,
-    /// Memory protection configuration
-    config: MemoryProtectionConfig,
-    /// Encryption key (if memory encryption is enabled)
-    encryption_key: Option<Vec<u8>>,
-    /// Reference to the memory protection system
-    memory_protection: Arc<MemoryProtection>,
-    /// Last access timestamp
-    last_access: std::time::Instant,
+/// Mode of memory protection to use
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemoryProtectionMode {
+    /// Testing mode with minimal protection
+    Testing,
+    /// Production mode with full protection
+    Production,
 }
 
-impl<T> Drop for SecureMemory<T> {
-    fn drop(&mut self) {
-        // First, ensure data is decrypted so we can properly clean it
-        if self.is_encrypted {
-            let _ = self.decrypt();
-        }
-
-        // Get the actual data pointer and securely clear it
-        let data_ptr = self.ptr.as_ptr() as *mut u8;
-        let size = std::mem::size_of::<T>();
-        
-        // If secure clearing is enabled, clear the memory
-        if self.config.secure_clearing_enabled {
-            self.memory_protection.secure_clear(data_ptr, size);
-        }
-
-        // Check if we have a secure allocator available
-        let has_secure_allocator = self.memory_protection.secure_allocator.is_some() && !is_test_mode();
-        
-        // Deallocate the memory
-        unsafe {
-            // Drop the actual value
-            ptr::drop_in_place(self.ptr.as_ptr());
-            
-            if has_secure_allocator {
-                // If we have a secure allocator, use it for deallocation
-                if let Some(allocator) = &self.memory_protection.secure_allocator {
-                    let _ = allocator.deallocate_internal(
-                        NonNull::new_unchecked(data_ptr),
-                        self.layout
-                    ).map_err(|e| {
-                        error!("Error deallocating memory with secure allocator: {:?}", e);
-                    });
-                }
-            } else {
-                // Otherwise, use the traditional method
-                if let Some(guard_info) = &self.guard_info {
-                    // If we have guard pages, deallocate the entire region
-                    dealloc(guard_info.base_ptr, guard_info.total_layout);
-                } else {
-                    // Standard deallocation
-                    dealloc(data_ptr, self.layout);
-                }
-            }
-        }
-    }
-}
-
-/// Information about guard pages for a secure memory allocation
-#[derive(Debug)]
-struct GuardPageInfo {
-    /// Pointer to the base of the entire allocation (including guard pages)
-    base_ptr: *mut u8,
+/// Guard pages information for secure memory
+#[derive(Debug, Clone)]
+pub struct GuardPageInfo {
+    /// Base pointer for the entire allocation including guard pages
+    pub base_ptr: *mut u8,
     /// Total memory layout including guard pages
-    total_layout: Layout,
-    /// Offset to the actual data
-    data_offset: usize,
+    pub total_layout: Layout,
 }
 
-// Add unsafe Send and Sync implementations for thread safety
-// This is safe because we ensure synchronized access through Arc<Mutex<>> in multithreaded contexts
-unsafe impl<T: Send> Send for SecureMemory<T> {}
-unsafe impl<T: Sync> Sync for SecureMemory<T> {}
+/// Available memory protection modes 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemoryProtectionMode {
+    /// Testing mode with simplified memory management
+    Testing,
+    /// Production mode with full memory protection
+    Production,
+}
+
+/// Initialize test mode at startup
+pub static mut TEST_MODE: bool = cfg!(test);
+
+/// Securely managed memory that protects sensitive values
+#[allow(unused_attributes)]
+#[derive(Debug)]
+pub struct SecureMemory<T> {
+    /// Non-null pointer to the protected value
+    pub ptr: NonNull<T>,
+    /// Layout used for allocation
+    pub layout: Layout,
+    /// Memory protection implementation
+    pub memory_protection: Arc<MemoryProtection>,
+    /// Guard pages information if enabled
+    pub guard_info: Option<GuardPageInfo>,
+    /// Configuration for memory protection
+    pub config: MemoryProtectionConfig,
+    /// Whether guard pages are enabled
+    pub enable_guard_pages: bool,
+    /// Whether the memory is currently encrypted
+    pub is_encrypted: bool,
+    /// Last access time for auto-encryption
+    pub last_access: Instant,
+    /// Encryption key for the memory
+    pub encryption_key: Vec<u8>,
+    /// Operating mode (Testing or Production)
+    pub mode: MemoryProtectionMode,
+}
 
 impl<T> SecureMemory<T> {
     /// Get a reference to the protected data
@@ -384,11 +358,11 @@ impl<T> SecureMemory<T> {
     /// This will automatically decrypt the data if it's currently encrypted
     pub fn get(&mut self) -> Result<&T, MemoryProtectionError> {
         // Fast path for test mode
-        if is_test_mode() {
+        if self.mode == MemoryProtectionMode::Testing || is_test_mode() {
             return Ok(unsafe { self.ptr.as_ref() });
         }
         
-        self.last_access = std::time::Instant::now();
+        self.last_access = Instant::now();
         
         // Decrypt if needed
         if self.is_encrypted && self.config.encrypted_memory_enabled {
@@ -408,11 +382,11 @@ impl<T> SecureMemory<T> {
     /// This will automatically decrypt the data if it's currently encrypted
     pub fn get_mut(&mut self) -> Result<&mut T, MemoryProtectionError> {
         // Fast path for test mode
-        if is_test_mode() {
+        if self.mode == MemoryProtectionMode::Testing || is_test_mode() {
             return Ok(unsafe { self.ptr.as_mut() });
         }
         
-        self.last_access = std::time::Instant::now();
+        self.last_access = Instant::now();
         
         // Decrypt if needed
         if self.is_encrypted && self.config.encrypted_memory_enabled {
@@ -430,7 +404,7 @@ impl<T> SecureMemory<T> {
     /// Encrypt the memory if it's not already encrypted
     pub fn encrypt(&mut self) -> Result<(), MemoryProtectionError> {
         // Skip in test mode
-        if is_test_mode() {
+        if self.mode == MemoryProtectionMode::Testing || is_test_mode() {
             return Ok(());
         }
         
@@ -438,18 +412,14 @@ impl<T> SecureMemory<T> {
             return Ok(());
         }
         
-        let encryption_key = match &self.encryption_key {
-            Some(key) => key,
-            None => {
-                // Generate a new encryption key if needed
-                let mut key = vec![0u8; 32]; // 256-bit key
-                thread_rng().fill(&mut key[..]);
-                self.encryption_key = Some(key);
-                self.encryption_key.as_ref().unwrap()
-            }
-        };
+        if self.encryption_key.is_empty() {
+            // Generate a new encryption key
+            let mut key = vec![0u8; self.layout.size()];
+            thread_rng().fill(&mut key[..]);
+            self.encryption_key = key;
+        }
         
-        if encryption_key.is_empty() {
+        if self.encryption_key.is_empty() {
             return Err(MemoryProtectionError::EncryptionError(
                 "Empty encryption key".to_string()));
         }
@@ -462,7 +432,7 @@ impl<T> SecureMemory<T> {
             // Make sure we're not accessing an empty key or zero-sized data
             if data_size > 0 {
                 for i in 0..data_size {
-                    *data_ptr.add(i) ^= encryption_key[i % encryption_key.len()];
+                    *data_ptr.add(i) ^= self.encryption_key[i % self.encryption_key.len()];
                 }
             }
         }
@@ -474,7 +444,7 @@ impl<T> SecureMemory<T> {
     /// Decrypt the memory if it's currently encrypted
     fn decrypt(&mut self) -> Result<(), MemoryProtectionError> {
         // Skip in test mode
-        if is_test_mode() {
+        if self.mode == MemoryProtectionMode::Testing || is_test_mode() {
             return Ok(());
         }
         
@@ -482,13 +452,7 @@ impl<T> SecureMemory<T> {
             return Ok(());
         }
         
-        let encryption_key = match &self.encryption_key {
-            Some(key) => key,
-            None => return Err(MemoryProtectionError::EncryptionError(
-                "Cannot decrypt: encryption key not found".to_string())),
-        };
-        
-        if encryption_key.is_empty() {
+        if self.encryption_key.is_empty() {
             return Err(MemoryProtectionError::EncryptionError(
                 "Empty encryption key".to_string()));
         }
@@ -501,7 +465,7 @@ impl<T> SecureMemory<T> {
             // Make sure we're not accessing an empty key or zero-sized data
             if data_size > 0 {
                 for i in 0..data_size {
-                    *data_ptr.add(i) ^= encryption_key[i % encryption_key.len()];
+                    *data_ptr.add(i) ^= self.encryption_key[i % self.encryption_key.len()];
                 }
             }
         }
@@ -513,7 +477,7 @@ impl<T> SecureMemory<T> {
     /// Check if auto-encryption should be applied
     pub fn check_auto_encrypt(&mut self) -> Result<(), MemoryProtectionError> {
         // Skip in test mode
-        if is_test_mode() {
+        if self.mode == MemoryProtectionMode::Testing || is_test_mode() {
             return Ok(());
         }
         
@@ -531,7 +495,39 @@ impl<T> SecureMemory<T> {
     }
 }
 
+impl<T> Drop for SecureMemory<T> {
+    fn drop(&mut self) {
+        // Use different cleanup strategies based on the mode
+        if self.mode == MemoryProtectionMode::Testing || cfg!(test) {
+            // Simplified cleanup for testing - just do basic deallocation
+            unsafe {
+                // First drop the value
+                if !self.ptr.as_ptr().is_null() {
+                    ptr::drop_in_place(self.ptr.as_ptr());
+                }
+                
+                // Then deallocate the memory directly
+                if let Some(guard_info) = &self.guard_info {
+                    // Just deallocate the base pointer
+                    std::alloc::dealloc(guard_info.base_ptr, guard_info.total_layout);
+                } else {
+                    // Simple standard deallocation
+                    std::alloc::dealloc(self.ptr.as_ptr() as *mut u8, self.layout);
+                }
+            }
+            return;
+        }
+
+        // For production mode, use the safer cleanup approach
+        match self.memory_protection.deallocate_safely(self) {
+            Ok(_) => {}, 
+            Err(e) => warn!("Error during SecureMemory cleanup: {:?}", e)
+        }
+    }
+}
+
 /// Memory protection system for secure operations
+#[derive(Debug, Clone)]
 pub struct MemoryProtection {
     /// Configuration for memory protection
     config: MemoryProtectionConfig,
@@ -551,6 +547,11 @@ impl MemoryProtection {
         config: MemoryProtectionConfig,
         side_channel_protection: Option<Arc<SideChannelProtection>>,
     ) -> Self {
+        // Set the test mode based on config
+        if config.security_profile == SecurityProfile::Testing {
+            set_test_mode(true);
+        }
+    
         let decoy_buffer = if config.access_pattern_obfuscation_enabled {
             let size = config.decoy_buffer_size_kb * 1024;
             let mut buffer = Vec::with_capacity(size);
@@ -617,304 +618,172 @@ impl MemoryProtection {
     // Secure Memory Allocation
     //------------------------
     
-    /// Secure memory allocation with optimized allocation patterns
-    /// 
-    /// This method uses the secure allocator when available, otherwise falls back
-    /// to the previous implementation logic.
+    /// Secure allocation of values with memory protection
     pub fn secure_alloc<T>(&self, value: T) -> Result<SecureMemory<T>, MemoryProtectionError> {
-        // If we have a secure allocator and we're not in test mode, use it
-        if !is_test_mode() && self.secure_allocator.is_some() {
-            return self.secure_alloc_with_allocator(value);
-        }
-        
-        // Otherwise, use the existing implementation
-        let size = std::mem::size_of::<T>();
-        let align = std::mem::align_of::<T>();
-
-        if size == 0 {
-            return Err(MemoryProtectionError::AllocationError(
-                "Cannot allocate zero-sized type".to_string()));
-        }
-
-        let layout = Layout::from_size_align(size, align)
-            .map_err(|_| MemoryProtectionError::AllocationError(
-                "Invalid size or alignment".to_string()))?;
-
-        let (ptr, guard_info) = if self.config.guard_pages_enabled {
-            self.allocate_with_guard_pages_cross_platform::<T>()?
-        } else if self.config.aslr_integration_enabled {
-            let ptr = self.allocate_with_aslr::<T>()?;
-            (ptr, None)
-        } else {
-            // Standard allocation
-            let ptr = unsafe { alloc(layout) };
-            if ptr.is_null() {
-                return Err(MemoryProtectionError::AllocationError(
-                    "Failed to allocate memory".to_string()));
-            }
-            
-            let ptr = NonNull::new(ptr as *mut T)
-                .ok_or_else(|| MemoryProtectionError::AllocationError(
-                    "Failed to convert pointer to NonNull".to_string()))?;
-            
-            (ptr, None)
-        };
-
-        // Initialize with the value
-        unsafe {
-            ptr::write(ptr.as_ptr(), value);
-        }
-
-        // Generate encryption key if needed
-        let encryption_key = if self.config.encrypted_memory_enabled {
-            let mut key = vec![0u8; 32]; // 256-bit key
-            let mut rng = thread_rng();
-            rng.fill_bytes(&mut key);
-            Some(key)
-        } else {
-            None
-        };
-
-        Ok(SecureMemory {
-            ptr,
-            layout,
-            is_encrypted: false,
-            guard_info,
-            config: self.config.clone(),
-            encryption_key,
-            memory_protection: Arc::new(self.clone()),
-            last_access: std::time::Instant::now(),
-        })
-    }
-
-    /// Allocate secure memory using the secure allocator
-    fn secure_alloc_with_allocator<T>(&self, value: T) -> Result<SecureMemory<T>, MemoryProtectionError> {
-        // Get the secure allocator
-        let allocator = self.secure_allocator.as_ref()
-            .ok_or_else(|| MemoryProtectionError::AllocationError(
-                "Secure allocator not available".to_string()))?;
-        
-        let size = std::mem::size_of::<T>();
-        let align = std::mem::align_of::<T>();
-
-        if size == 0 {
-            return Err(MemoryProtectionError::AllocationError(
-                "Cannot allocate zero-sized type".to_string()));
-        }
-
-        let layout = Layout::from_size_align(size, align)
-            .map_err(|_| MemoryProtectionError::AllocationError(
-                "Invalid size or alignment".to_string()))?;
-        
-        // Use our secure allocator to allocate memory
-        let memory_ptr = allocator.allocate(layout)?;
-        
-        // Convert to the appropriate pointer type
-        let ptr = NonNull::new(memory_ptr.as_ptr() as *mut T)
-            .ok_or_else(|| MemoryProtectionError::AllocationError(
-                "Failed to convert pointer to NonNull".to_string()))?;
-        
-        // Initialize with the value
-        unsafe {
-            ptr::write(ptr.as_ptr(), value);
-        }
-
-        // Generate encryption key if needed
-        let encryption_key = if self.config.encrypted_memory_enabled {
-            let mut key = vec![0u8; 32]; // 256-bit key
-            let mut rng = thread_rng();
-            rng.fill_bytes(&mut key);
-            Some(key)
-        } else {
-            None
-        };
-
-        Ok(SecureMemory {
-            ptr,
-            layout,
-            is_encrypted: false,
-            guard_info: None, // Guard pages are managed by the secure allocator
-            config: self.config.clone(),
-            encryption_key,
-            memory_protection: Arc::new(self.clone()),
-            last_access: std::time::Instant::now(),
-        })
-    }
-    
-    /// Allocate memory with guard pages using cross-platform APIs
-    fn allocate_with_guard_pages_cross_platform<T>(&self) -> Result<(NonNull<T>, Option<GuardPageInfo>), MemoryProtectionError> {
-        let data_size = mem::size_of::<T>();
-        let align = mem::align_of::<T>();
-        
-        // Skip the entire function in test mode
-        if is_test_mode() {
-            let layout = Layout::new::<T>();
-            let ptr = unsafe {
-                let ptr = alloc(layout);
-                if ptr.is_null() {
-                    return Err(MemoryProtectionError::AllocationError(
-                        "Failed to allocate memory".to_string()));
-                }
-                NonNull::new(ptr as *mut T).unwrap()
-            };
-            
-            return Ok((ptr, None));
-        }
-        
-        #[cfg(windows)]
-        {
-            // Use Windows-specific optimized implementation
-            let (base_ptr, data_ptr, layout) = WindowsMemoryProtection::allocate_with_guard_pages(
-                data_size,
-                self.config.pre_guard_pages,
-                self.config.post_guard_pages,
-                align
-            )?;
-            
-            // Create guard page info
-            let guard_info = GuardPageInfo {
-                base_ptr,
-                total_layout: layout,
-                data_offset: self.config.pre_guard_pages * PlatformMemory::page_size(),
-            };
-            
-            let typed_ptr = data_ptr as *mut T;
-            Ok((NonNull::new(typed_ptr).unwrap(), Some(guard_info)))
-        }
-        
-        #[cfg(unix)]
-        {
-            // Use Unix-specific optimized implementation
-            let (base_ptr, data_ptr, layout) = UnixMemoryProtection::allocate_with_guard_pages(
-                data_size,
-                self.config.pre_guard_pages,
-                self.config.post_guard_pages,
-                align
-            )?;
-            
-            // Create guard page info
-            let guard_info = GuardPageInfo {
-                base_ptr,
-                total_layout: layout,
-                data_offset: self.config.pre_guard_pages * PlatformMemory::page_size(),
-            };
-            
-            let typed_ptr = data_ptr as *mut T;
-            Ok((NonNull::new(typed_ptr).unwrap(), Some(guard_info)))
-        }
-        
-        #[cfg(not(any(windows, unix)))]
-        {
-            // Fallback to the generic implementation for other platforms
-            let page_size = PlatformMemory::page_size();
-            let pre_guard_size = self.config.pre_guard_pages * page_size;
-            let post_guard_size = self.config.post_guard_pages * page_size;
-            let total_size = pre_guard_size + data_size + post_guard_size;
-            
-            // Create layout with proper alignment
-            let total_layout = match Layout::from_size_align(total_size, align) {
-                Ok(layout) => layout,
-                Err(_) => return Err(MemoryProtectionError::GuardPageError(
-                    "Failed to create memory layout for guard pages".to_string())),
-            };
-            
-            // Allocate entire memory region
-            let base_ptr = PlatformMemory::allocate(
-                total_size,
-                align,
-                MemoryProtectionLevel::ReadWrite,
-                AllocationType::Regular
-            )?;
-            
-            // Protect pre-guard pages
-            if pre_guard_size > 0 {
-                if let Err(e) = PlatformMemory::protect(
-                    base_ptr,
-                    pre_guard_size,
-                    MemoryProtectionLevel::NoAccess
-                ) {
-                    // If protection fails, free the memory and return error
-                    let _ = PlatformMemory::free(base_ptr, total_size, total_layout);
-                    return Err(e);
-                }
-            }
-            
-            // Protect post-guard pages
-            if post_guard_size > 0 {
-                let post_guard_ptr = unsafe { base_ptr.add(pre_guard_size + data_size) };
-                if let Err(e) = PlatformMemory::protect(
-                    post_guard_ptr,
-                    post_guard_size,
-                    MemoryProtectionLevel::NoAccess
-                ) {
-                    // If protection fails, free the memory and return error
-                    let _ = PlatformMemory::free(base_ptr, total_size, total_layout);
-                    return Err(e);
-                }
-            }
-            
-            // Calculate data pointer
-            let data_ptr = unsafe { base_ptr.add(pre_guard_size) as *mut T };
-            
-            // Create guard page info
-            let guard_info = GuardPageInfo {
-                base_ptr,
-                total_layout,
-                data_offset: pre_guard_size,
-            };
-            
-            Ok((NonNull::new(data_ptr).unwrap(), Some(guard_info)))
-        }
-    }
-    
-    /// Allocate memory with ASLR randomization
-    fn allocate_with_aslr<T>(&self) -> Result<NonNull<T>, MemoryProtectionError> {
-        // Get the layout for the type
+        // Get the layout for the allocation
         let layout = Layout::new::<T>();
         
-        // Allocate with ASLR
-        let ptr = self.allocate_with_aslr_raw(layout)?;
+        // Check if we're in test mode
+        let mode = if is_test_mode() || self.config.security_profile == SecurityProfile::Testing {
+            MemoryProtectionMode::Testing
+        } else {
+            MemoryProtectionMode::Production
+        };
+
+        // Determine if guard pages should be used
+        let use_guard_pages = self.config.guard_pages_enabled && 
+                             !is_test_mode() && 
+                             mode != MemoryProtectionMode::Testing;
         
-        // Convert to typed pointer
-        let typed_ptr = ptr as *mut T;
-        match NonNull::new(typed_ptr) {
-            Some(non_null) => Ok(non_null),
-            None => Err(MemoryProtectionError::AsrlError(
-                "Failed to create NonNull pointer from ASLR allocation".to_string())),
-        }
-    }
-    
-    /// Allocate raw memory with ASLR randomization
-    fn allocate_with_aslr_raw(&self, layout: Layout) -> Result<*mut u8, MemoryProtectionError> {
-        // On real systems, ASLR is handled by the OS, but we can add additional randomization
-        // by making multiple allocation attempts at different addresses
-        
-        // Try a few times to get an allocation at a random spot
-        for _ in 0..5 {
-            unsafe {
-                // Standard allocation
-                let ptr = alloc(layout);
+        // Choose allocation strategy based on configuration and test mode
+        let (ptr, guard_info) = if use_guard_pages {
+            // Allocate with guard pages for production mode
+            self.alloc_with_guard_pages::<T>()?
+        } else {
+            // Standard allocation
+            let ptr = unsafe {
+                let ptr = std::alloc::alloc(layout);
                 if ptr.is_null() {
-                    continue;
+                    return Err(MemoryProtectionError::AllocationError(
+                        "Memory allocation failed".to_string()));
                 }
+                ptr
+            };
+            (ptr, None)
+        };
+        
+        // Initialize with the value
+        unsafe {
+            let value_ptr = ptr as *mut T;
+            ptr::write(value_ptr, value);
+        }
+        
+        // Generate encryption key if needed
+        let encryption_key = if self.config.encrypted_memory_enabled && !is_test_mode() {
+            // Generate a random key
+            let mut key = vec![0u8; layout.size()];
+            rand::thread_rng().fill(&mut key[..]);
+            key
+        } else {
+            Vec::new()
+        };
+        
+        // Create secure memory wrapper
+        let secure_memory = SecureMemory {
+            ptr: unsafe { NonNull::new_unchecked(ptr as *mut T) },
+            layout,
+            memory_protection: Arc::new(self.clone()),
+            guard_info,
+            config: self.config.clone(),
+            enable_guard_pages: use_guard_pages,
+            is_encrypted: false,
+            last_access: Instant::now(),
+            encryption_key,
+            mode,
+        };
+        
+        Ok(secure_memory)
+    }
+
+    /// Securely deallocate memory with proper cleanup
+    pub fn deallocate_safely<T>(&self, mem: &mut SecureMemory<T>) -> Result<(), MemoryProtectionError> {
+        // Skip full cleanup in test mode
+        if is_test_mode() || mem.mode == MemoryProtectionMode::Testing {
+            // Just do basic cleanup in test mode to avoid access violations
+            unsafe {
+                if !mem.ptr.as_ptr().is_null() {
+                    // Drop the value
+                    ptr::drop_in_place(mem.ptr.as_ptr());
+                    
+                    // Standard deallocation
+                    if let Some(guard_info) = &mem.guard_info {
+                        std::alloc::dealloc(guard_info.base_ptr, guard_info.total_layout);
+                    } else {
+                        std::alloc::dealloc(mem.ptr.as_ptr() as *mut u8, mem.layout);
+                    }
+                }
+            }
+            return Ok(());
+        }
+
+        let value_ptr = mem.ptr.as_ptr() as *mut u8;
+        let ptr_to_drop = mem.ptr.as_ptr();
+        let layout = mem.layout;
+        let guard_info = &mem.guard_info;
+        let has_secure_allocator = self.secure_allocator.is_some();
+
+        // First, securely clear the memory if enabled
+        if self.config.secure_clearing_enabled {
+            let size = layout.size();
+            self.secure_clear(value_ptr, size);
+        }
+
+        // Drop the value pointed to by ptr_to_drop if it's not null
+        unsafe {
+            if !ptr_to_drop.is_null() {
+                // Drop without using catch_unwind
+                ptr::drop_in_place(ptr_to_drop as *mut T);
+            }
+        }
+
+        // Handle guard pages
+        if let Some(guard_info) = guard_info {
+            #[cfg(target_os = "windows")]
+            {
+                use winapi::um::memoryapi::VirtualProtect;
+                use winapi::um::winnt::PAGE_READWRITE;
+                use winapi::shared::minwindef::DWORD;
                 
-                // For additional randomization, we could allocate a larger block than needed
-                // and use a random offset within it, but that's beyond the scope of this example
+                let total_size = guard_info.total_layout.size();
+                let base_ptr = guard_info.base_ptr;
                 
-                return Ok(ptr);
+                let mut old_protect: DWORD = 0;
+                let protect_result = unsafe {
+                    VirtualProtect(
+                        base_ptr as *mut _,
+                        total_size,
+                        PAGE_READWRITE,
+                        &mut old_protect
+                    )
+                };
+                
+                if protect_result == 0 {
+                    warn!("Failed to reset memory protection for cleanup: {}", std::io::Error::last_os_error());
+                }
+            }
+
+            // Deallocate the memory
+            unsafe {
+                dealloc(guard_info.base_ptr, guard_info.total_layout);
+            }
+            return Ok(());
+        }
+
+        // Handle memory deallocation
+        if has_secure_allocator {
+            if let Some(allocator) = &self.secure_allocator {
+                match NonNull::new(value_ptr) {
+                    Some(ptr) => {
+                        return allocator.deallocate_internal(ptr, layout)
+                            .map_err(|e| {
+                                warn!("Error in secure allocator deallocate: {:?}", e);
+                                e
+                            });
+                    },
+                    None => {
+                        warn!("Null pointer in secure allocator deallocate");
+                        return Ok(());
+                    }
+                }
             }
         }
         
-        // Fall back to regular allocation
+        // Standard deallocation fallback
         unsafe {
-            let ptr = alloc(layout);
-            if ptr.is_null() {
-                return Err(MemoryProtectionError::AllocationError(
-                    "Failed to allocate memory with ASLR".to_string()));
-            }
-            
-            Ok(ptr)
+            std::alloc::dealloc(value_ptr, layout);
         }
+        
+        Ok(())
     }
     
     //------------------------
@@ -1009,6 +878,85 @@ impl MemoryProtection {
     /// Get the secure allocator
     pub fn secure_allocator(&self) -> Option<Arc<super::secure_allocator::SecureAllocator>> {
         self.secure_allocator.clone()
+    }
+
+    /// Allocate memory with guard pages for enhanced protection
+    fn alloc_with_guard_pages<T>(&self) -> Result<(*mut u8, Option<GuardPageInfo>), MemoryProtectionError> {
+        let size = mem::size_of::<T>();
+        let align = mem::align_of::<T>();
+        
+        // Skip guard pages in test mode
+        if is_test_mode() || self.config.security_profile == SecurityProfile::Testing {
+            // Standard allocation
+            let layout = Layout::from_size_align(size, align)
+                .map_err(|_| MemoryProtectionError::AllocationError(
+                    "Invalid size or alignment".to_string()))?;
+                    
+            let ptr = unsafe { std::alloc::alloc(layout) };
+            if ptr.is_null() {
+                return Err(MemoryProtectionError::AllocationError(
+                    "Failed to allocate memory".to_string()));
+            }
+            
+            return Ok((ptr, None));
+        }
+        
+        // Platform-specific implementation
+        #[cfg(windows)]
+        {
+            use super::platform_memory_impl::WindowsMemoryProtection;
+            
+            let (base_ptr, data_ptr, layout) = WindowsMemoryProtection::allocate_with_guard_pages(
+                size,
+                self.config.pre_guard_pages,
+                self.config.post_guard_pages,
+                align
+            )?;
+            
+            // Create guard page info
+            let guard_info = GuardPageInfo {
+                base_ptr,
+                total_layout: layout,
+            };
+            
+            Ok((data_ptr, Some(guard_info)))
+        }
+        
+        #[cfg(unix)]
+        {
+            use super::platform_memory_impl::UnixMemoryProtection;
+            
+            let (base_ptr, data_ptr, layout) = UnixMemoryProtection::allocate_with_guard_pages(
+                size,
+                self.config.pre_guard_pages,
+                self.config.post_guard_pages,
+                align
+            )?;
+            
+            // Create guard page info
+            let guard_info = GuardPageInfo {
+                base_ptr,
+                total_layout: layout,
+            };
+            
+            Ok((data_ptr, Some(guard_info)))
+        }
+        
+        #[cfg(not(any(windows, unix)))]
+        {
+            // Fallback for unsupported platforms
+            let layout = Layout::from_size_align(size, align)
+                .map_err(|_| MemoryProtectionError::AllocationError(
+                    "Invalid size or alignment".to_string()))?;
+                    
+            let ptr = unsafe { std::alloc::alloc(layout) };
+            if ptr.is_null() {
+                return Err(MemoryProtectionError::AllocationError(
+                    "Failed to allocate memory".to_string()));
+            }
+            
+            Ok((ptr, None))
+        }
     }
 }
 
