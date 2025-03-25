@@ -186,6 +186,26 @@ While this release provides a comprehensive profiling system, future enhancement
 
 The Critical Path Profiling and Benchmarking System represents a significant enhancement to Obscura's development infrastructure, providing powerful tools for identifying performance bottlenecks, validating optimization efforts, and ensuring consistent performance across critical operations. This system will enable data-driven optimization decisions and help maintain Obscura's high-performance characteristics as the codebase continues to evolve.
 
+### Library Naming and Build System Improvements
+
+This release also includes an important fix to resolve a filename collision issue in the build system:
+
+**Library Name Change:**
+- Changed the library name from "obscura" to "obscura_lib" to prevent output filename collisions
+- Updated all binary files to properly import from the renamed library
+- Improved overall build stability with consistent naming conventions
+- Ensured backward compatibility for existing module structures
+- Fixed compilation errors related to library name references
+
+**Technical Implementation:**
+- Modified Cargo.toml to use a distinct library name while maintaining package name
+- Updated import statements across the codebase for compatibility
+- Implemented comprehensive testing to verify build stability
+- Created consistent naming patterns across all module imports
+- Fixed numerous import statements to respect the new library name
+
+This fix helps ensure a stable and reliable build process, particularly in environments where multiple output artifacts with the same name could cause conflicts.
+
 ## [0.7.19] - 2025-05-30
 
 ### Hardware Acceleration for Cryptographic Operations

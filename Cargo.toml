@@ -12,7 +12,7 @@ license = "All Rights Reserved"
 rustc_private = true
 
 [lib]
-name = "obscura"
+name = "obscura_lib"
 crate-type = ["rlib", "cdylib"]
 
 [[bin]]
@@ -23,7 +23,7 @@ path = "src/main.rs"
 name = "profiler"
 path = "src/bin/profiler.rs"
 
-# Add unstable features
+# Add features
 [features]
 default = ["parallel"]
 test-utils = []

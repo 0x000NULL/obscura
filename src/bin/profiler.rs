@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
-use obscura::utils::profiler::{set_profiling_level, ProfilingLevel, generate_report, GLOBAL_PROFILER};
-use obscura::utils::profiler_benchmarks::{
+use obscura_lib::utils::profiler::{set_profiling_level, ProfilingLevel, generate_report, GLOBAL_PROFILER};
+use obscura_lib::utils::profiler_benchmarks::{
     run_all_critical_path_benchmarks, run_high_priority_benchmarks, generate_benchmark_report
 };
 use std::str::FromStr;

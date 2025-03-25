@@ -1,4 +1,6 @@
-use obscura::crypto::privacy::{PrivacyPrimitive, TransactionObfuscationPrimitive};
+use obscura_lib::crypto::privacy::{PrivacyPrimitive, TransactionObfuscationPrimitive};
+use obscura_lib::crypto::pedersen::PedersenCommitment;
+use obscura_lib::crypto::bulletproofs::RangeProof;
 use std::sync::Arc;
 
 #[test]

@@ -155,5 +155,4 @@
 - [x] Fix insecure keypair encryption in mod.rs
 - [x] Remove debug print statements with sensitive information
 - [x] Address constant-time implementation issues
-- [ ] Standardize error handling
 - [x] Expand test coverage for critical functions

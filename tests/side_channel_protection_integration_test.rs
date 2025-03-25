@@ -1,6 +1,6 @@
-use obscura::crypto::side_channel_protection::{SideChannelProtection, SideChannelProtectionConfig};
-use obscura::crypto::jubjub::{self, JubjubPoint, JubjubScalar};
-use obscura::crypto::pedersen::PedersenCommitment;
+use obscura_lib::crypto::side_channel_protection::{SideChannelProtection, SideChannelProtectionConfig};
+use obscura_lib::crypto::jubjub::{JubjubPoint, JubjubScalar, generate_keypair};
+use obscura_lib::crypto::pedersen::PedersenCommitment;
 use rand::thread_rng;
 use ark_ff::PrimeField;
 use std::time::Instant;
@@ -12,7 +12,7 @@ fn test_side_channel_protection_integration() {
     let scp = SideChannelProtection::default();
     
     // Generate a keypair and verify it's valid
-    let keypair = jubjub::generate_keypair();
+    let keypair = generate_keypair();
     assert!(keypair.public == <ark_ed_on_bls12_381::EdwardsProjective as ark_ec::Group>::generator() * keypair.secret);
     
     // Generate random points and scalars

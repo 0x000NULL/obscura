@@ -1,10 +1,10 @@
-use obscura::wallet::Wallet;
-use obscura::crypto::jubjub;
-use obscura::Node;
-use obscura::blockchain::UTXOSet;
-use obscura::blockchain::mempool::Mempool;
-use obscura::wallet::integration::WalletIntegration;
-use obscura::networking::NetworkConfig;
+use obscura_lib::wallet::Wallet;
+use obscura_lib::crypto::jubjub;
+use obscura_lib::networking::Node;
+use obscura_lib::blockchain::UTXOSet;
+use obscura_lib::blockchain::mempool::Mempool;
+use obscura_lib::wallet::integration::WalletIntegration;
+use obscura_lib::networking::NetworkConfig;
 use std::sync::{Arc, Mutex, RwLock};
 
 fn main() {

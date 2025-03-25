@@ -3,13 +3,16 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 use ark_ec::{CurveGroup, Group};
 use ark_ff::UniformRand;
+use std::time::{Duration, Instant};
+use ark_std::rand::Rng;
 
-use obscura::crypto::power_analysis_protection::PowerAnalysisProtection;
-use obscura::crypto::side_channel_protection::SideChannelProtection;
-use obscura::crypto::jubjub::{JubjubPoint, JubjubScalar, generate_keypair};
-use obscura::crypto::{
-    PowerAnalysisConfig, 
-    SideChannelProtectionConfig
+use obscura_lib::crypto::power_analysis_protection::PowerAnalysisProtection;
+use obscura_lib::crypto::side_channel_protection::SideChannelProtection;
+use obscura_lib::crypto::jubjub::{JubjubPoint, JubjubScalar, generate_keypair};
+use obscura_lib::crypto::{
+    memory_protection::{MemoryProtection, MemoryProtectionConfig},
+    side_channel_protection::SideChannelProtectionConfig,
+    power_analysis_protection::PowerAnalysisConfig,
 };
 
 // Helper function to compare points in affine coordinates

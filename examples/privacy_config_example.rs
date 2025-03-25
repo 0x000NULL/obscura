@@ -1,12 +1,11 @@
 // Example of using the unified privacy configuration system
 
 use std::sync::Arc;
-use obscura::config::presets::{PrivacyLevel, PrivacyPreset};
-use obscura::config::privacy_registry::{
+use obscura_lib::config::presets::{PrivacyLevel, PrivacyPreset};
+use obscura_lib::config::privacy_registry::{
     PrivacySettingsRegistry, 
     ConfigUpdateListener, 
-    ConfigChangeEvent, 
-    ComponentType
+    ConfigChangeEvent
 };
 
 // A simple component that listens for privacy configuration changes

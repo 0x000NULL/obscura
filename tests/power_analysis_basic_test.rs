@@ -1,9 +1,10 @@
-use obscura::crypto::power_analysis_protection::{PowerAnalysisProtection, PowerAnalysisConfig};
-use obscura::crypto::jubjub::{self, JubjubPoint, JubjubScalar};
+use obscura_lib::crypto::power_analysis_protection::{PowerAnalysisProtection, PowerAnalysisConfig};
+use obscura_lib::crypto::jubjub::{self, JubjubPoint, JubjubScalar};
 use ark_std::UniformRand;
 use ark_ec::Group;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
+use std::time::{Duration, Instant};
 
 #[test]
 fn test_key_generation_with_power_protection() {

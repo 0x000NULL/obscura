@@ -1,5 +1,5 @@
-use obscura::{
-    blockchain::{Transaction, TransactionOutput},
+use obscura_lib::{
+    blockchain::{Transaction, TransactionOutput, Block},
     config::presets::PrivacyLevel,
     crypto::{
         bulletproofs::RangeProof,
@@ -16,9 +16,12 @@ use obscura::{
             DandelionRouter,
             CircuitRouter,
             TimingObfuscator,
+            FingerprintingProtection,
+            TorConnection,
         },
-        privacy_config_integration::PrivacySettingsRegistry,
+        privacy_config_integration::{PrivacySettingsRegistry, PrivacyLevel as NetworkPrivacyLevel},
     },
+    wallet::{Wallet, jubjub_point_to_bytes},
 };
 
 use std::sync::Arc;
@@ -35,14 +38,14 @@ struct PrivacyWorkflowTest {
 }
 
 impl PrivacyWorkflowTest {
-    fn new(privacy_level: obscura::PrivacyLevel) -> Self {
+    fn new(privacy_level: obscura_lib::PrivacyLevel) -> Self {
         let privacy_config = Arc::new(PrivacySettingsRegistry::new());
-        // Convert from obscura::PrivacyLevel to the type expected by set_privacy_level
+        // Convert from obscura_lib::PrivacyLevel to the type expected by set_privacy_level
         let config_level = match privacy_level {
-            obscura::PrivacyLevel::Standard => obscura::networking::privacy_config_integration::PrivacyLevel::Standard,
-            obscura::PrivacyLevel::Medium => obscura::networking::privacy_config_integration::PrivacyLevel::Medium,
-            obscura::PrivacyLevel::High => obscura::networking::privacy_config_integration::PrivacyLevel::High,
-            obscura::PrivacyLevel::Custom => obscura::networking::privacy_config_integration::PrivacyLevel::Custom,
+            obscura_lib::PrivacyLevel::Standard => obscura_lib::networking::privacy_config_integration::PrivacyLevel::Standard,
+            obscura_lib::PrivacyLevel::Medium => obscura_lib::networking::privacy_config_integration::PrivacyLevel::Medium,
+            obscura_lib::PrivacyLevel::High => obscura_lib::networking::privacy_config_integration::PrivacyLevel::High,
+            obscura_lib::PrivacyLevel::Custom => obscura_lib::networking::privacy_config_integration::PrivacyLevel::Custom,
         };
         privacy_config.set_privacy_level(config_level);
         
@@ -85,7 +88,7 @@ impl PrivacyWorkflowTest {
         tx.apply_receiver_privacy(receiver_privacy);
         
         // Create Pedersen commitment for the amount
-        let blinding_factor = obscura::crypto::pedersen::generate_random_jubjub_scalar();
+        let blinding_factor = obscura_lib::crypto::pedersen::generate_random_jubjub_scalar();
         let commitment = PedersenCommitment::commit(amount, blinding_factor);
         tx.set_amount_commitment(0, commitment.to_bytes()).unwrap();
         
@@ -117,7 +120,7 @@ mod tests {
     
     #[test]
     fn test_basic_privacy_workflow() {
-        let test = PrivacyWorkflowTest::new(obscura::PrivacyLevel::Medium);
+        let test = PrivacyWorkflowTest::new(obscura_lib::PrivacyLevel::Medium);
         
         // Create a private transaction
         let tx = test.create_private_transaction(
@@ -139,7 +142,7 @@ mod tests {
     
     #[test]
     fn test_high_privacy_workflow() {
-        let test = PrivacyWorkflowTest::new(obscura::PrivacyLevel::High);
+        let test = PrivacyWorkflowTest::new(obscura_lib::PrivacyLevel::High);
         
         // Create transaction components
         let sender_privacy = SenderPrivacy::new();
@@ -164,7 +167,7 @@ mod tests {
     
     #[test]
     fn test_view_key_functionality() {
-        let test = PrivacyWorkflowTest::new(obscura::PrivacyLevel::Medium);
+        let test = PrivacyWorkflowTest::new(obscura_lib::PrivacyLevel::Medium);
         
         // Create a private transaction
         let tx = test.create_private_transaction(
@@ -188,11 +191,11 @@ mod tests {
     
     #[test]
     fn test_stealth_address_workflow() {
-        let test = PrivacyWorkflowTest::new(obscura::PrivacyLevel::High);
+        let test = PrivacyWorkflowTest::new(obscura_lib::PrivacyLevel::High);
         
         // Create keypair for stealth address
         let keypair = JubjubKeypair::generate();
-        let stealth_address = obscura::wallet::jubjub_point_to_bytes(&keypair.public);
+        let stealth_address = jubjub_point_to_bytes(&keypair.public);
         
         // Create receiver privacy
         let receiver_privacy = ReceiverPrivacy::new();
@@ -224,11 +227,11 @@ mod tests {
     
     #[test]
     fn test_complete_privacy_pipeline() {
-        let test = PrivacyWorkflowTest::new(obscura::PrivacyLevel::High);
+        let test = PrivacyWorkflowTest::new(obscura_lib::PrivacyLevel::High);
         
         // Create keypair for stealth address
         let keypair = JubjubKeypair::generate();
-        let stealth_address = obscura::wallet::jubjub_point_to_bytes(&keypair.public);
+        let stealth_address = jubjub_point_to_bytes(&keypair.public);
         
         // Create privacy components
         let sender_privacy = SenderPrivacy::new();
@@ -284,11 +287,11 @@ mod tests {
     
     #[test]
     fn test_end_to_end_privacy_workflow() {
-        let test = PrivacyWorkflowTest::new(obscura::PrivacyLevel::High);
+        let test = PrivacyWorkflowTest::new(obscura_lib::PrivacyLevel::High);
         
         // Create keypair for stealth address
         let keypair = JubjubKeypair::generate();
-        let stealth_address = obscura::wallet::jubjub_point_to_bytes(&keypair.public);
+        let stealth_address = jubjub_point_to_bytes(&keypair.public);
         
         // Create privacy components
         let sender_privacy = SenderPrivacy::new();

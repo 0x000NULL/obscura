@@ -1,20 +1,20 @@
-use obscura::crypto::{
+use obscura_lib::crypto::{
     JubjubKeypair,
     jubjub::{JubjubPoint, JubjubScalar, JubjubPointExt, JubjubScalarExt}
 };
-use obscura::crypto::zk_key_management::{
+use obscura_lib::crypto::zk_key_management::{
     DkgManager, DkgConfig, Participant, DkgState, DkgResult, Share, DkgTimeoutConfig
 };
-use obscura::crypto::threshold_signatures::{
+use obscura_lib::crypto::threshold_signatures::{
     ThresholdSignatureManager
 };
-use obscura::crypto::verifiable_secret_sharing::{
+use obscura_lib::crypto::verifiable_secret_sharing::{
     VssManager, VssConfig
 };
-use obscura::crypto::secure_mpc::{
+use obscura_lib::crypto::secure_mpc::{
     MpcManager, MpcComputationType
 };
-use obscura::crypto::homomorphic_derivation::{
+use obscura_lib::crypto::homomorphic_derivation::{
     HomomorphicKeyDerivation, DerivationPath
 };
 use rand::rngs::OsRng;

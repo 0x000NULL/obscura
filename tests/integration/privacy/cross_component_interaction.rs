@@ -1,4 +1,4 @@
-use obscura::{
+use obscura_lib::{
     blockchain::{Transaction, TransactionOutput},
     config::presets::PrivacyLevel,
     crypto::{
@@ -39,14 +39,14 @@ struct CrossComponentTest {
 }
 
 impl CrossComponentTest {
-    fn new(privacy_level: obscura::PrivacyLevel, use_tor: bool) -> Self {
+    fn new(privacy_level: obscura_lib::PrivacyLevel, use_tor: bool) -> Self {
         let privacy_config = Arc::new(PrivacySettingsRegistry::new());
-        // Convert from obscura::PrivacyLevel to the type expected by set_privacy_level
+        // Convert from obscura_lib::PrivacyLevel to the type expected by set_privacy_level
         let config_level = match privacy_level {
-            obscura::PrivacyLevel::Standard => obscura::networking::privacy_config_integration::PrivacyLevel::Standard,
-            obscura::PrivacyLevel::Medium => obscura::networking::privacy_config_integration::PrivacyLevel::Medium,
-            obscura::PrivacyLevel::High => obscura::networking::privacy_config_integration::PrivacyLevel::High,
-            obscura::PrivacyLevel::Custom => obscura::networking::privacy_config_integration::PrivacyLevel::Custom,
+            obscura_lib::PrivacyLevel::Standard => obscura_lib::networking::privacy_config_integration::PrivacyLevel::Standard,
+            obscura_lib::PrivacyLevel::Medium => obscura_lib::networking::privacy_config_integration::PrivacyLevel::Medium,
+            obscura_lib::PrivacyLevel::High => obscura_lib::networking::privacy_config_integration::PrivacyLevel::High,
+            obscura_lib::PrivacyLevel::Custom => obscura_lib::networking::privacy_config_integration::PrivacyLevel::Custom,
         };
         privacy_config.set_privacy_level(config_level);
         
@@ -109,7 +109,7 @@ impl CrossComponentTest {
         tx.apply_receiver_privacy(ReceiverPrivacy::new());
         
         // Create Pedersen commitment for the amount
-        let blinding_factor = obscura::crypto::pedersen::generate_random_jubjub_scalar();
+        let blinding_factor = obscura_lib::crypto::pedersen::generate_random_jubjub_scalar();
         let commitment = PedersenCommitment::commit(amount, blinding_factor);
         tx.set_amount_commitment(0, commitment.to_bytes()).unwrap();
         
@@ -161,7 +161,7 @@ mod tests {
     
     #[test]
     fn test_dandelion_with_tor() {
-        let test = CrossComponentTest::new(obscura::PrivacyLevel::High, true);
+        let test = CrossComponentTest::new(obscura_lib::PrivacyLevel::High, true);
         
         // Create a private transaction
         let tx = test.create_private_transaction(100);
@@ -181,11 +181,11 @@ mod tests {
     
     #[test]
     fn test_stealth_addressing_with_metadata_protection() {
-        let test = CrossComponentTest::new(obscura::PrivacyLevel::High, false);
+        let test = CrossComponentTest::new(obscura_lib::PrivacyLevel::High, false);
         
         // Create keypair and stealth address
         let keypair = JubjubKeypair::generate();
-        let stealth_address = obscura::wallet::jubjub_point_to_bytes(&keypair.public);
+        let stealth_address = obscura_lib::wallet::jubjub_point_to_bytes(&keypair.public);
         
         // Create a transaction
         let mut tx = test.create_private_transaction(500);
@@ -213,7 +213,7 @@ mod tests {
     
     #[test]
     fn test_view_key_with_side_channel_protection() {
-        let test = CrossComponentTest::new(obscura::PrivacyLevel::Medium, false);
+        let test = CrossComponentTest::new(obscura_lib::PrivacyLevel::Medium, false);
         
         // Create a transaction
         let mut tx = test.create_private_transaction(250);
@@ -234,7 +234,7 @@ mod tests {
     
     #[test]
     fn test_timing_obfuscation_with_circuit_routing() {
-        let test = CrossComponentTest::new(obscura::PrivacyLevel::High, false);
+        let test = CrossComponentTest::new(obscura_lib::PrivacyLevel::High, false);
         
         // Create a transaction
         let tx = test.create_private_transaction(1000);
@@ -254,7 +254,7 @@ mod tests {
     
     #[test]
     fn test_fingerprinting_protection_with_dandelion() {
-        let test = CrossComponentTest::new(obscura::PrivacyLevel::High, false);
+        let test = CrossComponentTest::new(obscura_lib::PrivacyLevel::High, false);
         
         // Create a transaction
         let tx = test.create_private_transaction(750);
@@ -274,11 +274,11 @@ mod tests {
     
     #[test]
     fn test_all_privacy_components_interaction() {
-        let test = CrossComponentTest::new(obscura::PrivacyLevel::High, true);
+        let test = CrossComponentTest::new(obscura_lib::PrivacyLevel::High, true);
         
         // Create a stealth address
         let keypair = JubjubKeypair::generate();
-        let stealth_address = obscura::wallet::jubjub_point_to_bytes(&keypair.public);
+        let stealth_address = obscura_lib::wallet::jubjub_point_to_bytes(&keypair.public);
         
         // Create a transaction
         let mut tx = test.create_private_transaction(5000);
