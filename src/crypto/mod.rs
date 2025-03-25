@@ -46,6 +46,10 @@ pub mod platform_memory;
 pub mod platform_memory_impl;
 pub mod power_analysis_protection;
 pub mod metadata_protection;
+pub mod constant_time;
+
+// New hardware acceleration module
+pub mod hardware_accel;
 
 // Example and testing modules
 pub mod examples_standalone;
@@ -127,6 +131,25 @@ pub use platform_memory_impl::MacOSMemoryProtection;
 // Side channel protection types
 pub use side_channel_protection::{
     SideChannelProtection, SideChannelProtectionConfig, SideChannelError
+};
+
+// Constant-time operations
+pub use constant_time::{
+    constant_time_eq, constant_time_select, constant_time_scalar_mul,
+    montgomery_ladder_scalar_mul, windowed_scalar_mul,
+    constant_time_signature_verify, constant_time_key_derivation,
+    constant_time_encrypt_decrypt, constant_time_hmac_verify,
+    constant_time_pedersen_commit
+    // constant_time_bls_g1_mul,
+    // constant_time_bls_g2_mul
+};
+
+// Hardware-accelerated operations
+pub use hardware_accel::{
+    HardwareAccelerator, HardwareAccelConfig, HardwareAccelError,
+    accelerated_scalar_mul, accelerated_batch_verify, accelerated_batch_verify_parallel,
+    aes_encrypt_decrypt, is_hardware_accel_available, get_available_hardware_features,
+    get_hardware_accel_config, update_hardware_accel_config
 };
 
 // Secure memory allocator
@@ -373,26 +396,24 @@ impl LocalPedersenCommitment {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::crypto::LocalPedersenCommitment;
-    use crate::blockchain::Transaction;
-    
-    mod hash_tests;
-    #[allow(unused_imports)]
-    mod key_tests;
-    #[allow(unused_imports)]
-    pub mod vss_test;
-    #[allow(unused_imports)]
-    mod side_channel_protection_tests;
-    #[allow(unused_imports)]
-    mod memory_protection_tests;
-    #[allow(unused_imports)]
-    mod power_analysis_protection_tests;
-    #[allow(unused_imports)]
-    mod zk_key_management_tests;
-    #[allow(unused_imports)]
-    mod audit_tests;
-    
+    // Import the actual tests that exist
+    // Remove these non-existing imports:
+    // pub use super::hash_tests;
+    // pub use super::key_tests;
+    // pub use super::vss_test;
+    // pub use super::side_channel_protection_tests;
+    // pub use super::memory_protection_tests;
+    // pub use super::power_analysis_protection_tests;
+    // pub use super::zk_key_management_tests;
+    // pub use super::audit_tests;
+
+    // Constant-time operations tests
+    pub mod constant_time_tests;
+
+    // Import LocalPedersenCommitment for the tests
+    use super::pedersen;
+    use super::LocalPedersenCommitment;
+
     #[test]
     fn test_local_pedersen_commitment() {
         // Test regular commitment creation

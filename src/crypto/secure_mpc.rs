@@ -1,14 +1,19 @@
-use crate::crypto::{JubjubPoint, JubjubScalar, JubjubPointExt, JubjubScalarExt};
+use crate::crypto::{JubjubPointExt, JubjubScalarExt};
 use crate::crypto::zk_key_management::{Participant, Share, DkgResult};
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
-use rand::rngs::OsRng;
+use rand::thread_rng;
+use rand::Rng;
 use rand_core::RngCore;
+use log::{debug, error, info, warn};
+use serde::{Serialize, Deserialize};
+use crate::crypto::jubjub::{JubjubScalar, JubjubPoint};
+use crate::crypto::memory_protection::MemoryProtection;
+use crate::crypto::secure_allocator::SecureAllocator;
 use sha2::{Digest, Sha256};
-use log::{debug, error, info};
 use ark_std::UniformRand;
-use crate::crypto::jubjub::generate_keypair;
+use crate::crypto::jubjub::JubjubKeypair;
 
 /// Constants for secure MPC
 const MAX_MPC_PARTICIPANTS: usize = 100;
@@ -96,7 +101,8 @@ impl MpcSessionId {
     /// Create a new random session ID
     pub fn new() -> Self {
         let mut bytes = [0u8; 32];
-        OsRng.fill_bytes(&mut bytes);
+        let mut rng = thread_rng();
+        rng.fill_bytes(&mut bytes);
         Self(bytes.to_vec())
     }
     
@@ -403,7 +409,7 @@ impl MpcSession {
         // Convert the hash to a scalar
         let mut bytes = [0u8; 32];
         bytes.copy_from_slice(&hash);
-        let scalar = JubjubScalar::from_bytes(&bytes).unwrap_or_else(|| JubjubScalar::rand(&mut OsRng));
+        let scalar = JubjubScalar::from_bytes(&bytes).unwrap_or_else(|| JubjubScalar::rand(&mut thread_rng()));
         
         // Derive a new key using the DKG share and the derivation scalar
         let derived_private_share = dkg_share.value * scalar;
@@ -452,7 +458,7 @@ impl MpcSession {
         // Convert the hash to a scalar
         let mut bytes = [0u8; 32];
         bytes.copy_from_slice(&hash);
-        let message_hash = JubjubScalar::from_bytes(&bytes).unwrap_or_else(|| JubjubScalar::rand(&mut OsRng));
+        let message_hash = JubjubScalar::from_bytes(&bytes).unwrap_or_else(|| JubjubScalar::rand(&mut thread_rng()));
         
         // Sign with our share of the private key
         let signature_share = message_hash * dkg_share.value;
@@ -494,7 +500,7 @@ impl MpcSession {
         }
         
         // Generate a random ephemeral key
-        let ephemeral_scalar = JubjubScalar::rand(&mut OsRng);
+        let ephemeral_scalar = JubjubScalar::rand(&mut thread_rng());
         let ephemeral_point = JubjubPoint::generator() * ephemeral_scalar;
         
         // Derive a shared secret
@@ -709,19 +715,19 @@ mod tests {
         
         for i in 0..participant_count {
             let id = vec![i as u8];
-            let keypair = generate_keypair();
+            let keypair = JubjubKeypair::generate();
             let participant = Participant::new(id.clone(), keypair.public, None);
             participants.push(participant);
             
             // Create a share for each participant
             let index = JubjubScalar::from((i + 1) as u64);
-            let value = JubjubScalar::rand(&mut OsRng);
+            let value = JubjubScalar::rand(&mut thread_rng());
             shares.push(Share { index, value });
         }
         
         // Create a mock DKG result
         DkgResult {
-            public_key: JubjubPoint::generator() * JubjubScalar::rand(&mut OsRng), // Random public key
+            public_key: JubjubPoint::generator() * JubjubScalar::rand(&mut thread_rng()), // Random public key
             share: Some(shares[0].clone()), // First participant's share
             participants: participants.clone(),
             verification_data: vec![JubjubPoint::generator(); threshold], // Mock verification data

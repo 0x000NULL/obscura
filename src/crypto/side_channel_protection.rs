@@ -143,47 +143,8 @@ impl SideChannelProtection {
         // Use logging instead of prints
         log::trace!("Performing constant-time scalar multiplication");
         
-        // Generate two random masks for the scalar to prevent optimization
-        let mut rng = thread_rng();
-        let random_bytes1: [u8; 32] = rng.gen();
-        let random_bytes2: [u8; 32] = rng.gen();
-        let mask1 = JubjubScalar::from_le_bytes_mod_order(&random_bytes1);
-        let mask2 = JubjubScalar::from_le_bytes_mod_order(&random_bytes2);
-        
-        // Create two masked scalars with different masks
-        let masked_scalar1 = *scalar + mask1;
-        let masked_scalar2 = *scalar + mask2;
-        
-        // Perform dummy operations to confuse optimization
-        // The dummy operations use different masks to prevent common subexpression elimination
-        let dummy_result1 = *point * masked_scalar1;
-        
-        // Force memory barrier to prevent reordering
-        std::sync::atomic::fence(std::sync::atomic::Ordering::SeqCst);
-        
-        // Additional operations to prevent optimization
-        let dummy_result2 = dummy_result1 + (*point * masked_scalar2);
-        
-        // Second memory barrier
-        std::sync::atomic::fence(std::sync::atomic::Ordering::SeqCst);
-        
-        // Store in a volatile way to prevent optimization
-        let dummy_ptr = Box::into_raw(Box::new(dummy_result2));
-        unsafe {
-            // Read value to ensure the compiler doesn't eliminate it
-            let _dummy_read = std::ptr::read_volatile(dummy_ptr);
-            // Properly deallocate the memory
-            drop(Box::from_raw(dummy_ptr));
-        }
-        
-        // Add timing jitter for additional protection
-        self.add_jitter();
-        
-        // Perform the actual scalar multiplication
-        // This is the operation that will be returned, but the compiler
-        // can't optimize away the dummy operations due to the memory barriers
-        // and volatile operations
-        *point * *scalar
+        // Use the improved constant-time implementation from the constant_time module
+        super::constant_time::constant_time_scalar_mul(point, scalar)
     }
     
     /// Constant-time comparison of byte slices
@@ -197,15 +158,12 @@ impl SideChannelProtection {
             return false;
         }
 
-        // Constant-time comparison to prevent timing attacks
-        let mut result: u8 = 0;
-        for i in 0..a.len() {
-            result |= a[i] ^ b[i];
-        }
+        // Use the improved constant-time implementation from the constant_time module
+        let result = super::constant_time::constant_time_eq(a, b);
         
         self.add_jitter();
         
-        result == 0
+        result
     }
     
     //------------------------

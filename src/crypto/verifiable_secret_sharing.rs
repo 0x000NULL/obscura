@@ -1,4 +1,4 @@
-use crate::crypto::{JubjubPoint, JubjubScalar, JubjubPointExt};
+use crate::crypto::jubjub::{JubjubScalar, JubjubPoint, JubjubPointExt, JubjubScalarExt};
 use crate::crypto::zk_key_management::{Participant, Share};
 use crate::crypto::errors::{CryptoError, CryptoResult};
 use std::collections::{HashMap, HashSet};
@@ -8,7 +8,7 @@ use rand::rngs::OsRng;
 use rand_core::RngCore;
 use log::{debug, error, info, warn};
 use ark_std::{One, UniformRand, Zero};
-use crate::crypto::jubjub::generate_keypair;
+use crate::crypto::jubjub::JubjubKeypair;
 
 /// Constants for VSS
 const MAX_VSS_PARTICIPANTS: usize = 100;
@@ -112,7 +112,7 @@ impl VerifiableShare {
     /// Verify this share against the commitment
     pub fn verify(&self) -> bool {
         // Verify g^value = commitment.evaluate_at(index)
-        let left_side = JubjubPoint::generator() * self.value;  // point * scalar
+        let left_side = <JubjubPoint as JubjubPointExt>::generator() * self.value;  // point * scalar
         let right_side = self.commitment.evaluate_at(&self.index);
         
         left_side == right_side
@@ -196,7 +196,7 @@ impl Polynomial {
         let mut commitments = Vec::with_capacity(self.coefficients.len());
         
         for coeff in &self.coefficients {
-            commitments.push(JubjubPoint::generator() * coeff);
+            commitments.push(<JubjubPoint as JubjubPointExt>::generator() * coeff);
         }
         
         PolynomialCommitment::new(commitments)
@@ -786,7 +786,7 @@ mod tests {
         println!("=== Creating participant objects ===");
         let mut participants = Vec::new();
         for id in &participant_ids {
-            let keypair = generate_keypair();
+            let keypair = JubjubKeypair::generate();
             let participant = Participant::new(id.clone(), keypair.public, None);
             participants.push(participant);
         }
@@ -1040,10 +1040,10 @@ mod tests {
         participant_session.start().unwrap();
         
         println!("Creating participant objects");
-        let dealer_keypair = generate_keypair();
+        let dealer_keypair = JubjubKeypair::generate();
         let dealer_participant = Participant::new(dealer_id.clone(), dealer_keypair.public, None);
         
-        let participant_keypair = generate_keypair();
+        let participant_keypair = JubjubKeypair::generate();
         let participant = Participant::new(participant_id.clone(), participant_keypair.public, None);
         
         println!("Adding participants");
@@ -1138,10 +1138,10 @@ mod tests {
         println!("Participant state after start: {:?}", participant_session.get_state());
         
         println!("Creating participant objects");
-        let dealer_keypair = generate_keypair();
+        let dealer_keypair = JubjubKeypair::generate();
         let dealer_participant = Participant::new(dealer_id.clone(), dealer_keypair.public, None);
         
-        let participant_keypair = generate_keypair();
+        let participant_keypair = JubjubKeypair::generate();
         let participant = Participant::new(participant_id.clone(), participant_keypair.public, None);
         
         println!("Adding participants to dealer session");

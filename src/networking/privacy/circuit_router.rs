@@ -5,8 +5,10 @@ use std::time::{Duration, Instant};
 use std::str::FromStr;
 use log::{debug, info, warn, error};
 use rand::{thread_rng, Rng};
+use rand_distr::Distribution;
+use rand::distributions::{Bernoulli, Uniform};
 use rand_chacha::{ChaCha20Rng, rand_core::SeedableRng};
-use rand::prelude::SliceRandom;
+use rand::seq::SliceRandom;
 use thiserror::Error;
 use hex;
 

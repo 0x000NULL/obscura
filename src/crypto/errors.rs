@@ -71,6 +71,15 @@ pub enum CryptoError {
     /// Missing or invalid configuration errors
     ConfigurationError(String),
     
+    /// Hardware acceleration errors
+    HardwareAccelerationError(String),
+    
+    /// Operation not implemented error
+    NotImplemented(String),
+    
+    /// Generic operation error
+    OperationError(String),
+    
     /// Other unexpected errors
     UnexpectedError(String),
 }
@@ -94,6 +103,9 @@ impl fmt::Display for CryptoError {
             CryptoError::IoError(err) => write!(f, "IO error: {}", err),
             CryptoError::SerializationError(msg) => write!(f, "Serialization error: {}", msg),
             CryptoError::ConfigurationError(msg) => write!(f, "Configuration error: {}", msg),
+            CryptoError::HardwareAccelerationError(msg) => write!(f, "Hardware acceleration error: {}", msg),
+            CryptoError::NotImplemented(msg) => write!(f, "Not implemented: {}", msg),
+            CryptoError::OperationError(msg) => write!(f, "Operation error: {}", msg),
             CryptoError::UnexpectedError(msg) => write!(f, "Unexpected error: {}", msg),
         }
     }
@@ -174,6 +186,18 @@ impl CryptoError {
     
     pub fn to_protocol_error<S: ToString>(msg: S) -> Self {
         CryptoError::ProtocolError(msg.to_string())
+    }
+    
+    pub fn to_hardware_acceleration_error<S: ToString>(msg: S) -> Self {
+        CryptoError::HardwareAccelerationError(msg.to_string())
+    }
+    
+    pub fn to_not_implemented<S: ToString>(msg: S) -> Self {
+        CryptoError::NotImplemented(msg.to_string())
+    }
+    
+    pub fn to_operation_error<S: ToString>(msg: S) -> Self {
+        CryptoError::OperationError(msg.to_string())
     }
     
     /// Helper for internal unexpected errors

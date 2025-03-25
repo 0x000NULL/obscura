@@ -1,5 +1,79 @@
 # Changelog
 
+## [0.7.19] - 2025-05-30
+
+### Added
+- **Hardware Acceleration for Cryptographic Operations**
+  - Implemented comprehensive hardware acceleration framework:
+    - Created runtime CPU feature detection for x86/x86_64/ARM architectures
+    - Added support for AES-NI, AVX2, AVX512, ARM NEON, and ARM crypto extensions
+    - Implemented configurable hardware acceleration options
+    - Created performance metrics collection for optimized operations
+    - Added graceful fallback to software implementations
+  - Hardware-accelerated cryptographic operations:
+    - Implemented vectorized scalar multiplication for elliptic curves
+    - Added hardware-accelerated BLS signature batch verification
+    - Created parallel batch verification using multiple CPU cores
+    - Implemented AES encryption/decryption with hardware acceleration
+    - Added framework for future hardware-accelerated primitives
+  - Comprehensive testing and benchmarking:
+    - Created hardware acceleration benchmark suite
+    - Implemented correctness verification for all accelerated operations
+    - Added performance comparison tools for accelerated vs. standard implementations
+    - Created automated feature detection tests
+    - Implemented comprehensive integration tests
+
+### Improved
+- Enhanced performance of cryptographic operations on supported hardware
+- Improved scalability for batch signature verification operations
+- Added better performance monitoring and metrics collection
+- Enhanced integration between hardware acceleration and existing crypto modules
+- Improved cross-platform support for hardware-specific optimizations
+
+### Documentation
+- Created comprehensive hardware acceleration user guide
+- Added detailed API documentation for hardware acceleration module
+- Implemented usage examples for accelerated cryptographic operations
+- Added performance optimization guidelines
+- Created benchmarking and testing documentation
+
+## [0.7.18] - 2025-05-15
+
+### Added
+- **Constant-Time Operations for Critical Cryptographic Functions**
+  - Implemented comprehensive constant-time primitives module:
+    - Added core primitives for selection, equality, and comparison operations
+    - Created field element constant-time operations for all critical calculations
+    - Implemented constant-time scalar multiplication for BLS curves
+    - Added constant-time hash operation comparisons
+    - Created mask-based string and byte array comparison functions
+    - Implemented constant-time signature verification operations
+  - Enhanced cryptographic security against timing side-channel attacks:
+    - Added constant-time BLS signature verification
+    - Implemented protected scalar multiplication for G1 and G2
+    - Created secure key derivation operations
+    - Added constant-time HMAC verification
+    - Implemented secure encryption operations with ChaCha20-Poly1305
+  - Added comprehensive test suite for constant-time operations:
+    - Created timing variance tests for all operations
+    - Implemented correctness verification across all functions
+    - Added comparison testing against traditional implementations
+    - Created edge case testing for all constant-time operations
+
+### Improved
+- Enhanced side-channel protection for all critical cryptographic operations
+- Improved resistance to timing-based attacks on BLS operations
+- Added better protection for key handling and derivation operations
+- Enhanced security of signature verification against sophisticated attacks
+- Improved constant-time implementation consistency across the codebase
+
+### Documentation
+- Created detailed documentation for constant-time implementation principles
+- Added comprehensive API reference for the constant-time module
+- Updated security best practices with timing attack protection information
+- Implemented examples of proper constant-time operation usage
+- Added testing documentation for verifying timing consistency
+
 ## [0.7.17] - 2025-04-28
 
 ### Added

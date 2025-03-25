@@ -3,8 +3,8 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use rand::{Rng, thread_rng};
-use rand::prelude::SliceRandom;
-use log::{debug, info};
+use rand::seq::SliceRandom;
+use log::{debug, info, warn, error};
 use std::io;
 use socket2::TcpKeepalive;
 

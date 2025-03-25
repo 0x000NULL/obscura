@@ -762,7 +762,7 @@ impl PowerAnalysisProtection {
         result
     }
     
-    /// Perform scalar multiplication with power analysis protection
+    /// Protected scalar multiplication with advanced protections
     pub fn protected_scalar_mul(
         &self,
         point: &JubjubPoint,
@@ -774,19 +774,8 @@ impl PowerAnalysisProtection {
                 // Use the resistant implementation
                 self.resistant_scalar_mul(point, scalar)
             } else {
-                // Use a basic constant-time implementation
-                let mut result = JubjubPoint::zero();
-                let scalar_bits = scalar.into_bigint().to_bits_be();
-                
-                // Process bits from MSB to LSB for efficiency
-                for bit in scalar_bits {
-                    result = result.double();
-                    // Constant-time conditional addition using a mask
-                    let temp = result + *point;
-                    let mask = if bit { JubjubScalar::one() } else { JubjubScalar::zero() };
-                    result = temp * mask + result * (JubjubScalar::one() - mask);
-                }
-                result
+                // Use the improved constant-time implementation from the constant_time module
+                crate::crypto::constant_time::constant_time_scalar_mul(point, scalar)
             }
         })
     }

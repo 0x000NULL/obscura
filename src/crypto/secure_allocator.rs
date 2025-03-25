@@ -9,20 +9,19 @@
 //! 4. Allocation tracking and resource management
 //! 5. Platform-specific optimizations for secure memory handling
 
-use std::alloc::{Layout};
-use std::ptr::{self, NonNull};
 use std::sync::{Arc, Mutex, RwLock};
 use std::collections::HashMap;
-use std::cell::UnsafeCell;
+use std::alloc::{self, Layout};
+use std::ptr::{self, NonNull, null_mut};
+use std::slice;
 use std::time::{Duration, Instant};
-use std::convert::TryInto;
-use log::{debug, error, info, trace, warn};
-use rand::{thread_rng, Rng};
+use log::{debug, error, warn};
+use std::cell::UnsafeCell;
 use std::marker::PhantomData;
-use std::cell::RefCell;
-
-use super::memory_protection::{MemoryProtection, MemoryProtectionConfig, MemoryProtectionError, SecurityProfile};
-use super::platform_memory::{PlatformMemory, MemoryProtection as MemoryProtectionLevel, AllocationType};
+use super::platform_memory::{PlatformMemory, MemoryProtection as MemoryProtectionLevel};
+use super::platform_memory::AllocationType;
+use super::memory_protection::MemoryProtectionError;
+use super::memory_protection::{MemoryProtection, MemoryProtectionConfig};
 #[cfg(windows)]
 use super::platform_memory_impl::WindowsMemoryProtection;
 #[cfg(unix)]
@@ -782,13 +781,13 @@ impl SecureAllocatable<ThreadLocalSecureAllocator> for String {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::ptr;
     use std::sync::Arc;
-    use std::mem;
-    use super::super::memory_protection::{MemoryProtection, MemoryProtectionConfig};
-    use std::alloc::Layout;
+    use super::super::memory_protection::MemoryProtectionConfig;
+    use super::super::memory_protection::MemoryProtection;
 
     #[test]
     fn test_secure_allocator_basic() {

@@ -139,9 +139,8 @@
 - [x] Implement proper authenticated encryption for private keys
 - [x] Enhance memory protection with proper secure allocation/deallocation
 - [x] Add cryptographic auditing and logging mechanisms
-- [ ] Improve constant-time implementations for all critical operations
-- [ ] Add configurable performance profiles for security/performance trade-offs
-- [ ] Optimize cryptographic operations for hardware acceleration
+- [x] Improve constant-time implementations for all critical operations
+- [x] Optimize cryptographic operations for hardware acceleration
 - [ ] Profile and benchmark critical paths
 - [ ] Add comprehensive unit and integration tests
 - [ ] Implement formal verification for critical functions

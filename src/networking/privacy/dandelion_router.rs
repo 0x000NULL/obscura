@@ -7,7 +7,7 @@ use rand::{thread_rng, Rng};
 use rand_distr::Distribution;
 use rand::distributions::{Bernoulli};
 use rand_chacha::{ChaCha20Rng, rand_core::SeedableRng};
-use rand::prelude::SliceRandom;
+use rand::seq::SliceRandom;
 use crate::networking::privacy::PrivacyLevel;
 use crate::networking::privacy_config_integration::PrivacySettingsRegistry;
 use crate::blockchain::Transaction;

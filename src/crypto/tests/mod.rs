@@ -14,4 +14,19 @@ pub mod memory_protection_tests;
 pub mod improved_side_channel_tests;
 pub mod audit_integration_tests;
 pub mod audit_tests;
-pub mod audit_external_tests; 
+pub mod audit_external_tests;
+
+#[cfg(test)]
+mod bullet_proofs_tests;
+
+#[cfg(test)]
+mod constant_time_tests;
+
+#[cfg(test)]
+mod jubjub_tests;
+
+#[cfg(test)]
+mod hardware_accel_tests;
+
+// Re-export test utilities
+pub mod test_utils; 

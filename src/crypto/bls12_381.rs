@@ -366,57 +366,36 @@ pub fn aggregate_public_keys(public_keys: &[BlsPublicKey]) -> BlsPublicKey {
 }
 
 /// Batch verification of multiple signatures against multiple messages and public keys
+/// This is an alias for verify_batch_with_public_api for backward compatibility
 pub fn verify_batch(
     messages: &[&[u8]], 
-    signatures: &[G1Projective],
-    public_keys: &[G2Projective]
+    signatures: &[BlsSignature],
+    public_keys: &[BlsPublicKey]
+) -> bool {
+    verify_batch_with_public_api(messages, signatures, public_keys)
+}
+
+/// Batch verification of multiple signatures against multiple messages and public keys
+/// This API uses the public BlsSignature and BlsPublicKey types
+pub fn verify_batch_with_public_api(
+    messages: &[&[u8]], 
+    signatures: &[BlsSignature],
+    public_keys: &[BlsPublicKey]
 ) -> bool {
     // Check input validity
     if messages.is_empty() || signatures.len() != messages.len() || public_keys.len() != messages.len() {
         return false;
     }
 
-    // Check that all points are on their respective curves
-    for sig in signatures {
-        if !bool::from(sig.is_on_curve()) {
-            return false;
-        }
-    }
-    for pk in public_keys {
-        if !bool::from(pk.is_on_curve()) {
-            return false;
-        }
-    }
-
-    // Generate random scalars for linear combination
-    let mut rng = rand::thread_rng();
-    let scalars: Vec<Scalar> = (0..messages.len())
-        .map(|_| Scalar::random(&mut rng))
-        .collect();
-
-    // Compute linear combinations
-    let mut combined_sig = G1Projective::identity();
-    let mut combined_hash = G1Projective::identity();
-    let mut combined_pk = G2Projective::identity();
-
+    // Verify each signature individually
+    // This is less efficient than a true batch verification but simplifies the implementation
     for i in 0..messages.len() {
-        let h = hash_to_g1(messages[i]);
-        combined_sig += signatures[i] * scalars[i];
-        combined_hash += h * scalars[i];
-        combined_pk += public_keys[i] * scalars[i];
+        if !verify_signature(messages[i], &public_keys[i], &signatures[i]) {
+            return false;
+        }
     }
 
-    // Convert to affine for pairing
-    let sig_affine = G1Affine::from(combined_sig);
-    let hash_affine = G1Affine::from(combined_hash);
-    let pk_affine = G2Affine::from(combined_pk);
-    let g2_affine = G2Affine::generator();
-
-    // Verify pairing equation
-    let pairing1 = pairing(&sig_affine, &g2_affine);
-    let pairing2 = pairing(&hash_affine, &pk_affine);
-
-    bool::from(pairing1 == pairing2)
+    true
 }
 
 /// Ensure that the precomputed tables are initialized
