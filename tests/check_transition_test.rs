@@ -1,4 +1,4 @@
-use obscura_lib::networking::dandelion::{DandelionManager, PropagationState, PrivacyRoutingMode};
+use obscura_core::networking::dandelion::{DandelionManager, PropagationState, PrivacyRoutingMode};
 use std::time::{Duration, Instant};
 use std::thread;
 

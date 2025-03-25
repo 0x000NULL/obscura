@@ -1,6 +1,6 @@
-use obscura_lib::crypto::side_channel_protection::{SideChannelProtection, SideChannelProtectionConfig};
-use obscura_lib::crypto::jubjub::{JubjubPoint, JubjubScalar, generate_keypair};
-use obscura_lib::crypto::pedersen::PedersenCommitment;
+use obscura_core::crypto::side_channel_protection::{SideChannelProtection, SideChannelProtectionConfig};
+use obscura_core::crypto::jubjub::{JubjubPoint, JubjubScalar, generate_keypair};
+use obscura_core::crypto::pedersen::PedersenCommitment;
 use rand::thread_rng;
 use ark_ff::PrimeField;
 use std::time::Instant;

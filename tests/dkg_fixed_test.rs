@@ -1,5 +1,5 @@
-use obscura_lib::crypto::zk_key_management::{DkgConfig, DkgManager, DkgState, Participant, DkgTimeoutConfig};
-use obscura_lib::crypto::jubjub::{JubjubPoint, JubjubScalar, JubjubPointExt};
+use obscura_core::crypto::zk_key_management::{DkgConfig, DkgManager, DkgState, Participant, DkgTimeoutConfig};
+use obscura_core::crypto::jubjub::{JubjubPoint, JubjubScalar, JubjubPointExt};
 
 /// Create a set of participants for testing
 fn create_participants(num_participants: usize) -> Vec<Participant> {

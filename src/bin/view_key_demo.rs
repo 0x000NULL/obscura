@@ -1,10 +1,10 @@
-use obscura_lib::crypto::{
+use obscura_core::crypto::{
     ViewKeyPermissions, ViewKeyManager, ViewKeyLevel, ViewKeyContext
 };
-use obscura_lib::blockchain::{Transaction, TransactionOutput};
+use obscura_core::blockchain::{Transaction, TransactionOutput};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
-use obscura_lib::crypto::{
+use obscura_core::crypto::{
     jubjub::{JubjubPoint, JubjubScalar, JubjubKeypair, JubjubSignature},
 };
 use rand::{thread_rng, Rng};
@@ -20,7 +20,7 @@ use colored::*;
 /// 
 /// 1. Import the necessary types:
 ///    ```
-///    use obscura_lib::crypto::{
+///    use obscura_core::crypto::{
 ///        JubjubKeypair, ViewKey, ViewKeyPermissions, ViewKeyManager, 
 ///        ViewKeyLevel, ViewKeyContext, MultiSigViewKey
 ///    };
@@ -117,7 +117,7 @@ fn main() {
     println!("\n[1] Basic View Key Creation\n");
     
     // Create wallet keypair
-    let wallet_keypair = obscura_lib::crypto::jubjub::generate_keypair();
+    let wallet_keypair = obscura_core::crypto::jubjub::generate_keypair();
     println!("Generated wallet keypair");
     
     // Create view key manager
@@ -266,9 +266,9 @@ fn main() {
     println!("\n[6] Multi-Signature View Keys\n");
     
     // Create signers
-    let signer1 = obscura_lib::crypto::jubjub::generate_keypair();
-    let signer2 = obscura_lib::crypto::jubjub::generate_keypair();
-    let signer3 = obscura_lib::crypto::jubjub::generate_keypair();
+    let signer1 = obscura_core::crypto::jubjub::generate_keypair();
+    let signer2 = obscura_core::crypto::jubjub::generate_keypair();
+    let signer3 = obscura_core::crypto::jubjub::generate_keypair();
     
     println!("Created signers:");
     println!("- Signer 1: {:?}", signer1.public);

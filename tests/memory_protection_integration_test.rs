@@ -1,6 +1,6 @@
-use obscura_lib::crypto::memory_protection::{MemoryProtection, MemoryProtectionConfig};
-use obscura_lib::crypto::memory_protection::SecurityProfile;
-use obscura_lib::crypto::side_channel_protection::SideChannelProtection;
+use obscura_core::crypto::memory_protection::{MemoryProtection, MemoryProtectionConfig};
+use obscura_core::crypto::memory_protection::SecurityProfile;
+use obscura_core::crypto::side_channel_protection::SideChannelProtection;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;

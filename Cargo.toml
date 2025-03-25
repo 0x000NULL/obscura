@@ -19,7 +19,7 @@ license = false
 eula = false
 
 [lib]
-name = "obscura_lib"
+name = "obscura_core"
 crate-type = ["rlib", "cdylib"]
 
 [[bin]]

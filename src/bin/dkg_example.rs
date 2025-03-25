@@ -1,4 +1,4 @@
-use obscura_lib::crypto::zk_key_management::{DkgConfig, DkgManager, Participant, DkgTimeoutConfig};
+use obscura_core::crypto::zk_key_management::{DkgConfig, DkgManager, Participant, DkgTimeoutConfig};
 use std::io::Write;
 use std::thread;
 use std::time::Duration;
@@ -214,7 +214,7 @@ fn create_participants(ids: &[Vec<u8>]) -> Vec<Participant> {
     let participants = ids.iter().map(|id| {
         println!("- Generating keypair for participant {}...", id[0]);
         // Use the Jubjub keypair generator
-        let keypair = obscura_lib::crypto::jubjub::JubjubKeypair::generate();
+        let keypair = obscura_core::crypto::jubjub::JubjubKeypair::generate();
         println!("  Keypair generated successfully");
         
         println!("- Creating participant object for {}...", id[0]);

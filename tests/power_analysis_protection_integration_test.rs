@@ -6,10 +6,10 @@ use ark_ff::UniformRand;
 use std::time::{Duration, Instant};
 use ark_std::rand::Rng;
 
-use obscura_lib::crypto::power_analysis_protection::PowerAnalysisProtection;
-use obscura_lib::crypto::side_channel_protection::SideChannelProtection;
-use obscura_lib::crypto::jubjub::{JubjubPoint, JubjubScalar, generate_keypair};
-use obscura_lib::crypto::{
+use obscura_core::crypto::power_analysis_protection::PowerAnalysisProtection;
+use obscura_core::crypto::side_channel_protection::SideChannelProtection;
+use obscura_core::crypto::jubjub::{JubjubPoint, JubjubScalar, generate_keypair};
+use obscura_core::crypto::{
     memory_protection::{MemoryProtection, MemoryProtectionConfig},
     side_channel_protection::SideChannelProtectionConfig,
     power_analysis_protection::PowerAnalysisConfig,

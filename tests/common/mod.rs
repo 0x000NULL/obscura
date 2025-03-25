@@ -1,7 +1,7 @@
-use obscura_lib::blockchain::{Block, OutPoint, Transaction, TransactionInput, TransactionOutput};
-use obscura_lib::consensus::StakeProof;
-use obscura_lib::crypto::jubjub::generate_keypair;
-use obscura_lib::networking::{Node, NetworkConfig};
+use obscura_core::blockchain::{Block, OutPoint, Transaction, TransactionInput, TransactionOutput};
+use obscura_core::consensus::StakeProof;
+use obscura_core::crypto::jubjub::generate_keypair;
+use obscura_core::networking::{Node, NetworkConfig};
 
 pub fn create_test_block(nonce: u64) -> Block {
     let mut block = Block::new([0u8; 32]);

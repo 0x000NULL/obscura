@@ -1,13 +1,13 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use obscura::utils::profiler_benchmarks::criterion_benchmark;
-use obscura::crypto::bls12_381::{BlsKeypair, verify_signature};
-use obscura::crypto::jubjub::{generate_keypair, JubjubSignature};
-use obscura::crypto::constant_time::{constant_time_scalar_mul};
-use obscura::crypto::hardware_accel::{accelerated_scalar_mul, HardwareAccelerator};
-use obscura::consensus::ProofOfWork;
-use obscura::blockchain::Block;
-use obscura::utils::profiler_benchmarks::register_critical_path;
-use rand::thread_rng;
+use obscura_core::utils::profiler_benchmarks::criterion_benchmark;
+use obscura_core::crypto::bls12_381::{BlsKeypair, verify_signature};
+use obscura_core::crypto::jubjub::{generate_keypair, JubjubSignature};
+use obscura_core::crypto::constant_time::{constant_time_scalar_mul};
+use obscura_core::crypto::hardware_accel::{accelerated_scalar_mul, HardwareAccelerator};
+use obscura_core::consensus::pow::ProofOfWork;
+use obscura_core::ConsensusEngine;
+use obscura_core::blockchain::Block;
+use obscura_core::utils::profiler_benchmarks::register_critical_path;
 use std::time::Duration;
 
 // Register all critical paths to benchmark
@@ -33,7 +33,7 @@ fn register_all_critical_paths() {
             let keypair = BlsKeypair::generate();
             let message = b"test message";
             let signature = keypair.sign(message);
-            let result = verify_signature(&keypair.public_key, message, &signature);
+            let result = verify_signature(message, &keypair.public_key, &signature);
             criterion::black_box(result);
         },
         Some(1000), // Expected < 1ms
@@ -60,8 +60,8 @@ fn register_all_critical_paths() {
         || {
             let keypair = generate_keypair();
             let message = b"test transaction";
-            let signature = JubjubSignature::sign(&keypair.0, message);
-            let result = signature.verify(&keypair.1, message);
+            let signature = keypair.sign(message);
+            let result = signature.verify(&keypair.public, message);
             criterion::black_box(result);
         },
         Some(200), // Expected < 200μs
@@ -75,8 +75,8 @@ fn register_all_critical_paths() {
         "Constant-time scalar multiplication (critical for side-channel protection)",
         || {
             let keypair = generate_keypair();
-            let point = keypair.1;
-            let scalar = keypair.0;
+            let point = keypair.public;
+            let scalar = keypair.secret;
             let result = constant_time_scalar_mul(&point, &scalar);
             criterion::black_box(result);
         },
@@ -85,15 +85,16 @@ fn register_all_critical_paths() {
     );
     
     // Crypto - Hardware acceleration
-    if HardwareAccelerator::new().is_available() {
+    let hw_accel = HardwareAccelerator::new();
+    if hw_accel.is_feature_available("avx2") {
         register_critical_path(
             "accelerated_scalar_mul", 
             "crypto.hardware_accel",
             "Hardware-accelerated scalar multiplication",
             || {
                 let keypair = generate_keypair();
-                let point = keypair.1;
-                let scalar = keypair.0;
+                let point = keypair.public;
+                let scalar = keypair.secret;
                 let result = accelerated_scalar_mul(&point, &scalar);
                 criterion::black_box(result);
             },

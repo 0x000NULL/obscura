@@ -1,4 +1,4 @@
-use obscura_lib::{
+use obscura_core::{
     blockchain::{Transaction, TransactionOutput},
     config::presets::PrivacyLevel,
     crypto::{
@@ -47,8 +47,8 @@ struct MockStealthAddress(Vec<u8>);
 
 impl MockStealthAddress {
     fn new() -> Self {
-        let keypair = obscura_lib::crypto::jubjub::JubjubKeypair::generate();
-        MockStealthAddress(obscura_lib::wallet::jubjub_point_to_bytes(&keypair.public))
+        let keypair = obscura_core::crypto::jubjub::JubjubKeypair::generate();
+        MockStealthAddress(obscura_core::wallet::jubjub_point_to_bytes(&keypair.public))
     }
 }
 
@@ -199,7 +199,7 @@ impl LongRunningTest {
         tx.apply_receiver_privacy(ReceiverPrivacy::new());
         
         // Create Pedersen commitment for the amount
-        let blinding_factor = obscura_lib::crypto::pedersen::generate_random_jubjub_scalar();
+        let blinding_factor = obscura_core::crypto::pedersen::generate_random_jubjub_scalar();
         let commitment = PedersenCommitment::commit(amount, blinding_factor);
         tx.set_amount_commitment(0, commitment.to_bytes()).unwrap();
         
@@ -429,8 +429,8 @@ mod tests {
         // Create multiple stealth addresses
         let addresses: Vec<StealthAddress> = (0..10)
             .map(|_| {
-                let keypair = obscura_lib::crypto::jubjub::JubjubKeypair::generate();
-                obscura_lib::wallet::jubjub_point_to_bytes(&keypair.public)
+                let keypair = obscura_core::crypto::jubjub::JubjubKeypair::generate();
+                obscura_core::wallet::jubjub_point_to_bytes(&keypair.public)
             })
             .collect();
         
@@ -468,8 +468,8 @@ mod tests {
         
         // Create a stealth address
         let stealth_address = {
-            let keypair = obscura_lib::crypto::jubjub::JubjubKeypair::generate();
-            obscura_lib::wallet::jubjub_point_to_bytes(&keypair.public)
+            let keypair = obscura_core::crypto::jubjub::JubjubKeypair::generate();
+            obscura_core::wallet::jubjub_point_to_bytes(&keypair.public)
         };
         println!("Created stealth address: {:?}", stealth_address);
         println!("Stealth address length: {}", stealth_address.len());

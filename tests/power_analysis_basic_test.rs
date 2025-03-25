@@ -1,5 +1,5 @@
-use obscura_lib::crypto::power_analysis_protection::{PowerAnalysisProtection, PowerAnalysisConfig};
-use obscura_lib::crypto::jubjub::{self, JubjubPoint, JubjubScalar};
+use obscura_core::crypto::power_analysis_protection::{PowerAnalysisProtection, PowerAnalysisConfig};
+use obscura_core::crypto::jubjub::{self, JubjubPoint, JubjubScalar};
 use ark_std::UniformRand;
 use ark_ec::Group;
 use rand::rngs::StdRng;

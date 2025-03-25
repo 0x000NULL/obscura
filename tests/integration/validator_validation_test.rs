@@ -1,5 +1,5 @@
 use hex;
-use obscura_lib::consensus::pos::{
+use obscura_core::consensus::pos::{
     DiversityMetrics, HardwareSecurityInfo, ProofOfStake, ReputationAssessment, ValidatorGeoInfo,
     ValidatorInfo, Validator, EntityInfo,
 };

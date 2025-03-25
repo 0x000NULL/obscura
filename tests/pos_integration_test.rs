@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod test {
     use hex;
-    use obscura_lib::consensus::pos::{
+    use obscura_core::consensus::pos::{
         HardwareSecurityInfo, ProofOfStake, ReputationAssessment, ValidatorGeoInfo,
     };
     // Define our own ValidatorInfo as a simplified version
@@ -14,8 +14,8 @@ mod test {
         pub performance: f64,
         pub last_update: u64,
     }
-    use obscura_lib::consensus::pos::enhancements::DiversityMetrics;
-    use obscura_lib::consensus::pos_old;
+    use obscura_core::consensus::pos::enhancements::DiversityMetrics;
+    use obscura_core::consensus::pos_old;
     
     use std::collections::HashMap;
     use std::sync::Arc;

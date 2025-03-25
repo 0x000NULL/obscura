@@ -1,5 +1,5 @@
-use obscura_lib::crypto::zk_key_management::{DkgConfig, DkgManager, DkgState, Participant, DistributedKeyGeneration, DkgResult, SessionId, DkgTimeoutConfig};
-use obscura_lib::crypto::jubjub::{JubjubPointExt, JubjubScalarExt, JubjubKeypair, JubjubPoint, JubjubScalar};
+use obscura_core::crypto::zk_key_management::{DkgConfig, DkgManager, DkgState, Participant, DistributedKeyGeneration, DkgResult, SessionId, DkgTimeoutConfig};
+use obscura_core::crypto::jubjub::{JubjubPointExt, JubjubScalarExt, JubjubKeypair, JubjubPoint, JubjubScalar};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -1532,7 +1532,7 @@ fn test_dkg_verification_debug() {
 fn create_participants(ids: &[Vec<u8>]) -> Vec<Participant> {
     let mut participants = Vec::with_capacity(ids.len());
     for id in ids {
-        let keypair = obscura_lib::crypto::jubjub::JubjubKeypair::generate();
+        let keypair = obscura_core::crypto::jubjub::JubjubKeypair::generate();
         let participant = Participant::new(id.clone(), keypair.public, None);
         participants.push(participant);
     }
@@ -1998,7 +1998,7 @@ fn test_complete_dkg_execution() {
     init_test_logging();
     
     // Create a keypair for testing
-    let keypair = obscura_lib::crypto::jubjub::JubjubKeypair::generate();
+    let keypair = obscura_core::crypto::jubjub::JubjubKeypair::generate();
     
     // Create participants
     let num_participants = 3;
@@ -2009,7 +2009,7 @@ fn test_complete_dkg_execution() {
     let threshold = 2; // 2-of-3 threshold
     
     // Create DKG manager
-    let mut dkg_manager = obscura_lib::crypto::zk_key_management::DkgManager::new(
+    let mut dkg_manager = obscura_core::crypto::zk_key_management::DkgManager::new(
         participant_ids[0].clone(),
         None
     );

@@ -1,4 +1,4 @@
-use obscura_lib::{
+use obscura_core::{
     blockchain::{Transaction, TransactionOutput},
     config::presets::PrivacyLevel,
     crypto::{
@@ -47,10 +47,10 @@ impl PrivacyStressTest {
 
         // Convert from config::presets::PrivacyLevel to networking::privacy_config_integration::PrivacyLevel
         let network_privacy_level = match privacy_level {
-            PrivacyLevel::Standard => obscura_lib::networking::privacy_config_integration::PrivacyLevel::Standard,
-            PrivacyLevel::Medium => obscura_lib::networking::privacy_config_integration::PrivacyLevel::Medium,
-            PrivacyLevel::High => obscura_lib::networking::privacy_config_integration::PrivacyLevel::High,
-            PrivacyLevel::Custom => obscura_lib::networking::privacy_config_integration::PrivacyLevel::Custom,
+            PrivacyLevel::Standard => obscura_core::networking::privacy_config_integration::PrivacyLevel::Standard,
+            PrivacyLevel::Medium => obscura_core::networking::privacy_config_integration::PrivacyLevel::Medium,
+            PrivacyLevel::High => obscura_core::networking::privacy_config_integration::PrivacyLevel::High,
+            PrivacyLevel::Custom => obscura_core::networking::privacy_config_integration::PrivacyLevel::Custom,
         };
         
         privacy_config.set_privacy_level(network_privacy_level);
@@ -103,7 +103,7 @@ impl PrivacyStressTest {
         }
         
         // Add random amount commitment
-        let blinding_factor = obscura_lib::crypto::pedersen::generate_random_jubjub_scalar();
+        let blinding_factor = obscura_core::crypto::pedersen::generate_random_jubjub_scalar();
         let commitment = PedersenCommitment::commit(amount, blinding_factor);
         tx.set_amount_commitment(0, commitment.to_bytes()).unwrap();
         
@@ -151,10 +151,10 @@ impl PrivacyStressTest {
             
             // Convert from networking::privacy_config_integration::PrivacyLevel to config::presets::PrivacyLevel
             let privacy_level = match self.privacy_config.get_privacy_level() {
-                obscura_lib::networking::privacy_config_integration::PrivacyLevel::Standard => PrivacyLevel::Standard,
-                obscura_lib::networking::privacy_config_integration::PrivacyLevel::Medium => PrivacyLevel::Medium,
-                obscura_lib::networking::privacy_config_integration::PrivacyLevel::High => PrivacyLevel::High,
-                obscura_lib::networking::privacy_config_integration::PrivacyLevel::Custom => PrivacyLevel::Custom,
+                obscura_core::networking::privacy_config_integration::PrivacyLevel::Standard => PrivacyLevel::Standard,
+                obscura_core::networking::privacy_config_integration::PrivacyLevel::Medium => PrivacyLevel::Medium,
+                obscura_core::networking::privacy_config_integration::PrivacyLevel::High => PrivacyLevel::High,
+                obscura_core::networking::privacy_config_integration::PrivacyLevel::Custom => PrivacyLevel::Custom,
             };
             
             // Use the converted privacy level
@@ -200,21 +200,21 @@ impl PrivacyStressTest {
 }
 
 impl PrivacyLevelConverter {
-    pub fn to_network_privacy_level(&self, level: PrivacyLevel) -> obscura_lib::networking::privacy_config_integration::PrivacyLevel {
+    pub fn to_network_privacy_level(&self, level: PrivacyLevel) -> obscura_core::networking::privacy_config_integration::PrivacyLevel {
         match level {
-            PrivacyLevel::Standard => obscura_lib::networking::privacy_config_integration::PrivacyLevel::Standard,
-            PrivacyLevel::Medium => obscura_lib::networking::privacy_config_integration::PrivacyLevel::Medium,
-            PrivacyLevel::High => obscura_lib::networking::privacy_config_integration::PrivacyLevel::High,
-            PrivacyLevel::Custom => obscura_lib::networking::privacy_config_integration::PrivacyLevel::Custom,
+            PrivacyLevel::Standard => obscura_core::networking::privacy_config_integration::PrivacyLevel::Standard,
+            PrivacyLevel::Medium => obscura_core::networking::privacy_config_integration::PrivacyLevel::Medium,
+            PrivacyLevel::High => obscura_core::networking::privacy_config_integration::PrivacyLevel::High,
+            PrivacyLevel::Custom => obscura_core::networking::privacy_config_integration::PrivacyLevel::Custom,
         }
     }
     
-    pub fn from_network_privacy_level(&self, level: obscura_lib::networking::privacy_config_integration::PrivacyLevel) -> PrivacyLevel {
+    pub fn from_network_privacy_level(&self, level: obscura_core::networking::privacy_config_integration::PrivacyLevel) -> PrivacyLevel {
         match level {
-            obscura_lib::networking::privacy_config_integration::PrivacyLevel::Standard => PrivacyLevel::Standard,
-            obscura_lib::networking::privacy_config_integration::PrivacyLevel::Medium => PrivacyLevel::Medium,
-            obscura_lib::networking::privacy_config_integration::PrivacyLevel::High => PrivacyLevel::High,
-            obscura_lib::networking::privacy_config_integration::PrivacyLevel::Custom => PrivacyLevel::Custom,
+            obscura_core::networking::privacy_config_integration::PrivacyLevel::Standard => PrivacyLevel::Standard,
+            obscura_core::networking::privacy_config_integration::PrivacyLevel::Medium => PrivacyLevel::Medium,
+            obscura_core::networking::privacy_config_integration::PrivacyLevel::High => PrivacyLevel::High,
+            obscura_core::networking::privacy_config_integration::PrivacyLevel::Custom => PrivacyLevel::Custom,
         }
     }
 }
@@ -241,7 +241,7 @@ fn create_transaction_with_privacy_features(
     tx.apply_receiver_privacy(ReceiverPrivacy::new());
     
     // Create Pedersen commitment for the amount
-    let blinding_factor = obscura_lib::crypto::pedersen::generate_random_jubjub_scalar();
+    let blinding_factor = obscura_core::crypto::pedersen::generate_random_jubjub_scalar();
     let commitment = PedersenCommitment::commit(amount, blinding_factor);
     tx.set_amount_commitment(0, commitment.to_bytes()).unwrap();
     
@@ -252,7 +252,7 @@ fn create_transaction_with_privacy_features(
     // Add stealth address if requested
     if use_stealth_address {
         let keypair = JubjubKeypair::generate();
-        let stealth_bytes = obscura_lib::wallet::jubjub_point_to_bytes(&keypair.public);
+        let stealth_bytes = obscura_core::wallet::jubjub_point_to_bytes(&keypair.public);
         tx.outputs[0].public_key_script = stealth_bytes;
     }
     

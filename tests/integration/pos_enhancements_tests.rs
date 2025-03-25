@@ -1,5 +1,5 @@
 use hex;
-use obscura_lib::consensus::pos::{
+use obscura_core::consensus::pos::{
     CompoundingConfig, CompoundingOperation, CompoundingStatus,
     ContractVerificationManager, DelegationMarketplace, DiversityMetrics, EntityInfo, HardwareSecurityInfo, HardwareSecurityManager, MarketplaceListing,
     MarketplaceOffer, MarketplaceTransaction, ProofOfStake, ReputationAssessment, ReputationOracle, SecurityAttestation, StakeCompoundingManager, ValidatorDiversityManager,
@@ -24,7 +24,7 @@ fn create_test_listing(id: &str, validator_id: &str) -> MarketplaceListing {
         amount: 1000,
         min_delegation: 100,
         commission_rate: 0.05,
-        status: obscura_lib::consensus::pos::MarketplaceListingStatus::Active,
+        status: obscura_core::consensus::pos::MarketplaceListingStatus::Active,
         created_at: current_time(),
     }
 }
@@ -37,7 +37,7 @@ fn create_test_offer(id: &str, listing_id: &str, delegator_id: &str) -> Marketpl
         delegator_id: delegator_id.to_string(),
         amount: 500,
         created_at: current_time(),
-        status: obscura_lib::consensus::pos::MarketplaceOfferStatus::Pending,
+        status: obscura_core::consensus::pos::MarketplaceOfferStatus::Pending,
     }
 }
 
@@ -46,7 +46,7 @@ fn create_test_transaction(id: &str, offer_id: &str) -> MarketplaceTransaction {
     MarketplaceTransaction {
         id: id.to_string(),
         offer_id: offer_id.to_string(),
-        status: obscura_lib::consensus::pos::MarketplaceTransactionStatus::Completed,
+        status: obscura_core::consensus::pos::MarketplaceTransactionStatus::Completed,
         completed_at: current_time(),
     }
 }

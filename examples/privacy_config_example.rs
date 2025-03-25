@@ -1,8 +1,8 @@
 // Example of using the unified privacy configuration system
 
 use std::sync::Arc;
-use obscura_lib::config::presets::{PrivacyLevel, PrivacyPreset};
-use obscura_lib::config::privacy_registry::{
+use obscura_core::config::presets::{PrivacyLevel, PrivacyPreset};
+use obscura_core::config::privacy_registry::{
     PrivacySettingsRegistry, 
     ConfigUpdateListener, 
     ConfigChangeEvent

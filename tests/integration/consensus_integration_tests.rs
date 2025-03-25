@@ -1,8 +1,8 @@
 use crate::common::create_test_stake_proof;
-use obscura_lib::blockchain::test_helpers::create_test_block;
-use obscura_lib::blockchain::Block;
-use obscura_lib::consensus::randomx::RandomXContext;
-use obscura_lib::consensus::validate_block_hybrid;
+use obscura_core::blockchain::test_helpers::create_test_block;
+use obscura_core::blockchain::Block;
+use obscura_core::consensus::randomx::RandomXContext;
+use obscura_core::consensus::validate_block_hybrid;
 use std::sync::Arc;
 
 #[test]

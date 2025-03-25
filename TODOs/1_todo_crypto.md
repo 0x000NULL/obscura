@@ -142,8 +142,6 @@
 - [x] Improve constant-time implementations for all critical operations
 - [x] Optimize cryptographic operations for hardware acceleration
 - [x] Profile and benchmark critical paths
-- [ ] Add comprehensive unit and integration tests
-- [ ] Implement formal verification for critical functions
 - [ ] Add fuzz testing for all cryptographic primitives
 
 ### 5. Documentation Needs
