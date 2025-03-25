@@ -186,6 +186,27 @@
 
 ## 9. Todo Checklist
 
+### Stealth Addressing
+- [ ] Fix privacy component integration issues:
+    - [ ] Redesign privacy component pipeline to properly preserve stealth address information
+    - [ ] Ensure DandelionRouter, CircuitRouter, and TimingObfuscator correctly maintain public key scripts
+    - [ ] Add validation checks after each privacy component to verify preservation of transaction properties
+- [ ] Implement proper privacy flag handling:
+    - [ ] Create consistent privacy flag propagation mechanism across all privacy components
+    - [ ] Add validation to ensure flags match actual transaction content
+    - [ ] Implement flag verification to detect inconsistencies between flags and transaction properties
+[ ] Fix transaction propagation issues:
+    - [ ] Reimplement propagate_transaction to properly preserve all transaction properties
+    - [ ] Add property preservation guarantees for privacy-sensitive transaction fields
+    - [ ] Create intermediate validation steps during transaction propagation
+- [ ] Create comprehensive integration tests:
+   - [ ] Test end-to-end transaction flow with stealth addresses
+   - [ ] Validate property preservation across all transaction processing stages
+   - [ ] Implement automated regression testing for privacy feature interactions
+- [ ] Document expected behavior for stealth address handling
+- [ ] Create clear implementation guidelines for privacy component developers
+- [ ] Add architecture documentation explaining privacy feature integration requirements
+
 ### Security Issues
 - [ ] Implement robust double-spend detection algorithm with cryptographic proofs
 - [ ] Add time-locked transaction support for double-spend prevention

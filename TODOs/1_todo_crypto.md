@@ -151,6 +151,19 @@
 - [ ] Document cryptographic guarantees and assumptions
 - [ ] Provide usage guidelines for secure implementation patterns
 
+### 6. Stealth Addressing
+- [ ] Fix cryptographic integration with transaction privacy:
+- [ ] Ensure cryptographic operations preserve transaction metadata including stealth addresses
+- [ ] Implement proper verification mechanisms for privacy-enhanced transactions
+- [ ] Add cryptographic guarantees for transaction property preservation
+- [ ] Create comprehensive integration tests:
+   - [ ] Test end-to-end transaction flow with stealth addresses
+   - [ ] Validate property preservation across all transaction processing stages
+   - [ ] Implement automated regression testing for privacy feature interactions
+- [ ] Document expected behavior for stealth address handling
+- [ ] Create clear implementation guidelines for privacy component developers
+- [ ] Add architecture documentation explaining privacy feature integration requirements
+
 ### Priority Tasks
 - [x] Fix insecure keypair encryption in mod.rs
 - [x] Remove debug print statements with sensitive information

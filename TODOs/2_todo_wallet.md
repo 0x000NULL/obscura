@@ -81,6 +81,26 @@
 
 ## TODO Checklist
 
+- [ ] Fix transaction creation issues with stealth addresses:
+- [ ] Redesign create_transaction to properly initialize and retain public key scripts for stealth addressing
+- [ ] Ensure transaction outputs maintain public key script integrity after privacy feature application
+- [ ] Add validation to prevent empty or invalid public key scripts in transaction outputs
+- [ ] Fix stealth address implementation issues:
+- [ ] Reimplement set_stealth_recipient to properly preserve all output properties (value, range proofs, - commitments)
+- [ ] Add property integrity verification after stealth address is set
+- [ ] Create test suite to validate stealth address preservation across transaction processing
+- [ ] Enhance transaction verification for stealth addresses:
+- [ ] Add comprehensive validation in can_find_transaction to detect stealth address inconsistencies
+- [ ] Implement proper error reporting for stealth address verification failures
+- [ ] Create automated tests for stealth address matching and verification
+- [ ] Create comprehensive integration tests:
+   - [ ] Test end-to-end transaction flow with stealth addresses
+   - [ ] Validate property preservation across all transaction processing stages
+   - [ ] Implement automated regression testing for privacy feature interactions
+- [ ] Document expected behavior for stealth address handling
+- [ ] Create clear implementation guidelines for privacy component developers
+- [ ] Add architecture documentation explaining privacy feature integration requirements
+
 - [ ] Fix weak error handling
   - [ ] Replace `Option<Transaction>` returns with proper `Result` types
   - [ ] Implement structured error types

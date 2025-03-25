@@ -1,5 +1,22 @@
 # Obscura Networking Module Improvements
 
+## Stealth Addressing
+- [ ] Fix privacy component interactions:
+    - [ ] Implement proper interface contracts for all privacy components to guarantee property preservation
+    - [ ] Create a comprehensive transaction property preservation mechanism across network boundaries
+    - [ ] Add logging and monitoring for privacy component failures in transaction processing
+- [ ] Standardize privacy feature handling:
+    - [ ] Create unified privacy flag handling across all networking components
+    - [ ] Implement consistent stealth address propagation in network transaction broadcasts
+    - [ ] Add validation hooks in network transaction processing pipeline
+- [ ] Create comprehensive integration tests:
+   - [ ] Test end-to-end transaction flow with stealth addresses
+   - [ ] Validate property preservation across all transaction processing stages
+   - [ ] Implement automated regression testing for privacy feature interactions
+- [ ] Document expected behavior for stealth address handling
+- [ ] Create clear implementation guidelines for privacy component developers
+- [ ] Add architecture documentation explaining privacy feature integration requirements
+
 ## General Networking Issues
 
 - [ ] **Inconsistent Privacy Feature Flags**: Remove duplicate entries (like "Dandelion") from `FeatureFlag` and `PrivacyFeatureFlag` enums in p2p.rs.

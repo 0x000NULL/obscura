@@ -1,2 +1,8 @@
 [2025-03-25 17:01:54.827] [INFO] [ENCRYPTION] [SUCCESS] Test encryption operation
 [2025-03-25 17:01:54.830] [CRITICAL] [GENERAL] [FAILED] Test security incident
+[2025-03-25 17:04:57.483] [CRITICAL] [GENERAL] [FAILED] Test security incident
+[2025-03-25 17:04:57.484] [INFO] [ENCRYPTION] [SUCCESS] Test encryption operation
+[2025-03-25 17:20:22.053] [INFO] [ENCRYPTION] [SUCCESS] Test encryption operation
+[2025-03-25 17:20:22.054] [CRITICAL] [GENERAL] [FAILED] Test security incident
+[2025-03-25 17:20:36.994] [INFO] [ENCRYPTION] [SUCCESS] Test encryption operation
+[2025-03-25 17:20:37.005] [CRITICAL] [GENERAL] [FAILED] Test security incident

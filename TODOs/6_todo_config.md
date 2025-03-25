@@ -239,6 +239,19 @@
 - [ ] Standardize inconsistent error handling
 - [ ] Fill test coverage gaps
 
+### Stealth Addressing
+- [ ] Fix privacy configuration issues:
+   - [ ] Add specific configuration options for stealth address handling behavior
+   - [ ] Implement validation rules for privacy component configuration combinations
+   - [ ] Create default configurations that guarantee stealth address preservation
+- [ ] Create comprehensive integration tests:
+   - [ ] Test end-to-end transaction flow with stealth addresses
+   - [ ] Validate property preservation across all transaction processing stages
+   - [ ] Implement automated regression testing for privacy feature interactions
+- [ ] Document expected behavior for stealth address handling
+- [ ] Create clear implementation guidelines for privacy component developers
+- [ ] Add architecture documentation explaining privacy feature integration requirements
+
 ### Suggested Enhancements
 - [ ] Implement configuration versioning
 - [ ] Design distributed synchronization
