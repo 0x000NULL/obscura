@@ -1,6 +1,6 @@
 [package]
 name = "obscura"
-version = "0.7.22"
+version = "0.7.23"
 authors = ["Obscura Team <ethan@needtoaddadomainhere.fake>"]
 description = "A privacy-focused cryptocurrency with stealth addresses and confidential transactions"
 repository = "https://github.com/obscura-org/obscura"
