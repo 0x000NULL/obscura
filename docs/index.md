@@ -17,6 +17,7 @@ Welcome to the official documentation for the Obscura blockchain project. This d
 - [Privacy Features](./privacy_features.md) - Overview of all privacy-enhancing technologies
 - [Cryptography](./cryptography.md) - Cryptographic primitives used in Obscura
 - [Wallet Integration](./wallet/integration.md) - How the wallet integrates with blockchain components
+- [Profiling and Benchmarking](./profiling_system.md) - Performance analysis and optimization system
 
 ## Technical Reference
 
@@ -57,6 +58,13 @@ Welcome to the official documentation for the Obscura blockchain project. This d
 - [Protocol Morphing](./networking/protocol_morphing.md) - How network traffic is disguised as other protocols
 - [I2P Network Support](./networking/i2p_proxy.md) - Integration with I2P for enhanced anonymity
 - [DNS-over-HTTPS](./networking/dns_over_https.md) - Privacy-preserving peer discovery
+
+### Performance and Optimization
+
+- [Profiling System](./profiling_system.md) - Comprehensive performance profiling framework
+- [Critical Path Benchmarking](./critical_path_benchmarking.md) - Benchmarking performance-critical operations
+- [Profiler Visualization](./profiler_visualization.md) - Visualizing performance data
+- [Module Profiling Integration](./profiler_integration.md) - Specialized profiling for specific modules
 
 ### Security
 

@@ -56,6 +56,9 @@ pub trait JubjubPointExt: Sized {
     /// Get the generator point
     fn generator() -> Self;
     
+    /// Get the identity (zero) point
+    fn identity() -> Self;
+    
     /// Verify a signature
     fn verify(&self, message: &[u8], signature: &JubjubSignature) -> bool;
 }
@@ -411,6 +414,10 @@ impl JubjubPointExt for JubjubPoint {
 
     fn generator() -> Self {
         <EdwardsProjective as ark_ec::Group>::generator()
+    }
+    
+    fn identity() -> Self {
+        EdwardsProjective::zero()
     }
 
     fn verify(&self, message: &[u8], signature: &JubjubSignature) -> bool {

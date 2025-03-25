@@ -10,6 +10,7 @@ pub mod randomx;
 pub mod sharding;
 pub mod threshold_sig;
 pub mod vrf;
+pub mod profile_integration;
 
 pub use pos_old::StakeProof;
 pub use randomx::{verify_difficulty, RandomXContext, RandomXError};
@@ -129,6 +130,16 @@ pub fn calculate_block_hash(
     randomx.calculate_hash(header_bytes, &mut hash)?;
     Ok(hash)
 }
+
+// Use the profiling integration as part of the public API
+pub use profile_integration::{
+    profile_block_validation,
+    profile_randomx_hash,
+    profile_nonce_validation,
+    profile_calculate_difficulty,
+    measure_block_mining,
+    profile_consensus_operation,
+};
 
 #[cfg(test)]
 mod tests {

@@ -498,3 +498,16 @@ mod tests {
 // - Merkle tree implementations
 // - RandomX for proof-of-work verification
 // - Staking mechanisms for consensus
+
+pub mod profile_integration;
+
+// Use the profiling integration as part of the public API
+pub use profile_integration::{
+    profile_bls_verify,
+    profile_bls_batch_verify,
+    profile_jubjub_scalar_mul,
+    profile_constant_time_scalar_mul,
+    profile_hardware_accel_scalar_mul,
+    profile_operation,
+    measure_operation,
+};

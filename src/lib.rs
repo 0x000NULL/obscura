@@ -143,3 +143,20 @@ pub fn process_mempool(_mempool: &std::sync::Arc<std::sync::Mutex<crate::blockch
 pub fn start_network_services(_mempool: std::sync::Arc<std::sync::Mutex<crate::blockchain::mempool::Mempool>>) -> std::thread::JoinHandle<()> {
     std::thread::spawn(|| {})
 }
+
+pub use utils::profiler::{
+    profile, profile_with_level, ProfilingLevel, 
+    set_profiling_level, generate_report
+};
+
+// Re-export the visualization utilities
+pub use utils::profiler_viz::{
+    generate_visualization, print_colored_report, 
+    generate_full_visualization, OutputFormat
+};
+
+// Re-export benchmarking utilities
+pub use utils::profiler_benchmarks::{
+    register_critical_path, run_all_critical_path_benchmarks,
+    run_high_priority_benchmarks, generate_benchmark_report
+};

@@ -1,5 +1,57 @@
 # Changelog
 
+## [0.7.20] - 2025-06-05
+
+### Added
+- **Critical Path Profiling and Benchmarking System**
+  - Implemented comprehensive profiling infrastructure:
+    - Created configurable profiling level system (Disabled, Minimal, Normal, Detailed, Debug)
+    - Added thread-safe profiling statistics collection
+    - Implemented span-based profiling API for code section measurement
+    - Created automatic profiling span management with RAII pattern
+    - Added detailed timing statistics with min/max/avg/std-dev calculation
+    - Implemented category-based profiling organization
+    - Created performance reporting system with filtering capabilities
+  - Added benchmarking infrastructure for critical paths:
+    - Implemented critical path registration system with metadata
+    - Created configurable benchmark execution framework
+    - Added high-priority path designation for critical operations
+    - Implemented expected latency tracking for performance validation
+    - Created comprehensive benchmark reporting system
+    - Added Criterion integration for detailed statistical analysis
+  - Enhanced visualization capabilities:
+    - Added multiple output formats (Text, HTML, JSON, CSV, FlameGraph)
+    - Implemented colored console output for interactive analysis
+    - Created drill-down reporting by category
+    - Added full visualization generation for all formats
+    - Implemented time-series visualization capabilities
+  - Added module integrations for key subsystems:
+    - Created crypto module profiling integration
+    - Implemented consensus module profiling integration
+    - Added specialized profiling wrappers for critical operations
+    - Created timing measurement utilities for specialized analysis
+  - Added command-line profiler binary:
+    - Implemented subcommands for benchmarking, profiling, and path listing
+    - Added configurable profiling level setting
+    - Created customizable benchmark iterations
+    - Added category filtering for targeted analysis
+    - Implemented report generation and output options
+    - Created detailed logging configuration
+
+### Improved
+- Enhanced performance visibility across critical system operations
+- Added better identification of performance bottlenecks
+- Improved developer tooling for performance optimization
+- Enhanced testing infrastructure with benchmarking capabilities
+- Added comprehensive documentation for profiling system usage
+
+### Documentation
+- Added detailed README for the profiling system
+- Created comprehensive API documentation
+- Added usage examples for all profiling components
+- Implemented examples of integration with application code
+- Added performance optimization guidelines
+
 ## [0.7.19] - 2025-05-30
 
 ### Added

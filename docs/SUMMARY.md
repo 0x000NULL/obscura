@@ -46,6 +46,11 @@
   - [Message Types](networking/message_types.md)
   - [Privacy-Enhanced Networking](peer_reputation_privacy.md)
 - [Development](development.md)
+- [Profiling and Benchmarking](profiling_system.md)
+  - [Profiler Usage Guide](profiling_guide.md)
+  - [Benchmarking Critical Paths](critical_path_benchmarking.md)
+  - [Visualization Tools](profiler_visualization.md)
+  - [Module Integration](profiler_integration.md)
 
 # Components
 - [Mining & Rewards](mining_rewards/index.md)
