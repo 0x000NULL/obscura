@@ -17,7 +17,9 @@ use std::sync::{Arc, Mutex};
 use log::debug;
 use chacha20poly1305::{
     aead::{Aead, KeyInit},
-    ChaCha20Poly1305, Nonce,
+    ChaCha20Poly1305,
+    Key,
+    Nonce,
 };
 use ring::pbkdf2;
 
@@ -1355,7 +1357,8 @@ impl Wallet {
     pub fn export_bls_keypair(&self, password: &str) -> Option<Vec<u8>> {
         use chacha20poly1305::{
             aead::{Aead, KeyInit},
-            ChaCha20Poly1305, Nonce,
+            ChaCha20Poly1305,
+            Key,
         };
         use ring::pbkdf2;
         use rand::RngCore;
@@ -1397,10 +1400,10 @@ impl Wallet {
             );
             
             // Create a ChaCha20Poly1305 cipher with the derived key
-            let cipher = ChaCha20Poly1305::new(derived_key.as_ref().into());
+            let cipher = ChaCha20Poly1305::new(Key::from_slice(derived_key.as_ref()));
             
             // Encrypt the serialized keypair with authentication tag
-            let ciphertext = match cipher.encrypt(&nonce, serialized.as_ref()) {
+            let ciphertext = match cipher.encrypt(nonce, serialized.as_ref()) {
                 Ok(ciphertext) => ciphertext,
                 Err(_) => return None,
             };
@@ -1446,7 +1449,7 @@ impl Wallet {
         );
         
         // Create a ChaCha20Poly1305 cipher with the derived key
-        let cipher = ChaCha20Poly1305::new(derived_key.as_ref().into());
+        let cipher = ChaCha20Poly1305::new(Key::from_slice(derived_key.as_ref()));
         
         // Decrypt the ciphertext
         let plaintext = match cipher.decrypt(nonce, ciphertext) {

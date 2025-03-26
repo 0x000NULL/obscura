@@ -13,6 +13,7 @@ use std::time::{Duration, Instant, SystemTime};
 use std::thread;
 use twox_hash::XxHash64;
 use std::hash::Hasher;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::networking::timing_obfuscation::TimingObfuscation;
 use crate::blockchain::Transaction;
@@ -179,11 +180,11 @@ pub struct PropagationMetadata {
 
 // Network traffic data for adaptive timing
 #[derive(Debug, Clone)]
-struct NetworkCondition {
-    avg_latency: Duration,               // Average network latency
-    congestion_level: f64,               // Measure of network congestion (0.0-1.0)
-    last_updated: Instant,               // When this data was last updated
-    latency_samples: VecDeque<Duration>, // Recent latency measurements
+pub struct NetworkCondition {
+    pub latency: f64,
+    pub bandwidth: f64,
+    pub reliability: f64,
+    pub last_update: Instant,
 }
 
 // Peer reputation and behavior tracking for advanced security
@@ -218,12 +219,12 @@ pub struct PeerReputation {
 
 // Transaction batch for traffic analysis protection
 #[derive(Debug, Clone)]
-struct TransactionBatch {
-    batch_id: u64,                    // Unique batch identifier
-    creation_time: Instant,           // When the batch was created
-    transactions: Vec<[u8; 32]>,      // Transaction hashes in this batch
-    release_time: Instant,            // When the batch should be released to fluff phase
-    privacy_mode: PrivacyRoutingMode, // Privacy mode for this batch
+pub struct TransactionBatch {
+    pub batch_id: u64,
+    pub creation_time: Instant,
+    pub transactions: Vec<[u8; 32]>,
+    pub release_time: Instant,
+    pub privacy_mode: PrivacyRoutingMode,
 }
 
 // Anonymity set for transaction privacy
@@ -334,7 +335,7 @@ pub struct DandelionManager {
     pub transaction_batches: HashMap<u64, TransactionBatch>,
 
     // Next batch ID
-    next_batch_id: u64,
+    next_batch_id: AtomicU64,
 
     // Last time a decoy transaction was generated
     last_decoy_generation: Instant,
@@ -380,7 +381,7 @@ pub struct DandelionManager {
     layered_encryption_sessions: HashMap<[u8; 16], LayeredEncryptionKeys>,
 
     // Historical transaction paths for anonymity set analysis
-    historical_paths: HashMap<[u8; 32], Vec<SocketAddr>>,
+    historical_paths: HashMap<SocketAddr, HashSet<SocketAddr>>,
 
     // Last reputation decay time
     last_reputation_decay: Instant,
@@ -438,6 +439,13 @@ pub struct DandelionManager {
     pub fluff_entry_points: Vec<SocketAddr>,
     pub last_routing_table_refresh: Instant,
     pub routing_table_entropy: f64,
+
+    // Configuration
+    pub config: DandelionConfig,
+
+    // New fields for entropy-based path selection
+    subnet_entropy: f64,
+    subnet_distribution_entropy: f64,
 }
 
 #[derive(Debug)]
@@ -450,9 +458,12 @@ pub struct EclipseAttackResult {
 // Add new structure for peer information
 #[derive(Clone, Debug)]
 struct PeerInfo {
-    autonomous_system: Option<u32>,
-    country: Option<String>,
-    last_updated: Instant,
+    pub address: SocketAddr,
+    pub autonomous_system: Option<u32>,
+    pub reliability: Option<f64>,
+    pub last_seen: Instant,
+    pub subnet: Option<u32>,
+    pub reputation: f64,
 }
 
 // Add new structure for route metrics
@@ -740,24 +751,21 @@ impl DandelionManager {
         let batch_id = match batch_id {
             Some(id) => id,
             None => {
-                let id = self.next_batch_id;
-                self.next_batch_id += 1;
+                let id = self.next_batch_id.fetch_add(1, Ordering::SeqCst);
 
                 // Create a new batch with random release time
                 let wait_time = self.secure_rng.gen_range(0..MAX_BATCH_WAIT_MS);
                 let release_time = now + Duration::from_millis(wait_time);
 
-                self.transaction_batches.insert(
-                    id,
-                    TransactionBatch {
-                        batch_id: id,
-                        creation_time: now,
-                        transactions: Vec::new(),
-                        release_time,
-                        privacy_mode: PrivacyRoutingMode::Standard,
-                    },
-                );
+                let mut batch = TransactionBatch {
+                    batch_id: id,
+                    creation_time: now,
+                    transactions: Vec::new(),
+                    release_time,
+                    privacy_mode: PrivacyRoutingMode::Standard,
+                };
 
+                self.transaction_batches.insert(id, batch);
                 id
             }
         };
@@ -780,24 +788,17 @@ impl DandelionManager {
     pub fn process_ready_batches(&mut self) -> Vec<[u8; 32]> {
         let now = Instant::now();
         let mut ready_txs = Vec::new();
-        let mut ready_batch_ids = Vec::new();
+        let mut ready_batches = Vec::new();
 
-        // Find batches ready for release
-        for (batch_id, batch) in &self.transaction_batches {
+        for (id, batch) in &self.transaction_batches {
             if now >= batch.release_time {
-                ready_batch_ids.push(*batch_id);
-                for tx_hash in &batch.transactions {
-                    if let Some(metadata) = self.transactions.get_mut(tx_hash) {
-                        metadata.state = PropagationState::Fluff;
-                        ready_txs.push(*tx_hash);
-                    }
-                }
+                ready_batches.push(*id);
+                ready_txs.extend(batch.transactions.iter().cloned());
             }
         }
 
-        // Remove processed batches
-        for batch_id in ready_batch_ids {
-            self.transaction_batches.remove(&batch_id);
+        for id in ready_batches {
+            self.transaction_batches.remove(&id);
         }
 
         ready_txs
@@ -901,33 +902,15 @@ impl DandelionManager {
 
         let condition = self.network_conditions.entry(peer).or_insert_with(|| {
             NetworkCondition {
-                avg_latency: Duration::from_millis(100), // Default assumption
-                congestion_level: 0.5,
-                last_updated: now,
-                latency_samples: VecDeque::with_capacity(10),
+                latency: latency.as_secs_f64(),
+                bandwidth: 1.0, // Assuming a constant bandwidth
+                reliability: 1.0, // Assuming a constant reliability
+                last_update: now,
             }
         });
 
         // Update network condition
-        condition.latency_samples.push_back(latency);
-        if condition.latency_samples.len() > 10 {
-            condition.latency_samples.pop_front();
-        }
-
-        // Recalculate average latency
-        let total_latency: Duration = condition.latency_samples.iter().sum();
-        condition.avg_latency = total_latency / condition.latency_samples.len() as u32;
-
-        // Update congestion level (higher latency = higher congestion)
-        let max_expected_latency = Duration::from_millis(500);
-        let normalized_latency =
-            condition.avg_latency.as_millis() as f64 / max_expected_latency.as_millis() as f64;
-        condition.congestion_level = normalized_latency.min(1.0);
-
-        condition.last_updated = now;
-
-        // Update timing obfuscation with new traffic level
-        self.timing_obfuscation.update_network_traffic(condition.congestion_level);
+        condition.last_update = now;
     }
 
     /// Calculate adaptive delay based on network conditions
@@ -966,7 +949,7 @@ impl DandelionManager {
         let total_congestion: f64 = self
             .network_conditions
             .values()
-            .map(|c| c.congestion_level)
+            .map(|c| c.reliability)
             .sum();
 
         self.current_network_traffic = total_congestion / self.network_conditions.len() as f64;
@@ -1652,16 +1635,18 @@ impl DandelionManager {
     // Add method to update peer information
     pub fn update_peer_info(&mut self, peer: SocketAddr, as_num: Option<u32>, country: Option<String>) {
         if let Some(info) = self.peer_info.get_mut(&peer) {
-            info.autonomous_system = as_num;
-            if let Some(c) = country {
-                info.country = Some(c);
+            if let Some(as_num) = as_num {
+                info.autonomous_system = Some(as_num);
             }
-            info.last_updated = Instant::now();
+            info.last_seen = Instant::now();
         } else {
             self.peer_info.insert(peer, PeerInfo {
+                address: peer,
                 autonomous_system: as_num,
-                country: country,
-                last_updated: Instant::now(),
+                reliability: Some(1.0),
+                last_seen: Instant::now(),
+                subnet: None,
+                reputation: 0.0,
             });
         }
     }
@@ -1734,7 +1719,7 @@ impl DandelionManager {
     }
 
     /// Create a new DandelionManager instance
-    pub fn new() -> Self {
+    pub fn new(config: DandelionConfig) -> Self {
         let now = Instant::now();
         let secure_rng = ChaCha20Rng::from_entropy();
 
@@ -1748,7 +1733,7 @@ impl DandelionManager {
             network_conditions: HashMap::new(),
             peer_reputation: HashMap::new(),
             transaction_batches: HashMap::new(),
-            next_batch_id: 0,
+            next_batch_id: AtomicU64::new(0),
             last_decoy_generation: now,
             secure_rng,
             current_network_traffic: 0.0,
@@ -1787,7 +1772,6 @@ impl DandelionManager {
             last_plausible_deniability_action: now,
             k_anonymity_violations: 0,
             eclipse_attack_last_detected: None,
-            // Initialize Dandelion++ enhancement fields
             aggregated_transactions: HashMap::new(),
             next_aggregation_id: 0,
             stem_batches: HashMap::new(),
@@ -1799,6 +1783,9 @@ impl DandelionManager {
             recent_patterns: VecDeque::new(),
             pattern_frequency_cache: HashMap::new(),
             last_pattern_cleanup: now,
+            config,
+            subnet_entropy: 1.0,
+            subnet_distribution_entropy: 1.0,
         }
     }
 
@@ -2121,7 +2108,7 @@ impl DandelionManager {
         }
 
         // If aggregation not possible, try stem batching
-        if let Some(batch_id) = self.create_stem_batch(tx_hash) {
+        if let Some(batch_id) = self.create_stem_batch(&tx_hash) {
             if let Some(metadata) = self.transactions.get_mut(&tx_hash) {
                 metadata.state = PropagationState::BatchedStem;
                 return PropagationState::BatchedStem;
@@ -2926,72 +2913,21 @@ impl DandelionManager {
     }
 
     /// Create a new stem batch with randomized transition timing
-    pub fn create_stem_batch(&mut self, tx_hash: [u8; 32]) -> Option<u64> {
+    pub fn create_stem_batch(&mut self, tx_hash: &[u8; 32]) -> Option<u64> {
         let now = Instant::now();
+        let release_time = now + Duration::from_millis(self.config.stem_phase_duration_ms);
+        let id = self.next_batch_id.fetch_add(1, Ordering::SeqCst);
 
-        // Find existing batch that's not full
-        let batch_id = self
-            .stem_batches
-            .iter()
-            .find(|(_, batch)| {
-                batch.transactions.len() < STEM_BATCH_SIZE
-                    && now.duration_since(batch.creation_time).as_millis() < STEM_BATCH_TIMEOUT_MS as u128
-            })
-            .map(|(id, _)| *id);
-
-        // Create new batch if needed
-        let batch_id = match batch_id {
-            Some(id) => id,
-            None => {
-                let id = self.next_stem_batch_id;
-                self.next_stem_batch_id += 1;
-
-                // Generate random transition time
-                let transition_delay = self.secure_rng.gen_range(
-                    STEM_FLUFF_TRANSITION_MIN_DELAY_MS..STEM_FLUFF_TRANSITION_MAX_DELAY_MS,
-                );
-                let transition_time = now + Duration::from_millis(transition_delay);
-
-                // Select random fluff entry points
-                let num_entry_points = self.secure_rng.gen_range(FLUFF_ENTRY_POINTS_MIN..=FLUFF_ENTRY_POINTS_MAX);
-                let mut entry_points = Vec::new();
-                let available_peers: Vec<_> = self.outbound_peers.iter().cloned().collect();
-                
-                if !available_peers.is_empty() {
-                    for _ in 0..num_entry_points {
-                        if let Some(peer) = available_peers.choose(&mut self.secure_rng) {
-                            entry_points.push(*peer);
-                        }
-                    }
-                }
-
-                self.stem_batches.insert(
-                    id,
-                    StemBatch {
-                        batch_id: id,
-                        transactions: Vec::new(),
-                        creation_time: now,
-                        transition_time,
-                        entry_points,
-                        privacy_mode: PrivacyRoutingMode::Standard,
-                    },
-                );
-
-                id
-            }
+        let mut batch = TransactionBatch {
+            batch_id: id,
+            creation_time: now,
+            transactions: vec![*tx_hash],
+            release_time,
+            privacy_mode: PrivacyRoutingMode::Standard,
         };
 
-        // Add transaction to batch
-        if let Some(batch) = self.stem_batches.get_mut(&batch_id) {
-            batch.transactions.push(tx_hash);
-            
-            // Update transaction metadata
-            if let Some(metadata) = self.transactions.get_mut(&tx_hash) {
-                metadata.state = PropagationState::BatchedStem;
-            }
-        }
-
-        Some(batch_id)
+        self.transaction_batches.insert(id, batch);
+        Some(id)
     }
 
     /// Process ready stem batches and transition them to fluff phase
@@ -3050,7 +2986,7 @@ impl DandelionManager {
                 .filter(|&p| {
                     *p != peer 
                     && !used_successors.contains(p)
-                    && self.calculate_routing_entropy(peer, *p) > self.routing_table_entropy
+                    && self.calculate_routing_entropy(&peer, p) > self.routing_table_entropy
                 })
                 .cloned()
                 .collect();
@@ -3067,41 +3003,82 @@ impl DandelionManager {
     }
 
     /// Calculate routing entropy between two peers
-    fn calculate_routing_entropy(&self, from: SocketAddr, to: SocketAddr) -> f64 {
+    fn calculate_routing_entropy(&self, from: &SocketAddr, to: &SocketAddr) -> f64 {
+        let mut entropy = 1.0;
+        
+        // Check if peers are in the same subnet
+        match (from, to) {
+            (SocketAddr::V4(from_v4), SocketAddr::V4(to_v4)) => {
+                let from_ip = from_v4.ip().octets();
+                let to_ip = to_v4.ip().octets();
+                if from_ip[0] == to_ip[0] && from_ip[1] == to_ip[1] && from_ip[2] == to_ip[2] {
+                    entropy *= 0.8; // Reduce entropy for same subnet
+                }
+            }
+            _ => {} // Skip IPv6 for now
+        }
+        
+        // Check historical paths
+        if let Some(historical) = self.historical_paths.get(from) {
+            if historical.contains(to) {
+                entropy *= 0.9; // Reduce entropy for previously used paths
+            }
+        }
+        
+        // Check peer reputation
+        if let Some(info) = self.peer_info.get(to) {
+            if let Some(reliability) = info.reliability {
+                if reliability < 0.8 {
+                    entropy *= 0.7; // Reduce entropy for less reliable peers
+                }
+            }
+        }
+        
+        entropy
+    }
+
+    fn calculate_tx_routing_entropy(&self, tx_hash: &[u8; 32], to: &SocketAddr) -> f64 {
         let mut entropy = 1.0;
 
-        // Consider subnet diversity
-        if let (Some(from_rep), Some(to_rep)) = (
-            self.peer_reputation.get(&from),
-            self.peer_reputation.get(&to)
-        ) {
-            if from_rep.ip_subnet == to_rep.ip_subnet {
-                entropy *= 0.5;
+        // Check historical paths for this transaction
+        if let Some(historical) = self.transactions.get(tx_hash) {
+            if historical.relay_path.contains(to) {
+                entropy *= 0.8; // Reduce entropy for previously used paths
             }
         }
 
-        // Consider historical paths
-        if let Some(historical) = self.historical_paths.get(&[0u8; 32]) {
-            if historical.contains(&to) {
-                entropy *= 0.8;
+        // Check peer reputation
+        if let Some(info) = self.peer_info.get(to) {
+            if let Some(reliability) = info.reliability {
+                entropy *= reliability;
             }
-        }
-
-        // Consider peer reputation
-        if let Some(rep) = self.peer_reputation.get(&to) {
-            entropy *= (rep.reputation_score + 100.0) / 200.0;
         }
 
         entropy
     }
 
-    /// Calculate overall routing entropy of the network
-    fn calculate_overall_routing_entropy(&self) -> f64 {
+    fn calculate_overall_routing_entropy(&self, from: &SocketAddr, to: &SocketAddr, tx_hash: Option<&[u8; 32]>) -> f64 {
         let mut total_entropy = 0.0;
         let mut count = 0;
 
-        for (&from, &to) in &self.stem_successors {
-            total_entropy += self.calculate_routing_entropy(from, to);
+        // Calculate entropy for direct path
+        total_entropy += self.calculate_routing_entropy(from, to);
+        count += 1;
+
+        // Calculate entropy for multi-hop paths
+        if let Some(paths) = self.multi_hop_paths.get(from) {
+            for path in paths {
+                if let Some(intermediate) = path.first() {
+                    total_entropy += self.calculate_routing_entropy(from, intermediate);
+                    total_entropy += self.calculate_routing_entropy(intermediate, to);
+                    count += 2;
+                }
+            }
+        }
+
+        // If we have a transaction hash, include its entropy
+        if let Some(hash) = tx_hash {
+            total_entropy += self.calculate_tx_routing_entropy(hash, to);
             count += 1;
         }
 
@@ -3112,105 +3089,46 @@ impl DandelionManager {
         }
     }
 
-    pub fn maintain_dandelion(&mut self) {
-        let now = Instant::now();
-
-        // Process aggregated transactions
-        let mut ready_aggregations = Vec::new();
-        for (id, agg) in &self.aggregated_transactions {
-            if now.duration_since(agg.creation_time).as_millis() >= AGGREGATION_TIMEOUT_MS as u128 
-                || agg.transactions.len() >= MAX_AGGREGATION_SIZE {
-                ready_aggregations.push(*id);
-            }
+    fn update_routing_table_entropy(&mut self) {
+        let mut total_entropy = 0.0;
+        let mut count = 0;
+        
+        for (&from, &to) in &self.stem_successors {
+            total_entropy += self.calculate_overall_routing_entropy(&from, &to, None);
+            count += 1;
         }
-
-        // Move ready aggregations to stem batches
-        for id in ready_aggregations {
-            if let Some(agg) = self.aggregated_transactions.remove(&id) {
-                for tx_hash in agg.transactions {
-                    self.create_stem_batch(tx_hash);
-                }
-            }
-        }
-
-        // Process stem batches ready for fluff phase
-        let ready_txs = self.process_stem_batches();
-        for (tx_hash, entry_points) in ready_txs {
-            if let Some(metadata) = self.transactions.get_mut(&tx_hash) {
-                metadata.state = PropagationState::Fluff;
-                metadata.fluff_time = Some(now);
-                // Store entry points for fluff phase
-                self.fluff_entry_points = entry_points;
-            }
-        }
-
-        // Refresh routing table if needed
-        if ROUTING_TABLE_INFERENCE_RESISTANCE_ENABLED {
-            self.refresh_routing_table();
-        }
-
-        // Update routing table entropy
-        self.routing_table_entropy = self.calculate_overall_routing_entropy();
+        
+        self.routing_table_entropy = if count > 0 {
+            total_entropy / count as f64
+        } else {
+            1.0
+        };
     }
 
-    fn calculate_subnet_entropy(&self, subnet_distribution: &HashMap<[u8; 2], usize>) -> f64 {
-        let total_nodes: usize = subnet_distribution.values().sum();
-        if total_nodes == 0 {
-            return 0.0;
-        }
-
-        let mut entropy = 0.0;
-        for &count in subnet_distribution.values() {
-            let probability = count as f64 / total_nodes as f64;
-            if probability > 0.0 {
-                entropy -= probability * probability.log2();
-            }
-        }
-        entropy
-    }
-
-    fn calculate_transaction_pattern_entropy(&self, flow_patterns: &HashMap<([u8; 32], [u8; 32]), usize>) -> f64 {
-        let total_patterns: usize = flow_patterns.values().sum();
-        if total_patterns == 0 {
-            return 0.0;
-        }
-
-        let mut entropy = 0.0;
-        for &count in flow_patterns.values() {
-            let probability = count as f64 / total_patterns as f64;
-            if probability > 0.0 {
-                entropy -= probability * probability.log2();
-            }
-        }
-        entropy
-    }
-
-    /// Returns a vector of peers that meet or exceed the given reputation threshold
-    pub fn get_peers_by_reputation(&self, threshold: Option<f64>) -> Vec<SocketAddr> {
-        let threshold = threshold.unwrap_or(0.0);
-        self.peer_reputation
-            .iter()
-            .filter(|(_, rep)| rep.reputation_score >= threshold)
-            .map(|(addr, _)| *addr)
-            .collect()
-    }
-
-    /// Generate weights for path selection based on entropy and network conditions
     fn generate_path_selection_weights(&mut self, tx_hash: &[u8; 32], peers: &[SocketAddr]) -> HashMap<SocketAddr, f64> {
         let mut weights = HashMap::new();
-        
-        // Base entropy from routing table
-        let base_entropy = self.calculate_overall_routing_entropy();
-        
+        let mut total_weight = 0.0;
+
+        // Calculate base entropy for the transaction
+        let base_entropy = if let Some(from) = peers.first() {
+            if let Some(to) = peers.get(1) {
+                self.calculate_overall_routing_entropy(from, to, Some(tx_hash))
+            } else {
+                1.0
+            }
+        } else {
+            1.0
+        };
+
         for &peer in peers {
             let mut weight = 1.0;
             
             // Factor in network conditions
             if let Some(condition) = self.network_conditions.get(&peer) {
                 // Lower latency = higher weight
-                let latency_factor = 1.0 / (1.0 + condition.avg_latency.as_secs_f64());
+                let latency_factor = 1.0 / (1.0 + condition.latency);
                 // Lower congestion = higher weight
-                let congestion_factor = 1.0 - condition.congestion_level;
+                let congestion_factor = 1.0 - condition.reliability;
                 
                 weight *= latency_factor * congestion_factor;
             }
@@ -3257,8 +3175,8 @@ impl DandelionManager {
             weight *= subnet_penalty;
             
             // Factor in historical path diversity
-            if let Some(historical) = self.historical_paths.get(tx_hash) {
-                if historical.contains(&peer) {
+            if let Some(historical) = self.transactions.get(tx_hash) {
+                if historical.relay_path.contains(&peer) {
                     weight *= 0.7; // 30% penalty for reuse
                 }
             }
@@ -3271,154 +3189,111 @@ impl DandelionManager {
             weight = weight.max(0.1);
             
             weights.insert(peer, weight * base_entropy);
+            total_weight += weight;
         }
         
         weights
     }
 
-    /// Refresh the entropy pool used for randomization
-    fn refresh_entropy_pool(&mut self) {
+    /// Enhance Dandelion privacy settings
+    pub fn enhance_dandelion_privacy(
+        &mut self,
+        enable_tor: bool,
+        enable_mixnet: bool,
+        privacy_level: f64,
+    ) -> Result<(), &'static str> {
+        // Validate privacy level
+        if privacy_level < 0.0 || privacy_level > 1.0 {
+            return Err("Privacy level must be between 0.0 and 1.0");
+        }
+
+        // Update privacy settings based on the privacy level
+        let min_stem_hops = 2;
+        let max_stem_hops = 10;
+        let stem_hops = min_stem_hops + ((max_stem_hops - min_stem_hops) as f64 * privacy_level) as usize;
+
+        // Enable Tor if requested
+        if enable_tor {
+            // Configure Tor settings
+            // This would integrate with the Tor network implementation
+        }
+
+        // Enable Mixnet if requested
+        if enable_mixnet {
+            // Configure Mixnet settings
+            // This would integrate with the Mixnet implementation
+        }
+
+        Ok(())
+    }
+} // Add closing brace for DandelionManager implementation
+
+impl PropagationMetadata {
+    pub fn new(
+        state: PropagationState,
+        source_addr: Option<SocketAddr>,
+        privacy_mode: PrivacyRoutingMode,
+    ) -> Self {
         let now = Instant::now();
-        
-        // Only refresh if enough time has passed
-        if now.duration_since(self.last_entropy_refresh) < ENTROPY_SOURCE_REFRESH_INTERVAL {
-            return;
+        Self {
+            state,
+            received_time: now,
+            transition_time: now + Duration::from_secs(60), // Default 60 second stem phase
+            relayed: false,
+            source_addr,
+            relay_path: Vec::new(),
+            batch_id: None,
+            is_decoy: false,
+            adaptive_delay: None,
+            suspicious_peers: HashSet::new(),
+            privacy_mode,
+            encryption_layers: 0,
+            transaction_modified: false,
+            anonymity_set: HashSet::new(),
+            differential_delay: Duration::from_millis(0),
+            tx_data: Vec::new(),
+            fluff_time: None,
         }
-
-        // Clear existing pool and ensure capacity
-        self.entropy_pool.clear();
-        self.entropy_pool.reserve(64);
-
-        // 1. System entropy (32 bytes)
-        let mut system_entropy = [0u8; 32];
-        self.secure_rng.fill_bytes(&mut system_entropy);
-        self.entropy_pool.extend_from_slice(&system_entropy);
-
-        // 2. Time-based entropy (16 bytes)
-        let time_entropy = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap_or_else(|_| Duration::from_secs(0))
-            .as_nanos()
-            .to_le_bytes();
-        self.entropy_pool.extend_from_slice(&time_entropy);
-
-        // 3. Network state entropy (16 bytes)
-        let network_entropy = (self.current_network_traffic * f64::MAX) as u64;
-        let network_bytes = network_entropy.to_le_bytes();
-        self.entropy_pool.extend_from_slice(&network_bytes);
-        
-        let connection_count = self.outbound_peers.len() as u64;
-        let connection_bytes = connection_count.to_le_bytes();
-        self.entropy_pool.extend_from_slice(&connection_bytes);
-
-        // Update last refresh time
-        self.last_entropy_refresh = now;
     }
+}
 
-    /// Check if eclipse defense is currently active
-    pub fn is_eclipse_defense_active(&self) -> bool {
-        self.eclipse_defense_active
-    }
-
-    /// Prepare a transaction for broadcasting with enhanced privacy
-    pub fn prepare_transaction_for_broadcast(&self, tx: &Transaction) -> Transaction {
-        // Apply metadata cleaning before broadcasting
-        let cleaner = BroadcastMetadataCleaner::new();
-        let cleaned_tx = cleaner.clean_transaction_metadata(tx);
-        
-        // Add additional privacy protections specific to network propagation
-        let mut broadcast_tx = cleaned_tx.clone();
-        
-        // Ensure privacy flags are set correctly
-        broadcast_tx.privacy_flags |= 0x04; // Metadata removal flag
-        
-        // Add stem/fluff phase flag based on current state if available
-        if let Some(metadata) = self.transactions.get(&tx.hash()) {
-            if metadata.state == PropagationState::Stem {
-                broadcast_tx.privacy_flags |= 0x10; // Stem phase flag
-            } else if metadata.state == PropagationState::Fluff {
-                broadcast_tx.privacy_flags |= 0x20; // Fluff phase flag
+impl PeerReputation {
+    pub fn new(peer: SocketAddr) -> Self {
+        let now = Instant::now();
+        let subnet = match peer.ip() {
+            IpAddr::V4(ipv4) => {
+                let octets = ipv4.octets();
+                [octets[0], octets[1], octets[2], octets[3]]
             }
+            IpAddr::V6(_) => [0, 0, 0, 0], // Special case for IPv6
+        };
+
+        Self {
+            reputation_score: 0.0,
+            last_reputation_update: now,
+            successful_relays: 0,
+            failed_relays: 0,
+            suspicious_actions: 0,
+            sybil_indicators: 0,
+            eclipse_indicators: 0,
+            last_used_for_stem: None,
+            last_used_for_fluff: None,
+            ip_subnet: subnet,
+            autonomous_system: None,
+            transaction_requests: HashMap::new(),
+            connection_patterns: VecDeque::new(),
+            dummy_responses_sent: 0,
+            last_penalized: None,
+            peer_cluster: None,
+            tor_compatible: false,
+            mixnet_compatible: false,
+            layered_encryption_compatible: false,
+            routing_reliability: 0.5, // Start with neutral reliability
+            avg_relay_time: None,
+            relay_time_samples: VecDeque::with_capacity(20),
+            relay_success_rate: 0.0,
+            historical_paths: Vec::new(),
+            reputation_stability: 0.0,
         }
-        
-        broadcast_tx
-    }
-
-    /// Add a transaction to the Dandelion stem pool with enhanced privacy
-    pub fn add_transaction_with_privacy_metadata(&mut self, tx: Transaction) -> Result<(), String> {
-        let tx_hash = tx.hash();
-        
-        // First clean the transaction metadata
-        let cleaner = BroadcastMetadataCleaner::new();
-        let cleaned_tx = cleaner.clean_transaction_metadata(&tx);
-        
-        // Then add to stem pool with standard process
-        let state = self.add_transaction(cleaned_tx.hash(), None);
-        Ok(())
-    }
-
-    pub fn fluff_transaction(&mut self, tx_hash: &[u8; 32]) -> Result<(), String> {
-        // ... existing code ...
-        
-        // Apply metadata cleaning before fluffing
-        if let Some(tx) = self.transactions.get(tx_hash) {
-            // We can't directly clean PropagationMetadata, so we'll just mark it as fluffed
-            // and handle the cleaning at the actual broadcast point
-            
-            // ... existing broadcasting code ...
-        }
-        
-        // ... rest of existing code ...
-        
-        Ok(())
-    }
-
-    /// Set the number of hops in the stem phase
-    pub fn set_stem_phase_hops(&mut self, hops: usize) {
-        // Update the stem phase hops configuration
-        // This affects how many nodes a transaction will pass through in the stem phase
-        println!("Setting stem phase hops to {}", hops);
-    }
-    
-    /// Enable or disable traffic analysis protection
-    pub fn set_traffic_analysis_protection(&mut self, enabled: bool) {
-        // Update the traffic analysis protection setting
-        println!("Setting traffic analysis protection to {}", enabled);
-    }
-    
-    /// Enable or disable multi-path routing
-    pub fn set_multi_path_routing(&mut self, enabled: bool) {
-        // Update the multi-path routing setting
-        println!("Setting multi-path routing to {}", enabled);
-    }
-    
-    /// Enable or disable adaptive timing
-    pub fn set_adaptive_timing(&mut self, enabled: bool) {
-        // Update the adaptive timing setting
-        println!("Setting adaptive timing to {}", enabled);
-    }
-    
-    /// Set the probability of fluffing (broadcasting) a transaction early
-    pub fn set_fluff_probability(&mut self, probability: f64) {
-        // Update the fluff probability setting
-        println!("Setting fluff probability to {}", probability);
-    }
-    
-    /// Enable or disable Tor integration
-    pub fn set_tor_integration(&mut self, enabled: bool) {
-        // Update the Tor integration setting
-        println!("Setting Tor integration to {}", enabled);
-    }
-    
-    /// Enable or disable mixnet integration
-    pub fn set_mixnet_integration(&mut self, enabled: bool) {
-        // Update the mixnet integration setting
-        println!("Setting mixnet integration to {}", enabled);
-    }
-
-    /// Update the outbound peers list
-    /// Get the outbound peers list
-    pub fn get_outbound_peers(&self) -> Vec<SocketAddr> {
-        self.outbound_peers.clone().into_iter().collect()
     }
 }

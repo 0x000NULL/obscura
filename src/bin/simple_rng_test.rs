@@ -35,16 +35,14 @@ struct RngAdapter(OsRng);
 // Implement rand_core::RngCore for RngAdapter
 impl rand_core::RngCore for RngAdapter {
     fn next_u32(&mut self) -> u32 {
-        // Use a safer approach that works with rand 0.7's OsRng
         let mut buf = [0u8; 4];
-        self.0.fill_bytes(&mut buf);
+        self.0.try_fill_bytes(&mut buf).expect("RNG should not fail");
         u32::from_le_bytes(buf)
     }
 
     fn next_u64(&mut self) -> u64 {
-        // Use a safer approach that works with rand 0.7's OsRng
         let mut buf = [0u8; 8];
-        self.0.fill_bytes(&mut buf);
+        self.0.try_fill_bytes(&mut buf).expect("RNG should not fail");
         u64::from_le_bytes(buf)
     }
 
@@ -53,7 +51,6 @@ impl rand_core::RngCore for RngAdapter {
     }
 
     fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
-        // Delegate to the wrapped RNG's try_fill_bytes
         self.0.try_fill_bytes(dest)
     }
 }

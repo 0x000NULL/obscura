@@ -1,11 +1,22 @@
-use obscura_core::networking::dandelion::{DandelionManager, PropagationState, PrivacyRoutingMode};
+use obscura::networking::dandelion::{DandelionManager, PropagationState, PrivacyRoutingMode, DandelionConfig};
 use std::time::{Duration, Instant};
 use std::thread;
 
+fn create_default_dandelion_config() -> DandelionConfig {
+    DandelionConfig {
+        enabled: true,
+        stem_phase_hops: 3,
+        traffic_analysis_protection: true,
+        multi_path_routing: true,
+        adaptive_timing: true,
+        fluff_probability: 0.1,
+    }
+}
+
 #[test]
 fn test_check_transition() {
-    // Create a new DandelionManager
-    let mut manager = DandelionManager::new();
+    let config = create_default_dandelion_config();
+    let mut manager = DandelionManager::new(config);
     
     // Create a transaction hash
     let tx_hash = [0u8; 32];

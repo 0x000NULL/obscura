@@ -19,6 +19,7 @@ use crate::crypto::platform_memory_impl::UnixMemoryProtection;
 use crate::crypto::platform_memory_impl::MacOSMemoryProtection;
 use std::marker::PhantomData;
 use std::time::Instant;
+use std::time::Duration;
 
 // Global flag to check if we're in a test environment
 // This allows us to bypass expensive operations across the entire module
@@ -1087,4 +1088,48 @@ mod tests {
         assert!(!mp.config().secure_clearing_enabled);
         assert_eq!(mp.config().decoy_access_percentage, 10);
     }
+}
+
+pub fn generate_random_key() -> [u8; 32] {
+    let mut key = [0u8; 32];
+    let mut rng = rand::thread_rng();
+    rng.fill_bytes(&mut key);
+    key
+}
+
+pub fn generate_random_iv() -> [u8; 16] {
+    let mut iv = [0u8; 16];
+    let mut rng = rand::thread_rng();
+    rng.fill_bytes(&mut iv);
+    iv
+}
+
+pub fn generate_random_salt() -> [u8; 32] {
+    let mut salt = [0u8; 32];
+    let mut rng = rand::thread_rng();
+    rng.fill_bytes(&mut salt);
+    salt
+}
+
+pub fn generate_random_nonce() -> [u8; 12] {
+    let mut nonce = [0u8; 12];
+    let mut rng = rand::thread_rng();
+    rng.fill_bytes(&mut nonce);
+    nonce
+}
+
+pub fn generate_random_padding(size: usize) -> Vec<u8> {
+    let mut padding = vec![0u8; size];
+    let mut rng = rand::thread_rng();
+    rng.fill_bytes(&mut padding);
+    padding
+}
+
+pub fn generate_random_delay() -> Duration {
+    let mut rng = rand::thread_rng();
+    let mut bytes = [0u8; 8];
+    rng.fill_bytes(&mut bytes);
+    let value = u64::from_le_bytes(bytes);
+    let range = 100u64; // 0-100ms
+    Duration::from_millis(value % range)
 } 

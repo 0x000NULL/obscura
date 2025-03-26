@@ -11,6 +11,7 @@ use std::thread;
 use log::{info, warn, error, LevelFilter};
 use env_logger::Builder;
 use colored::*;
+use obscura::crypto::profiling::{Profiler, generate_report};
 
 #[derive(Parser)]
 #[clap(author, version, about)]

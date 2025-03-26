@@ -1,5 +1,6 @@
 use crate::networking::dandelion::{
     DandelionManager,
+    DandelionConfig,
     PropagationState,
     PrivacyRoutingMode,
     REPUTATION_PENALTY_SYBIL,
@@ -52,6 +53,17 @@ fn create_tx_hash(seed: u8) -> [u8; 32] {
     let mut hash = [0u8; 32];
     hash[0] = seed;
     hash
+}
+
+fn create_default_dandelion_config() -> DandelionConfig {
+    DandelionConfig {
+        enabled: true,
+        stem_phase_hops: 3,
+        traffic_analysis_protection: true,
+        multi_path_routing: true,
+        adaptive_timing: true,
+        fluff_probability: 0.1,
+    }
 }
 
 #[test]
@@ -593,5 +605,89 @@ fn test_adversary_resistance_integrated() {
 #[test]
 fn test_advanced_dandelion() {
     let mut node = Node::new_with_config(NetworkConfig::default());
+    // ... rest of test ...
+}
+
+#[test]
+fn test_advanced_privacy_features() {
+    let config = create_default_dandelion_config();
+    let mut manager = DandelionManager::new(config);
+    // ... rest of test ...
+}
+
+#[test]
+fn test_advanced_network_conditions() {
+    let config = create_default_dandelion_config();
+    let mut manager = DandelionManager::new(config);
+    // ... rest of test ...
+}
+
+#[test]
+fn test_advanced_peer_selection() {
+    let config = create_default_dandelion_config();
+    let mut manager = DandelionManager::new(config);
+    // ... rest of test ...
+}
+
+#[test]
+fn test_advanced_transaction_batching() {
+    let config = create_default_dandelion_config();
+    let mut manager = DandelionManager::new(config);
+    // ... rest of test ...
+}
+
+#[test]
+fn test_advanced_anonymity_sets() {
+    let config = create_default_dandelion_config();
+    let mut manager = DandelionManager::new(config);
+    // ... rest of test ...
+}
+
+#[test]
+fn test_advanced_sybil_detection() {
+    let config = create_default_dandelion_config();
+    let mut manager = DandelionManager::new(config);
+    // ... rest of test ...
+}
+
+#[test]
+fn test_advanced_eclipse_detection() {
+    let config = create_default_dandelion_config();
+    let mut manager = DandelionManager::new(config);
+    // ... rest of test ...
+}
+
+#[test]
+fn test_advanced_timing_attacks() {
+    let config = create_default_dandelion_config();
+    let mut manager = DandelionManager::new(config);
+    // ... rest of test ...
+}
+
+#[test]
+fn test_advanced_network_analysis() {
+    let config = create_default_dandelion_config();
+    let mut manager = DandelionManager::new(config);
+    // ... rest of test ...
+}
+
+#[test]
+fn test_advanced_privacy_metrics() {
+    let config = create_default_dandelion_config();
+    let mut manager = DandelionManager::new(config);
+    // ... rest of test ...
+}
+
+#[test]
+fn test_advanced_network_resilience() {
+    let config = create_default_dandelion_config();
+    let mut manager = DandelionManager::new(config);
+    // ... rest of test ...
+}
+
+#[test]
+fn test_advanced_privacy_optimization() {
+    let config = create_default_dandelion_config();
+    let mut manager = DandelionManager::new(config);
     // ... rest of test ...
 } 

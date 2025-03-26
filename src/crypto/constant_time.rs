@@ -9,6 +9,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::Duration;
 use rand::{Rng, thread_rng};
+use rand_core::RngCore;
 use ark_ff::{BigInteger, Field, PrimeField, Zero, One};
 use ark_ec::{CurveGroup, Group};
 use ark_ec::models::{short_weierstrass::SWCurveConfig, twisted_edwards::TECurveConfig};
@@ -469,8 +470,9 @@ pub fn constant_time_encrypt_decrypt(
 /// Generate a random scalar value in a constant-time manner.
 /// The time taken is independent of the value generated.
 pub fn constant_time_random_scalar() -> JubjubScalar {
-    let mut rng = thread_rng();
-    let random_bytes: [u8; 32] = rng.gen();
+    let mut rng = rand::thread_rng();
+    let mut random_bytes = [0u8; 32];
+    rng.try_fill_bytes(&mut random_bytes);
     JubjubScalar::from_le_bytes_mod_order(&random_bytes)
 }
 

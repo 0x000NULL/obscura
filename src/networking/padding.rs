@@ -3,6 +3,7 @@ use crate::networking::p2p::ConnectionObfuscationConfig;
 use rand::thread_rng;
 use rand_distr::{Distribution, Normal, Uniform};
 use rand::Rng;
+use rand_core::RngCore;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -175,19 +176,15 @@ impl MessagePaddingService {
     
     /// Generate random padding bytes
     fn generate_padding(&self, size: usize) -> Vec<u8> {
-        let mut rng = thread_rng();
-        let mut padding = Vec::with_capacity(size);
-        
-        for _ in 0..size {
-            padding.push(rng.gen::<u8>());
-        }
-        
+        let mut rng = rand::thread_rng();
+        let mut padding = vec![0u8; size];
+        rng.try_fill_bytes(&mut padding);
         padding
     }
     
     /// Determine how much padding to add based on the configured strategy
     fn determine_padding_size(&self) -> usize {
-        let mut rng = thread_rng();
+        let mut rng = rand::thread_rng();
         
         match self.strategy {
             MessagePaddingStrategy::None => 0,
@@ -196,11 +193,11 @@ impl MessagePaddingService {
             
             MessagePaddingStrategy::Uniform => {
                 // Uniform random padding between min and max
-                let dist = Uniform::new(
-                    self.config.message_min_padding_bytes,
-                    self.config.message_max_padding_bytes + 1
-                );
-                dist.sample(&mut rng)
+                let range = self.config.message_max_padding_bytes - self.config.message_min_padding_bytes + 1;
+                let mut bytes = [0u8; 8];
+                rng.try_fill_bytes(&mut bytes);
+                let value = u64::from_le_bytes(bytes) as usize;
+                self.config.message_min_padding_bytes + (value % range)
             }
             
             MessagePaddingStrategy::NormalDistribution => {
@@ -208,8 +205,13 @@ impl MessagePaddingService {
                 let mean = (self.config.message_min_padding_bytes + self.config.message_max_padding_bytes) as f64 / 2.0;
                 let std_dev = (self.config.message_max_padding_bytes - self.config.message_min_padding_bytes) as f64 / 6.0;
                 
-                let dist = Normal::new(mean, std_dev).unwrap();
-                let sample = dist.sample(&mut rng);
+                // Generate random bytes for normal distribution
+                let mut bytes = [0u8; 8];
+                rng.try_fill_bytes(&mut bytes);
+                let u = u64::from_le_bytes(bytes) as f64 / u64::MAX as f64;
+                let v = u64::from_le_bytes(bytes) as f64 / u64::MAX as f64;
+                let z = (-2.0 * u.ln()).sqrt() * (2.0 * std::f64::consts::PI * v).cos();
+                let sample = mean + z * std_dev;
                 
                 // Clamp to valid range
                 sample.clamp(
@@ -493,10 +495,12 @@ impl MessagePaddingService {
         }
         
         if self.config.message_padding_interval_max_ms > 0 {
-            let mut rng = thread_rng();
-            let jitter_ms = rng.gen_range(
-                self.config.message_padding_interval_min_ms..=self.config.message_padding_interval_max_ms
-            );
+            let mut rng = rand::thread_rng();
+            let mut bytes = [0u8; 8];
+            rng.try_fill_bytes(&mut bytes);
+            let value = u64::from_le_bytes(bytes) as u64;
+            let range = self.config.message_padding_interval_max_ms - self.config.message_padding_interval_min_ms + 1;
+            let jitter_ms = self.config.message_padding_interval_min_ms + (value % range);
             
             if jitter_ms > 0 {
                 thread::sleep(Duration::from_millis(jitter_ms));
@@ -551,7 +555,7 @@ impl MessagePaddingService {
         }
         
         thread::spawn(move || {
-            let mut rng = thread_rng();
+            let mut rng = rand::thread_rng();
             
             while {
                 let lock = running.lock().unwrap();
@@ -572,7 +576,11 @@ impl MessagePaddingService {
                 }
                 
                 // Sleep for a random interval
-                let interval_ms = rng.gen_range(min_interval..=max_interval);
+                let mut bytes = [0u8; 8];
+                rng.try_fill_bytes(&mut bytes);
+                let value = u64::from_le_bytes(bytes) as u64;
+                let range = max_interval - min_interval + 1;
+                let interval_ms = min_interval + (value % range);
                 thread::sleep(Duration::from_millis(interval_ms));
             }
             

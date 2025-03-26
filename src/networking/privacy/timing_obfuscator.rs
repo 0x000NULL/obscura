@@ -8,12 +8,15 @@ use rand::distributions::{Distribution, Uniform};
 use rand_distr::Normal;
 use rand_chacha::{ChaCha20Rng, rand_core::SeedableRng};
 use rand_distr::LogNormal;
+use rand_core::RngCore;
 use serde::{Serialize, Deserialize};
 use std::thread;
 use crate::networking::Node;
 use crate::blockchain::{Transaction, Block};
 use crate::networking::privacy::PrivacyLevel;
 use crate::networking::privacy_config_integration::PrivacySettingsRegistry;
+use crate::networking::privacy::PrivacyRouter;
+use std::ops::Deref;
 
 // Constants for timing obfuscation
 const MIN_DELAY_MS: u64 = 10;
@@ -47,307 +50,367 @@ pub struct MessageBatch {
     pub release_time: Instant,
 }
 
+impl MessageBatch {
+    pub fn is_expired(&self) -> bool {
+        let now = Instant::now();
+        now.duration_since(self.creation_time) > Duration::from_millis(BATCH_TIMEOUT_MS)
+    }
+}
+
 /// Timing obfuscation implementation
 pub struct TimingObfuscator {
+    /// Configuration
+    config: Arc<Mutex<TimingConfig>>,
+    
+    /// Message batches waiting to be sent
+    batches: Arc<Mutex<VecDeque<MessageBatch>>>,
+    
+    /// Random number generator for timing
+    rng: Arc<Mutex<rand::rngs::ThreadRng>>,
+    
+    /// Statistical distribution for delays
+    delay_distribution: Arc<Mutex<DelayDistribution>>,
+    
+    /// Batch size distribution
+    batch_size_distribution: Arc<Mutex<BatchSizeDistribution>>,
+    
+    /// Messages in this batch (message ID -> target address)
+    messages: Arc<Mutex<HashMap<u64, SocketAddr>>>,
+    
     /// Configuration registry
     config_registry: Arc<PrivacySettingsRegistry>,
-    
-    /// Current privacy level
-    privacy_level: RwLock<PrivacyLevel>,
-    
-    /// Message batches
-    batches: Mutex<HashMap<u64, MessageBatch>>,
-    
-    /// Next batch ID
-    next_batch_id: Mutex<u64>,
-    
-    /// Next message ID
-    next_message_id: Mutex<u64>,
-    
-    /// Delayed messages (message ID -> release time)
-    delayed_messages: Mutex<HashMap<u64, Instant>>,
-    
-    /// Whether batching is enabled
-    batching_enabled: RwLock<bool>,
-    
-    /// Whether the obfuscator is initialized
-    initialized: RwLock<bool>,
 }
 
 impl TimingObfuscator {
-    /// Create a new TimingObfuscator with the given configuration registry
     pub fn new(config_registry: Arc<PrivacySettingsRegistry>) -> Self {
+        let config = TimingConfig::default();
+        let rng = Arc::new(Mutex::new(thread_rng()));
+        let batches = Arc::new(Mutex::new(VecDeque::new()));
+        let messages = Arc::new(Mutex::new(HashMap::new()));
+        
+        // Initialize distributions
+        let delay_distribution = DelayDistribution::new(
+            STATISTICAL_NOISE_MEAN as f64,
+            STATISTICAL_NOISE_STD_DEV as f64
+        );
+        
+        let batch_size_distribution = BatchSizeDistribution::new(
+            BATCH_SIZE_MIN as f64,
+            BATCH_SIZE_MAX as f64
+        );
+        
         Self {
+            config: Arc::new(Mutex::new(config)),
+            rng,
+            batches,
+            messages,
             config_registry,
-            privacy_level: RwLock::new(PrivacyLevel::Standard),
-            batches: Mutex::new(HashMap::new()),
-            next_batch_id: Mutex::new(0),
-            next_message_id: Mutex::new(0),
-            delayed_messages: Mutex::new(HashMap::new()),
-            batching_enabled: RwLock::new(false),
-            initialized: RwLock::new(false),
+            delay_distribution: Arc::new(Mutex::new(delay_distribution)),
+            batch_size_distribution: Arc::new(Mutex::new(batch_size_distribution)),
+        }
+    }
+
+    pub fn clone(&self) -> Self {
+        TimingObfuscator {
+            config: Arc::clone(&self.config),
+            rng: Arc::new(Mutex::new(thread_rng())),
+            batches: Arc::new(Mutex::new(VecDeque::new())),
+            messages: Arc::new(Mutex::new(HashMap::new())),
+            batch_size_distribution: Arc::clone(&self.batch_size_distribution),
+            delay_distribution: Arc::clone(&self.delay_distribution),
+            config_registry: Arc::clone(&self.config_registry)
         }
     }
     
-    /// Initialize the TimingObfuscator
-    pub fn initialize(&self) -> Result<(), String> {
-        if *self.initialized.read().unwrap() {
-            return Ok(());
+    /// Add random timing delay
+    pub fn add_delay(&self) {
+        let mut rng = self.rng.lock().unwrap();
+        let mut bytes = [0u8; 8];
+        rng.fill_bytes(&mut bytes);
+        let value = u64::from_le_bytes(bytes);
+        let range = MAX_DELAY_MS - MIN_DELAY_MS + 1;
+        let delay_ms = MIN_DELAY_MS + (value % range);
+        thread::sleep(Duration::from_millis(delay_ms));
+    }
+    
+    /// Get a random batch size
+    pub fn get_batch_size(&self) -> usize {
+        let mut rng = self.rng.lock().unwrap();
+        let mut bytes = [0u8; 8];
+        rng.fill_bytes(&mut bytes);
+        let value = u64::from_le_bytes(bytes) as usize;
+        BATCH_SIZE_MIN + (value % (BATCH_SIZE_MAX - BATCH_SIZE_MIN + 1))
+    }
+    
+    /// Add statistical noise to timing
+    pub fn add_statistical_noise(&self) {
+        let mut rng = self.rng.lock().unwrap();
+        let delay_dist = self.delay_distribution.lock().unwrap();
+        
+        let mut bytes = [0u8; 8];
+        rng.fill_bytes(&mut bytes);
+        let u = u64::from_le_bytes(bytes) as f64 / u64::MAX as f64;
+        
+        rng.fill_bytes(&mut bytes);
+        let v = u64::from_le_bytes(bytes) as f64 / u64::MAX as f64;
+        
+        let z = (-2.0 * u.ln()).sqrt() * (2.0 * std::f64::consts::PI * v).cos();
+        let delay = delay_dist.mean() + z * delay_dist.std_dev();
+        
+        if delay > 0.0 {
+            thread::sleep(Duration::from_millis(delay as u64));
         }
-        
-        // Configure based on privacy level
-        match *self.privacy_level.read().unwrap() {
-            PrivacyLevel::Standard => {
-                debug!("Initializing TimingObfuscator with standard privacy settings");
-                *self.batching_enabled.write().unwrap() = false;
-            },
-            PrivacyLevel::Medium => {
-                debug!("Initializing TimingObfuscator with medium privacy settings");
-                *self.batching_enabled.write().unwrap() = true;
-            },
-            PrivacyLevel::High => {
-                debug!("Initializing TimingObfuscator with high privacy settings");
-                *self.batching_enabled.write().unwrap() = true;
-            },
-            PrivacyLevel::Custom => {
-                debug!("Initializing TimingObfuscator with custom privacy settings");
-                *self.batching_enabled.write().unwrap() = true;
-            },
-        }
-        
-        // Mark as initialized
-        *self.initialized.write().unwrap() = true;
-        
+    }
+
+    pub fn maintain(&self) -> Result<(), Box<dyn std::error::Error>> {
+        // Clean up expired batches
+        let mut batches = self.batches.lock().unwrap();
+        batches.retain(|batch| !batch.is_expired());
         Ok(())
     }
-    
-    /// Set the privacy level for the TimingObfuscator
-    pub fn set_privacy_level(&self, level: PrivacyLevel) {
-        debug!("Setting timing obfuscator privacy level to {:?}", level);
-        *self.privacy_level.write().unwrap() = level;
-        
-        // Update batching setting based on privacy level
-        let should_batch = level != PrivacyLevel::Standard;
-        *self.batching_enabled.write().unwrap() = should_batch;
+}
+
+pub struct TimingObfuscatorHandle {
+    inner: Arc<TimingObfuscator>,
+}
+
+impl TimingObfuscatorHandle {
+    pub fn new(obfuscator: Arc<TimingObfuscator>) -> Self {
+        Self {
+            inner: obfuscator,
+        }
     }
-    
-    /// Calculate delay based on the current privacy level
-    pub fn calculate_delay(&self) -> Duration {
-        let privacy_level = *self.privacy_level.read().unwrap();
-        
-        match privacy_level {
+
+    pub fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
+impl Deref for TimingObfuscatorHandle {
+    type Target = TimingObfuscator;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl PrivacyRouter for TimingObfuscator {
+    fn set_privacy_level(&self, level: PrivacyLevel) {
+        // Update configuration based on privacy level
+        let mut config = self.config.lock().unwrap();
+        match level {
             PrivacyLevel::Standard => {
-                // Minimal delay for standard privacy
-                let dist = Uniform::new(MIN_DELAY_MS, MIN_DELAY_MS + 50);
-                Duration::from_millis(dist.sample(&mut thread_rng()))
+                config.min_delay_ms = 10;
+                config.max_delay_ms = 100;
+                config.batch_size_min = 2;
+                config.batch_size_max = 3;
             },
             PrivacyLevel::Medium => {
-                // Moderate delay for enhanced privacy
-                let dist = Uniform::new(MIN_DELAY_MS + 50, MIN_DELAY_MS + 300);
-                Duration::from_millis(dist.sample(&mut thread_rng()))
+                config.min_delay_ms = 50;
+                config.max_delay_ms = 500;
+                config.batch_size_min = 3;
+                config.batch_size_max = 7;
             },
             PrivacyLevel::High => {
-                // Maximum delay with some randomization for maximum privacy
-                let mean = (MAX_DELAY_MS as f64) * 0.7;
-                let std_dev = (MAX_DELAY_MS as f64) * 0.2;
-                let normal = Normal::new(mean, std_dev).unwrap();
-                
-                let delay = normal.sample(&mut thread_rng()).max(MIN_DELAY_MS as f64);
-                Duration::from_millis(delay as u64)
+                config.min_delay_ms = 100;
+                config.max_delay_ms = 1000;
+                config.batch_size_min = 5;
+                config.batch_size_max = 10;
             },
             PrivacyLevel::Custom => {
-                // Use Medium as default for custom
-                let dist = Uniform::new(MIN_DELAY_MS + 50, MIN_DELAY_MS + 300);
-                Duration::from_millis(dist.sample(&mut thread_rng()))
+                // Keep current configuration for custom level
             }
         }
     }
-    
-    /// Add a message for delayed sending
-    pub fn add_delayed_message(&self, target: SocketAddr) -> u64 {
-        let mut next_id = self.next_message_id.lock().unwrap();
-        let message_id = *next_id;
-        *next_id += 1;
-        
-        // Calculate delay
-        let delay = self.calculate_delay();
-        let release_time = Instant::now() + delay;
-        
-        // Check if batching is enabled
-        if *self.batching_enabled.read().unwrap() {
-            // Add to a batch
-            self.add_to_batch(message_id, target);
-        } else {
-            // Just delay the message
-            self.delayed_messages.lock().unwrap().insert(message_id, release_time);
-        }
-        
-        message_id
+
+    fn initialize(&self) -> Result<(), String> {
+        // Initialize the timing obfuscator
+        Ok(())
     }
-    
-    /// Add a message to a batch or create a new batch
-    fn add_to_batch(&self, message_id: u64, target: SocketAddr) -> u64 {
+
+    fn maintain(&self) -> Result<(), String> {
+        // Clean up expired batches
         let mut batches = self.batches.lock().unwrap();
-        let mut next_id = self.next_batch_id.lock().unwrap();
+        batches.retain(|batch| !batch.is_expired());
+        Ok(())
+    }
+
+    fn shutdown(&self) {
+        // Clean up resources
+    }
+
+    fn route_transaction(&self, tx: &Transaction) -> Result<(), String> {
+        let mut batches = self.batches.lock().unwrap();
+        let mut rng = self.rng.lock().unwrap();
         
-        // Check if we should create a new batch
-        let privacy_level = *self.privacy_level.read().unwrap();
-        
-        // Set batch size based on privacy level
-        let max_batch_size = match privacy_level {
-            PrivacyLevel::Standard => BATCH_SIZE_MIN,
-            PrivacyLevel::Medium => (BATCH_SIZE_MIN + BATCH_SIZE_MAX) / 2,
-            PrivacyLevel::High => BATCH_SIZE_MAX,
-            PrivacyLevel::Custom => (BATCH_SIZE_MIN + BATCH_SIZE_MAX) / 2, // Default to Medium for custom
-        };
-        
-        // Find an existing batch that's not full
-        for (id, batch) in batches.iter_mut() {
-            if batch.messages.len() < max_batch_size && 
-               batch.creation_time.elapsed() < Duration::from_millis(BATCH_TIMEOUT_MS / 2) {
-                batch.messages.insert(message_id, target);
-                return *id;
-            }
-        }
+        // Generate a new batch ID
+        let mut id_bytes = [0u8; 8];
+        rng.try_fill_bytes(&mut id_bytes);
+        let batch_id = u64::from_le_bytes(id_bytes);
         
         // Create a new batch
-        let batch_id = *next_id;
-        *next_id += 1;
+        let now = Instant::now();
+        let config = self.config.lock().unwrap();
+        let delay = Duration::from_millis(
+            rng.gen_range(config.min_delay_ms..=config.max_delay_ms)
+        );
         
-        // Calculate batch release time
-        let mut rng = thread_rng();
-        let timeout_ms = rng.gen_range(BATCH_TIMEOUT_MS / 2..=BATCH_TIMEOUT_MS);
-        let release_time = Instant::now() + Duration::from_millis(timeout_ms);
-        
-        let mut messages = HashMap::new();
-        messages.insert(message_id, target);
-        
-        let batch = MessageBatch {
+        let mut batch = MessageBatch {
             id: batch_id,
-            messages,
-            creation_time: Instant::now(),
-            release_time,
+            messages: HashMap::new(),
+            creation_time: now,
+            release_time: now + delay,
         };
         
-        batches.insert(batch_id, batch);
+        // Add the transaction to the batch
+        let tx_hash = u64::from_le_bytes(tx.hash()[..8].try_into().unwrap());
+        batch.messages.insert(tx_hash, SocketAddr::new(IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), 0));
         
-        batch_id
-    }
-    
-    /// Check for messages ready to be sent
-    pub fn get_ready_messages(&self) -> HashMap<u64, SocketAddr> {
-        let mut ready_messages = HashMap::new();
-        let now = Instant::now();
-        
-        // Check batches first
-        let mut batches_to_remove = Vec::new();
-        {
-            let batches = self.batches.lock().unwrap();
-            
-            for (id, batch) in batches.iter() {
-                if now >= batch.release_time {
-                    // Add all messages in the batch
-                    for (msg_id, target) in &batch.messages {
-                        ready_messages.insert(*msg_id, *target);
-                    }
-                    batches_to_remove.push(*id);
-                }
-            }
-        }
-        
-        // Remove processed batches
-        if !batches_to_remove.is_empty() {
-            let mut batches = self.batches.lock().unwrap();
-            for id in batches_to_remove {
-                batches.remove(&id);
-            }
-        }
-        
-        // Check individual delayed messages
-        let mut messages_to_remove = Vec::new();
-        {
-            let delayed_messages = self.delayed_messages.lock().unwrap();
-            
-            for (id, release_time) in delayed_messages.iter() {
-                if now >= *release_time {
-                    // This message is ready to be sent
-                    messages_to_remove.push(*id);
-                }
-            }
-        }
-        
-        // Remove processed messages and get their targets
-        if !messages_to_remove.is_empty() {
-            let mut delayed_messages = self.delayed_messages.lock().unwrap();
-            for id in messages_to_remove {
-                delayed_messages.remove(&id);
-                
-                // We don't have the target address for individual messages
-                // This would need to be stored separately in a real implementation
-            }
-        }
-        
-        ready_messages
-    }
-    
-    /// Maintain the timing obfuscator
-    pub fn maintain(&self) -> Result<(), String> {
-        // Process ready messages
-        let ready_messages = self.get_ready_messages();
-        
-        if !ready_messages.is_empty() {
-            debug!("Found {} messages ready to send", ready_messages.len());
-            // In a real implementation, we would send these messages
-        }
+        // Add the batch to the queue
+        batches.push_back(batch);
         
         Ok(())
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct TimingConfig {
+    /// Minimum delay in milliseconds
+    pub min_delay_ms: u64,
     
-    /// Shutdown the obfuscator
-    pub fn shutdown(&self) {
-        debug!("Shutting down TimingObfuscator");
-        // Perform any cleanup needed
+    /// Maximum delay in milliseconds
+    pub max_delay_ms: u64,
+    
+    /// Minimum batch size
+    pub batch_size_min: usize,
+    
+    /// Maximum batch size
+    pub batch_size_max: usize,
+}
+
+impl Default for TimingConfig {
+    fn default() -> Self {
+        Self {
+            min_delay_ms: MIN_DELAY_MS,
+            max_delay_ms: MAX_DELAY_MS,
+            batch_size_min: BATCH_SIZE_MIN,
+            batch_size_max: BATCH_SIZE_MAX,
+        }
     }
-    
-    /// Check if the obfuscator is initialized
-    pub fn is_initialized(&self) -> bool {
-        *self.initialized.read().unwrap()
+}
+
+#[derive(Clone)]
+pub struct TimingObfuscatorWrapper(Arc<TimingObfuscator>);
+
+impl Deref for TimingObfuscatorWrapper {
+    type Target = TimingObfuscator;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<Arc<TimingObfuscator>> for TimingObfuscatorWrapper {
+    fn from(arc: Arc<TimingObfuscator>) -> Self {
+        TimingObfuscatorWrapper(arc)
+    }
+}
+
+impl TimingObfuscatorWrapper {
+    pub fn clone(&self) -> Self {
+        TimingObfuscatorWrapper(Arc::clone(&self.0))
+    }
+}
+
+struct DelayDistribution {
+    distribution: LogNormal<f64>,
+    mu: f64,
+    sigma: f64,
+}
+
+impl DelayDistribution {
+    pub fn new(mean: f64, std_dev: f64) -> Self {
+        // Convert normal parameters to lognormal parameters
+        let mu = (mean.powi(2) / (mean.powi(2) + std_dev.powi(2))).sqrt().ln();
+        let sigma = ((mean.powi(2) + std_dev.powi(2)) / mean.powi(2)).sqrt().ln();
+        
+        Self {
+            distribution: LogNormal::new(mu, sigma).unwrap(),
+            mu,
+            sigma,
+        }
+    }
+
+    pub fn sample<R: rand::Rng>(&self, rng: &mut R) -> Duration {
+        let delay_ms = self.distribution.sample(rng);
+        Duration::from_millis(delay_ms as u64)
+    }
+
+    pub fn mean(&self) -> f64 {
+        (self.mu + self.sigma * self.sigma / 2.0).exp()
+    }
+
+    pub fn std_dev(&self) -> f64 {
+        let variance = (self.sigma * self.sigma).exp() * ((self.mu * 2.0).exp()) * ((self.sigma * self.sigma).exp() - 1.0);
+        variance.sqrt()
+    }
+}
+
+struct BatchSizeDistribution {
+    distribution: Normal<f64>,
+}
+
+impl BatchSizeDistribution {
+    pub fn new(mean: f64, std_dev: f64) -> Self {
+        Self {
+            distribution: Normal::new(mean, std_dev).expect("Invalid parameters for Normal distribution")
+        }
+    }
+
+    pub fn sample<R: rand::Rng>(&self, rng: &mut R) -> usize {
+        let size = self.distribution.sample(rng);
+        size.max(1.0) as usize
+    }
+
+    pub fn mean(&self) -> f64 {
+        self.distribution.mean()
+    }
+
+    pub fn std_dev(&self) -> f64 {
+        self.distribution.std_dev()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
-    
-    // Helper function to create test registry
-    fn create_test_registry() -> Arc<PrivacySettingsRegistry> {
-        Arc::new(PrivacySettingsRegistry::new())
-    }
     
     #[test]
-    fn test_delay_calculation() {
-        let config_registry = create_test_registry();
-        let obfuscator = TimingObfuscator::new(config_registry);
+    fn test_timing_obfuscation() {
+        let config = TimingConfig::default();
+        let obfuscator = TimingObfuscator::new(Arc::new(PrivacySettingsRegistry::new()));
         
-        // Now the calculate_delay method should take the privacy_level parameter by reference
-        let delay = obfuscator.calculate_delay_for_level(&PrivacyLevel::Standard);
-        assert!(delay.as_millis() >= MIN_OBFUSCATION_DELAY_MS as u128);
-        assert!(delay.as_millis() <= MAX_OBFUSCATION_DELAY_MS as u128);
-    }
-    
-    // ... more tests ...
-}
-
-// Add this helper method for the test
-impl TimingObfuscator {
-    // Helper method for the test
-    pub fn calculate_delay_for_level(&self, level: &PrivacyLevel) -> Duration {
-        match level {
-            PrivacyLevel::Standard => Duration::from_millis(BASELINE_DELAY_MS),
-            PrivacyLevel::Medium => Duration::from_millis(BASELINE_DELAY_MS * 2),
-            PrivacyLevel::High => Duration::from_millis(BASELINE_DELAY_MS * 4),
-            PrivacyLevel::Custom => Duration::from_millis(BASELINE_DELAY_MS * 3), // Custom level defaults to medium-high delay
-        }
+        // Test random delay
+        let start = Instant::now();
+        obfuscator.add_delay();
+        let elapsed = start.elapsed();
+        
+        assert!(elapsed.as_millis() >= MIN_DELAY_MS as u128);
+        assert!(elapsed.as_millis() <= MAX_DELAY_MS as u128);
+        
+        // Test batch size
+        let size = obfuscator.get_batch_size();
+        assert!(size >= BATCH_SIZE_MIN);
+        assert!(size <= BATCH_SIZE_MAX);
+        
+        // Test statistical noise
+        let start = Instant::now();
+        obfuscator.add_statistical_noise();
+        let elapsed = start.elapsed();
+        
+        // Statistical noise should be roughly within 3 standard deviations
+        assert!(elapsed.as_millis() as f64 <= STATISTICAL_NOISE_MEAN + 3.0 * STATISTICAL_NOISE_STD_DEV);
     }
 } 

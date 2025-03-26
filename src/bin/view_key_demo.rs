@@ -1,3 +1,7 @@
+use obscura::crypto::{
+    jubjub::{JubjubPoint, JubjubScalar},
+    view_key::ViewKey,
+};
 use obscura_core::crypto::{
     ViewKeyPermissions, ViewKeyManager, ViewKeyLevel, ViewKeyContext
 };
@@ -5,7 +9,7 @@ use obscura_core::blockchain::{Transaction, TransactionOutput};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use obscura_core::crypto::{
-    jubjub::{JubjubPoint, JubjubScalar, JubjubKeypair, JubjubSignature},
+    jubjub::{JubjubKeypair, JubjubSignature},
 };
 use rand::{thread_rng, Rng};
 use colored::*;

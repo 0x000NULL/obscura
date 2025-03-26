@@ -9,6 +9,7 @@ use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use rand::{seq::SliceRandom, thread_rng};
+use rand_core::RngCore;
 
 /// Error types for DNS-over-HTTPS operations
 #[derive(Error, Debug)]
@@ -77,13 +78,20 @@ impl DoHProvider {
         }
     }
     
+    /// Get a random DoH provider
     pub fn random() -> Self {
         let providers = [
             DoHProvider::Cloudflare,
             DoHProvider::Google,
             DoHProvider::Quad9,
+            DoHProvider::Custom,
         ];
-        *providers.choose(&mut thread_rng()).unwrap()
+        
+        let mut rng = rand::thread_rng();
+        let mut bytes = [0u8; 8];
+        rng.try_fill_bytes(&mut bytes);
+        let value = u64::from_le_bytes(bytes) as usize;
+        providers[value % providers.len()]
     }
 }
 

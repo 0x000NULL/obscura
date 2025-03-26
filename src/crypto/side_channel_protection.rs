@@ -3,6 +3,7 @@ use std::thread;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use rand::{thread_rng, Rng};
+use rand_core::RngCore;
 use ark_ff::PrimeField;
 use crate::crypto::jubjub::JubjubScalarExt;
 use crate::crypto::{JubjubPoint, JubjubScalar};
@@ -305,7 +306,10 @@ impl SideChannelProtection {
         
         // Check if we should execute the batch
         let count = self.operation_counter.fetch_add(1, Ordering::SeqCst) + 1;
-        let batch_threshold = thread_rng().gen_range(self.config.min_batch_size..=self.config.max_batch_size);
+        let mut rng = rand::thread_rng();
+        let mut batch_threshold_bytes = [0u8; 8];
+        let _ = rng.try_fill_bytes(&mut batch_threshold_bytes);
+        let batch_threshold = self.config.min_batch_size + (u64::from_le_bytes(batch_threshold_bytes) as usize % (self.config.max_batch_size - self.config.min_batch_size + 1));
         
         if count >= batch_threshold {
             self.operation_counter.store(0, Ordering::SeqCst);

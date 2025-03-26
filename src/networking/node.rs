@@ -6,6 +6,7 @@ use crate::blockchain::Transaction;
 use crate::crypto::metadata_protection::AdvancedMetadataProtection;
 use std::sync::{Arc, RwLock, Mutex};
 use std::collections::HashSet;
+use std::time::Duration;
 
 // Note: Node is already defined elsewhere in the codebase
 // This is an implementation of additional methods for Node
@@ -126,21 +127,25 @@ pub struct Node {
 
 impl Node {
     pub fn new() -> Self {
-        // Create a default configuration
-        let config = crate::networking::NetworkConfig::default();
-        Self::new_with_config(config)
-    }
-    
-    pub fn new_with_config(config: NetworkConfig) -> Self {
-        // ... existing initialization
-        let dandelion_manager = Arc::new(Mutex::new(crate::networking::dandelion::DandelionManager::new()));
+        let config = DandelionConfig {
+            stem_phase_duration_ms: 10000,
+            fluff_phase_duration_ms: 5000,
+            max_stem_transactions: 100,
+            max_fluff_transactions: 50,
+            min_anonymity_set_size: 10,
+            max_anonymity_set_size: 100,
+            decoy_transaction_rate: 0.1,
+            path_selection_alpha: 0.15,
+            routing_randomization: 0.2,
+            peer_rotation_interval: Duration::from_secs(300),
+            eclipse_prevention_ratio: 0.33,
+            sybil_resistance_threshold: 0.75,
+        };
         
         Self {
-            // ... existing fields initialization
-            dandelion_manager,
+            dandelion_manager: Arc::new(Mutex::new(DandelionManager::new(config))),
             metadata_protection: None,
             outbound_peers: HashSet::new(),
-            // ... other fields
         }
     }
     

@@ -7,21 +7,15 @@ struct RngAdapter(OsRng);
 impl RngCore for RngAdapter {
     fn next_u32(&mut self) -> u32 {
         println!("Called next_u32");
-        // Use a safer approach that works with rand 0.7's OsRng
         let mut buf = [0u8; 4];
-        self.0
-            .try_fill_bytes(&mut buf)
-            .expect("RNG should not fail");
+        self.0.try_fill_bytes(&mut buf).expect("RNG should not fail");
         u32::from_le_bytes(buf)
     }
 
     fn next_u64(&mut self) -> u64 {
         println!("Called next_u64");
-        // Use a safer approach that works with rand 0.7's OsRng
         let mut buf = [0u8; 8];
-        self.0
-            .try_fill_bytes(&mut buf)
-            .expect("RNG should not fail");
+        self.0.try_fill_bytes(&mut buf).expect("RNG should not fail");
         u64::from_le_bytes(buf)
     }
 
@@ -32,9 +26,7 @@ impl RngCore for RngAdapter {
 
     fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Error> {
         println!("Called try_fill_bytes");
-        // This is the fix we've been implementing - use fill_bytes and return Ok
-        self.0.try_fill_bytes(dest).expect("RNG should not fail");
-        Ok(())
+        self.0.try_fill_bytes(dest)
     }
 }
 

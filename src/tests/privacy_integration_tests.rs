@@ -1,10 +1,21 @@
 use crate::crypto::jubjub::generate_keypair;
-use crate::networking::dandelion::{DandelionManager, PrivacyRoutingMode, PropagationState};
+use crate::networking::dandelion::{DandelionManager, PrivacyRoutingMode, PropagationState, DandelionConfig};
 use crate::wallet::Wallet;
 use crate::blockchain::Transaction;
 use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
+
+fn create_default_dandelion_config() -> DandelionConfig {
+    DandelionConfig {
+        enabled: true,
+        stem_phase_hops: 3,
+        traffic_analysis_protection: true,
+        multi_path_routing: true,
+        adaptive_timing: true,
+        fluff_probability: 0.1,
+    }
+}
 
 // Extension trait for Transaction serialization in tests
 trait TransactionSerialize {
@@ -147,7 +158,8 @@ fn test_transaction_linkability_attack() {
 
 #[test]
 fn test_privacy_through_dandelion() {
-    let mut dandelion_manager = DandelionManager::new();
+    let config = create_default_dandelion_config();
+    let mut dandelion_manager = DandelionManager::new(config);
 
     // Create privacy-enabled wallet
     let mut wallet = Wallet::new_with_keypair();

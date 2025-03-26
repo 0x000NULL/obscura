@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use crate::blockchain::{Block, Transaction};
-use crate::networking::dandelion::{DandelionManager, PropagationState};
+use crate::networking::dandelion::{DandelionManager, PropagationState, DandelionConfig, PrivacyLevel};
 use rand;
 use rand::thread_rng;
 use rand::Rng;
@@ -118,7 +118,7 @@ pub use tor::{TorService, TorConfig, OnionAddress, TorError, CircuitPurpose};
 pub use bridge_relay::{BridgeRelayService, BridgeRelayConfig, TransportType, BridgeInfo, BridgeRelayError};
 
 // Re-export circuit types
-pub use self::circuit::{CircuitConfig, PrivacyLevel, CircuitManager, CircuitError, CircuitPriority};
+pub use self::circuit::{CircuitConfig, CircuitManager, CircuitError, CircuitPriority};
 
 // Structure representing configuration options for the node
 #[derive(Clone, Debug)]
@@ -154,13 +154,38 @@ pub struct Node {
     pub fluff_queue: Arc<Mutex<Vec<Transaction>>>,
     pub broadcast_transactions: Vec<Transaction>,
     pub metadata_protection: Option<Arc<RwLock<AdvancedMetadataProtection>>>,
+    pub tor_service: Option<Arc<TorService>>,
+    pub bridge_relay: Option<Arc<BridgeRelayService>>,
     // ... existing fields ...
 }
 
 impl Node {
     /// Creates a new Node with default configuration
     pub fn new() -> Self {
-        Self::new_with_config(NetworkConfig::default())
+        let dandelion_config = DandelionConfig {
+            stem_phase_duration_ms: 10000,
+            fluff_phase_duration_ms: 5000,
+            max_stem_transactions: 100,
+            max_fluff_transactions: 1000,
+            min_peer_count: 3,
+            max_peer_count: 10,
+            peer_rotation_interval: Duration::from_secs(300),
+            decoy_transaction_rate: 0.1,
+            sybil_resistance_threshold: 0.7,
+            privacy_level: PrivacyLevel::High,
+        };
+
+        Self {
+            dandelion_manager: Arc::new(Mutex::new(DandelionManager::new(dandelion_config))),
+            doh_service: None,
+            fingerprinting_protection: None,
+            stem_transactions: Vec::new(),
+            fluff_queue: Arc::new(Mutex::new(Vec::new())),
+            broadcast_transactions: Vec::new(),
+            metadata_protection: None,
+            tor_service: None,
+            bridge_relay: None,
+        }
     }
 
     /// Creates a new Node with the given network configuration
@@ -180,6 +205,8 @@ impl Node {
             fluff_queue: Arc::new(Mutex::new(Vec::new())),
             broadcast_transactions: Vec::new(),
             metadata_protection: None,
+            tor_service: None,
+            bridge_relay: None,
         }
     }
     
@@ -800,4 +827,21 @@ impl PrivacyNetworkService {
             bridge.shutdown();
         }
     }
+}
+
+fn create_default_dandelion_config() -> DandelionConfig {
+    DandelionConfig {
+        enabled: true,
+        stem_phase_hops: 3,
+        traffic_analysis_protection: true,
+        multi_path_routing: true,
+        adaptive_timing: true,
+        fluff_probability: 0.1,
+    }
+}
+
+pub struct NetworkManager {
+    // ... other fields ...
+    dandelion_manager: Arc::new(Mutex::new(DandelionManager::new(create_default_dandelion_config()))),
+    // ... other fields ...
 }

@@ -664,32 +664,33 @@ pub fn verify_commitment_sum(tx: &Transaction) -> bool {
 }
 
 // Generate a random JubjubScalar
-#[allow(dead_code)]
 pub fn generate_random_jubjub_scalar() -> JubjubScalar {
     // Adapter to convert OsRng to the type expected by arkworks
     struct RngAdapter(OsRng);
 
-    impl ark_std::rand::RngCore for RngAdapter {
+    impl rand_core::RngCore for RngAdapter {
         fn next_u32(&mut self) -> u32 {
-            self.0.next_u32()
+            let mut buf = [0u8; 4];
+            self.0.try_fill_bytes(&mut buf).expect("RNG should not fail");
+            u32::from_le_bytes(buf)
         }
 
         fn next_u64(&mut self) -> u64 {
-            self.0.next_u64()
+            let mut buf = [0u8; 8];
+            self.0.try_fill_bytes(&mut buf).expect("RNG should not fail");
+            u64::from_le_bytes(buf)
         }
 
         fn fill_bytes(&mut self, dest: &mut [u8]) {
-            self.0.fill_bytes(dest)
+            self.0.try_fill_bytes(dest).expect("RNG should not fail")
         }
 
         fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
-            self.0
-                .try_fill_bytes(dest)
-                .map_err(|_| rand_core::Error::new("Failed to fill bytes"))
+            self.0.try_fill_bytes(dest)
         }
     }
 
-    impl ark_std::rand::CryptoRng for RngAdapter {}
+    impl rand_core::CryptoRng for RngAdapter {}
 
     let mut rng = RngAdapter(OsRng);
     JubjubScalar::rand(&mut rng)

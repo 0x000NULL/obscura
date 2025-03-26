@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use rand::{Rng, thread_rng};
 use rand::seq::SliceRandom;
+use rand_core::RngCore;
 use log::{debug, info, warn, error};
 use std::io;
 use socket2::TcpKeepalive;
@@ -158,7 +159,10 @@ impl ClientImplementation {
             let mut rng = StdRng::from_seed(seed);
             
             // For tests, just cycle between the first two for predictability and speed
-            return if rng.gen_bool(0.5) {
+            let mut bytes = [0u8; 8];
+            rng.fill_bytes(&mut bytes);
+            let value = u64::from_le_bytes(bytes);
+            return if value % 2 == 0 {
                 ClientImplementation::Standard
             } else {
                 ClientImplementation::PrivacyFocused
@@ -167,7 +171,11 @@ impl ClientImplementation {
         
         #[cfg(not(test))]
         {
-            *implementations.get(thread_rng().gen_range(0..implementations.len())).unwrap()
+            let mut rng = rand::thread_rng();
+            let mut bytes = [0u8; 8];
+            rng.fill_bytes(&mut bytes);
+            let value = u64::from_le_bytes(bytes) as usize;
+            *implementations.get(value % implementations.len()).unwrap()
         }
     }
     
@@ -568,12 +576,19 @@ impl HandshakePattern {
                 HandshakePattern::Firefox,
             ];
             
-            return test_patterns[rng.gen_range(0..test_patterns.len())];
+            let mut bytes = [0u8; 8];
+            rng.fill_bytes(&mut bytes);
+            let value = u64::from_le_bytes(bytes) as usize;
+            return test_patterns[value % test_patterns.len()];
         }
         
         #[cfg(not(test))]
         {
-            patterns[thread_rng().gen_range(0..patterns.len())]
+            let mut rng = rand::thread_rng();
+            let mut bytes = [0u8; 8];
+            rng.fill_bytes(&mut bytes);
+            let value = u64::from_le_bytes(bytes) as usize;
+            patterns[value % patterns.len()]
         }
     }
     
@@ -745,46 +760,18 @@ pub struct BrowserConnectionBehavior {
 impl BrowserConnectionBehavior {
     /// Create a randomized browser-like connection behavior
     pub fn randomize() -> Self {
-        #[cfg(test)]
-        {
-            // Use a deterministic RNG with fixed seed for tests
-            use rand::SeedableRng;
-            use rand::rngs::StdRng;
-            
-            // Fixed seed for deterministic test behavior
-            let seed = [45u8; 32]; // Different seed from other randomizations
-            let mut rng = StdRng::from_seed(seed);
-            
-            return Self {
-                parallel_connections: 4, // Fixed moderate value for tests
-                use_connection_pooling: true,
-                use_keepalive: true,
-                max_idle_time_secs: 120, // Fixed moderate value for tests
-                connection_timeout_secs: 30, // Fixed moderate value for tests
-                use_dns_prefetching: true,
-                use_session_resumption: true,
-                use_tls_false_start: false,
-                use_http2_multiplexing: true,
-                max_concurrent_streams: 100, // Fixed moderate value for tests
-            };
-        }
-        
-        #[cfg(not(test))]
-        {
-            let mut rng = thread_rng();
-            
-            Self {
-                parallel_connections: rng.gen_range(2..=8),
-                use_connection_pooling: rng.gen_bool(0.95),
-                use_keepalive: rng.gen_bool(0.9),
-                max_idle_time_secs: rng.gen_range(60..=300),
-                connection_timeout_secs: rng.gen_range(10..=120),
-                use_dns_prefetching: rng.gen_bool(0.7),
-                use_session_resumption: rng.gen_bool(0.85),
-                use_tls_false_start: rng.gen_bool(0.6),
-                use_http2_multiplexing: rng.gen_bool(0.8),
-                max_concurrent_streams: rng.gen_range(50..=200),
-            }
+        let mut rng = thread_rng();
+        Self {
+            parallel_connections: rng.gen_range(2..8),
+            use_connection_pooling: rng.gen_bool(0.7),
+            use_keepalive: rng.gen_bool(0.8),
+            max_idle_time_secs: rng.gen_range(30..300),
+            connection_timeout_secs: rng.gen_range(5..30),
+            use_dns_prefetching: rng.gen_bool(0.6),
+            use_session_resumption: rng.gen_bool(0.8),
+            use_tls_false_start: rng.gen_bool(0.7),
+            use_http2_multiplexing: rng.gen_bool(0.8),
+            max_concurrent_streams: rng.gen_range(50..200) as u32,
         }
     }
     
@@ -1207,8 +1194,11 @@ impl FingerprintingProtectionService {
         }
         
         let client_pattern = self.get_current_client().connection_pattern();
-        let mut rng = thread_rng();
-        rng.gen_bool(client_pattern.disconnect_probability)
+        let mut rng = rand::thread_rng();
+        let mut bytes = [0u8; 8];
+        rng.fill_bytes(&mut bytes);
+        let value = u64::from_le_bytes(bytes) as f64 / u64::MAX as f64;
+        value < client_pattern.disconnect_probability
     }
     
     /// Get a connection establishment delay for a new peer if enabled
@@ -1217,8 +1207,12 @@ impl FingerprintingProtectionService {
             return Duration::from_secs(0);
         }
         
-        let mut rng = thread_rng();
-        let delay_ms = rng.gen_range(0..=self.config.connection_establishment_jitter_ms);
+        let mut rng = rand::thread_rng();
+        let mut bytes = [0u8; 8];
+        rng.fill_bytes(&mut bytes);
+        let value = u64::from_le_bytes(bytes);
+        let range = self.config.connection_establishment_jitter_ms + 1;
+        let delay_ms = value % range;
         Duration::from_millis(delay_ms)
     }
     
@@ -1577,6 +1571,25 @@ impl FingerprintingProtectionService {
             // Update rotation timestamp
             *last_rotation = Instant::now();
             info!("Rotated connection parameters for fingerprinting protection");
+        }
+    }
+
+    /// Get a random number of connections to maintain based on the current client pattern
+    pub fn get_random_connection_count(&self, min_connections: usize) -> usize {
+        if self.config.randomize_connection_patterns {
+            let mut rng = rand::thread_rng();
+            let client_pattern = self.get_current_client().connection_pattern();
+            let connection_range = client_pattern.max_connections - min_connections;
+            if connection_range > 0 {
+                let mut bytes = [0u8; 8];
+                rng.fill_bytes(&mut bytes);
+                let value = u64::from_le_bytes(bytes) as usize;
+                min_connections + (value % (connection_range + 1))
+            } else {
+                min_connections
+            }
+        } else {
+            min_connections
         }
     }
 }

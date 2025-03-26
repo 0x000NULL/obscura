@@ -10,9 +10,11 @@ use std::collections::HashMap;
 use log::{debug, info, warn, trace};
 use once_cell::sync::Lazy;
 use rand::{Rng, thread_rng};
+use rand_core::RngCore;
 use thiserror::Error;
 use std::thread;
 use lazy_static::lazy_static;
+use std::time::Duration;
 
 use crate::crypto::errors::{CryptoError, CryptoResult};
 use crate::crypto::audit::{CryptoAudit, AuditEntry, AuditLevel, CryptoOperationType, OperationStatus};
@@ -88,6 +90,9 @@ pub struct HardwareAccelConfig {
     
     /// Optimization level (0 = balanced, 1 = performance focused, 2 = max performance)
     pub optimization_level: u8,
+
+    pub min_batch_size: usize,
+    pub max_batch_size: usize,
 }
 
 impl Default for HardwareAccelConfig {
@@ -102,6 +107,8 @@ impl Default for HardwareAccelConfig {
             fallback_to_software: true,
             collect_performance_metrics: true,
             optimization_level: 1,
+            min_batch_size: 1,
+            max_batch_size: 100,
         }
     }
 }
@@ -340,6 +347,37 @@ impl HardwareAccelerator {
     pub fn has_avx2() -> bool {
         let cpu_features = CPU_FEATURES_DETECTED.load(Ordering::Relaxed);
         cpu_features
+    }
+
+    pub fn generate_random_seed() -> [u8; 32] {
+        let mut seed = [0u8; 32];
+        let mut rng = rand::thread_rng();
+        rng.try_fill_bytes(&mut seed);
+        seed
+    }
+
+    pub fn generate_random_nonce() -> [u8; 12] {
+        let mut nonce = [0u8; 12];
+        let mut rng = rand::thread_rng();
+        rng.try_fill_bytes(&mut nonce);
+        nonce
+    }
+
+    pub fn generate_random_delay() -> Duration {
+        let mut rng = rand::thread_rng();
+        let mut bytes = [0u8; 8];
+        rng.try_fill_bytes(&mut bytes);
+        let value = u64::from_le_bytes(bytes);
+        let range = 100u64; // 0-100ms
+        Duration::from_millis(value % range)
+    }
+
+    pub fn generate_random_batch_size(&self) -> usize {
+        let mut rng = rand::thread_rng();
+        let mut bytes = [0u8; 8];
+        rng.try_fill_bytes(&mut bytes);
+        let value = u64::from_le_bytes(bytes) as usize;
+        self.config.min_batch_size + (value % (self.config.max_batch_size - self.config.min_batch_size + 1))
     }
 }
 
@@ -674,6 +712,8 @@ mod tests {
             fallback_to_software: true,
             collect_performance_metrics: true,
             optimization_level: 1,
+            min_batch_size: 1,
+            max_batch_size: 100,
         };
         
         update_hardware_accel_config(config.clone());

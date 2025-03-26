@@ -28,6 +28,7 @@ use std::time::Duration;
 use log::{debug, info, warn};
 // Import privacy configuration
 use crate::networking::privacy_config_integration::{PrivacySettingsRegistry, ComponentType, PrivacyLevel};
+use crate::networking::privacy::timing_obfuscator::TimingObfuscatorHandle;
 
 /// Defines a standard interface for all privacy routing components
 pub trait PrivacyRouter {
@@ -38,7 +39,10 @@ pub trait PrivacyRouter {
     fn set_privacy_level(&self, level: PrivacyLevel);
     
     /// Route a transaction
-    fn route_transaction(&self, tx: Transaction) -> Result<(), String>;
+    fn route_transaction(&self, tx: &Transaction) -> Result<(), String>;
+    
+    /// Maintain the router state
+    fn maintain(&self) -> Result<(), String>;
     
     /// Shutdown the router
     fn shutdown(&self);
@@ -67,23 +71,12 @@ pub struct NetworkPrivacyFactory {
 
 /// Network privacy manager
 pub struct NetworkPrivacyManager {
-    /// Config registry
     config_registry: Arc<PrivacySettingsRegistry>,
-    
-    /// Dandelion router
     dandelion_router: Arc<DandelionRouter>,
-    
-    /// Circuit router
+    timing_obfuscator: TimingObfuscatorHandle,
     circuit_router: Arc<CircuitRouter>,
-    
-    /// Timing obfuscator
-    timing_obfuscator: Arc<TimingObfuscator>,
-    
-    /// Fingerprinting protection
     fingerprinting_protection: Arc<FingerprintingProtection>,
-    
-    /// Tor connection
-    tor_connection: Arc<TorConnection>,
+    privacy_level: PrivacyLevel,
 }
 
 impl NetworkPrivacyFactory {
@@ -112,16 +105,16 @@ impl NetworkPrivacyFactory {
             config_registry: self.config_registry.clone(),
             dandelion_router: self.dandelion_router.clone(),
             circuit_router: self.circuit_router.clone(),
-            timing_obfuscator: self.timing_obfuscator.clone(),
+            timing_obfuscator: TimingObfuscatorHandle::new(self.timing_obfuscator.clone()),
             fingerprinting_protection: self.fingerprinting_protection.clone(),
-            tor_connection: self.tor_connection.clone(),
+            privacy_level: PrivacyLevel::Standard,
         }
     }
     
     /// Integrate with a registry
     pub fn integrate_with_registry(registry: Arc<PrivacySettingsRegistry>) -> Arc<Self> {
         let factory = NetworkPrivacyFactory::new(registry.clone());
-        let manager = factory.create_manager();
+        let mut manager = factory.create_manager();
         
         let privacy_level = registry.get_setting_for_component(
             ComponentType::Network,
@@ -137,40 +130,36 @@ impl NetworkPrivacyFactory {
 
 impl NetworkPrivacyManager {
     /// Create a new NetworkPrivacyManager
-    pub fn new(config_registry: PrivacySettingsRegistry) -> Self {
-        // Wrap the config_registry in an Arc
-        let config_registry = Arc::new(config_registry);
-        
-        // Get the privacy level setting from the registry
-        let privacy_level = config_registry
-            .get_setting_for_component(
-                ComponentType::Network,
-                "privacy_level",
-                PrivacyLevel::Medium,
-            );
-        
-        let dandelion_router = Arc::new(DandelionRouter::new(config_registry.clone()));
-        let circuit_router = Arc::new(CircuitRouter::new(config_registry.clone()));
+    pub fn new(config_registry: Arc<PrivacySettingsRegistry>) -> Self {
+        let config_registry = config_registry.clone();
         let timing_obfuscator = Arc::new(TimingObfuscator::new(config_registry.clone()));
-        let fingerprinting_protection = Arc::new(FingerprintingProtection::new(config_registry.clone()));
-        let tor_connection = Arc::new(TorConnection::new(config_registry.clone()));
+        let timing_handle = TimingObfuscatorHandle::new(timing_obfuscator);
         
-        // Initialize the manager
-        let manager = NetworkPrivacyManager {
-            config_registry,
-            dandelion_router,
-            circuit_router,
-            timing_obfuscator,
-            fingerprinting_protection,
-            tor_connection,
+        let mut manager = NetworkPrivacyManager {
+            config_registry: config_registry.clone(),
+            dandelion_router: Arc::new(DandelionRouter::new(config_registry.clone())),
+            timing_obfuscator: timing_handle,
+            circuit_router: Arc::new(CircuitRouter::new(config_registry.clone())),
+            fingerprinting_protection: Arc::new(FingerprintingProtection::new(config_registry.clone())),
+            privacy_level: PrivacyLevel::Standard,
         };
-        
-        // Set the initial privacy level
-        manager.set_privacy_level(privacy_level);
-        
+
+        // Initialize with standard privacy level
+        manager.set_privacy_level(PrivacyLevel::Standard);
         manager
     }
-    
+
+    pub fn clone(&self) -> Self {
+        NetworkPrivacyManager {
+            config_registry: self.config_registry.clone(),
+            dandelion_router: self.dandelion_router.clone(),
+            timing_obfuscator: self.timing_obfuscator.clone(),
+            circuit_router: self.circuit_router.clone(),
+            fingerprinting_protection: self.fingerprinting_protection.clone(),
+            privacy_level: self.privacy_level.clone(),
+        }
+    }
+
     /// Get the dandelion router
     pub fn dandelion_router(&self) -> Arc<DandelionRouter> {
         self.dandelion_router.clone()
@@ -182,8 +171,8 @@ impl NetworkPrivacyManager {
     }
     
     /// Get the timing obfuscator
-    pub fn timing_obfuscator(&self) -> Arc<TimingObfuscator> {
-        self.timing_obfuscator.clone()
+    pub fn get_timing_obfuscator(&self) -> &TimingObfuscator {
+        &self.timing_obfuscator
     }
     
     /// Get the fingerprinting protection
@@ -191,66 +180,51 @@ impl NetworkPrivacyManager {
         self.fingerprinting_protection.clone()
     }
     
-    /// Get the Tor connection
-    pub fn tor_connection(&self) -> Arc<TorConnection> {
-        self.tor_connection.clone()
-    }
-    
     /// Update privacy settings from the registry
-    pub fn update_from_registry(&self) -> Result<(), String> {
-        debug!("Updating network privacy manager settings from registry");
-        
-        // Get the privacy level from the registry
-        let level = self.config_registry
-            .get_setting_for_component(
-                ComponentType::Network,
-                "privacy_level",
-                PrivacyLevel::Medium,
-            );
-        
-        // Update components
-        self.set_privacy_level(level);
-        
+    pub fn update_from_registry(&mut self) -> Result<(), String> {
+        let privacy_level = self.config_registry.get_privacy_level();
+        self.set_privacy_level(privacy_level);
         Ok(())
     }
     
     /// Set the privacy level for all components
-    pub fn set_privacy_level(&self, level: PrivacyLevel) {
-        debug!("Setting NetworkPrivacyManager privacy level to {:?}", level);
-        
-        // Set the privacy level for each component
-        self.dandelion_router.set_privacy_level(level);
-        self.circuit_router.set_privacy_level(level);
-        self.timing_obfuscator.set_privacy_level(level);
-        self.fingerprinting_protection.set_privacy_level(level);
-        self.tor_connection.set_privacy_level(level);
+    pub fn set_privacy_level(&mut self, privacy_level: PrivacyLevel) {
+        self.privacy_level = privacy_level;
+        self.dandelion_router.set_privacy_level(privacy_level);
+        self.timing_obfuscator.set_privacy_level(privacy_level);
+        self.circuit_router.set_privacy_level(privacy_level);
+        self.fingerprinting_protection.set_privacy_level(privacy_level);
     }
     
     /// Initialize all components
-    pub fn initialize(&self) -> Result<(), String> {
-        // Initialize each component
+    pub fn initialize(&mut self) -> Result<(), String> {
         self.dandelion_router.initialize()?;
-        self.circuit_router.initialize()?;
         self.timing_obfuscator.initialize()?;
+        self.circuit_router.initialize()?;
         self.fingerprinting_protection.initialize()?;
-        self.tor_connection.initialize()?;
-        
         Ok(())
     }
     
     /// Maintain all components
-    pub fn maintain(&self) -> Result<(), String> {
-        // Maintain each component
-        self.dandelion_router.maintain()?;
-        self.timing_obfuscator.maintain()?;
-        
+    pub fn maintain(&mut self) -> Result<(), String> {
+        self.dandelion_router.maintain().map_err(|e| e.to_string())?;
+        self.timing_obfuscator.maintain().map_err(|e| e.to_string())?;
+        self.circuit_router.maintain().map_err(|e| e.to_string())?;
+        self.fingerprinting_protection.maintain().map_err(|e| e.to_string())?;
         Ok(())
     }
     
     /// Shutdown all components
-    pub fn shutdown(&self) {
-        // Shutdown each component
+    pub fn shutdown(&mut self) {
         self.dandelion_router.shutdown();
         self.timing_obfuscator.shutdown();
+        self.circuit_router.shutdown();
+        self.fingerprinting_protection.shutdown();
     }
+}
+
+pub fn initialize_privacy_manager(factory: &NetworkPrivacyFactory, privacy_level: PrivacyLevel) -> NetworkPrivacyManager {
+    let mut manager = factory.create_manager();
+    manager.set_privacy_level(privacy_level);
+    manager
 } 

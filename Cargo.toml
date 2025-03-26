@@ -1,6 +1,6 @@
 [package]
 name = "obscura"
-version = "0.7.21"
+version = "0.7.25"
 authors = ["Obscura Team <ethan@needtoaddadomainhere.fake>"]
 description = "A privacy-focused cryptocurrency with stealth addresses and confidential transactions"
 repository = "https://github.com/obscura-org/obscura"
@@ -54,8 +54,8 @@ examples = []
 
 [dependencies]
 # Cryptography dependencies
-rand = { version = "0.8", features = ["std", "small_rng", "alloc"] }
-rand_core = "0.6"
+rand = { version = "0.8.5", features = ["std", "small_rng", "alloc"] }
+rand_core = "0.6.4"
 sha2 = "0.10"
 blake2 = "0.10.6"
 blake3 = "1.7"

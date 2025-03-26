@@ -3,6 +3,10 @@ use sha2::{Sha256};
 use rand::rngs::OsRng;
 use rand_core::RngCore;
 use chacha20poly1305::Nonce;
+use chacha20poly1305::aead::{Aead, AeadCore, KeyInit};
+use chacha20poly1305::ChaCha20Poly1305;
+use ring::pbkdf2;
+use generic_array::GenericArray;
 
 // Add the errors module
 pub mod errors;
@@ -205,12 +209,6 @@ pub fn encrypt_keypair(
     keypair: &(jubjub::JubjubScalar, jubjub::JubjubPoint),
     password: &str,
 ) -> CryptoResult<Vec<u8>> {
-    use chacha20poly1305::{
-        aead::{Aead, AeadCore, KeyInit},
-        ChaCha20Poly1305,
-    };
-    use ring::pbkdf2;
-    
     if password.is_empty() {
         return Err(CryptoError::ValidationError("Password cannot be empty".to_string()));
     }
@@ -236,7 +234,7 @@ pub fn encrypt_keypair(
     );
     
     // Create a ChaCha20Poly1305 cipher with the derived key
-    let cipher = ChaCha20Poly1305::new(derived_key.as_ref().into());
+    let cipher = ChaCha20Poly1305::new(GenericArray::from_slice(derived_key.as_ref()));
     
     // Encrypt the serialized keypair with authentication tag
     let ciphertext = cipher
@@ -256,12 +254,6 @@ pub fn decrypt_keypair(
     encrypted: &[u8],
     password: &str,
 ) -> CryptoResult<(jubjub::JubjubScalar, jubjub::JubjubPoint)> {
-    use chacha20poly1305::{
-        aead::{Aead, KeyInit},
-        ChaCha20Poly1305,
-    };
-    use ring::pbkdf2;
-    
     if encrypted.len() < 96 {
         return Err(CryptoError::ValidationError("Invalid encrypted data format".to_string()));
     }
@@ -289,7 +281,7 @@ pub fn decrypt_keypair(
     );
     
     // Create a ChaCha20Poly1305 cipher with the derived key
-    let cipher = ChaCha20Poly1305::new(derived_key.as_ref().into());
+    let cipher = ChaCha20Poly1305::new(GenericArray::from_slice(derived_key.as_ref()));
     
     // Decrypt the ciphertext
     let plaintext = match cipher.decrypt(nonce, ciphertext) {

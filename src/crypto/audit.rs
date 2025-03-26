@@ -2,6 +2,7 @@ use crate::crypto::{CryptoError, CryptoResult};
 use chrono::{DateTime, Utc};
 use log::{debug, error, info, warn, Level};
 use rand::Rng;
+use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt;
@@ -363,7 +364,9 @@ pub type AuditResult<T> = Result<T, AuditError>;
 /// Helper function to generate a unique ID for audit entries.
 fn generate_audit_id() -> String {
     let mut rng = rand::thread_rng();
-    let id: u64 = rng.gen();
+    let mut id_bytes = [0u8; 8];
+    let _ = rng.try_fill_bytes(&mut id_bytes);
+    let id = u64::from_le_bytes(id_bytes);
     format!("{:x}-{}", id, Utc::now().timestamp_millis())
 }
 
