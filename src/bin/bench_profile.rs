@@ -2,7 +2,7 @@ use obscura_core::consensus::{pow::ProofOfWork, RandomXContext, ConsensusEngine}
 use obscura_core::blockchain::Block;
 use std::time::{Duration, Instant};
 use std::sync::Arc;
-use obscura::crypto::profiling::{Profiler, ProfilingLevel, generate_report};
+use obscura_core::utils::profiler::{Profiler, ProfilingLevel, generate_report};
 
 fn main() {
     // Parse command line args

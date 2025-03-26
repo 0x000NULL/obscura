@@ -374,15 +374,18 @@ mod tests {
         
         // Create threads for each test instance
         let handle1 = thread::spawn(move || {
-            test1.run_sustained_privacy_test(3, 5)
+            let test = LongRunningTest::new(TestPrivacyLevel::Standard);
+            test.run_sustained_privacy_test(3, 5)
         });
         
         let handle2 = thread::spawn(move || {
-            test2.run_sustained_privacy_test(3, 5)
+            let test = LongRunningTest::new(TestPrivacyLevel::Medium);
+            test.run_sustained_privacy_test(3, 5)
         });
         
         let handle3 = thread::spawn(move || {
-            test3.run_sustained_privacy_test(3, 5)
+            let test = LongRunningTest::new(TestPrivacyLevel::High);
+            test.run_sustained_privacy_test(3, 5)
         });
         
         // Wait for all threads to complete

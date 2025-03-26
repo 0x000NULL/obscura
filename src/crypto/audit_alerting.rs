@@ -351,7 +351,7 @@ impl AlertingSystem {
         }
 
         let now = Utc::now();
-        let mut triggered = false;
+        let mut _triggered = false;
         let mut alert = None;
 
         // Check each threshold
@@ -365,7 +365,7 @@ impl AlertingSystem {
                     let window = windows.entry(key).or_insert_with(|| EventWindow::new(threshold.clone()));
                     
                     if window.add_event(now) {
-                        triggered = true;
+                        _triggered = true;
                         
                         // Create an alert for the rate limit
                         let alert_type = AlertType::RateExceeded {

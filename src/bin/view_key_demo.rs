@@ -1,4 +1,4 @@
-use obscura::crypto::{
+use obscura_core::crypto::{
     jubjub::{JubjubPoint, JubjubScalar},
     view_key::ViewKey,
 };

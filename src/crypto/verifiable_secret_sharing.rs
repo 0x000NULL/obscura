@@ -1205,13 +1205,13 @@ mod tests {
         
         log::debug!("Completing dealer session");
         match dealer_session.complete() {
-            Ok(result) => log::debug!("Dealer session completed successfully. Public key available for verification"),
+            Ok(_result) => log::debug!("Dealer session completed successfully. Public key available for verification."),
             Err(e) => log::error!("Error completing dealer session: {}", e),
         }
         
         log::debug!("Completing participant session");
         match participant_session.complete() {
-            Ok(result) => log::debug!("Participant session completed successfully. Public key available for verification"),
+            Ok(_result) => log::debug!("Participant session completed successfully. Public key available for verification."),
             Err(e) => log::error!("Error completing participant session: {}", e),
         }
         

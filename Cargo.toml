@@ -1,6 +1,6 @@
 [package]
 name = "obscura"
-version = "0.7.25"
+version = "0.7.31"
 authors = ["Obscura Team <ethan@needtoaddadomainhere.fake>"]
 description = "A privacy-focused cryptocurrency with stealth addresses and confidential transactions"
 repository = "https://github.com/obscura-org/obscura"
@@ -83,6 +83,8 @@ group = "0.13.0"
 ff = "0.13.1"
 winapi = { version = "0.3", features = ["winnt", "memoryapi", "errhandlingapi", "processthreadsapi", "handleapi", "wincrypt", "sysinfoapi"] }
 parking_lot = "0.12.3"
+xxhash-rust = { version = "0.8.7", features = ["xxh3"] }
+socket2 = { version = "0.5.8", features = ["all"] }
 
 # BLS12-381 and Jubjub dependencies
 blstrs = { version = "0.7.1", features = ["serde"] }
@@ -107,7 +109,6 @@ libp2p-webrtc = { version = "0.9.0-alpha" }
 chacha20poly1305 = "0.10.1"
 chacha20 = "0.9.1"
 libc = "0.2"
-socket2 = "0.5.8"
 
 # Tor and I2P dependencies
 # Commenting out arti-client for now to avoid the dependency conflict

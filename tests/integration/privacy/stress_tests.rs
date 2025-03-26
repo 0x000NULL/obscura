@@ -34,10 +34,9 @@ struct PrivacyLevelConverter;
 /// Test structure for stress testing privacy components
 struct PrivacyStressTest {
     privacy_config: Arc<PrivacySettingsRegistry>,
-    dandelion_router: DandelionRouter,
-    circuit_router: CircuitRouter,
-    timing_obfuscator: TimingObfuscator,
-    metadata_protector: MetadataProtection,
+    dandelion_router: Arc<DandelionRouter>,
+    circuit_router: Arc<CircuitRouter>,
+    metadata_protector: Arc<MetadataProtection>,
 }
 
 impl PrivacyStressTest {
@@ -55,25 +54,20 @@ impl PrivacyStressTest {
         
         privacy_config.set_privacy_level(network_privacy_level);
         
-        let dandelion_router = DandelionRouter::new(
+        let dandelion_router = Arc::new(DandelionRouter::new(
             privacy_config.clone(),
-        );
+        ));
         
-        let circuit_router = CircuitRouter::new(
+        let circuit_router = Arc::new(CircuitRouter::new(
             privacy_config.clone(),
-        );
+        ));
         
-        let timing_obfuscator = TimingObfuscator::new(
-            privacy_config.clone(),
-        );
-        
-        let metadata_protector = MetadataProtection::new();
+        let metadata_protector = Arc::new(MetadataProtection::new());
         
         Self {
             privacy_config,
             dandelion_router,
             circuit_router,
-            timing_obfuscator,
             metadata_protector,
         }
     }
@@ -121,8 +115,11 @@ impl PrivacyStressTest {
     
     /// Propagate transaction through privacy components
     fn propagate_transaction(&self, tx: Transaction) -> Transaction {
+        // Create timing obfuscator per call to ensure thread safety
+        let timing_obfuscator = TimingObfuscator::new(self.privacy_config.clone());
+        
         // Apply timing obfuscation
-        let delayed_tx = self.timing_obfuscator.apply_delay(tx);
+        let delayed_tx = timing_obfuscator.apply_delay(tx);
         
         // Route through circuit for network privacy
         let circuit_routed_tx = self.circuit_router.route_through_circuit(delayed_tx);
@@ -144,21 +141,12 @@ impl PrivacyStressTest {
         
         for thread_id in 0..threads {
             let success_counter = Arc::clone(&success_counter);
-            
-            // Create a new test instance for each thread
-            let mut new_config = PrivacySettingsRegistry::new();
-            new_config.set_privacy_level(self.privacy_config.get_privacy_level());
-            
-            // Convert from networking::privacy_config_integration::PrivacyLevel to config::presets::PrivacyLevel
-            let privacy_level = match self.privacy_config.get_privacy_level() {
+            let test_clone = Self::new(match self.privacy_config.get_privacy_level() {
                 obscura_core::networking::privacy_config_integration::PrivacyLevel::Standard => PrivacyLevel::Standard,
                 obscura_core::networking::privacy_config_integration::PrivacyLevel::Medium => PrivacyLevel::Medium,
                 obscura_core::networking::privacy_config_integration::PrivacyLevel::High => PrivacyLevel::High,
                 obscura_core::networking::privacy_config_integration::PrivacyLevel::Custom => PrivacyLevel::Custom,
-            };
-            
-            // Use the converted privacy level
-            let test_clone = Self::new(privacy_level);
+            });
             
             let handle = thread::spawn(move || {
                 let mut rng = StdRng::seed_from_u64(thread_id as u64);

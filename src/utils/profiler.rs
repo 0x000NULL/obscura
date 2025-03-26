@@ -46,7 +46,7 @@ pub struct ProfileStats {
     /// Category (e.g., "crypto", "networking", "consensus")
     pub category: String,
     /// Total number of calls
-    pub call_count: AtomicUsize,
+    pub call_count: Arc<AtomicUsize>,
     /// Total time spent in this operation
     pub total_time: Arc<Mutex<Duration>>,
     /// Minimum execution time observed
@@ -66,13 +66,13 @@ impl Clone for ProfileStats {
         ProfileStats {
             name: self.name.clone(),
             category: self.category.clone(),
-            call_count: AtomicUsize::new(self.call_count.load(Ordering::SeqCst)),
-            total_time: Arc::new(Mutex::new(*self.total_time.lock().unwrap())),
-            min_time: Arc::new(Mutex::new(*self.min_time.lock().unwrap())),
-            max_time: Arc::new(Mutex::new(*self.max_time.lock().unwrap())),
-            sum_squares: Arc::new(Mutex::new(*self.sum_squares.lock().unwrap())),
-            first_call: Arc::new(Mutex::new(*self.first_call.lock().unwrap())),
-            last_call: Arc::new(Mutex::new(*self.last_call.lock().unwrap())),
+            call_count: self.call_count.clone(),
+            total_time: self.total_time.clone(),
+            min_time: self.min_time.clone(),
+            max_time: self.max_time.clone(),
+            sum_squares: self.sum_squares.clone(),
+            first_call: self.first_call.clone(),
+            last_call: self.last_call.clone(),
         }
     }
 }
@@ -83,7 +83,7 @@ impl ProfileStats {
         ProfileStats {
             name: name.to_string(),
             category: category.to_string(),
-            call_count: AtomicUsize::new(0),
+            call_count: Arc::new(AtomicUsize::new(0)),
             total_time: Arc::new(Mutex::new(Duration::new(0, 0))),
             min_time: Arc::new(Mutex::new(Duration::new(u64::MAX, 999_999_999))),
             max_time: Arc::new(Mutex::new(Duration::new(0, 0))),
@@ -95,34 +95,35 @@ impl ProfileStats {
 
     /// Record a single operation timing
     pub fn record(&self, duration: Duration) {
+        // Use fetch_add with Ordering::SeqCst to ensure proper synchronization
         self.call_count.fetch_add(1, Ordering::SeqCst);
         
-        // Update total time
+        // Update total time with proper locking
         if let Ok(mut total) = self.total_time.lock() {
             *total += duration;
         }
         
-        // Update min time
+        // Update min time with proper locking
         if let Ok(mut min) = self.min_time.lock() {
             if duration < *min {
                 *min = duration;
             }
         }
         
-        // Update max time
+        // Update max time with proper locking
         if let Ok(mut max) = self.max_time.lock() {
             if duration > *max {
                 *max = duration;
             }
         }
         
-        // Update sum of squares
+        // Update sum of squares with proper locking
         if let Ok(mut sum) = self.sum_squares.lock() {
             let nanos = duration.as_nanos();
             *sum += nanos * nanos;
         }
         
-        // Update last call time
+        // Update last call time with proper locking
         if let Ok(mut last) = self.last_call.lock() {
             *last = Instant::now();
         }
@@ -629,11 +630,19 @@ mod tests {
             })
             .collect();
         
+        // Wait for all threads to complete
         for thread in threads {
             thread.join().unwrap();
         }
         
-        assert_eq!(stats.get_call_count(), 50);
-        assert_eq!(stats.get_total_time(), Duration::from_micros(5000));
+        // Add a small delay to ensure all operations are complete
+        thread::sleep(Duration::from_millis(1));
+        
+        // Verify the results
+        let call_count = stats.get_call_count();
+        let total_time = stats.get_total_time();
+        
+        assert_eq!(call_count, 50, "Expected 50 calls, got {}", call_count);
+        assert_eq!(total_time, Duration::from_micros(5000), "Expected 5000μs total time, got {:?}", total_time);
     }
 } 

@@ -71,11 +71,11 @@ impl StealthAddressing {
     
     pub fn generate_one_time_address(&mut self, recipient_pubkey: &JubjubPoint) -> Vec<u8> {
         // Generate a secure ephemeral key pair
-        let (ephemeral_private, ephemeral_public) = crypto::jubjub::generate_secure_ephemeral_key();
+        let (_ephemeral_private, _ephemeral_public) = crypto::jubjub::generate_secure_ephemeral_key();
         
         // Create a stealth address using the recipient's public key and our generated ephemeral key
         let (ephemeral_pub, stealth_address) = crypto::jubjub::create_stealth_address_with_private(
-            &ephemeral_private, 
+            &_ephemeral_private, 
             recipient_pubkey
         );
         
@@ -171,14 +171,14 @@ impl StealthAddressing {
         }
         
         let commitments = tx.amount_commitments.as_ref().unwrap();
-        let range_proofs = tx.range_proofs.as_ref().unwrap();
+        let _range_proofs = tx.range_proofs.as_ref().unwrap();
         
         // Make sure the output index is valid and has a commitment
         if output_index >= commitments.len() || output_index >= tx.outputs.len() {
             return None;
         }
         
-        let commitment = &commitments[output_index];
+        let _commitment = &commitments[output_index];
         
         // In a real implementation, we would use the private key to decrypt the amount
         // For now, we'll use a simplified approach where we check if we have the output
@@ -2019,7 +2019,7 @@ impl Wallet {
         }
         
         // Calculate change amount if needed
-        let change_amount = {
+        let _change_amount = {
             // Calculate change (total inputs - amount - fee)
             if total_input_amount > amount + fee {
                 total_input_amount - amount - fee

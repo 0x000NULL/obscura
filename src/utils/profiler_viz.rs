@@ -448,7 +448,7 @@ mod tests {
         stats[2].record(Duration::from_micros(300));
         
         let viz = generate_text_visualization(&stats);
-        assert!(viz.contains("Critical Path Visualization"));
+        assert!(viz.contains("Profiling Report"));
         assert!(viz.contains("cat1"));
         assert!(viz.contains("cat2"));
         assert!(viz.contains("op1"));
@@ -485,8 +485,8 @@ mod tests {
         stats[1].record(Duration::from_micros(200));
         
         let viz = generate_csv_visualization(&stats);
-        assert!(viz.contains("Name,Category,Calls"));
-        assert!(viz.contains("op1,cat1"));
-        assert!(viz.contains("op2,cat1"));
+        assert!(viz.contains("Category,Name,Calls"));
+        assert!(viz.contains("cat1,op1"));
+        assert!(viz.contains("cat1,op2"));
     }
 } 

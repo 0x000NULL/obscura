@@ -1,7 +1,8 @@
 #![allow(dead_code)]
 
 use crate::blockchain::{Block, Transaction};
-use crate::networking::dandelion::{DandelionManager, PropagationState, DandelionConfig, PrivacyLevel};
+use crate::networking::dandelion::{DandelionManager, PropagationState, DandelionConfig};
+use crate::networking::circuit::PrivacyLevel;
 use rand;
 use rand::thread_rng;
 use rand::Rng;
@@ -163,16 +164,28 @@ impl Node {
     /// Creates a new Node with default configuration
     pub fn new() -> Self {
         let dandelion_config = DandelionConfig {
-            stem_phase_duration_ms: 10000,
-            fluff_phase_duration_ms: 5000,
-            max_stem_transactions: 100,
-            max_fluff_transactions: 1000,
-            min_peer_count: 3,
-            max_peer_count: 10,
+            enabled: true,
+            stem_phase_hops: 3,
+            traffic_analysis_protection: true,
+            multi_path_routing: true,
+            adaptive_timing: true,
+            fluff_probability: 0.1,
+            stem_phase_min_timeout: Duration::from_secs(10),
+            stem_phase_max_timeout: Duration::from_secs(30),
+            fluff_phase_timeout: Duration::from_secs(60),
+            max_stem_retries: 3,
+            max_batch_size: 100,
+            min_batch_interval: Duration::from_secs(5),
+            max_batch_interval: Duration::from_secs(15),
+            decoy_probability: 0.1,
+            max_decoy_outputs: 5,
+            min_anonymity_set: 3,
+            max_anonymity_set: 10,
+            path_selection_alpha: 0.15,
+            routing_randomization: 0.2,
             peer_rotation_interval: Duration::from_secs(300),
-            decoy_transaction_rate: 0.1,
-            sybil_resistance_threshold: 0.7,
-            privacy_level: PrivacyLevel::High,
+            eclipse_prevention_ratio: 0.33,
+            sybil_resistance_threshold: 0.75,
         };
 
         Self {
@@ -200,7 +213,7 @@ impl Node {
         Self {
             doh_service,
             fingerprinting_protection,
-            dandelion_manager: Arc::new(Mutex::new(DandelionManager::new())),
+            dandelion_manager: Arc::new(Mutex::new(DandelionManager::new(create_default_dandelion_config()))),
             stem_transactions: Vec::new(),
             fluff_queue: Arc::new(Mutex::new(Vec::new())),
             broadcast_transactions: Vec::new(),
@@ -365,8 +378,8 @@ impl Node {
 
     /// Get the stem successor for a transaction
     pub fn get_stem_successor(&self, tx_hash: &[u8; 32]) -> Option<SocketAddr> {
-        let mut dandelion_manager = self.dandelion_manager.lock().unwrap();
-        dandelion_manager.get_stem_successor()
+        let dandelion_manager = self.dandelion_manager.lock().unwrap();
+        dandelion_manager.get_stem_successor_for_tx(tx_hash)
     }
 
     /// Route a transaction in stem phase
@@ -837,11 +850,35 @@ fn create_default_dandelion_config() -> DandelionConfig {
         multi_path_routing: true,
         adaptive_timing: true,
         fluff_probability: 0.1,
+        stem_phase_min_timeout: Duration::from_secs(10),
+        stem_phase_max_timeout: Duration::from_secs(30),
+        fluff_phase_timeout: Duration::from_secs(60),
+        max_stem_retries: 3,
+        max_batch_size: 100,
+        min_batch_interval: Duration::from_secs(5),
+        max_batch_interval: Duration::from_secs(15),
+        decoy_probability: 0.1,
+        max_decoy_outputs: 5,
+        min_anonymity_set: 3,
+        max_anonymity_set: 10,
+        path_selection_alpha: 0.15,
+        routing_randomization: 0.2,
+        peer_rotation_interval: Duration::from_secs(300),
+        eclipse_prevention_ratio: 0.33,
+        sybil_resistance_threshold: 0.75,
     }
 }
 
 pub struct NetworkManager {
     // ... other fields ...
-    dandelion_manager: Arc::new(Mutex::new(DandelionManager::new(create_default_dandelion_config()))),
+    dandelion_manager: Arc<Mutex<DandelionManager>>,
     // ... other fields ...
+}
+
+impl NetworkManager {
+    pub fn new() -> Self {
+        Self {
+            dandelion_manager: Arc::new(Mutex::new(DandelionManager::new(create_default_dandelion_config()))),
+        }
+    }
 }

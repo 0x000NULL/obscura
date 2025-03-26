@@ -7,6 +7,7 @@ use crate::crypto::metadata_protection::AdvancedMetadataProtection;
 use std::sync::{Arc, RwLock, Mutex};
 use std::collections::HashSet;
 use std::time::Duration;
+use crate::networking::dandelion::{DandelionConfig, DandelionManager};
 
 // Note: Node is already defined elsewhere in the codebase
 // This is an implementation of additional methods for Node
@@ -64,26 +65,34 @@ impl crate::networking::Node {
             NodeError::NetworkError("Failed to acquire lock on Dandelion manager".to_string())
         })?;
         
-        // Determine stem phase hops based on privacy level
-        let stem_phase_hops = if privacy_level < 0.3 {
-            2 // Low privacy
-        } else if privacy_level < 0.7 {
-            4 // Medium privacy
-        } else {
-            6 // High privacy
+        // Create new Dandelion configuration
+        let config = DandelionConfig {
+            enabled: true,
+            stem_phase_hops: ((2.0 + (8.0 * privacy_level)) as usize).max(2).min(10),
+            traffic_analysis_protection: privacy_level > 0.5,
+            multi_path_routing: privacy_level > 0.7,
+            adaptive_timing: privacy_level > 0.6,
+            fluff_probability: 0.3 * (1.0 - privacy_level),
+            stem_phase_min_timeout: Duration::from_secs(10),
+            stem_phase_max_timeout: Duration::from_secs(30),
+            fluff_phase_timeout: Duration::from_secs(60),
+            max_stem_retries: 3,
+            max_batch_size: 100,
+            min_batch_interval: Duration::from_secs(5),
+            max_batch_interval: Duration::from_secs(15),
+            decoy_probability: 0.1,
+            max_decoy_outputs: 5,
+            min_anonymity_set: 3,
+            max_anonymity_set: 10,
+            path_selection_alpha: 0.15,
+            routing_randomization: 0.2,
+            peer_rotation_interval: Duration::from_secs(300),
+            eclipse_prevention_ratio: 0.33,
+            sybil_resistance_threshold: 0.75,
         };
         
-        // Configure Dandelion with appropriate settings
-        // These methods should be implemented in DandelionManager
-        dandelion_manager.set_stem_phase_hops(stem_phase_hops);
-        dandelion_manager.set_traffic_analysis_protection(privacy_level > 0.5);
-        dandelion_manager.set_multi_path_routing(privacy_level > 0.7);
-        dandelion_manager.set_adaptive_timing(privacy_level > 0.6);
-        
-        // Set fluff probability inversely proportional to privacy level
-        // Higher privacy = lower probability of fluffing early
-        let fluff_probability = 0.3 * (1.0 - privacy_level);
-        dandelion_manager.set_fluff_probability(fluff_probability);
+        // Apply the configuration
+        dandelion_manager.reconfigure(config);
         
         // Configure Tor integration if enabled
         if enable_tor {
@@ -127,20 +136,7 @@ pub struct Node {
 
 impl Node {
     pub fn new() -> Self {
-        let config = DandelionConfig {
-            stem_phase_duration_ms: 10000,
-            fluff_phase_duration_ms: 5000,
-            max_stem_transactions: 100,
-            max_fluff_transactions: 50,
-            min_anonymity_set_size: 10,
-            max_anonymity_set_size: 100,
-            decoy_transaction_rate: 0.1,
-            path_selection_alpha: 0.15,
-            routing_randomization: 0.2,
-            peer_rotation_interval: Duration::from_secs(300),
-            eclipse_prevention_ratio: 0.33,
-            sybil_resistance_threshold: 0.75,
-        };
+        let config = DandelionConfig::default();
         
         Self {
             dandelion_manager: Arc::new(Mutex::new(DandelionManager::new(config))),
@@ -160,16 +156,23 @@ impl Node {
     /// Broadcast a transaction to the network with privacy protections
     pub fn broadcast_transaction_with_privacy(&self, tx: &Transaction) -> Result<(), String> {
         // Apply metadata protection if available
-        let transaction_to_broadcast = if let Some(protection) = &self.metadata_protection {
-            protection.read().unwrap().protect_transaction(tx)
+        let transaction_to_broadcast = if let Some(_metadata_protection) = &self.metadata_protection {
+            self.metadata_protection.as_ref().unwrap().read().unwrap().protect_transaction(tx)
         } else {
             tx.clone()
         };
         
-        // Since we don't have a broadcast_transaction method, we'll implement the logic here
-        // In a real implementation, this would broadcast the transaction to the network
+        // Add to Dandelion for privacy routing
         let mut dandelion = self.dandelion_manager.lock().unwrap();
-        dandelion.add_transaction_with_privacy_metadata(transaction_to_broadcast)
+        let tx_hash = transaction_to_broadcast.hash();
+        
+        dandelion.add_transaction_with_privacy(
+            tx_hash,
+            None,
+            crate::networking::dandelion::PrivacyRoutingMode::Standard
+        );
+        
+        Ok(())
     }
     
     // Add a method to integrate Dandelion with metadata protection
@@ -189,11 +192,15 @@ impl Node {
         // Add the transaction to the Dandelion manager for privacy routing
         let mut dandelion_manager = self.dandelion_manager.lock().unwrap();
         
-        // Clean the transaction for privacy
-        let clean_tx = dandelion_manager.prepare_transaction_for_broadcast(&tx);
+        // Calculate transaction hash
+        let tx_hash = tx.hash();
         
-        // Add the transaction with privacy metadata
-        let _ = dandelion_manager.add_transaction_with_privacy_metadata(clean_tx);
+        // Add the transaction with privacy settings
+        let _ = dandelion_manager.add_transaction_with_privacy(
+            tx_hash,
+            None,
+            crate::networking::dandelion::PrivacyRoutingMode::Standard
+        );
     }
     
     // ... existing methods

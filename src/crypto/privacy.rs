@@ -411,7 +411,7 @@ impl ReceiverPrivacy {
     }
     
     /// Add a view key for selective disclosure
-    pub fn add_view_key(&mut self, name: &[u8], view_key: JubjubScalar) {
+    pub fn add_view_key(&mut self, _name: &[u8], _view_key: JubjubScalar) {
         // Implementation needed
     }
     

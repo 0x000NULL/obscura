@@ -1,4 +1,4 @@
-use obscura::networking::dandelion::{DandelionManager, PropagationState, PrivacyRoutingMode, DandelionConfig};
+use obscura_core::networking::dandelion::{DandelionManager, PropagationState, PrivacyRoutingMode, DandelionConfig};
 use std::time::{Duration, Instant};
 use std::thread;
 
@@ -10,6 +10,22 @@ fn create_default_dandelion_config() -> DandelionConfig {
         multi_path_routing: true,
         adaptive_timing: true,
         fluff_probability: 0.1,
+        stem_phase_min_timeout: Duration::from_secs(10),
+        stem_phase_max_timeout: Duration::from_secs(30),
+        fluff_phase_timeout: Duration::from_secs(60),
+        max_stem_retries: 3,
+        max_batch_size: 100,
+        min_batch_interval: Duration::from_secs(5),
+        max_batch_interval: Duration::from_secs(15),
+        decoy_probability: 0.1,
+        max_decoy_outputs: 5,
+        min_anonymity_set: 3,
+        max_anonymity_set: 10,
+        path_selection_alpha: 0.15,
+        routing_randomization: 0.2,
+        peer_rotation_interval: Duration::from_secs(300),
+        eclipse_prevention_ratio: 0.33,
+        sybil_resistance_threshold: 0.75,
     }
 }
 
