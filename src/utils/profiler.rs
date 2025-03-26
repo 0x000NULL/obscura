@@ -39,26 +39,42 @@ impl Default for ProfilingLevel {
 }
 
 /// Statistics for a specific operation or code path
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ProfileStats {
     /// Name of the operation being profiled
     pub name: String,
     /// Category (e.g., "crypto", "networking", "consensus")
     pub category: String,
     /// Total number of calls
-    pub call_count: usize,
+    pub call_count: AtomicUsize,
     /// Total time spent in this operation
-    pub total_time: Duration,
+    pub total_time: Arc<Mutex<Duration>>,
     /// Minimum execution time observed
-    pub min_time: Duration,
+    pub min_time: Arc<Mutex<Duration>>,
     /// Maximum execution time observed
-    pub max_time: Duration,
+    pub max_time: Arc<Mutex<Duration>>,
     /// Sum of squares (for variance calculation)
-    sum_squares: u128,
+    pub sum_squares: Arc<Mutex<u128>>,
     /// Timestamp of the first call
-    first_call: Instant,
+    pub first_call: Arc<Mutex<Instant>>,
     /// Timestamp of the last call
-    last_call: Instant,
+    pub last_call: Arc<Mutex<Instant>>,
+}
+
+impl Clone for ProfileStats {
+    fn clone(&self) -> Self {
+        ProfileStats {
+            name: self.name.clone(),
+            category: self.category.clone(),
+            call_count: AtomicUsize::new(self.call_count.load(Ordering::SeqCst)),
+            total_time: Arc::new(Mutex::new(*self.total_time.lock().unwrap())),
+            min_time: Arc::new(Mutex::new(*self.min_time.lock().unwrap())),
+            max_time: Arc::new(Mutex::new(*self.max_time.lock().unwrap())),
+            sum_squares: Arc::new(Mutex::new(*self.sum_squares.lock().unwrap())),
+            first_call: Arc::new(Mutex::new(*self.first_call.lock().unwrap())),
+            last_call: Arc::new(Mutex::new(*self.last_call.lock().unwrap())),
+        }
+    }
 }
 
 impl ProfileStats {
@@ -67,52 +83,75 @@ impl ProfileStats {
         ProfileStats {
             name: name.to_string(),
             category: category.to_string(),
-            call_count: 0,
-            total_time: Duration::new(0, 0),
-            min_time: Duration::new(u64::MAX, 999_999_999),
-            max_time: Duration::new(0, 0),
-            sum_squares: 0,
-            first_call: Instant::now(),
-            last_call: Instant::now(),
+            call_count: AtomicUsize::new(0),
+            total_time: Arc::new(Mutex::new(Duration::new(0, 0))),
+            min_time: Arc::new(Mutex::new(Duration::new(u64::MAX, 999_999_999))),
+            max_time: Arc::new(Mutex::new(Duration::new(0, 0))),
+            sum_squares: Arc::new(Mutex::new(0)),
+            first_call: Arc::new(Mutex::new(Instant::now())),
+            last_call: Arc::new(Mutex::new(Instant::now())),
         }
     }
 
     /// Record a single operation timing
-    pub fn record(&mut self, duration: Duration) {
-        self.call_count += 1;
-        self.total_time += duration;
-        self.last_call = Instant::now();
+    pub fn record(&self, duration: Duration) {
+        self.call_count.fetch_add(1, Ordering::SeqCst);
         
-        if duration < self.min_time {
-            self.min_time = duration;
+        // Update total time
+        if let Ok(mut total) = self.total_time.lock() {
+            *total += duration;
         }
         
-        if duration > self.max_time {
-            self.max_time = duration;
+        // Update min time
+        if let Ok(mut min) = self.min_time.lock() {
+            if duration < *min {
+                *min = duration;
+            }
         }
         
-        // Update sum of squares for variance calculation
-        let nanos = duration.as_nanos();
-        self.sum_squares += nanos * nanos;
+        // Update max time
+        if let Ok(mut max) = self.max_time.lock() {
+            if duration > *max {
+                *max = duration;
+            }
+        }
+        
+        // Update sum of squares
+        if let Ok(mut sum) = self.sum_squares.lock() {
+            let nanos = duration.as_nanos();
+            *sum += nanos * nanos;
+        }
+        
+        // Update last call time
+        if let Ok(mut last) = self.last_call.lock() {
+            *last = Instant::now();
+        }
     }
 
     /// Get the average execution time
     pub fn average_time(&self) -> Duration {
-        if self.call_count == 0 {
+        let count = self.call_count.load(Ordering::SeqCst);
+        if count == 0 {
             Duration::new(0, 0)
         } else {
-            self.total_time / self.call_count as u32
+            if let Ok(total) = self.total_time.lock() {
+                *total / count as u32
+            } else {
+                Duration::new(0, 0)
+            }
         }
     }
 
     /// Calculate standard deviation of execution time
     pub fn std_deviation(&self) -> Duration {
-        if self.call_count <= 1 {
+        let count = self.call_count.load(Ordering::SeqCst);
+        if count <= 1 {
             return Duration::new(0, 0);
         }
 
         let mean = self.average_time().as_nanos() as f64;
-        let variance = (self.sum_squares as f64 / self.call_count as f64) - (mean * mean);
+        let sum_squares = self.sum_squares.lock().map(|s| *s).unwrap_or(0) as f64;
+        let variance = (sum_squares / count as f64) - (mean * mean);
         
         // Avoid negative values due to floating point imprecision
         if variance <= 0.0 {
@@ -125,29 +164,65 @@ impl ProfileStats {
 
     /// Get calls per second rate
     pub fn calls_per_second(&self) -> f64 {
-        if self.call_count <= 1 {
+        let count = self.call_count.load(Ordering::SeqCst);
+        if count <= 1 {
             return 0.0;
         }
         
-        let elapsed = self.last_call.duration_since(self.first_call);
+        let first = self.first_call.lock().map(|f| *f).unwrap_or(Instant::now());
+        let last = self.last_call.lock().map(|l| *l).unwrap_or(Instant::now());
+        let elapsed = last.duration_since(first);
         let seconds = elapsed.as_secs_f64();
         
         if seconds > 0.0 {
-            self.call_count as f64 / seconds
+            count as f64 / seconds
         } else {
             0.0
         }
     }
     
     /// Reset the statistics
-    pub fn reset(&mut self) {
-        self.call_count = 0;
-        self.total_time = Duration::new(0, 0);
-        self.min_time = Duration::new(u64::MAX, 999_999_999);
-        self.max_time = Duration::new(0, 0);
-        self.sum_squares = 0;
-        self.first_call = Instant::now();
-        self.last_call = Instant::now();
+    pub fn reset(&self) {
+        self.call_count.store(0, Ordering::SeqCst);
+        if let Ok(mut total) = self.total_time.lock() {
+            *total = Duration::new(0, 0);
+        }
+        if let Ok(mut min) = self.min_time.lock() {
+            *min = Duration::new(u64::MAX, 999_999_999);
+        }
+        if let Ok(mut max) = self.max_time.lock() {
+            *max = Duration::new(0, 0);
+        }
+        if let Ok(mut sum) = self.sum_squares.lock() {
+            *sum = 0;
+        }
+        let now = Instant::now();
+        if let Ok(mut first) = self.first_call.lock() {
+            *first = now;
+        }
+        if let Ok(mut last) = self.last_call.lock() {
+            *last = now;
+        }
+    }
+
+    /// Get the total number of calls
+    pub fn get_call_count(&self) -> usize {
+        self.call_count.load(Ordering::SeqCst)
+    }
+
+    /// Get the total time
+    pub fn get_total_time(&self) -> Duration {
+        self.total_time.lock().map(|t| *t).unwrap_or(Duration::new(0, 0))
+    }
+
+    /// Get the minimum time
+    pub fn get_min_time(&self) -> Duration {
+        self.min_time.lock().map(|t| *t).unwrap_or(Duration::new(0, 0))
+    }
+
+    /// Get the maximum time
+    pub fn get_max_time(&self) -> Duration {
+        self.max_time.lock().map(|t| *t).unwrap_or(Duration::new(0, 0))
     }
 }
 
@@ -156,10 +231,10 @@ impl fmt::Display for ProfileStats {
         write!(f, "{} ({}): {} calls, avg: {:?}, min: {:?}, max: {:?}, σ: {:?}, rate: {:.2}/s",
             self.name, 
             self.category,
-            self.call_count,
+            self.get_call_count(),
             self.average_time(),
-            self.min_time,
-            self.max_time,
+            self.get_min_time(),
+            self.get_max_time(),
             self.std_deviation(),
             self.calls_per_second()
         )
@@ -249,9 +324,12 @@ impl Profiler {
     pub fn record_timing(&self, name: &str, category: &str, duration: Duration) {
         let key = format!("{}:{}", category, name);
         
-        let mut stats = self.stats.write();
-        let entry = stats.entry(key).or_insert_with(|| ProfileStats::new(name, category));
-        entry.record(duration);
+        // Get or create the ProfileStats instance
+        let mut stats_map = self.stats.write();
+        let stats = stats_map.entry(key).or_insert_with(|| ProfileStats::new(name, category));
+        
+        // Record the timing directly
+        stats.record(duration);
     }
 
     /// Get statistics for a specific operation
@@ -320,7 +398,7 @@ impl Profiler {
             
             // Sort by total time spent (descending)
             let mut sorted_stats = cat_stats.clone();
-            sorted_stats.sort_by(|a, b| b.total_time.cmp(&a.total_time));
+            sorted_stats.sort_by(|a, b| b.get_total_time().cmp(&a.get_total_time()));
             
             for stat in sorted_stats {
                 report.push_str(&format!("  {}\n", stat));
@@ -430,28 +508,29 @@ mod tests {
     
     #[test]
     fn test_profile_stats() {
-        let mut stats = ProfileStats::new("test_op", "test_category");
+        let stats = ProfileStats::new("test_op", "test_category");
         
         // Add some measurements
         stats.record(Duration::from_micros(100));
         stats.record(Duration::from_micros(200));
         stats.record(Duration::from_micros(300));
         
-        assert_eq!(stats.call_count, 3);
-        assert_eq!(stats.total_time, Duration::from_micros(600));
-        assert_eq!(stats.min_time, Duration::from_micros(100));
-        assert_eq!(stats.max_time, Duration::from_micros(300));
+        assert_eq!(stats.get_call_count(), 3);
+        assert_eq!(stats.get_total_time(), Duration::from_micros(600));
+        assert_eq!(stats.get_min_time(), Duration::from_micros(100));
+        assert_eq!(stats.get_max_time(), Duration::from_micros(300));
         assert_eq!(stats.average_time(), Duration::from_micros(200));
         
         // Test reset
         stats.reset();
-        assert_eq!(stats.call_count, 0);
+        assert_eq!(stats.get_call_count(), 0);
     }
     
     #[test]
     fn test_profiling_span() {
         // Set profiling level
         set_profiling_level(ProfilingLevel::Debug);
+        reset_profiling_stats();
         
         // Profile a simple operation
         {
@@ -462,7 +541,7 @@ mod tests {
         // Verify the stats were recorded
         let stats = GLOBAL_PROFILER.get_stats("test_operation", "test_category");
         assert!(stats.is_some());
-        assert_eq!(stats.unwrap().call_count, 1);
+        assert_eq!(stats.unwrap().get_call_count(), 1);
         
         // Test with different level
         set_profiling_level(ProfilingLevel::Minimal);
@@ -490,6 +569,7 @@ mod tests {
     #[test]
     fn test_manual_finish() {
         set_profiling_level(ProfilingLevel::Debug);
+        reset_profiling_stats();
         
         // Manually finish the span
         let span = profile("manual_finish", "test_category").unwrap();
@@ -501,7 +581,7 @@ mod tests {
         // Check that stats were recorded
         let stats = GLOBAL_PROFILER.get_stats("manual_finish", "test_category");
         assert!(stats.is_some());
-        assert_eq!(stats.unwrap().call_count, 1);
+        assert_eq!(stats.unwrap().get_call_count(), 1);
     }
     
     #[test]
@@ -531,7 +611,29 @@ mod tests {
         assert_eq!(all_stats.len(), 5);
         
         for stats in all_stats {
-            assert_eq!(stats.call_count, 10);
+            assert_eq!(stats.get_call_count(), 10);
         }
+    }
+
+    #[test]
+    fn test_concurrent_recording() {
+        let stats = ProfileStats::new("concurrent_op", "test_category");
+        let threads: Vec<_> = (0..5)
+            .map(|_| {
+                let stats = stats.clone();
+                thread::spawn(move || {
+                    for _ in 0..10 {
+                        stats.record(Duration::from_micros(100));
+                    }
+                })
+            })
+            .collect();
+        
+        for thread in threads {
+            thread.join().unwrap();
+        }
+        
+        assert_eq!(stats.get_call_count(), 50);
+        assert_eq!(stats.get_total_time(), Duration::from_micros(5000));
     }
 } 
