@@ -118,6 +118,11 @@ impl PedersenCommitment {
         }
     }
 
+    // Add new static commit method
+    pub fn commit(value: u64, blinding_factor: JubjubScalar) -> Self {
+        Self::new(JubjubScalar::from(value), blinding_factor)
+    }
+
     pub fn commit_random(value: u64) -> Self {
         let mut rng = OsRng;
         let value_scalar = JubjubScalar::from(value);
@@ -125,18 +130,24 @@ impl PedersenCommitment {
         Self::new(value_scalar, randomness)
     }
 
-    pub fn commit(&self) -> JubjubPoint {
+    // Add a new instance method to compute the actual commitment point
+    pub fn compute_commitment(&self) -> JubjubPoint {
         *PEDERSEN_G * self.value + *PEDERSEN_H * self.randomness
     }
 
+    // Add to_bytes method that returns the bytes of the computed commitment point
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.compute_commitment().to_bytes()
+    }
+
     pub fn verify(&self, commitment: &JubjubPoint) -> bool {
-        self.commit() == *commitment
+        self.compute_commitment() == *commitment
     }
 
     pub fn verify_value(&self, value: u64) -> bool {
         let value_scalar = JubjubScalar::from(value);
         let expected_point = *PEDERSEN_G * value_scalar + *PEDERSEN_H * self.randomness;
-        self.commit() == expected_point
+        self.compute_commitment() == expected_point
     }
 
     // Add the blinding() method to access the randomness field
@@ -443,7 +454,7 @@ impl DualCurveCommitment {
     // Homomorphic addition of dual commitments
     pub fn add(&self, other: &DualCurveCommitment) -> DualCurveCommitment {
         // Add commitments on both curves
-        let jubjub_sum = self.jubjub_commitment.commit() + other.jubjub_commitment.commit();
+        let jubjub_sum = self.jubjub_commitment.compute_commitment() + other.jubjub_commitment.compute_commitment();
         let bls_sum = self.bls_commitment.commitment + other.bls_commitment.commitment;
 
         // Calculate combined value if available
@@ -471,7 +482,7 @@ impl DualCurveCommitment {
         let mut bytes = Vec::new();
 
         // Add Jubjub commitment bytes
-        bytes.extend_from_slice(&self.jubjub_commitment.commit().to_bytes());
+        bytes.extend_from_slice(&self.jubjub_commitment.compute_commitment().to_bytes());
 
         // Add BLS commitment bytes
         bytes.extend_from_slice(&self.bls_commitment.to_bytes());
@@ -528,7 +539,7 @@ impl DualCurveCommitment {
 
     // Verify against a value in both curves
     pub fn verify(&self, value: u64) -> (bool, bool) {
-        let jubjub_valid = self.jubjub_commitment.verify(&self.jubjub_commitment.commit());
+        let jubjub_valid = self.jubjub_commitment.verify(&self.jubjub_commitment.compute_commitment());
         let bls_valid = self.bls_commitment.verify(value);
         (jubjub_valid, bls_valid)
     }
@@ -637,13 +648,13 @@ mod tests {
         let commitment = PedersenCommitment::new(JubjubScalar::from(value), generate_random_jubjub_scalar());
 
         // Serialize to bytes
-        let bytes = commitment.commit().to_bytes();
+        let bytes = commitment.compute_commitment().to_bytes();
 
         // Deserialize from bytes
         let deserialized = PedersenCommitment::from_bytes(&bytes).unwrap();
 
         // Points should match
-        assert_eq!(commitment.commit(), deserialized.commit());
+        assert_eq!(commitment.compute_commitment(), deserialized.compute_commitment());
     }
 
     #[test]
@@ -664,7 +675,7 @@ mod tests {
         let expected_sum = PedersenCommitment::new(JubjubScalar::from(value1 + value2), blinding1 + blinding2);
 
         // The commitments should be the same
-        assert_eq!(sum_commitment.commit(), expected_sum.commit());
+        assert_eq!(sum_commitment.compute_commitment(), expected_sum.compute_commitment());
         assert_eq!(sum_commitment.value, JubjubScalar::from(value1 + value2));
     }
 
@@ -675,7 +686,7 @@ mod tests {
         let commitment = PedersenCommitment::new(JubjubScalar::from(value), blinding);
 
         // Verify with correct value
-        assert!(commitment.verify(&commitment.commit()));
+        assert!(commitment.verify(&commitment.compute_commitment()));
 
         // Verify with incorrect value
         assert!(!commitment.verify(&(*PEDERSEN_G * (JubjubScalar::from(value + 1)) + *PEDERSEN_H * blinding)));
@@ -727,8 +738,8 @@ mod tests {
 
         // Points should match after serialization
         assert_eq!(
-            commitment.jubjub_commitment.commit(),
-            deserialized.jubjub_commitment.commit()
+            commitment.jubjub_commitment.compute_commitment(),
+            deserialized.jubjub_commitment.compute_commitment()
         );
         assert_eq!(
             commitment.bls_commitment.commitment,

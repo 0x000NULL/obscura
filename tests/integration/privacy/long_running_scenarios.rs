@@ -5,6 +5,8 @@ use obscura_core::{
         bulletproofs::RangeProof,
         pedersen::PedersenCommitment,
         privacy::{SenderPrivacy, ReceiverPrivacy},
+        JubjubScalar,
+        JubjubPointExt,
     },
     networking::{
         privacy::{
@@ -200,8 +202,8 @@ impl LongRunningTest {
         
         // Create Pedersen commitment for the amount
         let blinding_factor = obscura_core::crypto::pedersen::generate_random_jubjub_scalar();
-        let commitment = PedersenCommitment::commit(amount, blinding_factor);
-        tx.set_amount_commitment(0, commitment.to_bytes()).unwrap();
+        let commitment = PedersenCommitment::new(JubjubScalar::from(amount), blinding_factor);
+        tx.set_amount_commitment(0, commitment.compute_commitment().to_bytes()).unwrap();
         
         // Create range proof
         let range_proof = RangeProof::new(amount, 64).unwrap();

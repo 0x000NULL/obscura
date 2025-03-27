@@ -341,7 +341,7 @@ impl LocalPedersenCommitment {
         );
         
         // Convert the commitment to a fixed-size byte array
-        let commitment_point = pedersen_commitment.commit();
+        let commitment_point = pedersen_commitment.compute_commitment();
         let commitment_bytes = commitment_point.to_bytes();
         let mut result = [0u8; 32];
         let bytes_to_copy = commitment_bytes.len().min(32);
@@ -364,7 +364,7 @@ impl LocalPedersenCommitment {
     
     /// Convert from the full PedersenCommitment representation
     pub fn from_pedersen_commitment(commitment: &pedersen::PedersenCommitment, amount: u64, blinding: [u8; 32]) -> Self {
-        let commitment_point = commitment.commit();
+        let commitment_point = commitment.compute_commitment();
         let commitment_bytes = commitment_point.to_bytes();
         let mut result = [0u8; 32];
         let bytes_to_copy = commitment_bytes.len().min(32);
@@ -488,7 +488,7 @@ mod tests {
         // Verify both commitments
         assert!(local_commitment.verify(amount));
         // Convert amount to a commitment point for verification
-        let commitment_point = pedersen_commitment.commit();
+        let commitment_point = pedersen_commitment.compute_commitment();
         assert!(pedersen_commitment.verify(&commitment_point));
     }
 }

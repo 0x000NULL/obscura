@@ -1,24 +1,25 @@
 use std::sync::Arc;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
-use ark_ec::{CurveGroup, Group};
+use ark_ec::CurveGroup;
 use ark_ff::UniformRand;
 use std::time::{Duration, Instant};
 use ark_std::rand::Rng;
-
+use group::Group;
 use obscura_core::crypto::power_analysis_protection::PowerAnalysisProtection;
 use obscura_core::crypto::side_channel_protection::SideChannelProtection;
-use obscura_core::crypto::jubjub::{JubjubPoint, JubjubScalar, generate_keypair};
+use obscura_core::crypto::jubjub::{JubjubPoint, JubjubScalar, generate_keypair, JubjubPointExt};
 use obscura_core::crypto::{
     memory_protection::{MemoryProtection, MemoryProtectionConfig},
     side_channel_protection::SideChannelProtectionConfig,
     power_analysis_protection::PowerAnalysisConfig,
 };
+use ark_ed_on_bls12_381::EdwardsProjective;
 
 // Helper function to compare points in affine coordinates
 fn assert_points_equal(left: &JubjubPoint, right: &JubjubPoint) {
-    let left_affine = left.into_affine();
-    let right_affine = right.into_affine();
+    let left_affine = left.0.into_affine();
+    let right_affine = right.0.into_affine();
     assert_eq!(left_affine, right_affine, "Points are not equal in affine form");
 }
 
@@ -46,7 +47,7 @@ fn test_power_analysis_protection_basic() {
     let result = pap.protected_scalar_mul(&point, &scalar);
     
     // Verify the result is correct
-    assert_eq!(result, expected);
+    assert_points_equal(&result, &expected);
     
     println!("Basic power analysis protection works correctly");
 }
@@ -62,8 +63,8 @@ fn test_key_generation_with_power_protection() {
     });
     
     // Verify the keypair is valid
-    let expected_public = <ark_ed_on_bls12_381::EdwardsProjective as Group>::generator() * keypair.secret;
-    assert_eq!(keypair.public, expected_public);
+    let expected_public = JubjubPoint::new(JubjubPoint::generator().inner() * keypair.secret);
+    assert_points_equal(&keypair.public, &expected_public);
     
     println!("Key generation with power analysis protection works correctly");
 }

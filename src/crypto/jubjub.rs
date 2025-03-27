@@ -5,11 +5,13 @@ use rand::rngs::OsRng;
 use rand::Rng;
 use rand_core::RngCore;
 use sha2::{Digest, Sha256};
-use std::ops::Mul;
+use std::ops::{Mul, Neg};
 use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField};
+use ark_ec::AdditiveGroup;
 use group::Group;
 use rand::thread_rng;
+use rand_distr::Distribution;
 
 /// Security level for cryptographic operations
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -91,8 +93,11 @@ impl JubjubPoint {
     }
 
     // Add into_bigint method
-    pub fn into_bigint(&self) -> <EdwardsProjective as ark_ec::CurveGroup>::ScalarField {
-        self.0.into_bigint()
+    pub fn into_bigint(&self) -> JubjubScalar {
+        // Convert projective point to affine form first
+        let affine = self.0.into_affine();
+        // Return the x-coordinate as the scalar field element
+        affine.x.into_bigint().into()
     }
 
     // Add verify method for signature verification
@@ -806,7 +811,7 @@ pub fn create_stealth_address(recipient_public_key: &JubjubPoint) -> (JubjubPoin
     let blinded_secret = blind_key(&forward_secret, &blinding_factor, None);
 
     // Compute the stealth address as S = blinded_secret·G + P
-    let stealth_address = JubjubPoint::new(optimized_mul(&blinded_secret) + recipient_public_key.inner());
+    let stealth_address = JubjubPoint::new(optimized_mul(&blinded_secret).inner() + recipient_public_key.inner());
 
     // Return the ephemeral public key and the stealth address
     (ephemeral_public, stealth_address)
@@ -1621,8 +1626,8 @@ pub fn derive_public_key_protected(
         let entropy_scalar = Fr::from_le_bytes_mod_order(&entropy_bytes);
         
         // Use the scalar to tweak the public key using the JubjubPointExt trait
-        let entropy_point = <EdwardsProjective as JubjubPointExt>::generator().mul(entropy_scalar);
-        return JubjubPoint::new(derived_public_key + entropy_point);
+        let entropy_point = JubjubPoint::new(EdwardsProjective::generator() * entropy_scalar);
+        return JubjubPoint::new(derived_public_key.inner() + entropy_point.inner());
     }
     
     derived_public_key
@@ -1791,7 +1796,7 @@ mod tests {
         // Instead of exact equality, verify that the derived public key can be used for verification
         let message = b"test message";
         let signature = sign(&stealth_private_key, message);
-        assert!(verify(&derived_public.inner(), message, &signature));
+        assert!(verify(&derived_public, message, &signature));
     }
 
     #[test]
@@ -1814,7 +1819,7 @@ mod tests {
 
         // Test signing and verification
         let signature = sign(&recovered_private, message);
-        assert!(verify(&JubjubPoint::new(derived_public.inner()), message, &signature));
+        assert!(verify(&derived_public, message, &signature));
 
         // Ensure the stealth address is not zero
         assert!(!stealth_address.inner().is_zero());
@@ -1956,11 +1961,11 @@ mod tests {
         // Test signing and verification
         let message = b"test message";
         let signature = sign(&private_key, message);
-        assert!(verify(&public_key.inner(), message, &signature));
+        assert!(verify(&JubjubPoint::new(public_key.inner()), message, &signature));
         
         // Test that verification fails with wrong message
         let wrong_message = b"wrong message";
-        assert!(!verify(&public_key.inner(), wrong_message, &signature));
+        assert!(!verify(&JubjubPoint::new(public_key.inner()), wrong_message, &signature));
     }
 
     #[test]

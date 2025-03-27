@@ -1,10 +1,11 @@
 use obscura_core::crypto::side_channel_protection::{SideChannelProtection, SideChannelProtectionConfig};
-use obscura_core::crypto::jubjub::{JubjubPoint, JubjubScalar, generate_keypair};
+use obscura_core::crypto::jubjub::{JubjubPoint, JubjubScalar, generate_keypair, JubjubPointExt};
 use obscura_core::crypto::pedersen::PedersenCommitment;
 use rand::thread_rng;
 use ark_ff::PrimeField;
 use std::time::Instant;
 use ark_std::UniformRand;
+use group::Group;
 
 #[test]
 fn test_side_channel_protection_integration() {
@@ -13,7 +14,7 @@ fn test_side_channel_protection_integration() {
     
     // Generate a keypair and verify it's valid
     let keypair = generate_keypair();
-    assert!(keypair.public == <ark_ed_on_bls12_381::EdwardsProjective as ark_ec::Group>::generator() * keypair.secret);
+    assert!(keypair.public == JubjubPoint::generator() * keypair.secret);
     
     // Generate random points and scalars
     let mut rng = thread_rng();
@@ -29,10 +30,10 @@ fn test_side_channel_protection_integration() {
     let value = JubjubScalar::rand(&mut rng);
     let blinding = JubjubScalar::rand(&mut rng);
     let value_u64 = value.into_bigint().as_ref()[0] as u64;
-    let commitment = PedersenCommitment::commit(value_u64, blinding);
+    let commitment = PedersenCommitment::new(value, blinding);
     
     // Verify the commitment
-    assert!(commitment.verify(value_u64));
+    assert!(commitment.verify_value(value_u64));
     
     // Test operation batching
     let counter = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));

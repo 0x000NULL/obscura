@@ -1348,7 +1348,7 @@ impl StealthAddressing {
         let r_p = *recipient_pubkey * r;
         let mut hasher = Sha256::new();
         let mut r_p_bytes = Vec::new();
-        r_p.serialize_compressed(&mut r_p_bytes).unwrap();
+        r_p.0.serialize_compressed(&mut r_p_bytes).unwrap();
         hasher.update(&r_p_bytes);
         let s = hasher.finalize();
         
@@ -1361,7 +1361,7 @@ impl StealthAddressing {
         
         // Convert to bytes
         let mut stealth_address_bytes = Vec::new();
-        stealth_address.serialize_compressed(&mut stealth_address_bytes).unwrap();
+        stealth_address.0.serialize_compressed(&mut stealth_address_bytes).unwrap();
         
         // Cache the one-time address
         self.one_time_addresses.insert(stealth_address_bytes.clone(), r_g);
@@ -1583,7 +1583,7 @@ impl ConfidentialTransactions {
         
         // Convert to bytes
         let mut commitment_bytes = Vec::new();
-        commitment.serialize_compressed(&mut commitment_bytes).unwrap();
+        commitment.0.serialize_compressed(&mut commitment_bytes).unwrap();
         
         commitment_bytes
     }
