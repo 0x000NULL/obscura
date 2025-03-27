@@ -1,10 +1,11 @@
 use std::sync::{Arc, Mutex, RwLock};
 use log::{debug, info};
+use rand::thread_rng;
 
 use crate::blockchain::{Block, Transaction, UTXOSet};
 use crate::blockchain::mempool::Mempool;
 use crate::networking::Node;
-use crate::crypto::jubjub::{JubjubPoint, JubjubPointExt, JubjubScalarExt};
+use crate::crypto::jubjub::{JubjubPoint, JubjubPointExt, JubjubScalarExt, JubjubKeypair};
 use crate::wallet::Wallet;
 use crate::crypto::metadata_protection::AdvancedMetadataProtection;
 
@@ -464,7 +465,11 @@ mod integration_tests {
     #[test]
     fn test_stealth_address_integration() {
         // Create a sender wallet
-        let sender_wallet = Arc::new(RwLock::new(Wallet::new_with_keypair()));
+        let sender_wallet = Arc::new(RwLock::new({
+            let mut wallet = Wallet::new();
+            wallet.set_keypair(JubjubKeypair::generate());
+            wallet
+        }));
         let sender_pubkey = sender_wallet.read().unwrap().get_public_key().unwrap();
         
         // Give the sender some initial funds to use
@@ -474,7 +479,11 @@ mod integration_tests {
         }
         
         // Create a receiver wallet
-        let receiver_wallet = Arc::new(RwLock::new(Wallet::new_with_keypair()));
+        let receiver_wallet = Arc::new(RwLock::new({
+            let mut wallet = Wallet::new();
+            wallet.set_keypair(JubjubKeypair::generate());
+            wallet
+        }));
         let receiver_pubkey = receiver_wallet.read().unwrap().get_public_key().unwrap();
         
         // Create a mock UTXO set

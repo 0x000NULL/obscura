@@ -727,7 +727,7 @@ pub fn example_memory_protection() {
     
     // Access the protected scalar and perform computation
     let scalar_value = protected_scalar.get().unwrap();
-    let result = point * scalar_value;
+    let result = point * *scalar_value;
     
     // Verify the result
     let expected = point * scalar;

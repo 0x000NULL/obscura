@@ -77,7 +77,6 @@ num-traits = "0.2"
 rayon = "1.10"
 num_cpus = "1.16.0"
 
-
 rand_chacha = "0.3.1"
 siphasher = "0.3"
 group = "0.13.0"

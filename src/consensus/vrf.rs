@@ -1,6 +1,6 @@
 use crate::crypto::jubjub::{JubjubKeypair, JubjubPoint, JubjubPointExt, JubjubScalarExt};
 use ark_ed_on_bls12_381::{Fr, EdwardsProjective};
-use ark_ec::CurveGroup;
+use ark_ec::{CurveGroup, PrimeGroup};
 use ark_ff::{PrimeField, Zero};
 use ark_serialize::CanonicalSerialize;
 use sha2::{Digest, Sha256};
@@ -53,16 +53,16 @@ impl Vrf {
         let nonce = Fr::from_be_bytes_mod_order(&nonce_hash);
 
         // Compute R = nonce * G
-        let r_point = <EdwardsProjective as JubjubPointExt>::generator() * nonce;
+        let r_point = JubjubPoint::new(<EdwardsProjective as JubjubPointExt>::generator() * nonce);
 
         // Hash public key, message and R to get challenge
         let mut hasher = Sha256::new();
         hasher.update(b"Obscura_VRF_Challenge");
         let mut r_point_bytes = Vec::new();
-        r_point.into_affine().serialize_compressed(&mut r_point_bytes).unwrap();
+        r_point.inner().into_affine().serialize_compressed(&mut r_point_bytes).unwrap();
         hasher.update(&r_point_bytes);
         let mut public_bytes = Vec::new();
-        self.keypair.public.into_affine().serialize_compressed(&mut public_bytes).unwrap();
+        self.keypair.public.inner().into_affine().serialize_compressed(&mut public_bytes).unwrap();
         hasher.update(&public_bytes);
         hasher.update(message);
         let challenge_hash = hasher.finalize();
@@ -94,17 +94,17 @@ impl Vrf {
         let s = Fr::from_bytes(&s_bytes).unwrap();
         
         // Compute R = s·G - r·P
-        let r_point = <EdwardsProjective as JubjubPointExt>::generator() * s - self.keypair.public * r;
+        let r_point = JubjubPoint::generator() * s - self.keypair.public * r;
         
         // Hash R, public key, and message to get challenge
         let mut hasher = Sha256::new();
         hasher.update(b"Obscura_VRF_Challenge");
         let mut r_point_bytes = Vec::new();
-        r_point.into_affine().serialize_compressed(&mut r_point_bytes).unwrap();
+        r_point.inner().into_affine().serialize_compressed(&mut r_point_bytes).unwrap();
         hasher.update(&r_point_bytes);
         
         let mut public_bytes = Vec::new();
-        self.keypair.public.into_affine().serialize_compressed(&mut public_bytes).unwrap();
+        self.keypair.public.inner().into_affine().serialize_compressed(&mut public_bytes).unwrap();
         hasher.update(&public_bytes);
         hasher.update(message);
         

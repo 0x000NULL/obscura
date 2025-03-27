@@ -16,7 +16,9 @@ fn test_wallet_creation() {
 
 #[test]
 fn test_transaction_creation() {
-    let mut wallet = Wallet::new_with_keypair();
+    let mut wallet = Wallet::new();
+    let keypair = JubjubKeypair::generate();
+    wallet.set_keypair(keypair);
     // Create a recipient using JubjubKeypair
     let recipient_keypair = JubjubKeypair::generate();
     let recipient = recipient_keypair.public;
@@ -31,7 +33,9 @@ fn test_transaction_creation() {
 
 #[test]
 fn test_stake_creation() {
-    let mut wallet = Wallet::new_with_keypair();
+    let mut wallet = Wallet::new();
+    let keypair = JubjubKeypair::generate();
+    wallet.set_keypair(keypair);
     wallet.balance = 2000;
     
     // Set up a UTXO that can be used for staking
@@ -69,7 +73,9 @@ fn test_stake_creation() {
 
 #[test]
 fn test_privacy_features_enabled() {
-    let mut wallet = Wallet::new_with_keypair();
+    let mut wallet = Wallet::new();
+    let keypair = JubjubKeypair::generate();
+    wallet.set_keypair(keypair);
     
     // Initially privacy features should be disabled
     assert_eq!(wallet.privacy_enabled, false);
@@ -83,7 +89,9 @@ fn test_privacy_features_enabled() {
 
 #[test]
 fn test_transaction_obfuscation() {
-    let mut wallet = Wallet::new_with_keypair();
+    let mut wallet = Wallet::new();
+    let keypair = JubjubKeypair::generate();
+    wallet.set_keypair(keypair);
     let recipient_keypair = JubjubKeypair::generate();
     let recipient = recipient_keypair.public;
     
@@ -110,8 +118,13 @@ fn test_transaction_obfuscation() {
 
 #[test]
 fn test_stealth_addressing() {
-    let mut sender_wallet = Wallet::new_with_keypair();
-    let mut recipient_wallet = Wallet::new_with_keypair();
+    let mut sender_wallet = Wallet::new();
+    let sender_keypair = JubjubKeypair::generate();
+    sender_wallet.set_keypair(sender_keypair);
+    
+    let mut recipient_wallet = Wallet::new();
+    let recipient_keypair = JubjubKeypair::generate();
+    recipient_wallet.set_keypair(recipient_keypair);
     
     // Enable privacy for both wallets
     sender_wallet.enable_privacy();
@@ -139,7 +152,9 @@ fn test_stealth_addressing() {
 
 #[test]
 fn test_privacy_persistence() {
-    let mut wallet = Wallet::new_with_keypair();
+    let mut wallet = Wallet::new();
+    let keypair = JubjubKeypair::generate();
+    wallet.set_keypair(keypair);
     wallet.balance = 1000;
     
     // Enable privacy
@@ -165,7 +180,9 @@ fn test_privacy_persistence() {
 
 #[test]
 fn test_wallet_insufficient_funds() {
-    let mut wallet = Wallet::new_with_keypair();
+    let mut wallet = Wallet::new();
+    let keypair = JubjubKeypair::generate();
+    wallet.set_keypair(keypair);
     let recipient = JubjubKeypair::generate().public;
     
     wallet.balance = 100;
@@ -179,7 +196,9 @@ fn test_wallet_insufficient_funds() {
 
 #[test]
 fn test_wallet_utxo_management() {
-    let mut wallet = Wallet::new_with_keypair();
+    let mut wallet = Wallet::new();
+    let keypair = JubjubKeypair::generate();
+    wallet.set_keypair(keypair);
     let recipient_keypair = JubjubKeypair::generate();
     let recipient = recipient_keypair.public;
     

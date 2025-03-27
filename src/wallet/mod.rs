@@ -4,8 +4,11 @@ use crate::blockchain::{
 use crate::crypto;
 use crate::crypto::bls12_381::{BlsKeypair, BlsPublicKey, BlsSignature, ProofOfPossession};
 use crate::crypto::jubjub::{
-    JubjubKeypair, JubjubPoint, JubjubPointExt, JubjubScalar, JubjubScalarExt,
+    JubjubKeypair, JubjubPoint, JubjubPointExt, JubjubScalar, JubjubScalarExt, Point,
 };
+use ark_ed_on_bls12_381::Fr;
+use ark_ff::PrimeField;
+use ark_std::{UniformRand, Zero};
 use crate::crypto::view_key::{ViewKey, ViewKeyPermissions, ViewKeyManager};
 use crate::utils::{current_time, format_time_diff};
 use crypto::jubjub;
@@ -22,7 +25,6 @@ use chacha20poly1305::{
     Nonce,
 };
 use ring::pbkdf2;
-use jubjub::{EdwardsProjective, Fr};
 
 #[derive(Debug, Clone)]
 pub struct Wallet {
@@ -49,7 +51,7 @@ pub struct Wallet {
     // Use decoys for privacy
     add_decoys: bool,
     secret_key: Fr,
-    public_key: EdwardsProjective,
+    public_key: Point,
 }
 
 // Placeholder for stealth addressing functionality
@@ -256,7 +258,7 @@ impl Default for Wallet {
             confidential_transactions: None,
             add_decoys: false,
             secret_key: Fr::zero(),
-            public_key: EdwardsProjective::generator(),
+            public_key: Point::generator(),
         }
     }
 }
@@ -265,7 +267,7 @@ impl Wallet {
     pub fn new() -> Self {
         let mut rng = OsRng;
         let secret_key = Fr::rand(&mut rng);
-        let public_key = EdwardsProjective::generator() * secret_key;
+        let public_key = Point::generator() * secret_key;
         
         Self {
             secret_key,
@@ -287,7 +289,7 @@ impl Wallet {
     }
     
     pub fn from_secret_key(secret_key: Fr) -> Self {
-        let public_key = EdwardsProjective::generator() * secret_key;
+        let public_key = Point::generator() * secret_key;
         
         Self {
             secret_key,
@@ -2144,7 +2146,14 @@ pub fn bytes_to_jubjub_point(bytes: &[u8]) -> Option<JubjubPoint> {
 
 // Helper function to hash data to a JubjubScalar
 pub fn hash_to_jubjub_scalar(data: &[u8]) -> JubjubScalar {
-    JubjubScalar::hash_to_scalar(data)
+    // Create a SHA-256 hash of the input data
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    let hash = hasher.finalize();
+
+    // Convert the hash to a scalar in a secure way by using from_be_bytes_mod_order
+    // This ensures proper byte order handling
+    Fr::from_be_bytes_mod_order(&hash)
 }
 
 // Struct to represent transaction information for reports

@@ -1,10 +1,11 @@
-use crate::crypto::jubjub::generate_keypair;
+use crate::crypto::jubjub::{generate_keypair, Point, JubjubKeypair};
 use crate::networking::dandelion::{DandelionManager, PrivacyRoutingMode, PropagationState, DandelionConfig};
 use crate::wallet::Wallet;
 use crate::blockchain::Transaction;
 use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
+use rand::thread_rng;
 
 fn create_default_dandelion_config() -> DandelionConfig {
     DandelionConfig {
@@ -64,8 +65,11 @@ impl TransactionSerialize for Transaction {
 #[test]
 fn test_transaction_privacy() {
     // Create wallets
-    let mut sender_wallet = Wallet::new_with_keypair();
-    let mut recipient_wallet = Wallet::new_with_keypair();
+    let mut sender_wallet = Wallet::new();
+    sender_wallet.set_keypair(JubjubKeypair::generate());
+    
+    let mut recipient_wallet = Wallet::new();
+    recipient_wallet.set_keypair(JubjubKeypair::generate());
 
     // Enable privacy features
     sender_wallet.enable_privacy();
@@ -108,9 +112,14 @@ fn test_transaction_privacy() {
 #[test]
 fn test_transaction_linkability_attack() {
     // Create wallets
-    let mut sender_wallet = Wallet::new_with_keypair();
-    let mut recipient1_wallet = Wallet::new_with_keypair();
-    let mut recipient2_wallet = Wallet::new_with_keypair();
+    let mut sender_wallet = Wallet::new();
+    sender_wallet.set_keypair(JubjubKeypair::generate());
+    
+    let mut recipient1_wallet = Wallet::new();
+    recipient1_wallet.set_keypair(JubjubKeypair::generate());
+    
+    let mut recipient2_wallet = Wallet::new();
+    recipient2_wallet.set_keypair(JubjubKeypair::generate());
 
     // Enable privacy features
     sender_wallet.enable_privacy();
@@ -178,7 +187,8 @@ fn test_privacy_through_dandelion() {
     let mut dandelion_manager = DandelionManager::new(config);
 
     // Create privacy-enabled wallet
-    let mut wallet = Wallet::new_with_keypair();
+    let mut wallet = Wallet::new();
+    wallet.set_keypair(JubjubKeypair::generate());
     wallet.enable_privacy();
     wallet.balance = 1000;
 
@@ -239,7 +249,8 @@ fn test_privacy_through_dandelion() {
 #[test]
 fn test_amount_hiding_with_confidential_transactions() {
     // Create a set of wallets
-    let mut wallet = Wallet::new_with_keypair();
+    let mut wallet = Wallet::new();
+    wallet.set_keypair(JubjubKeypair::generate());
     wallet.enable_privacy();
     wallet.balance = 2000;
 
@@ -324,7 +335,8 @@ fn test_multiple_wallet_privacy() {
 
     // Create 5 privacy-enabled wallets
     for _ in 0..5 {
-        let mut wallet = Wallet::new_with_keypair();
+        let mut wallet = Wallet::new();
+        wallet.set_keypair(JubjubKeypair::generate());
         wallet.enable_privacy();
         wallet.balance = 1000;
         wallets.push(wallet);
@@ -375,7 +387,8 @@ fn test_multiple_wallet_privacy() {
 
 #[test]
 fn test_adversarial_transaction_analysis() {
-    let mut sender_wallet = Wallet::new_with_keypair();
+    let mut sender_wallet = Wallet::new();
+    sender_wallet.set_keypair(JubjubKeypair::generate());
     sender_wallet.enable_privacy();
     sender_wallet.balance = 1000;
 

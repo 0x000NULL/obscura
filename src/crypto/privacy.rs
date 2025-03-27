@@ -1484,7 +1484,7 @@ impl StealthAddressing {
         
         // Verify the signature
         if let Some(signature) = JubjubSignature::from_bytes(proof) {
-            return signature.verify(pubkey, &hash);
+            return pubkey.verify(&hash, &signature);
         }
         
         false

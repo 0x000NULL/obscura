@@ -9,8 +9,7 @@ use rand_core::RngCore;
 use log::{debug, error, info, warn};
 use ark_std::{One, UniformRand, Zero};
 use crate::crypto::jubjub::JubjubKeypair;
-use crate::crypto::jubjub::EdwardsProjective;
-use crate::crypto::jubjub::Fr;
+use ark_ed_on_bls12_381::{EdwardsProjective, Fr as JubjubFr};
 
 /// Constants for VSS
 const MAX_VSS_PARTICIPANTS: usize = 100;
@@ -117,9 +116,9 @@ impl VerifiableShare {
         let left_side = EdwardsProjective::generator() * self.value;  // point * scalar
         
         // Compute right side: product of commitments raised to powers
-        let mut right_side = EdwardsProjective::zero();
+        let mut right_side = <EdwardsProjective as JubjubPointExt>::zero();
         for (i, commitment) in self.commitment.commitments.iter().enumerate() {
-            right_side += *commitment * Fr::from(i as u64);
+            right_side += *commitment * JubjubFr::from(i as u64);
         }
         
         left_side == right_side
@@ -203,7 +202,7 @@ impl Polynomial {
         let mut commitments = Vec::with_capacity(self.coefficients.len());
         
         for coeff in &self.coefficients {
-            commitments.push(<JubjubPoint as JubjubPointExt>::generator() * coeff);
+            commitments.push(<JubjubPoint as JubjubPointExt>::generator() * *coeff);
         }
         
         PolynomialCommitment::new(commitments)
@@ -748,7 +747,7 @@ impl Share {
         // Compute right side: product of commitments raised to powers
         let mut right_side = EdwardsProjective::zero();
         for (i, commitment) in commitments.iter().enumerate() {
-            right_side += *commitment * Fr::from(i as u64);
+            right_side += *commitment * JubjubFr::from(i as u64);
         }
         
         left_side == right_side

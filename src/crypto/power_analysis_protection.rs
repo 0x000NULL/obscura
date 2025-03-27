@@ -1,7 +1,7 @@
 use ark_ed_on_bls12_381::{EdwardsProjective, Fr as JubjubScalar};
 use ark_ff::{Field, PrimeField, Zero, One, BigInteger};
 use ff::PrimeFieldBits;
-use ark_ec::{CurveGroup, AdditiveGroup, AffineRepr};
+use ark_ec::{CurveGroup, AffineRepr};
 use group::Group;
 use crate::crypto::jubjub::{JubjubPoint, JubjubPointExt};
 use rand::rngs::OsRng;
@@ -452,7 +452,7 @@ impl PowerAnalysisProtection {
         
         for bit in scalar_bits {
             result = result.double();
-            let temp = result + point;
+            let temp = result + *point;
             let mask = if bit { JubjubScalar::one() } else { JubjubScalar::zero() };
             result = temp * mask + result * (JubjubScalar::one() - mask);
         }
@@ -796,12 +796,12 @@ impl PowerAnalysisProtection {
 mod tests {
     use super::*;
     use rand::thread_rng;
-    use ark_ec::{CurveGroup, Group, AffineRepr};
+    use ark_ec::{CurveGroup, AffineRepr};
 
     // Helper function to compare points in affine coordinates
     fn assert_points_equal(left: &JubjubPoint, right: &JubjubPoint) {
-        let left_affine = left.into_affine();
-        let right_affine = right.into_affine();
+        let left_affine = left.0.into_affine();
+        let right_affine = right.0.into_affine();
         assert_eq!(left_affine, right_affine);
     }
 

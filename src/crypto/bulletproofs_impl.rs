@@ -27,6 +27,7 @@ use rand::thread_rng;
 use ark_std::UniformRand;
 use ark_ed_on_bls12_381::EdwardsProjective;
 use ark_ed_on_bls12_381::Fr;
+use std::ops::Add;
 
 // Define standard transcript labels as constants to ensure consistency
 const TRANSCRIPT_LABEL_RANGE_PROOF: &[u8] = b"Obscura Range Proof";
@@ -88,7 +89,7 @@ impl JubjubBulletproofGens {
         let mut scalar_bytes = [0u8; 32];
         scalar_bytes.copy_from_slice(&hash[0..32]);
         
-        EdwardsProjective::generator() * Fr::from_le_bytes_mod_order(&scalar_bytes)
+        JubjubPoint(EdwardsProjective::generator() * Fr::from_le_bytes_mod_order(&scalar_bytes))
     }
 }
 
@@ -109,7 +110,7 @@ impl JubjubPedersenGens {
 
     /// Commit to a value using the Pedersen commitment scheme
     pub fn commit(&self, value: JubjubScalar, blinding: JubjubScalar) -> JubjubPoint {
-        (self.value_generator * value) + (self.blinding_generator * blinding)
+        JubjubPoint((self.value_generator * value) + (self.blinding_generator * blinding))
     }
 }
 
@@ -358,21 +359,20 @@ impl RangeProof {
             let zero_blinding = JubjubScalar::zero();
             
             // Adjust the commitment: C' = C + Commit(-min_value, 0)
-            // This effectively shifts the committed value by -min_value
             let min_value_commitment = PC_GENS.commit(neg_min_value, zero_blinding);
-            commitment + min_value_commitment
+            // Get the base commitment point and add it to the min_value_commitment
+            let base_point = commitment.commit();
+            JubjubPoint(base_point.0 + min_value_commitment.0)
         } else {
             // No adjustment needed for standard range proofs
-            commitment.clone()
+            commitment.commit()
         };
         
         // Add commitment to transcript
         let mut commitment_bytes = Vec::new();
         adjusted_commitment
-            .serialize_compressed(&mut commitment_bytes)
-            .map_err(|_| {
-                BulletproofsError::InvalidCommitment("Failed to serialize commitment".to_string())
-            })?;
+            .0.serialize_compressed(&mut commitment_bytes)
+            .expect("Failed to serialize commitment");
         transcript.append_message(b"commitment", &commitment_bytes);
         
         // Verify the range proof using the adjusted commitment
@@ -583,12 +583,8 @@ impl MultiOutputRangeProof {
             for commitment in proof_commitments {
                 let mut commitment_bytes = Vec::new();
                 commitment
-                    .serialize_compressed(&mut commitment_bytes)
-                    .map_err(|_| {
-                        BulletproofsError::InvalidCommitment(
-                            "Failed to serialize commitment".to_string(),
-                        )
-                    })?;
+                    .0.serialize_compressed(&mut commitment_bytes)
+                    .expect("Failed to serialize commitment");
                 transcript.append_message(b"commitment", &commitment_bytes);
             }
 
@@ -625,9 +621,10 @@ pub fn verify_range_proof(
         let zero_blinding = JubjubScalar::zero();
 
         // Adjust the commitment: C' = C + Commit(-min_value, 0)
-        // This effectively shifts the committed value by -min_value
         let min_value_commitment = PC_GENS.commit(neg_min_value, zero_blinding);
-        commitment.commit() + min_value_commitment
+        // Get the base commitment point and add it to the min_value_commitment
+        let base_point = commitment.commit();
+        JubjubPoint(base_point.0 + min_value_commitment.0)
     } else {
         // No adjustment needed for standard range proofs
         commitment.commit()
@@ -636,10 +633,8 @@ pub fn verify_range_proof(
     // Add commitment to transcript
     let mut commitment_bytes = Vec::new();
     adjusted_commitment
-        .serialize_compressed(&mut commitment_bytes)
-        .map_err(|_| {
-            BulletproofsError::InvalidCommitment("Failed to serialize commitment".to_string())
-        })?;
+        .0.serialize_compressed(&mut commitment_bytes)
+        .expect("Failed to serialize commitment");
     transcript.append_message(b"commitment", &commitment_bytes);
 
     // Verify the range proof using the adjusted commitment
@@ -669,18 +664,16 @@ pub fn verify_multi_output_range_proof(
 
     let mut transcript = Transcript::new(TRANSCRIPT_LABEL_MULTI_OUTPUT_RANGE_PROOF);
 
-    // Convert PedersenCommitment to JubjubPoint
-    let jubjub_commitments: Vec<JubjubPoint> = commitments.iter().map(|c| c.commit()).collect();
+    // Convert PedersenCommitment to JubjubPoint by wrapping the projective point
+    let jubjub_commitments: Vec<JubjubPoint> = commitments.iter().map(|c| JubjubPoint(c.commit())).collect();
     let jubjub_commitment_refs: Vec<&JubjubPoint> = jubjub_commitments.iter().collect();
 
     // Add commitments to transcript
     for commitment in &jubjub_commitment_refs {
         let mut commitment_bytes = Vec::new();
         commitment
-            .serialize_compressed(&mut commitment_bytes)
-            .map_err(|_| {
-                BulletproofsError::InvalidCommitment("Failed to serialize commitment".to_string())
-            })?;
+            .0.serialize_compressed(&mut commitment_bytes)
+            .expect("Failed to serialize commitment");
         transcript.append_message(b"commitment", &commitment_bytes);
     }
 
@@ -728,14 +721,8 @@ pub fn batch_verify_range_proofs(
         // Add commitment
         let mut commitment_bytes = Vec::new();
         commitment
-            .commit()
-            .serialize_compressed(&mut commitment_bytes)
-            .map_err(|_| {
-                BulletproofsError::InvalidCommitment(format!(
-                    "Failed to serialize commitment at index {}",
-                    i
-                ))
-            })?;
+            .0.serialize_compressed(&mut commitment_bytes)
+            .expect("Failed to serialize commitment");
         batch_transcript.append_message(b"commitment", &commitment_bytes);
 
         // Add proof
@@ -761,9 +748,10 @@ pub fn batch_verify_range_proofs(
             let zero_blinding = JubjubScalar::zero();
 
             // Adjust the commitment: C' = C + Commit(-min_value, 0)
-            // This effectively shifts the committed value by -min_value
             let min_value_commitment = PC_GENS.commit(neg_min_value, zero_blinding);
-            commitment.commit() + min_value_commitment
+            // Get the base commitment point and add it to the min_value_commitment
+            let base_point = commitment.commit();
+            JubjubPoint(base_point.0 + min_value_commitment.0)
         } else {
             // No adjustment needed for standard range proofs
             commitment.commit()
@@ -846,7 +834,7 @@ fn batch_verify_range_proofs_internal(
         // Add commitment to transcript
         let mut commitment_bytes = Vec::new();
         commitment_point
-            .serialize_compressed(&mut commitment_bytes)
+            .0.serialize_compressed(&mut commitment_bytes)
             .map_err(|_| {
                 BulletproofsError::InvalidCommitment(format!(
                     "Failed to serialize commitment at index {}",
@@ -986,12 +974,8 @@ fn verify_range_proof_internal(
             // Verify the commitment hash matches what's in the proof
             let mut commitment_bytes = Vec::new();
             commitment
-                .serialize_compressed(&mut commitment_bytes)
-                .map_err(|_| {
-                    BulletproofsError::InvalidCommitment(
-                        "Failed to serialize commitment".to_string(),
-                    )
-                })?;
+                .0.serialize_compressed(&mut commitment_bytes)
+                .expect("Failed to serialize commitment");
 
             let mut hasher = Sha256::new();
             hasher.update(&commitment_bytes);
@@ -1107,8 +1091,8 @@ pub fn range_proof_scalar_mul(point: &JubjubPoint, scalar: &JubjubScalar) -> Jub
     let mut result = JubjubPoint::zero();
     
     for bit in scalar_bits {
-        // Always double
-        result = result.double();
+        // Double the result using the inner EdwardsProjective point
+        result = JubjubPoint(result.0.double());
         
         // Always compute the sum
         let point_plus_result = *point + result;
@@ -1131,7 +1115,7 @@ pub fn generate_random_scalar() -> JubjubScalar {
 
 /// Generate a random point for testing
 pub fn generate_random_point() -> JubjubPoint {
-    JubjubPoint::rand(&mut thread_rng())
+    JubjubPoint::new(EdwardsProjective::rand(&mut thread_rng()))
 }
 
 #[cfg(test)]
@@ -1157,7 +1141,7 @@ mod tests {
         if proof.proof[0] == 0xDD {
             let mut commitment_bytes = Vec::new();
             commitment
-                .serialize_compressed(&mut commitment_bytes)
+                .0.serialize_compressed(&mut commitment_bytes)
                 .expect("Failed to serialize commitment");
 
             let mut hasher = Sha256::new();
@@ -1186,7 +1170,7 @@ mod tests {
         // Serialize the commitment to prepare the hash
         let mut commitment_bytes = Vec::new();
         commitment
-            .serialize_compressed(&mut commitment_bytes)
+            .0.serialize_compressed(&mut commitment_bytes)
             .expect("Failed to serialize commitment");
 
         // Hash the commitment bytes
@@ -1230,7 +1214,7 @@ mod tests {
             
             // Adjust the commitment: C' = C + Commit(-min_value, 0)
             let min_value_commitment = PC_GENS.commit(neg_min_value, zero_blinding);
-            commitment + min_value_commitment
+            commitment.clone() + min_value_commitment
         } else {
             commitment.clone()
         };
@@ -1238,7 +1222,7 @@ mod tests {
         // Serialize the adjusted commitment
         let mut commitment_bytes = Vec::new();
         adjusted_commitment
-            .serialize_compressed(&mut commitment_bytes)
+            .0.serialize_compressed(&mut commitment_bytes)
             .unwrap();
 
         // Hash the commitment bytes
@@ -1288,7 +1272,7 @@ mod tests {
             
             // Adjust the commitment: C' = C + Commit(-min_value, 0)
             let min_value_commitment = PC_GENS.commit(neg_min_value, zero_blinding);
-            commitment + min_value_commitment
+            commitment.clone() + min_value_commitment
         } else {
             commitment.clone()
         };
@@ -1296,7 +1280,7 @@ mod tests {
         // Serialize the adjusted commitment
         let mut commitment_bytes = Vec::new();
         adjusted_commitment
-            .serialize_compressed(&mut commitment_bytes)
+            .0.serialize_compressed(&mut commitment_bytes)
             .unwrap();
 
         // Hash the commitment bytes

@@ -1,6 +1,6 @@
 use crate::blockchain::{Block, Transaction};
 use crate::consensus::StakeProof;
-use crate::crypto::jubjub::{JubjubPointExt, JubjubScalarExt};
+use crate::crypto::jubjub::{JubjubKeypair, JubjubPointExt, JubjubScalarExt};
 use crate::networking::{dandelion::PrivacyRoutingMode, Node, NetworkConfig};
 use crate::tests::common::{create_test_block, create_test_stake_proof};
 use crate::wallet::Wallet;
@@ -150,7 +150,8 @@ fn create_privacy_network(node_count: usize) -> (Vec<TestNode>, Vec<Wallet>) {
         test_node.set_privacy_mode(PrivacyRoutingMode::Standard);
 
         // Create a corresponding wallet with privacy features
-        let mut wallet = Wallet::new_with_keypair();
+        let mut wallet = Wallet::new();
+        wallet.set_keypair(JubjubKeypair::generate());
         wallet.enable_privacy();
 
         // Give the wallet some initial balance
@@ -222,8 +223,11 @@ fn test_private_transaction_validation() {
 #[test]
 fn test_stealth_address_transaction_privacy() {
     // Set up privacy-enabled wallets
-    let mut sender_wallet = Wallet::new_with_keypair();
-    let mut recipient_wallet = Wallet::new_with_keypair();
+    let mut sender_wallet = Wallet::new();
+    sender_wallet.set_keypair(JubjubKeypair::generate());
+    
+    let mut recipient_wallet = Wallet::new();
+    recipient_wallet.set_keypair(JubjubKeypair::generate());
 
     sender_wallet.enable_privacy();
     recipient_wallet.enable_privacy();
@@ -303,8 +307,11 @@ fn test_stealth_address_transaction_privacy() {
 #[test]
 fn test_confidential_transactions_amount_hiding() {
     // Set up privacy-enabled wallets
-    let mut sender_wallet = Wallet::new_with_keypair();
-    let mut recipient_wallet = Wallet::new_with_keypair();
+    let mut sender_wallet = Wallet::new();
+    sender_wallet.set_keypair(JubjubKeypair::generate());
+    
+    let mut recipient_wallet = Wallet::new();
+    recipient_wallet.set_keypair(JubjubKeypair::generate());
 
     sender_wallet.enable_privacy();
     recipient_wallet.enable_privacy();

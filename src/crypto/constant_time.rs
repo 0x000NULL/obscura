@@ -158,8 +158,8 @@ pub fn montgomery_ladder_scalar_mul(point: &JubjubPoint, scalar: &JubjubScalar) 
     for bit in scalar_bits {
         // Compute both possible next states
         let sum = r0 + r1;
-        let double_r0 = r0.double();
-        let double_r1 = r1.double();
+        let double_r0 = JubjubPoint::new(r0.0.double());
+        let double_r1 = JubjubPoint::new(r1.0.double());
         
         // Select the right values based on the bit (in constant time)
         if bit {
@@ -184,7 +184,7 @@ pub fn windowed_scalar_mul(point: &JubjubPoint, scalar: &JubjubScalar) -> Jubjub
     let mut table = Vec::with_capacity(TABLE_SIZE);
     table.push(JubjubPoint::zero());
     for i in 1..TABLE_SIZE {
-        table.push(table[i-1] + point);
+        table.push(table[i-1] + *point);
     }
     
     // Process scalar in fixed-size windows
@@ -202,7 +202,7 @@ pub fn windowed_scalar_mul(point: &JubjubPoint, scalar: &JubjubScalar) -> Jubjub
         let window_value = (byte >> 4) as usize;
         
         // Constant-time table lookup
-        let mut window_point = JubjubPoint::zero();
+        let mut window_point = <JubjubPoint as JubjubPointExt>::zero();
         for i in 0..TABLE_SIZE {
             // If i == window_value, add table[i] to window_point
             let select = constant_time_eq(&[i as u8], &[window_value as u8]);
@@ -220,7 +220,7 @@ pub fn windowed_scalar_mul(point: &JubjubPoint, scalar: &JubjubScalar) -> Jubjub
         }
         
         let window_value = (byte & 0xf) as usize;
-        let mut window_point = JubjubPoint::zero();
+        let mut window_point = <JubjubPoint as JubjubPointExt>::zero();
         for i in 0..TABLE_SIZE {
             let select = constant_time_eq(&[i as u8], &[window_value as u8]);
             if select {
