@@ -1,16 +1,21 @@
+use ark_ed_on_bls12_381::{EdwardsProjective, Fr as JubjubScalar};
+use ark_ff::{Field, PrimeField, Zero, One, BigInteger};
+use ff::PrimeFieldBits;
+use ark_ec::{CurveGroup, AdditiveGroup, AffineRepr};
+use group::Group;
+use crate::crypto::jubjub::{JubjubPoint, JubjubPointExt};
+use rand::rngs::OsRng;
+use rand_core::RngCore;
+use rand::Rng;
+use sha2::{Digest, Sha256};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use rand::thread_rng;
-use rand::Rng;
-use log::{debug, info, warn, trace};
-
+use std::collections::HashMap;
 use crate::crypto::side_channel_protection::SideChannelProtection;
-use crate::crypto::jubjub::{JubjubPoint, JubjubScalar, JubjubPointExt};
-
-use ark_ff::{BigInteger, PrimeField};
-use ark_ec::Group;
-use ark_std::{Zero, UniformRand, One};
+use rand::thread_rng;
+use ark_std::UniformRand;
+use log::{debug, info, warn, trace};
 
 /// Configuration for power analysis protection features
 #[derive(Debug, Clone)]
@@ -762,6 +767,11 @@ impl PowerAnalysisProtection {
         result
     }
     
+    /// Generate a random scalar for masking
+    fn generate_random_scalar(&self) -> JubjubScalar {
+        JubjubScalar::rand(&mut OsRng)
+    }
+
     /// Protected scalar multiplication with advanced protections
     pub fn protected_scalar_mul(
         &self,

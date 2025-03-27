@@ -4,6 +4,7 @@ use ark_ec::CurveGroup;
 use ark_ff::{PrimeField, Zero};
 use ark_serialize::CanonicalSerialize;
 use sha2::{Digest, Sha256};
+use group::Group;
 
 /// VRF (Verifiable Random Function) implementation for validator selection
 /// This is a simplified implementation based on the JubJub signature scheme

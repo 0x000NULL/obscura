@@ -67,13 +67,13 @@ pub fn example_protected_pedersen_commitment() {
     
     // Create a Pedersen commitment
     let mut rng = thread_rng();
-    let value = JubjubScalar::rand(&mut rng);
-    let blinding = JubjubScalar::rand(&mut rng);
+    let value = JubjubScalar::random(&mut rng);
+    let blinding = JubjubScalar::random(&mut rng);
     
     // Create a Pedersen commitment with side-channel protection
     let commitment = protection.protected_operation(|| {
-        let pedersen = PedersenCommitment::commit_random(0);
-        pedersen
+        let pedersen = PedersenCommitment::new(JubjubScalar::from(value), blinding);
+        pedersen.commit()
     });
     
     println!("Protected Pedersen commitment created");
@@ -544,13 +544,13 @@ pub fn example_pedersen_commitment() {
     // Generate a random value and blinding factor
     let mut rng = thread_rng();
     let value = 100u64; // Use a u64 value
-    let blinding = JubjubScalar::rand(&mut rng);
+    let blinding = JubjubScalar::random(&mut rng);
     
     // Create a commitment using the static method
-    let commitment = PedersenCommitment::commit(value, blinding);
+    let commitment = PedersenCommitment::new(JubjubScalar::from(value), blinding).commit();
     
     println!("Value: {}", value);
-    println!("Commitment point: {:?}", commitment.commitment);
+    println!("Commitment point: {:?}", commitment);
     println!();
 }
 
@@ -614,7 +614,7 @@ pub fn example_range_proof() {
     // Create a value to prove
     let mut rng = thread_rng();
     let value = 42u64;
-    let blinding = JubjubScalar::rand(&mut rng);
+    let blinding = JubjubScalar::random(&mut rng);
     
     // Create a prover
     let mut prover_transcript = merlin::Transcript::new(b"range_proof_example");
@@ -810,15 +810,15 @@ pub fn example_pedersen_commitments() {
     // Create a Pedersen commitment
     let mut rng = thread_rng();
     let value = 1000u64; // Amount to commit to
-    let blinding = JubjubScalar::rand(&mut rng);
+    let blinding = JubjubScalar::random(&mut rng);
     
     // Create the commitment
-    let pedersen = PedersenCommitment::commit_random(value);
+    let pedersen = PedersenCommitment::new(JubjubScalar::from(value), blinding);
     
     println!("Pedersen commitment created for value: {}", value);
     
-    // Verify the commitment
-    let commitment_point = pedersen.commitment;
+    // Get the commitment point
+    let commitment_point = pedersen.commit();
     println!("Commitment point: {:?}", commitment_point);
 }
 
@@ -851,7 +851,7 @@ pub fn example_advanced_range_proof() {
     
     // Create a value to prove is in range
     let value = 42u64;
-    let blinding = JubjubScalar::rand(&mut thread_rng());
+    let blinding = JubjubScalar::random(&mut thread_rng());
     
     // Create a Pedersen commitment
     let pedersen = PedersenCommitment::commit_random(value);
@@ -884,7 +884,7 @@ pub fn example_bulletproofs_range_proof() {
     
     // Choose a value to prove is in a range
     let value = 42u64;
-    let blinding = JubjubScalar::rand(&mut thread_rng());
+    let blinding = JubjubScalar::random(&mut thread_rng());
     
     // Create a prover
     let mut prover_transcript = merlin::Transcript::new(b"range_proof_example");

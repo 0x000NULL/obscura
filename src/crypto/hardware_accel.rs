@@ -4,25 +4,32 @@
 // across different platforms and hardware capabilities. It detects available
 // hardware features at runtime and leverages them for improved performance.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use crate::crypto::jubjub::{JubjubPoint, JubjubScalar, JubjubPointExt, JubjubScalarExt};
+use ark_ed_on_bls12_381::EdwardsProjective;
+use ark_ff::{Field, PrimeField, Zero, One, BigInteger};
+use ff::PrimeFieldBits;
+use ark_ec::{CurveGroup, AdditiveGroup, AffineRepr};
+use group::Group;
+use rand::rngs::OsRng;
+use rand_core::RngCore;
+use sha2::{Digest, Sha256};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::collections::HashMap;
 use log::{debug, info, warn, trace};
 use once_cell::sync::Lazy;
 use rand::{Rng, thread_rng};
-use rand_core::RngCore;
 use thiserror::Error;
 use std::thread;
 use lazy_static::lazy_static;
 use std::time::Duration;
-
 use crate::crypto::errors::{CryptoError, CryptoResult};
 use crate::crypto::audit::{CryptoAudit, AuditEntry, AuditLevel, CryptoOperationType, OperationStatus};
-use crate::crypto::jubjub::{JubjubPoint, JubjubScalar};
 use crate::crypto::bls12_381::{BlsKeypair, BlsPublicKey, BlsSignature};
 use ark_bls12_381::{G1Projective, G2Projective, G1Affine, G2Affine};
 use num_cpus;
 use ark_std::UniformRand;
+use crate::crypto::side_channel_protection::SideChannelProtection;
 
 // Feature detection flags
 static CPU_FEATURES_DETECTED: AtomicBool = AtomicBool::new(false);
@@ -729,7 +736,7 @@ mod tests {
         // Generate random point and scalar
         let keypair = jubjub::JubjubKeypair::generate();
         let point = keypair.public;
-        let scalar = jubjub::JubjubScalar::rand(&mut thread_rng());
+        let scalar = jubjub::JubjubScalar::random(&mut thread_rng());
         
         // Test accelerated multiplication
         let result = accelerated_scalar_mul(&point, &scalar);

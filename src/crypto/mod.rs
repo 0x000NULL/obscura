@@ -334,11 +334,15 @@ impl LocalPedersenCommitment {
         ]);
         let jubjub_blinding = jubjub::JubjubScalar::from(blinding_value);
         
-        // Use the full pedersen.rs implementation to create the commitment
-        let pedersen_commitment = pedersen::PedersenCommitment::commit(amount, jubjub_blinding);
+        // Create a new PedersenCommitment instance
+        let pedersen_commitment = pedersen::PedersenCommitment::new(
+            jubjub::JubjubScalar::from(amount),
+            jubjub_blinding
+        );
         
         // Convert the commitment to a fixed-size byte array
-        let commitment_bytes = pedersen_commitment.to_bytes();
+        let commitment_point = pedersen_commitment.commit();
+        let commitment_bytes = commitment_point.to_bytes();
         let mut result = [0u8; 32];
         let bytes_to_copy = commitment_bytes.len().min(32);
         result[..bytes_to_copy].copy_from_slice(&commitment_bytes[..bytes_to_copy]);
@@ -360,7 +364,8 @@ impl LocalPedersenCommitment {
     
     /// Convert from the full PedersenCommitment representation
     pub fn from_pedersen_commitment(commitment: &pedersen::PedersenCommitment, amount: u64, blinding: [u8; 32]) -> Self {
-        let commitment_bytes = commitment.to_bytes();
+        let commitment_point = commitment.commit();
+        let commitment_bytes = commitment_point.to_bytes();
         let mut result = [0u8; 32];
         let bytes_to_copy = commitment_bytes.len().min(32);
         result[..bytes_to_copy].copy_from_slice(&commitment_bytes[..bytes_to_copy]);
@@ -382,7 +387,10 @@ impl LocalPedersenCommitment {
         let jubjub_blinding = jubjub::JubjubScalar::from(blinding_value);
             
         // Recreate the full commitment
-        pedersen::PedersenCommitment::commit(self.amount, jubjub_blinding)
+        pedersen::PedersenCommitment::new(
+            jubjub::JubjubScalar::from(self.amount),
+            jubjub_blinding
+        )
     }
 }
 
@@ -479,7 +487,9 @@ mod tests {
         
         // Verify both commitments
         assert!(local_commitment.verify(amount));
-        assert!(pedersen_commitment.verify(amount));
+        // Convert amount to a commitment point for verification
+        let commitment_point = pedersen_commitment.commit();
+        assert!(pedersen_commitment.verify(&commitment_point));
     }
 }
 

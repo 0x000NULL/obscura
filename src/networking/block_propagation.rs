@@ -10,6 +10,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 use crate::blockchain::TransactionOutput;
+use bincode::{encode_to_vec, decode_from_slice, Encode, Decode};
 
 const BLOCK_ANNOUNCEMENT_DELAY: Duration = Duration::from_millis(100);
 const MAX_BLOCK_RELAY_TIME: Duration = Duration::from_secs(30);
@@ -17,7 +18,7 @@ const COMPACT_BLOCK_VERSION: u32 = 1;
 const MAX_MISSING_TRANSACTIONS: usize = 128;
 const PRIVACY_BATCH_SIZE: usize = 3; // Number of peers to batch announcements for privacy
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
 pub struct BlockAnnouncement {
     pub block_hash: [u8; 32],
     pub height: u64,
@@ -25,7 +26,7 @@ pub struct BlockAnnouncement {
     pub relay_count: u32,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
 pub struct CompactBlock {
     pub block_hash: [u8; 32],
     pub header: BlockHeader,
@@ -80,7 +81,7 @@ impl CompactBlock {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct BlockAnnouncementResponse {
     pub block_hash: [u8; 32],
     pub have_block: bool,
@@ -114,7 +115,7 @@ pub struct BlockPropagation {
     peers: HashMap<SocketAddr, PeerInfo>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct PendingBlock {
     compact_block: CompactBlock,
     missing_txs: HashSet<u64>,
@@ -352,7 +353,15 @@ impl BlockPropagation {
                 }
             }
 
-            self.send_block_announcement(&peer_addr, &announcement);
+            let message = Message::new(
+                MessageType::BlockAnnouncement,
+                encode_to_vec(&announcement, bincode::config::standard()).unwrap_or_default(),
+            );
+
+            if let Err(e) = self.send_message(&peer_addr, message) {
+                error!("Failed to send block announcement: {}", e);
+            }
+
             self.last_announcement_time.insert(peer_addr, now);
 
             // Record announcement for tracking
@@ -366,7 +375,7 @@ impl BlockPropagation {
     fn send_block_announcement(&self, peer_addr: &SocketAddr, announcement: &BlockAnnouncement) {
         let _message = Message::new(
             MessageType::BlockAnnouncement,
-            bincode::serialize(announcement).unwrap_or_default(),
+            encode_to_vec(announcement, bincode::config::standard()).unwrap_or_default(),
         );
 
         if let Ok(peer_manager) = self.peer_manager.lock() {
@@ -694,7 +703,7 @@ impl BlockPropagation {
     ) {
         let message = Message::new(
             MessageType::BlockAnnouncementResponse,
-            bincode::serialize(response).unwrap_or_default(),
+            encode_to_vec(response, bincode::config::standard()).unwrap_or_default(),
         );
 
         if let Err(e) = self.send_message(peer_addr, message) {
@@ -714,7 +723,7 @@ impl BlockPropagation {
         // Serialize and send the compact block
         let message = Message::new(
             MessageType::CompactBlock,
-            bincode::serialize(&compact_block).unwrap_or_default(),
+            encode_to_vec(&compact_block, bincode::config::standard()).unwrap_or_default(),
         );
 
         // Add random delay for privacy
@@ -780,7 +789,7 @@ impl BlockPropagation {
         // Serialize and send the block transactions
         let message = Message::new(
             MessageType::BlockTransactions,
-            bincode::serialize(&block_txs).unwrap_or_default(),
+            encode_to_vec(&block_txs, bincode::config::standard()).unwrap_or_default(),
         );
 
         self.send_message(&from_peer, message)
@@ -794,7 +803,7 @@ impl BlockPropagation {
         end_height: u64,
     ) -> Result<(), std::io::Error> {
         // Create a message to request blocks in the given height range
-        let payload = bincode::serialize(&(start_height, end_height)).unwrap_or_default();
+        let payload = encode_to_vec(&(start_height, end_height), bincode::config::standard()).unwrap_or_default();
         let message = Message::new(MessageType::GetBlocks, payload);
 
         self.send_message(&from_peer, message)
@@ -823,7 +832,7 @@ impl BlockPropagation {
             // Serialize and send the compact block
             let message = Message::new(
                 MessageType::CompactBlock,
-                bincode::serialize(&compact_block).unwrap_or_default(),
+                encode_to_vec(&compact_block, bincode::config::standard()).unwrap_or_default(),
             );
 
             self.send_message(&from_peer, message)?;
@@ -862,13 +871,13 @@ impl BlockPropagation {
             let announcement = BlockAnnouncement {
                 block_hash,
                 height: block.header.height,
-                total_difficulty: 0, // Assuming total_difficulty is not available in the announcement
+                total_difficulty: 0,
                 relay_count: 0,
             };
 
             let message = Message::new(
                 MessageType::BlockAnnouncement,
-                bincode::serialize(&announcement).unwrap_or_default(),
+                encode_to_vec(&announcement, bincode::config::standard()).unwrap_or_default(),
             );
 
             self.send_message(&peer_addr, message)?;
@@ -914,13 +923,13 @@ impl BlockPropagation {
 }
 
 // Add BlockTransactions struct
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct BlockTransactions {
     pub block_hash: [u8; 32],
     pub transactions: Vec<Transaction>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct GetBlockTransactions {
     pub block_hash: [u8; 32],
     pub indexes: Vec<u32>,

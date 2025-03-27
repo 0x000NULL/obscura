@@ -10,7 +10,7 @@ use rand::Rng;
 use rand_core::RngCore;
 use sha2::{Digest, Sha256};
 use std::ops::Mul;
-use ark_ec::{Group, CurveGroup, AffineRepr};
+use ark_ec::{CurveGroup, AdditiveGroup, AffineRepr};
 use ark_ff::{One, PrimeField, Zero, BigInteger};
 use rand_distr::Distribution;
 
@@ -35,7 +35,7 @@ static BASE_TABLE: Lazy<Arc<Vec<EdwardsProjective>>> = Lazy::new(|| {
 /// Generate precomputation table for base point
 fn generate_base_table() -> Vec<EdwardsProjective> {
     let mut table = Vec::with_capacity(TABLE_SIZE);
-    let base = <EdwardsProjective as ark_ec::Group>::generator();
+    let base = EdwardsProjective::generator();
     
     table.push(EdwardsProjective::zero());
     for i in 1..TABLE_SIZE {
@@ -107,7 +107,7 @@ impl JubjubSignature {
         let e = Fr::from_bytes(&hash).unwrap_or_default();
         
         // Verify the signature
-        let lhs = <EdwardsProjective as JubjubPointExt>::generator() * self.s;
+        let lhs = EdwardsProjective::generator() * self.s;
         let rhs = *pubkey * e + self.r;
         
         lhs == rhs
@@ -128,7 +128,7 @@ impl JubjubKeypair {
     pub fn generate() -> Self {
         let mut rng = OsRng;
         let secret = Fr::rand(&mut rng);
-        let public = <EdwardsProjective as ark_ec::Group>::generator() * secret;
+        let public = EdwardsProjective::generator() * secret;
         
         Self { secret, public }
     }
@@ -139,7 +139,7 @@ impl JubjubKeypair {
         
         // Generate random nonce
         let k = Fr::rand(&mut rng);
-        let r = <EdwardsProjective as ark_ec::Group>::generator() * k;
+        let r = EdwardsProjective::generator() * k;
         
         // Hash message and public key
         let mut hasher = Sha256::new();
@@ -180,7 +180,7 @@ impl JubjubKeypair {
         let e = Fr::from_le_bytes_mod_order(&h);
         
         // Verify sG = R + eP
-        let sg = <EdwardsProjective as ark_ec::Group>::generator() * signature.s;
+        let sg = EdwardsProjective::generator() * signature.s;
         let ep = self.public * e;
         let rhs = signature.r + ep;
         
@@ -270,7 +270,7 @@ pub fn verify_batch_parallel(
             // Left-hand side: sum(s_i * G)
             signatures.par_iter()
                 .zip(scalars.par_iter())
-                .map(|(sig, scalar)| <EdwardsProjective as ark_ec::Group>::generator() * (sig.s * scalar))
+                .map(|(sig, scalar)| EdwardsProjective::generator() * (sig.s * scalar))
                 .reduce(|| EdwardsProjective::zero(), |acc, x| acc + x)
         },
         || {
@@ -413,7 +413,7 @@ impl JubjubPointExt for JubjubPoint {
     }
 
     fn generator() -> Self {
-        <EdwardsProjective as ark_ec::Group>::generator()
+        EdwardsProjective::generator()
     }
     
     fn identity() -> Self {
@@ -437,7 +437,7 @@ impl JubjubPointExt for JubjubPoint {
         let e = Fr::from_le_bytes_mod_order(&h);
         
         // Verify sG = R + eP
-        let sg = <EdwardsProjective as ark_ec::Group>::generator() * signature.s;
+        let sg = EdwardsProjective::generator() * signature.s;
         let ep = *self * e;
         let rhs = signature.r + ep;
         
@@ -455,7 +455,7 @@ pub fn get_jubjub_params() -> JubjubParams {
 pub fn generate_keypair() -> JubjubKeypair {
     let mut rng = OsRng;
     let secret = Fr::rand(&mut rng);
-    let public = <EdwardsProjective as ark_ec::Group>::generator() * secret;
+    let public = EdwardsProjective::generator() * secret;
     
     JubjubKeypair { secret, public }
 }
@@ -468,8 +468,7 @@ pub fn sign(secret_key: &Fr, message: &[u8]) -> (Fr, Fr) {
     let k = Fr::rand(&mut rng);
 
     // R = k·G (the commitment)
-    let r = <EdwardsProjective as ark_ec::Group>::generator() * k;
-
+    let r = EdwardsProjective::generator() * k;
     // Compute the challenge e = H(R || P || m)
     let mut hasher = Sha256::new();
     let mut r_bytes = Vec::new();
@@ -477,7 +476,7 @@ pub fn sign(secret_key: &Fr, message: &[u8]) -> (Fr, Fr) {
     hasher.update(&r_bytes);
 
     // Add the public key P = secret_key·G to the hash
-    let public_key = <EdwardsProjective as ark_ec::Group>::generator() * (*secret_key);
+    let public_key = EdwardsProjective::generator() * (*secret_key);
     let mut public_key_bytes = Vec::new();
     public_key.into_affine().serialize_compressed(&mut public_key_bytes).unwrap();
     hasher.update(&public_key_bytes);
@@ -504,7 +503,7 @@ pub fn verify(
     let (e, s) = signature;
 
     // R' = s·G - e·P
-    let r_prime = <EdwardsProjective as ark_ec::Group>::generator() * s - (*public_key) * e;
+    let r_prime = EdwardsProjective::generator() * s - (*public_key) * e;
 
     // Convert R' to bytes
     let mut r_prime_bytes = Vec::new();
@@ -537,7 +536,7 @@ pub fn create_rng() -> OsRng {
 
 /// Returns the JubJub generator point
 pub fn generator() -> EdwardsProjective {
-    <EdwardsProjective as JubjubPointExt>::generator()
+    EdwardsProjective::generator()
 }
 
 /// Secure Diffie-Hellman key exchange for stealth addressing
@@ -618,7 +617,7 @@ pub fn stealth_diffie_hellman(
     let ephemeral_private = Fr::rand(&mut rng);
 
     // Compute ephemeral public key R = r·G
-    let ephemeral_public = <EdwardsProjective as ark_ec::Group>::generator() * ephemeral_private;
+    let ephemeral_public = EdwardsProjective::generator() * ephemeral_private;
 
     // Compute the shared secret point S = r·P where P is the recipient's public key
     let shared_secret_point = (*recipient_public_key) * ephemeral_private;
@@ -731,7 +730,7 @@ pub fn generate_secure_ephemeral_key() -> (Fr, EdwardsProjective) {
     }
 
     // Generate the ephemeral public key
-    let ephemeral_public = <EdwardsProjective as ark_ec::Group>::generator() * scalar;
+    let ephemeral_public = EdwardsProjective::generator() * scalar;
 
     // Additional validation: ensure the public key is not the identity
     if ephemeral_public.is_zero() {
@@ -1296,9 +1295,7 @@ pub fn create_stealth_address(recipient_public_key: &EdwardsProjective) -> (Edwa
 
     // Return the ephemeral public key and the stealth address
     (ephemeral_public, stealth_address)
-}
-
-/// Recover a stealth address private key with forward secrecy
+}/// Recover a stealth address private key with forward secrecy
 pub fn recover_stealth_private_key(
     private_key: &Fr,
     ephemeral_public: &EdwardsProjective,
@@ -1314,7 +1311,7 @@ pub fn recover_stealth_private_key(
     let shared_secret = derive_shared_secret(
         &shared_secret_point,
         ephemeral_public,
-        &(<EdwardsProjective as ark_ec::Group>::generator() * (*private_key)),
+        &(EdwardsProjective::generator() * (*private_key)),
         None,
     );
 
@@ -1359,7 +1356,7 @@ pub fn create_stealth_address_with_private(
     recipient_public_key: &EdwardsProjective,
 ) -> (EdwardsProjective, EdwardsProjective) {
     // Generate ephemeral public key
-    let ephemeral_public = <EdwardsProjective as ark_ec::Group>::generator().mul(sender_private);
+    let ephemeral_public = EdwardsProjective::generator().mul(sender_private);
 
     // Compute the shared secret point
     let shared_secret_point = recipient_public_key.mul(sender_private);
@@ -1374,7 +1371,7 @@ pub fn create_stealth_address_with_private(
 
     // Compute the stealth address
     let stealth_address = scalar_mul(
-        &<EdwardsProjective as ark_ec::Group>::generator(),
+        &EdwardsProjective::generator(),
         &shared_secret,
     ) + (*recipient_public_key);
 
@@ -1505,7 +1502,7 @@ pub fn generate_secure_key() -> (Fr, EdwardsProjective) {
     }
 
     // Generate the public key
-    let public_key = <EdwardsProjective as ark_ec::Group>::generator() * private_key;
+    let public_key = EdwardsProjective::generator() * private_key;
 
     // Validate the public key
     if public_key.is_zero() {
@@ -1653,7 +1650,7 @@ pub fn derive_public_key(
     let derived_private = derive_private_key(private_key, context, index, additional_data);
     
     // Compute public key directly from the derived private key
-    <EdwardsProjective as ark_ec::Group>::generator() * derived_private
+    EdwardsProjective::generator() * derived_private
 }
 
 /// Create a hierarchical key derivation path
@@ -2080,7 +2077,6 @@ impl KeyUsageProtection {
         // while rotation affects the key generation but not usage tracking.
     }
 }
-
 /// Protected key derivation with usage pattern protection
 ///
 /// This function wraps the key derivation process with comprehensive usage pattern protection.
@@ -2226,7 +2222,7 @@ mod tests {
         assert_ne!(keypair.public, EdwardsProjective::zero());
 
         // Verify that the public key is correctly derived from the secret key
-        let expected_public = <EdwardsProjective as ark_ec::Group>::generator() * keypair.secret;
+        let expected_public = EdwardsProjective::generator() * keypair.secret;
         assert_eq!(keypair.public, expected_public);
     }
 
@@ -2265,7 +2261,7 @@ mod tests {
 
         // Verify that the stealth private key can be used to derive a public key
         let derived_public = scalar_mul(
-            &<EdwardsProjective as ark_ec::Group>::generator(),
+            &EdwardsProjective::generator(),
             &stealth_private_key,
         );
 
@@ -2292,7 +2288,7 @@ mod tests {
 
         // Derive the public key from the stealth private key
         let derived_public = scalar_mul(
-            &<EdwardsProjective as ark_ec::Group>::generator(),
+            &EdwardsProjective::generator(),
             &stealth_private_key,
         );
 
@@ -2379,8 +2375,8 @@ mod tests {
         assert_ne!(public1, public2);
 
         // Verify public keys are correctly derived from private keys
-        let derived_public1 = scalar_mul(&<EdwardsProjective as ark_ec::Group>::generator(), &private1);
-        let derived_public2 = scalar_mul(&<EdwardsProjective as ark_ec::Group>::generator(), &private2);
+        let derived_public1 = scalar_mul(&EdwardsProjective::generator(), &private1);
+        let derived_public2 = scalar_mul(&EdwardsProjective::generator(), &private2);
 
         // Verify that derived public keys match the generated public keys
         assert_eq!(derived_public1, public1);
@@ -2443,7 +2439,7 @@ mod tests {
             assert!(!public_key.is_zero());
             
             // Test 3: Public key should be correctly derived from private key
-            let expected_public = <EdwardsProjective as ark_ec::Group>::generator() * private_key;
+            let expected_public = EdwardsProjective::generator() * private_key;
             assert_eq!(public_key, expected_public);
             
             // Store for uniqueness test
@@ -2524,7 +2520,7 @@ mod tests {
         
         // Verify point operations are correct
         let derived_private = derive_private_key(&private_key, "test", 0, None);
-        let expected_public = <EdwardsProjective as ark_ec::Group>::generator() * derived_private;
+        let expected_public = EdwardsProjective::generator() * derived_private;
         assert_eq!(public_key1, expected_public);
     }
 
@@ -2726,7 +2722,6 @@ mod tests {
             "Should have a time-based rotation record");
     }
 }
-
 /// Key compartmentalization system for enhanced key isolation and separation
 pub struct KeyCompartmentalization {
     /// Compartment identifiers and their associated metadata
@@ -3045,3 +3040,10 @@ impl KeyCompartmentalization {
         false
     }
 }
+
+
+
+
+
+
+

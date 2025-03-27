@@ -5,6 +5,7 @@ use crate::crypto::metadata_protection::{
 };
 use crate::networking::message::{Message, MessageType};
 use std::collections::HashMap;
+use bincode::serde::{serialize, deserialize};
 
 // Setup test transaction with metadata
 fn create_test_transaction() -> Transaction {
@@ -277,7 +278,7 @@ fn test_end_to_end_privacy_workflow() {
     let bob_secret = pfs.derive_shared_secret(&bob_public, &alice_public).unwrap();
     
     // 4. Encrypt transaction for secure storage
-    let tx_bytes = bincode::serialize(&protected_tx).unwrap();
+    let tx_bytes = serialize(&protected_tx).unwrap();
     let encrypted_tx = pfs.encrypt_message(&tx_bytes, &alice_secret).unwrap();
     
     // 5. Store encrypted transaction
@@ -286,7 +287,7 @@ fn test_end_to_end_privacy_workflow() {
     // 6. Retrieve and decrypt the transaction
     let retrieved_encrypted = storage.retrieve_decrypted("protected_tx", "tx1").unwrap();
     let decrypted_bytes = pfs.decrypt_message(&retrieved_encrypted, &bob_secret).unwrap();
-    let retrieved_tx: Transaction = bincode::deserialize(&decrypted_bytes).unwrap();
+    let retrieved_tx: Transaction = deserialize(&decrypted_bytes).unwrap();
     
     // 7. Verify that the protected transaction was correctly stored and retrieved
     assert!(!retrieved_tx.metadata.contains_key("ip"));
@@ -300,7 +301,7 @@ fn test_end_to_end_privacy_workflow() {
     message_metadata.insert("tx_id".to_string(), "tx1".to_string());
     message_metadata.insert("ip".to_string(), "192.168.1.200".to_string());
     
-    let mut tx_message = Message::new(MessageType::Transactions, bincode::serialize(&retrieved_tx).unwrap());
+    let mut tx_message = Message::new(MessageType::Transactions, serialize(&retrieved_tx).unwrap());
     tx_message.metadata = Some(message_metadata);
     
     // 9. Apply protection to the message before transmission
@@ -315,7 +316,7 @@ fn test_end_to_end_privacy_workflow() {
     }
     
     // 11. Verify that the transaction payload is still valid
-    let payload_tx: Transaction = bincode::deserialize(&protected_message.payload).unwrap();
+    let payload_tx: Transaction = deserialize(&protected_message.payload).unwrap();
     assert!(!payload_tx.metadata.contains_key("ip"));
     assert_eq!(payload_tx.metadata.get("amount").unwrap(), "123.45");
     assert_eq!(payload_tx.privacy_flags & 0x06, 0x06);

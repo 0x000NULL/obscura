@@ -22,6 +22,7 @@ use chacha20poly1305::{
     Nonce,
 };
 use ring::pbkdf2;
+use jubjub::{EdwardsProjective, Fr};
 
 #[derive(Debug, Clone)]
 pub struct Wallet {
@@ -47,6 +48,8 @@ pub struct Wallet {
     confidential_transactions: Option<ConfidentialTransactions>,
     // Use decoys for privacy
     add_decoys: bool,
+    secret_key: Fr,
+    public_key: EdwardsProjective,
 }
 
 // Placeholder for stealth addressing functionality
@@ -252,23 +255,46 @@ impl Default for Wallet {
             stealth_addressing: None,
             confidential_transactions: None,
             add_decoys: false,
+            secret_key: Fr::zero(),
+            public_key: EdwardsProjective::generator(),
         }
     }
 }
 
 impl Wallet {
     pub fn new() -> Self {
-        Wallet::default()
-    }
-
-    pub fn new_with_keypair() -> Self {
-        let mut _rng = OsRng;
-        let keypair = JubjubKeypair::generate();
-
-        Wallet {
+        let mut rng = OsRng;
+        let secret_key = Fr::rand(&mut rng);
+        let public_key = EdwardsProjective::generator() * secret_key;
+        
+        Self {
+            secret_key,
+            public_key,
             balance: 0,
             transactions: Vec::new(),
-            keypair: Some(keypair),
+            keypair: None,
+            privacy_enabled: false,
+            utxos: HashMap::new(),
+            transaction_timestamps: HashMap::new(),
+            last_sync_time: current_time(),
+            pending_spent_outpoints: Arc::new(Mutex::new(HashSet::new())),
+            view_key_manager: ViewKeyManager::new(),
+            bls_keypair: None,
+            stealth_addressing: None,
+            confidential_transactions: None,
+            add_decoys: false,
+        }
+    }
+    
+    pub fn from_secret_key(secret_key: Fr) -> Self {
+        let public_key = EdwardsProjective::generator() * secret_key;
+        
+        Self {
+            secret_key,
+            public_key,
+            balance: 0,
+            transactions: Vec::new(),
+            keypair: None,
             privacy_enabled: false,
             utxos: HashMap::new(),
             transaction_timestamps: HashMap::new(),

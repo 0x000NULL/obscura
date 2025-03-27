@@ -9,6 +9,8 @@ use rand_core::RngCore;
 use log::{debug, error, info, warn};
 use ark_std::{One, UniformRand, Zero};
 use crate::crypto::jubjub::JubjubKeypair;
+use crate::crypto::jubjub::EdwardsProjective;
+use crate::crypto::jubjub::Fr;
 
 /// Constants for VSS
 const MAX_VSS_PARTICIPANTS: usize = 100;
@@ -111,9 +113,14 @@ impl VerifiableShare {
     
     /// Verify this share against the commitment
     pub fn verify(&self) -> bool {
-        // Verify g^value = commitment.evaluate_at(index)
-        let left_side = <JubjubPoint as JubjubPointExt>::generator() * self.value;  // point * scalar
-        let right_side = self.commitment.evaluate_at(&self.index);
+        // Compute left side: g^value
+        let left_side = EdwardsProjective::generator() * self.value;  // point * scalar
+        
+        // Compute right side: product of commitments raised to powers
+        let mut right_side = EdwardsProjective::zero();
+        for (i, commitment) in self.commitment.commitments.iter().enumerate() {
+            right_side += *commitment * Fr::from(i as u64);
+        }
         
         left_side == right_side
     }
@@ -733,6 +740,21 @@ impl VssManager {
     }
 }
 
+impl Share {
+    pub fn verify(&self, commitments: &[EdwardsProjective]) -> bool {
+        // Compute left side: g^value
+        let left_side = EdwardsProjective::generator() * self.value;
+        
+        // Compute right side: product of commitments raised to powers
+        let mut right_side = EdwardsProjective::zero();
+        for (i, commitment) in commitments.iter().enumerate() {
+            right_side += *commitment * Fr::from(i as u64);
+        }
+        
+        left_side == right_side
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -936,7 +958,7 @@ mod tests {
         }
         
         // Verify the public key matches the secret
-        let expected_public_key = JubjubPoint::generator() * secret;
+        let expected_public_key = EdwardsProjective::generator() * secret;
         assert_eq!(dealer_result.public_key, expected_public_key, "Public key does not match secret");
         
         println!("=== Test completed successfully ===");

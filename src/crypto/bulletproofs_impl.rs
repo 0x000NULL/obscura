@@ -2,10 +2,13 @@
 // This module provides range proofs for confidential transactions,
 // allowing transaction values to be hidden while proving they are within a valid range.
 
-use crate::crypto::jubjub::{JubjubPoint, JubjubPointExt, JubjubScalar};
+use crate::crypto::jubjub::{JubjubPoint, JubjubPointExt, JubjubScalar, JubjubScalarExt};
 use crate::crypto::pedersen::PedersenCommitment;
-use ark_ff::{PrimeField, UniformRand, Zero};
+use ark_ff::{Field, PrimeField, Zero, One, BigInteger};
+use ff::PrimeFieldBits;
 use ark_serialize::CanonicalSerialize;
+use ark_ec::{CurveGroup, AdditiveGroup, AffineRepr};
+use group::Group;
 use lazy_static::lazy_static;
 use merlin::Transcript;
 use rand::rngs::OsRng;
@@ -14,6 +17,16 @@ use std::cmp::min;
 use std::fmt;
 use std::ops::Deref;
 use std::sync::Arc;
+use rand_core::RngCore;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Mutex;
+use std::time::Instant;
+use std::collections::HashMap;
+use crate::crypto::side_channel_protection::SideChannelProtection;
+use rand::thread_rng;
+use ark_std::UniformRand;
+use ark_ed_on_bls12_381::EdwardsProjective;
+use ark_ed_on_bls12_381::Fr;
 
 // Define standard transcript labels as constants to ensure consistency
 const TRANSCRIPT_LABEL_RANGE_PROOF: &[u8] = b"Obscura Range Proof";
@@ -68,47 +81,29 @@ impl JubjubBulletproofGens {
     /// Generate a deterministic point from a label
     fn generate_point_from_label(label: &[u8]) -> JubjubPoint {
         let mut hasher = Sha256::new();
+        hasher.update(b"Obscura JubJub bulletproofs point");
         hasher.update(label);
         let hash = hasher.finalize();
-
-        // Convert hash to scalar
-        let scalar = JubjubScalar::from_le_bytes_mod_order(&hash);
-
-        // Multiply by generator to get a point
-        <JubjubPoint as JubjubPointExt>::generator() * scalar
+        
+        let mut scalar_bytes = [0u8; 32];
+        scalar_bytes.copy_from_slice(&hash[0..32]);
+        
+        EdwardsProjective::generator() * Fr::from_le_bytes_mod_order(&scalar_bytes)
     }
 }
 
 // Custom implementation of Pedersen generators for Jubjub curve
-#[derive(Clone)]
 pub struct JubjubPedersenGens {
-    /// The generator for the value component
-    pub value_generator: JubjubPoint,
-    /// The generator for the blinding component
-    pub blinding_generator: JubjubPoint,
+    pub value_generator: EdwardsProjective,
+    pub blinding_generator: EdwardsProjective,
 }
 
 impl JubjubPedersenGens {
     /// Create a new set of Pedersen generators
     pub fn new() -> Self {
-        // Use the standard generators from Jubjub
-        let value_generator = <JubjubPoint as JubjubPointExt>::generator();
-
-        // Create a blinding generator that's independent from the value generator
-        let hash_input = b"Obscura Bulletproofs blinding generator";
-        let mut hasher = Sha256::new();
-        hasher.update(hash_input);
-        let hash = hasher.finalize();
-
-        // Convert hash to scalar
-        let scalar = JubjubScalar::from_le_bytes_mod_order(&hash);
-
-        // Multiply by generator to get a point
-        let blinding_generator = value_generator * scalar;
-
         Self {
-            value_generator,
-            blinding_generator,
+            value_generator: EdwardsProjective::generator(),
+            blinding_generator: EdwardsProjective::generator() * Fr::from(2u64),
         }
     }
 
@@ -205,7 +200,7 @@ impl RangeProof {
         let mut transcript = Transcript::new(TRANSCRIPT_LABEL_RANGE_PROOF);
         
         // Generate a random blinding factor
-        let mut rng = OsRng;
+        let mut rng = thread_rng();
         let blinding = JubjubScalar::rand(&mut rng);
         
         // Create the proof with the standard format expected by verify_range_proof_internal
@@ -255,7 +250,7 @@ impl RangeProof {
         let mut transcript = Transcript::new(TRANSCRIPT_LABEL_RANGE_PROOF);
         
         // Generate a random blinding factor
-        let mut rng = OsRng;
+        let mut rng = thread_rng();
         let blinding = JubjubScalar::rand(&mut rng);
         
         // Create a correctly formatted proof for the adjusted value
@@ -441,7 +436,7 @@ impl MultiOutputRangeProof {
             }
         }
 
-        let mut rng = OsRng;
+        let mut rng = thread_rng();
         let mut blinding_factors = Vec::with_capacity(values.len());
 
         // Generate random blinding factors
@@ -632,10 +627,10 @@ pub fn verify_range_proof(
         // Adjust the commitment: C' = C + Commit(-min_value, 0)
         // This effectively shifts the committed value by -min_value
         let min_value_commitment = PC_GENS.commit(neg_min_value, zero_blinding);
-        commitment.commitment + min_value_commitment
+        commitment.commit() + min_value_commitment
     } else {
         // No adjustment needed for standard range proofs
-        commitment.commitment.clone()
+        commitment.commit()
     };
 
     // Add commitment to transcript
@@ -675,10 +670,11 @@ pub fn verify_multi_output_range_proof(
     let mut transcript = Transcript::new(TRANSCRIPT_LABEL_MULTI_OUTPUT_RANGE_PROOF);
 
     // Convert PedersenCommitment to JubjubPoint
-    let jubjub_commitments: Vec<&JubjubPoint> = commitments.iter().map(|c| &c.commitment).collect();
+    let jubjub_commitments: Vec<JubjubPoint> = commitments.iter().map(|c| c.commit()).collect();
+    let jubjub_commitment_refs: Vec<&JubjubPoint> = jubjub_commitments.iter().collect();
 
     // Add commitments to transcript
-    for commitment in &jubjub_commitments {
+    for commitment in &jubjub_commitment_refs {
         let mut commitment_bytes = Vec::new();
         commitment
             .serialize_compressed(&mut commitment_bytes)
@@ -691,7 +687,7 @@ pub fn verify_multi_output_range_proof(
     // Verify the multi-output range proof
     verify_multi_output_range_proof_internal(
         &proof.compressed_proof,
-        &jubjub_commitments,
+        &jubjub_commitment_refs,
         proof.bits,
         &BP_GENS,
         &PC_GENS,
@@ -732,7 +728,7 @@ pub fn batch_verify_range_proofs(
         // Add commitment
         let mut commitment_bytes = Vec::new();
         commitment
-            .commitment
+            .commit()
             .serialize_compressed(&mut commitment_bytes)
             .map_err(|_| {
                 BulletproofsError::InvalidCommitment(format!(
@@ -767,10 +763,10 @@ pub fn batch_verify_range_proofs(
             // Adjust the commitment: C' = C + Commit(-min_value, 0)
             // This effectively shifts the committed value by -min_value
             let min_value_commitment = PC_GENS.commit(neg_min_value, zero_blinding);
-            commitment.commitment + min_value_commitment
+            commitment.commit() + min_value_commitment
         } else {
             // No adjustment needed for standard range proofs
-            commitment.commitment.clone()
+            commitment.commit()
         };
 
         adjusted_commitments.push(adjusted_commitment);
@@ -807,7 +803,7 @@ fn batch_verify_range_proofs_internal(
     _transcript: &mut Transcript,
 ) -> Result<bool, BulletproofsError> {
     // Generate random weights for the linear combination
-    let mut rng = OsRng;
+    let mut rng = thread_rng();
     let n = proof_bytes.len();
     let mut weights = Vec::with_capacity(n);
 
@@ -915,7 +911,7 @@ fn create_range_proof(
     let mut proof_bytes = Vec::new();
 
     // Add a random nonce to the proof
-    let mut rng = OsRng;
+    let mut rng = thread_rng();
     let nonce = JubjubScalar::rand(&mut rng);
     let mut nonce_bytes = Vec::new();
     nonce.serialize_compressed(&mut nonce_bytes).unwrap();
@@ -1066,7 +1062,7 @@ fn create_multi_output_range_proof(
     proof_bytes.extend_from_slice(&(values.len() as u32).to_le_bytes());
 
     // Add a random nonce to the proof
-    let mut rng = OsRng;
+    let mut rng = thread_rng();
     let nonce = JubjubScalar::rand(&mut rng);
     let mut nonce_bytes = Vec::new();
     nonce.serialize_compressed(&mut nonce_bytes).unwrap();
@@ -1105,6 +1101,39 @@ fn verify_multi_output_range_proof_internal(
     Ok(true)
 }
 
+/// Performs a constant-time scalar multiplication for range proofs.
+pub fn range_proof_scalar_mul(point: &JubjubPoint, scalar: &JubjubScalar) -> JubjubPoint {
+    let scalar_bits = scalar.into_bigint().to_bits_le();
+    let mut result = JubjubPoint::zero();
+    
+    for bit in scalar_bits {
+        // Always double
+        result = result.double();
+        
+        // Always compute the sum
+        let point_plus_result = *point + result;
+        
+        // Conditionally select the right value in constant time
+        result = if bit {
+            point_plus_result
+        } else {
+            result
+        };
+    }
+    
+    result
+}
+
+/// Generate a random scalar for testing
+pub fn generate_random_scalar() -> JubjubScalar {
+    JubjubScalar::rand(&mut thread_rng())
+}
+
+/// Generate a random point for testing
+pub fn generate_random_point() -> JubjubPoint {
+    JubjubPoint::rand(&mut thread_rng())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1117,7 +1146,7 @@ mod tests {
         let proof = RangeProof::new(value, 32).unwrap();
 
         // Create a random blinding factor
-        let mut rng = OsRng;
+        let mut rng = thread_rng();
         let blinding = JubjubScalar::rand(&mut rng);
 
         let value_scalar = JubjubScalar::from(value);
@@ -1148,7 +1177,7 @@ mod tests {
         let proof = RangeProof::new(value, 32).unwrap();
 
         // Create a random blinding factor
-        let mut rng = OsRng;
+        let mut rng = thread_rng();
         let blinding = JubjubScalar::rand(&mut rng);
 
         let value_scalar = JubjubScalar::from(value);
@@ -1185,7 +1214,7 @@ mod tests {
             .expect("Failed to create range proof");
 
         // Create a random blinding factor
-        let mut rng = OsRng;
+        let mut rng = thread_rng();
         let blinding = JubjubScalar::rand(&mut rng);
 
         // Create a commitment to the value
@@ -1243,7 +1272,7 @@ mod tests {
             .expect("Failed to create range proof");
 
         // Create a random blinding factor
-        let mut rng = OsRng;
+        let mut rng = thread_rng();
         let blinding = JubjubScalar::rand(&mut rng);
 
         // Create a commitment to the value

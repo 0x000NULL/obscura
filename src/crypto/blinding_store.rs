@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use ark_serialize::CanonicalDeserialize;
 use ark_serialize::CanonicalSerialize;
-use bincode;
+use bincode::{encode_to_vec, decode_from_slice};
 use hex;
 use ring::aead::{self, Aad, LessSafeKey, Nonce, UnboundKey};
 use ring::pbkdf2;
@@ -371,8 +371,9 @@ impl BlindingStore {
         }
 
         // Serialize the blinding factor using bincode
-        let serialized = bincode::serialize(blinding_factor)
-            .map_err(|e| format!("Failed to serialize blinding factor: {}", e))?;
+        let mut serialized = Vec::new();
+        let bytes = blinding_factor.to_bytes_le();
+        serialized.extend_from_slice(&bytes);
 
         // Create metadata
         let metadata = BlindingFactorMetadata {
@@ -449,9 +450,14 @@ impl BlindingStore {
             _ => return Err("Expected Scalar blinding factor".to_string()),
         };
 
+        // Convert Vec<u8> to [u8; 32]
+        let bytes: [u8; 32] = serialized.as_slice().try_into()
+            .map_err(|_| "Invalid blinding factor length".to_string())?;
+
         // Deserialize the blinding factor using bincode
-        let scalar = bincode::deserialize::<Scalar>(serialized)
-            .map_err(|e| format!("Failed to deserialize blinding factor: {}", e))?;
+        let scalar = Scalar::from_bytes_le(&bytes)
+            .into_option()
+            .ok_or("Failed to deserialize blinding factor".to_string())?;
 
         Ok(scalar)
     }

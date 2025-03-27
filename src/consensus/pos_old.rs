@@ -6,7 +6,7 @@ use crate::consensus::pos::*;
 
 use crate::consensus::sharding::{CrossShardCommittee, Shard, ShardManager};
 use crate::crypto::jubjub::{JubjubPoint, JubjubPointExt, JubjubSignature};
-use bincode;
+use bincode::{encode_to_vec, decode_from_slice};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -1450,22 +1450,19 @@ impl StakingContract {
             match update.operation {
                 ValidatorUpdateOp::Register => {
                     // Process validator registration
-                    if let Ok(commission_rate) = bincode::deserialize::<f64>(&update.data) {
+                    if let Ok((commission_rate, _)) = decode_from_slice::<f64, bincode::config::Configuration>(&update.data, bincode::config::standard()) {
                         let _ = self.register_validator(update.validator, commission_rate, None);
                     }
                 }
                 ValidatorUpdateOp::UpdateCommission => {
                     // Process commission update
-                    if let Ok(commission_rate) = bincode::deserialize::<f64>(&update.data) {
-                        let _ =
-                            self.update_validator_commission(&update.validator, commission_rate);
+                    if let Ok((commission_rate, _)) = decode_from_slice::<f64, bincode::config::Configuration>(&update.data, bincode::config::standard()) {
+                        let _ = self.update_validator_commission(&update.validator, commission_rate);
                     }
                 }
                 ValidatorUpdateOp::Deregister => {
                     // Process validator deregistration
-                    // Remove from active validators
                     self.active_validators.remove(&update.validator);
-                    // Remove validator info
                     self.validators.remove(&update.validator);
                 }
             }

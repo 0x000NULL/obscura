@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use rand::{thread_rng, Rng};
 use rand_core::RngCore;
+use bincode::{encode_to_vec, decode_from_slice, Encode, Decode};
 
 // Add the new module
 pub mod block_structure;
@@ -12,7 +13,7 @@ pub mod test_helpers;
 pub mod tests;
 pub mod transaction_ext;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct Block {
     pub header: BlockHeader,
     pub transactions: Vec<Transaction>,
@@ -27,7 +28,7 @@ impl Default for Block {
     }
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct BlockHeader {
     pub version: u32,
     pub previous_hash: [u8; 32],
@@ -44,14 +45,14 @@ pub struct BlockHeader {
     pub metadata: HashMap<String, String>, // Added metadata field for block header metadata
 }
 
-#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize, Encode, Decode)]
 pub struct FeeAdjustment {
     pub adjustment_factor: f64, // Multiplier for the base fee (e.g. 1.5 = 50% increase)
     pub lock_time: u64,         // Unix timestamp when adjustment becomes active
     pub expiry_time: u64,       // Unix timestamp when adjustment expires
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode)]
 pub struct Transaction {
     pub inputs: Vec<TransactionInput>,
     pub outputs: Vec<TransactionOutput>,
@@ -66,14 +67,14 @@ pub struct Transaction {
     pub salt: Option<Vec<u8>>,
 }
 
-#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize, Encode, Decode)]
 pub struct TransactionInput {
     pub previous_output: OutPoint,
     pub signature_script: Vec<u8>,
     pub sequence: u32,
 }
 
-#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize, Encode, Decode)]
 pub struct TransactionOutput {
     pub value: u64,
     pub public_key_script: Vec<u8>,
@@ -81,7 +82,7 @@ pub struct TransactionOutput {
     pub commitment: Option<Vec<u8>>,
 }
 
-#[derive(Clone, Eq, Hash, PartialEq, Debug, Serialize, Deserialize, Copy)]
+#[derive(Clone, Eq, Hash, PartialEq, Debug, Serialize, Deserialize, Encode, Decode, Copy)]
 pub struct OutPoint {
     pub transaction_hash: [u8; 32],
     pub index: u32,
@@ -272,6 +273,10 @@ impl Block {
         block_structure_manager: &mut block_structure::BlockStructureManager,
     ) -> bool {
         block_structure_manager.validate_timestamp(self.header.timestamp)
+    }
+
+    pub fn serialize(&self) -> Vec<u8> {
+        bincode::encode_to_vec(self, bincode::config::standard()).unwrap_or_default()
     }
 }
 
@@ -685,7 +690,7 @@ impl Transaction {
     }
 
     pub fn serialize(&self) -> Vec<u8> {
-        bincode::serialize(self).unwrap_or_default()
+        bincode::encode_to_vec(self, bincode::config::standard()).unwrap_or_default()
     }
 
     pub fn new(inputs: Vec<TransactionInput>, outputs: Vec<TransactionOutput>) -> Self {

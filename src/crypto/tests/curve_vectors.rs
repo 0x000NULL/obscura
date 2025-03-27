@@ -373,4 +373,27 @@ mod tests {
         }
         println!("Completed test_jubjub_vectors");
     }
+
+    #[test]
+    fn test_jubjub_operations() {
+        let g = EdwardsProjective::generator();
+        let h = EdwardsProjective::generator() * Fr::from(2u64);
+        
+        // Test point addition
+        let p1 = g * Fr::from(2u64);
+        let p2 = g * Fr::from(3u64);
+        let sum = p1 + p2;
+        assert_eq!(sum, g * Fr::from(5u64));
+        
+        // Test scalar multiplication
+        let scalar = Fr::from(5u64);
+        let product = g * scalar;
+        assert_eq!(product, g * Fr::from(5u64));
+        
+        // Test Pedersen commitment
+        let value = Fr::from(100u64);
+        let blinding = Fr::from(200u64);
+        let commitment = (g * value) + (h * blinding);
+        assert_eq!(commitment, (g * value) + (h * blinding));
+    }
 } 

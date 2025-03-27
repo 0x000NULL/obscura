@@ -1,4 +1,4 @@
-use bincode::serialize;
+use bincode::serde::{serialize, deserialize};
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use log::{debug, error, info, trace};

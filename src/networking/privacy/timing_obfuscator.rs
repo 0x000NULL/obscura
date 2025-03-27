@@ -4,10 +4,9 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, SystemTime};
 use log::{debug, info, warn, error};
 use rand::{thread_rng, Rng};
-use rand::distributions::{Distribution, Uniform};
-use rand_distr::Normal;
+use rand::distributions::Uniform;
+use rand_distr::{Normal, LogNormal, Distribution as RandDistr};
 use rand_chacha::{ChaCha20Rng, rand_core::SeedableRng};
-use rand_distr::LogNormal;
 use rand_core::RngCore;
 use serde::{Serialize, Deserialize};
 use std::thread;
@@ -344,7 +343,7 @@ impl DelayDistribution {
     }
 
     pub fn sample<R: rand::Rng>(&self, rng: &mut R) -> Duration {
-        let delay_ms = self.distribution.sample(rng);
+        let delay_ms = RandDistr::sample(&self.distribution, rng);
         Duration::from_millis(delay_ms as u64)
     }
 
@@ -370,7 +369,7 @@ impl BatchSizeDistribution {
     }
 
     pub fn sample<R: rand::Rng>(&self, rng: &mut R) -> usize {
-        let size = self.distribution.sample(rng);
+        let size = RandDistr::sample(&self.distribution, rng);
         size.max(1.0) as usize
     }
 

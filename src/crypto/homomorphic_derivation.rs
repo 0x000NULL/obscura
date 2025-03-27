@@ -5,6 +5,7 @@ use std::sync::{Arc, RwLock};
 use rand::rngs::OsRng;
 use sha2::{Digest, Sha256};
 use ark_std::UniformRand;
+use group::Group;
 
 /// Constants for homomorphic derivation
 const MAX_DERIVATION_PATH_LENGTH: usize = 20;

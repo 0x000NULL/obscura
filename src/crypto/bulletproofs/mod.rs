@@ -24,8 +24,8 @@ impl<'a> JubjubProver<'a> {
 
     /// Create a Pedersen commitment to a value with a specified blinding factor
     pub fn commit(&self, value: u64, blinding: JubjubScalar) -> (JubjubPoint, JubjubScalar) {
-        let commitment = PedersenCommitment::commit(value, blinding);
-        (commitment.commitment, blinding)
+        let commitment = PedersenCommitment::new(JubjubScalar::from(value), blinding);
+        (commitment.commit(), blinding)
     }
 
     /// Create a range proof for a value commitment

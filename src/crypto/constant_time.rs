@@ -11,20 +11,25 @@ use std::time::Duration;
 use rand::{Rng, thread_rng};
 use rand_core::RngCore;
 use ark_ff::{BigInteger, Field, PrimeField, Zero, One};
-use ark_ec::{CurveGroup, Group};
+use ff::PrimeFieldBits;
+use ark_ec::{CurveGroup, AdditiveGroup, AffineRepr};
+use group::Group;
 use ark_ec::models::{short_weierstrass::SWCurveConfig, twisted_edwards::TECurveConfig};
 use crate::crypto::errors::{CryptoError, CryptoResult};
 use crate::crypto::jubjub::{JubjubPoint, JubjubScalar, JubjubPointExt};
-// Commented out due to missing types - add these when they become available
-// use crate::crypto::bls12_381::{Scalar as BlsScalar, G1Affine as BlsG1Point, G2Affine as BlsG2Point};
 use chacha20poly1305::{
     ChaCha20Poly1305, Key, Nonce,
-    aead::{Aead, KeyInit},
+    aead::KeyInit,
 };
-// Commented out as zeroize crate may not be available
-// use zeroize::Zeroize;
 use std::time::Instant;
 use crate::crypto::bulletproofs::{JubjubBulletproofGens, JubjubPedersenGens};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use ark_std::UniformRand;
+use rand::rngs::OsRng;
+use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
+use crate::crypto::side_channel_protection::SideChannelProtection;
 
 // Constants for timing attack defenses
 const MIN_OP_TIME_MICROS: u64 = 5;
@@ -126,25 +131,14 @@ pub fn constant_time_swap<F: Field + Copy>(swap: bool, a: &mut F, b: &mut F) {
 /// Performs a constant-time scalar multiplication on the Jubjub curve.
 /// The operation always performs the same sequence of operations regardless of scalar value.
 pub fn constant_time_scalar_mul(point: &JubjubPoint, scalar: &JubjubScalar) -> JubjubPoint {
-    // Convert scalar to bits in big-endian order
-    let scalar_bits = scalar.into_bigint().to_bits_be();
     let mut result = JubjubPoint::zero();
     
-    // Always process all bits regardless of scalar value
-    for bit in scalar_bits {
-        // Always double
-        result = result.double();
-        
-        // Always compute the sum
-        let point_plus_result = *point + result;
-        
-        // Conditionally select the right value in constant time
-        // This is the key to making the algorithm constant time
-        result = if bit {
-            point_plus_result
-        } else {
-            result
-        };
+    for bit in scalar.into_bigint().to_bits_be().iter().rev() {
+        for i in 0..8 {
+            let mask = 1u8 << i;
+            let is_set = (*bit as u8 & mask) != 0;
+            result = result + (*point * JubjubScalar::from(is_set as u64));
+        }
     }
     
     result
@@ -345,7 +339,7 @@ pub fn constant_time_signature_verify(
     let e = JubjubScalar::from_le_bytes_mod_order(&hash);
     
     // Compute sG
-    let s_g = constant_time_scalar_mul(&<JubjubPoint as JubjubPointExt>::generator(), &s);
+    let s_g = constant_time_scalar_mul(public_key, &s);
     
     // Compute R + eP
     let e_pub = constant_time_scalar_mul(public_key, &e);
@@ -479,7 +473,8 @@ pub fn constant_time_random_scalar() -> JubjubScalar {
 /// Generate a random point on the Jubjub curve in constant time.
 pub fn constant_time_random_point() -> JubjubPoint {
     let scalar = constant_time_random_scalar();
-    constant_time_scalar_mul(&<JubjubPoint as JubjubPointExt>::generator(), &scalar)
+    let generator = <JubjubPoint as JubjubPointExt>::generator();
+    constant_time_scalar_mul(&generator, &scalar)
 }
 
 // ====================================================

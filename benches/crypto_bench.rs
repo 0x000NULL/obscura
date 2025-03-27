@@ -11,6 +11,7 @@ use ark_ff::UniformRand;
 use ark_ec::models::short_weierstrass::Projective;
 use ark_ec::models::short_weierstrass::Affine;
 use ark_ec::CurveGroup;
+use rand_core::OsRng;
 
 fn bls_bench(c: &mut Criterion) {
     let mut group = c.benchmark_group("BLS12-381");
@@ -87,6 +88,32 @@ fn jubjub_bench(c: &mut Criterion) {
     });
 
     group.finish();
+}
+
+fn bench_scalar_mul(c: &mut Criterion) {
+    let mut rng = OsRng;
+    let scalar = Fr::rand(&mut rng);
+    let point = EdwardsProjective::generator();
+    
+    c.bench_function("scalar_mul", |b| {
+        b.iter(|| {
+            let _ = point * scalar;
+        })
+    });
+}
+
+fn bench_point_addition(c: &mut Criterion) {
+    let mut rng = OsRng;
+    let scalar1 = Fr::rand(&mut rng);
+    let scalar2 = Fr::rand(&mut rng);
+    let point1 = EdwardsProjective::generator() * scalar1;
+    let point2 = EdwardsProjective::generator() * scalar2;
+    
+    c.bench_function("point_addition", |b| {
+        b.iter(|| {
+            let _ = point1 + point2;
+        })
+    });
 }
 
 criterion_group!(benches, bls_bench, jubjub_bench);

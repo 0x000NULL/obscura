@@ -170,7 +170,7 @@ impl CommitmentVerifier {
         let value_scalar = JubjubScalar::from(value);
         let expected_point = (jubjub_get_g() * value_scalar) + (jubjub_get_h() * *blinding);
 
-        Ok(expected_point == commitment.commitment)
+        Ok(expected_point == commitment.commit())
     }
 
     /// Verify a BlsScalar Pedersen commitment matches a claimed value
@@ -399,8 +399,8 @@ impl CommitmentVerifier {
             let combined_outputs = sum_outputs.add(&fee_commitment);
 
             // JubJub commitment equality
-            let jubjub_equal = sum_inputs.jubjub_commitment.commitment
-                == combined_outputs.jubjub_commitment.commitment;
+            let jubjub_equal = sum_inputs.jubjub_commitment.commit()
+                == combined_outputs.jubjub_commitment.commit();
 
             // BLS commitment equality
             let bls_equal =
@@ -613,7 +613,7 @@ pub mod utils {
 
     /// Check if two commitments are equal (without knowing their values)
     pub fn are_commitments_equal(a: &DualCurveCommitment, b: &DualCurveCommitment) -> bool {
-        (a.jubjub_commitment.commitment == b.jubjub_commitment.commitment)
+        (a.jubjub_commitment.commit() == b.jubjub_commitment.commit())
             && (a.bls_commitment.commitment == b.bls_commitment.commitment)
     }
 }
@@ -632,7 +632,7 @@ mod tests {
         // Create a commitment to a value
         let value = 100u64;
         let blinding = generate_random_jubjub_scalar();
-        let commitment = PedersenCommitment::commit(value, blinding.clone());
+        let commitment = PedersenCommitment::new(JubjubScalar::from(value), blinding.clone());
 
         // Verify with correct value and blinding
         let result = CommitmentVerifier::verify_jubjub_commitment(&commitment, value, &blinding);
@@ -688,8 +688,7 @@ mod tests {
         // Get the blinding factors from the commitment
         let jubjub_blinding = dual_commitment
             .jubjub_commitment
-            .blinding()
-            .expect("Jubjub blinding should be available");
+            .blinding();
         let bls_blinding = dual_commitment
             .bls_commitment
             .blinding()
