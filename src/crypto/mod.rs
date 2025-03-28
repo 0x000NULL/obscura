@@ -5,8 +5,8 @@ use rand_core::RngCore;
 use chacha20poly1305::Nonce;
 use chacha20poly1305::aead::{Aead, AeadCore, KeyInit};
 use chacha20poly1305::ChaCha20Poly1305;
+use chacha20poly1305::Key;
 use ring::pbkdf2;
-use generic_array::GenericArray;
 
 // Add the errors module
 pub mod errors;
@@ -234,7 +234,8 @@ pub fn encrypt_keypair(
     );
     
     // Create a ChaCha20Poly1305 cipher with the derived key
-    let cipher = ChaCha20Poly1305::new(GenericArray::from_slice(derived_key.as_ref()));
+    let key = Key::from_slice(&derived_key);
+    let cipher = ChaCha20Poly1305::new(key);
     
     // Encrypt the serialized keypair with authentication tag
     let ciphertext = cipher
@@ -281,7 +282,8 @@ pub fn decrypt_keypair(
     );
     
     // Create a ChaCha20Poly1305 cipher with the derived key
-    let cipher = ChaCha20Poly1305::new(GenericArray::from_slice(derived_key.as_ref()));
+    let key = Key::from_slice(&derived_key);
+    let cipher = ChaCha20Poly1305::new(key);
     
     // Decrypt the ciphertext
     let plaintext = match cipher.decrypt(nonce, ciphertext) {

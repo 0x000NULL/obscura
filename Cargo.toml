@@ -103,8 +103,8 @@ futures = "0.3"
 async-trait = "0.1"
 reqwest = { version = "0.12.15", features = ["json", "socks"] }
 thiserror = "2.0.12"
-libp2p = { version = "0.51", features = ["tcp", "dns", "websocket", "noise", "yamux", "ping", "identify", "kad", "gossipsub", "mdns"] }
-libp2p-quic = { version = "0.9.3" }
+libp2p = { version = "0.55", features = ["tcp", "dns", "websocket", "noise", "yamux", "ping", "identify", "kad", "gossipsub", "mdns"] }
+libp2p-quic = { version = "0.12.0" }
 libp2p-webrtc = { version = "0.9.0-alpha" }
 chacha20poly1305 = "0.10.1"
 chacha20 = "0.9.1"
@@ -121,13 +121,13 @@ rocksdb = { version = "0.23.0", optional = true }
 sled = "0.34"
 
 # Consensus dependencies
-randomx-rs = { version = "0.2", optional = true }
+randomx-rs = { version = "1.3.2", optional = true }
 threshold_crypto = "0.4"
 
 # CLI and configuration
 config = "0.15.11"
 clap = { version = "4.5", features = ["derive"] }
-generic-array = "0.14.7"
+generic-array = "1.2.0"
 toml = "0.8.20"
 semver = { version = "1.0", features = ["serde"] }
 
@@ -142,14 +142,14 @@ colored = "3.0.0"
 prettytable-rs = "0.10"
 
 # Monitoring and metrics
-prometheus = { version = "0.13", optional = true }
+prometheus = { version = "0.14.0", optional = true }
 
 # Testing and benchmarking
 criterion = "0.5.1"
 
 # New dependency
 sys-info = "0.9"
-twox-hash = "1.6.3"
+twox-hash = "2.1.0"
 ctrlc = "3.4.5"  # Added for profiler binary
 
 [dev-dependencies]
