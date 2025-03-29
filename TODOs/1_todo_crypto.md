@@ -151,9 +151,9 @@
 
 ### 6. Stealth Addressing
 - [ ] Fix cryptographic integration with transaction privacy:
-- [ ] Ensure cryptographic operations preserve transaction metadata including stealth addresses
-- [ ] Implement proper verification mechanisms for privacy-enhanced transactions
-- [ ] Add cryptographic guarantees for transaction property preservation
+   - [x] Ensure cryptographic operations preserve transaction metadata including stealth addresses
+   - [x] Implement proper verification mechanisms for privacy-enhanced transactions
+   - [ ] Add cryptographic guarantees for transaction property preservation
 - [ ] Create comprehensive integration tests:
    - [ ] Test end-to-end transaction flow with stealth addresses
    - [ ] Validate property preservation across all transaction processing stages

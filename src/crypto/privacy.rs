@@ -16,6 +16,7 @@ use crate::networking::privacy_config_integration::{PrivacySettingsRegistry, Com
 use std::any::Any;
 use ark_std::Zero;
 use std::collections::HashSet;
+use env_logger::Logger;
 
 // Define a local ObscuraError for this module
 #[derive(Debug)]
@@ -70,6 +71,8 @@ pub struct SenderPrivacy {
     confidential_tx: ConfidentialTransactions,
     /// Stealth addressing component 
     stealth_addressing: StealthAddressing,
+    /// Property preservation component
+    property_preserver: TransactionPropertyPreserver,
     /// Bitmask of applied privacy features
     applied_features: u8,
     /// Privacy registry for configuration
@@ -91,6 +94,7 @@ impl SenderPrivacy {
             obfuscator: TransactionObfuscator::new(),
             confidential_tx: ConfidentialTransactions::new(),
             stealth_addressing: StealthAddressing::new(),
+            property_preserver: TransactionPropertyPreserver::new(),
             applied_features: 0,
             privacy_registry: None,
             transaction_cache: HashMap::new(),
@@ -106,6 +110,7 @@ impl SenderPrivacy {
             obfuscator: TransactionObfuscator::new(),
             confidential_tx: ConfidentialTransactions::new(),
             stealth_addressing: StealthAddressing::new(),
+            property_preserver: TransactionPropertyPreserver::new(),
             applied_features: 0,
             privacy_registry: Some(registry),
             transaction_cache: HashMap::new(),
@@ -119,71 +124,26 @@ impl SenderPrivacy {
     pub fn apply_all_features(&mut self, tx: &Transaction) -> Result<Transaction, ObscuraError> {
         let mut modified_tx = tx.clone();
         
-        // Check if we have a privacy registry
-        if let Some(registry) = &self.privacy_registry {
-            let config = registry.get_config();
+        // Preserve original properties before applying privacy features
+        self.property_preserver.preserve_properties(&mut modified_tx)?;
+        
+        // Process features in smaller batches to reduce stack usage
+        let feature_batches = vec![
+            vec![PrivacyFeature::Obfuscation, PrivacyFeature::GraphProtection],
+            vec![PrivacyFeature::StealthAddressing],
+            vec![PrivacyFeature::ConfidentialTransactions, PrivacyFeature::RangeProofs],
+            vec![PrivacyFeature::MetadataProtection]
+        ];
+        
+        for batch in feature_batches {
+            // Apply batch of features
+            modified_tx = self.apply_features(&modified_tx, &batch)?;
             
-            // Apply transaction obfuscation if enabled
-            if config.transaction_obfuscation_enabled {
-                modified_tx = self.obfuscator.protect_transaction_graph(&modified_tx);
-                self.applied_features |= PrivacyFeature::Obfuscation as u8;
-                self.applied_features |= PrivacyFeature::GraphProtection as u8;
+            // Verify properties after each batch
+            if !self.property_preserver.verify_properties(&modified_tx)? {
+                self.property_preserver.restore_properties(&mut modified_tx)?;
+                return Err(ObscuraError::CryptoError("Property preservation verification failed".to_string()));
             }
-            
-            // Apply stealth addressing if enabled
-            if config.use_stealth_addresses {
-                for i in 0..modified_tx.outputs.len() {
-                    if let Some(pubkey) = self.extract_recipient_pubkey(&modified_tx.outputs[i]) {
-                        let one_time_address = self.stealth_addressing.generate_one_time_address(&pubkey);
-                        modified_tx.outputs[i].public_key_script = one_time_address;
-                    }
-                }
-                self.applied_features |= PrivacyFeature::StealthAddressing as u8;
-            }
-            
-            // Apply confidential transactions if enabled
-            if config.use_confidential_transactions {
-                modified_tx = self.confidential_tx.obfuscate_output_value(&mut modified_tx);
-                self.applied_features |= PrivacyFeature::ConfidentialTransactions as u8;
-            }
-            
-            // Apply range proofs if enabled
-            if config.use_range_proofs {
-                for i in 0..modified_tx.outputs.len() {
-                    let amount = modified_tx.outputs[i].value;
-                    let range_proof = self.confidential_tx.create_range_proof(amount);
-                    modified_tx.outputs[i].range_proof = Some(range_proof);
-                }
-                self.applied_features |= PrivacyFeature::RangeProofs as u8;
-            }
-            
-            // Apply metadata protection if enabled
-            if config.metadata_stripping {
-                modified_tx = self.obfuscator.strip_metadata(&modified_tx);
-                self.applied_features |= PrivacyFeature::MetadataProtection as u8;
-            }
-        } else {
-            // If no registry, apply all privacy features by default
-            modified_tx = self.obfuscator.protect_transaction_graph(&modified_tx);
-            
-            for i in 0..modified_tx.outputs.len() {
-                if let Some(pubkey) = self.extract_recipient_pubkey(&modified_tx.outputs[i]) {
-                    let one_time_address = self.stealth_addressing.generate_one_time_address(&pubkey);
-                    modified_tx.outputs[i].public_key_script = one_time_address;
-                }
-            }
-            
-            modified_tx = self.confidential_tx.obfuscate_output_value(&mut modified_tx);
-            
-            for i in 0..modified_tx.outputs.len() {
-                let amount = modified_tx.outputs[i].value;
-                let range_proof = self.confidential_tx.create_range_proof(amount);
-                modified_tx.outputs[i].range_proof = Some(range_proof);
-            }
-            
-            modified_tx = self.obfuscator.strip_metadata(&modified_tx);
-            
-            self.applied_features = PrivacyFeature::All as u8;
         }
         
         // Cache the transaction for future reference
@@ -196,6 +156,7 @@ impl SenderPrivacy {
     pub fn apply_features(&mut self, tx: &Transaction, features: &[PrivacyFeature]) -> Result<Transaction, ObscuraError> {
         let mut modified_tx = tx.clone();
         
+        // Process features one at a time to reduce stack usage
         for feature in features {
             match feature {
                 PrivacyFeature::Obfuscation => {
@@ -212,7 +173,6 @@ impl SenderPrivacy {
                     if modified_tx.metadata.is_empty() {
                         modified_tx.metadata = HashMap::new();
                     }
-                    
                     modified_tx.metadata.insert("salt".to_string(), hex::encode(salt));
                 },
                 PrivacyFeature::StealthAddressing => {
@@ -234,45 +194,23 @@ impl SenderPrivacy {
                         if modified_tx.amount_commitments.is_none() {
                             modified_tx.amount_commitments = Some(Vec::new());
                         }
-                        
-                        let commitments = modified_tx.amount_commitments.as_mut().unwrap();
-                        while commitments.len() <= i {
-                            commitments.push(Vec::new());
-                        }
-                        commitments[i] = commitment.clone();
-                        
-                        // Cache the commitment for later use
-                        self.confidential_tx.commitments.insert(commitment, value);
+                        modified_tx.amount_commitments.as_mut().unwrap().push(commitment);
                     }
                 },
                 PrivacyFeature::RangeProofs => {
                     // Apply range proofs to each output
                     for i in 0..modified_tx.outputs.len() {
-                        let value = modified_tx.outputs[i].value;
-                        let range_proof = self.confidential_tx.create_range_proof(value);
-                        
-                        // Store the range proof in the transaction's range_proofs
-                        if modified_tx.range_proofs.is_none() {
-                            modified_tx.range_proofs = Some(Vec::new());
-                        }
-                        
-                        let proofs = modified_tx.range_proofs.as_mut().unwrap();
-                        while proofs.len() <= i {
-                            proofs.push(Vec::new());
-                        }
-                        proofs[i] = range_proof;
+                        let amount = modified_tx.outputs[i].value;
+                        let range_proof = self.confidential_tx.create_range_proof(amount);
+                        modified_tx.outputs[i].range_proof = Some(range_proof);
                     }
                 },
                 PrivacyFeature::MetadataProtection => {
-                    // Strip sensitive metadata
-                    if !modified_tx.metadata.is_empty() {
-                        for field in METADATA_FIELDS_TO_STRIP.iter() {
-                            modified_tx.metadata.remove(*field);
-                        }
-                    }
+                    // Apply metadata protection
+                    modified_tx = self.obfuscator.strip_metadata(&modified_tx);
                 },
                 PrivacyFeature::GraphProtection => {
-                    // Apply graph protection
+                    // Apply transaction graph protection
                     modified_tx = self.obfuscator.protect_transaction_graph(&modified_tx);
                 },
                 PrivacyFeature::ViewKeyRestrictions => {
@@ -292,6 +230,9 @@ impl SenderPrivacy {
                     return self.apply_features(&modified_tx, &all_features);
                 },
             }
+            
+            // Update applied features
+            self.applied_features |= *feature as u8;
         }
         
         Ok(modified_tx)
@@ -1510,6 +1451,74 @@ impl StealthAddressing {
         
         unique_address
     }
+
+    /// Preserve transaction metadata while applying stealth addressing
+    fn preserve_metadata(&self, tx: &mut Transaction) {
+        // Store original metadata if it exists
+        let original_metadata = tx.metadata.clone();
+        
+        // Clear metadata to prevent information leakage
+        tx.metadata.clear();
+        
+        // Add stealth addressing specific metadata
+        tx.metadata.insert("stealth_version".to_string(), "1.0".to_string());
+        tx.metadata.insert("stealth_timestamp".to_string(), chrono::Utc::now().timestamp().to_string());
+        
+        // Preserve any non-sensitive metadata that should be kept
+        for (key, value) in original_metadata {
+            if !key.starts_with("sensitive_") && !key.starts_with("private_") {
+                tx.metadata.insert(key, value);
+            }
+        }
+    }
+
+    /// Apply stealth addressing to a transaction while preserving metadata
+    pub fn apply_stealth_addressing_to_transaction(&mut self, tx: &mut Transaction, recipient_pubkeys: &[JubjubPoint]) -> Result<(), ObscuraError> {
+        if recipient_pubkeys.is_empty() {
+            return Ok(());
+        }
+
+        // Create new outputs with stealth addresses
+        let mut new_outputs = Vec::with_capacity(tx.outputs.len());
+        
+        // Generate a single ephemeral keypair for all recipients
+        let (ephemeral_secret, ephemeral_public) = crate::crypto::jubjub::generate_secure_ephemeral_key();
+        
+        // Store the ephemeral public key in the transaction
+        let ephemeral_bytes = crate::crypto::jubjub::JubjubPointExt::to_bytes(&ephemeral_public);
+        tx.ephemeral_pubkey = Some(ephemeral_bytes.try_into().unwrap_or([0u8; 32]));
+
+        for (i, output) in tx.outputs.iter().enumerate() {
+            if i < recipient_pubkeys.len() {
+                // Use the Jubjub stealth address creation function
+                let (_, stealth_address) = crate::crypto::jubjub::create_stealth_address_with_private(
+                    &ephemeral_secret,
+                    &recipient_pubkeys[i]
+                );
+                
+                // Convert the stealth address to bytes
+                let one_time_address = crate::crypto::jubjub::JubjubPointExt::to_bytes(&stealth_address);
+
+                // Create new output with stealth address
+                let mut new_output = output.clone();
+                new_output.public_key_script = one_time_address;
+                new_outputs.push(new_output);
+            } else {
+                new_outputs.push(output.clone());
+            }
+        }
+
+        // Update the transaction outputs
+        tx.outputs = new_outputs;
+
+        // Set the stealth addressing flag
+        tx.privacy_flags |= 0x02;
+
+        // Preserve metadata while applying stealth addressing
+        self.preserve_metadata(tx);
+
+        Ok(())
+    }
 }
 
 /// Confidential transactions module
@@ -1626,6 +1635,407 @@ impl ConfidentialTransactions {
     /// Clear the cache of commitments
     pub fn clear_cache(&mut self) {
         self.commitments.clear();
+    }
+}
+
+/// Privacy verification module for validating privacy-enhanced transactions
+pub struct PrivacyVerifier {
+    /// Cache of verified transactions
+    verified_transactions: HashMap<[u8; 32], bool>,
+    /// Privacy settings registry
+    registry: Option<Arc<PrivacySettingsRegistry>>,
+}
+
+impl PrivacyVerifier {
+    /// Create a new PrivacyVerifier
+    pub fn new() -> Self {
+        Self {
+            verified_transactions: HashMap::new(),
+            registry: None,
+        }
+    }
+    
+    /// Create a new PrivacyVerifier with privacy registry
+    pub fn with_registry(registry: Arc<PrivacySettingsRegistry>) -> Self {
+        Self {
+            verified_transactions: HashMap::new(),
+            registry: Some(registry),
+        }
+    }
+    
+    /// Verify a privacy-enhanced transaction
+    pub fn verify_transaction(&mut self, tx: &Transaction) -> Result<bool, ObscuraError> {
+        // Check cache first
+        let tx_hash = tx.hash();
+        if let Some(&verified) = self.verified_transactions.get(&tx_hash) {
+            return Ok(verified);
+        }
+        
+        // Verify each privacy feature that is enabled
+        let mut all_verified = true;
+        
+        // Verify transaction obfuscation if enabled
+        if tx.privacy_flags & 0x01 != 0 {
+            if !self.verify_transaction_obfuscation(tx)? {
+                error!("Transaction obfuscation verification failed");
+                all_verified = false;
+            }
+        }
+        
+        // Verify stealth addressing if enabled
+        if tx.privacy_flags & 0x02 != 0 {
+            if !self.verify_stealth_addressing(tx)? {
+                error!("Stealth addressing verification failed");
+                all_verified = false;
+            }
+        }
+        
+        // Verify confidential transactions if enabled
+        if tx.privacy_flags & 0x04 != 0 {
+            if !self.verify_confidential_transactions(tx)? {
+                error!("Confidential transactions verification failed");
+                all_verified = false;
+            }
+        }
+        
+        // Verify range proofs if enabled
+        if tx.privacy_flags & 0x08 != 0 {
+            if !self.verify_range_proofs(tx)? {
+                error!("Range proofs verification failed");
+                all_verified = false;
+            }
+        }
+        
+        // Cache the result
+        self.verified_transactions.insert(tx_hash, all_verified);
+        
+        Ok(all_verified)
+    }
+    
+    /// Verify transaction obfuscation
+    fn verify_transaction_obfuscation(&self, tx: &Transaction) -> Result<bool, ObscuraError> {
+        // Verify obfuscated ID exists and is valid
+        if let Some(obfuscated_id) = &tx.obfuscated_id {
+            // Verify the obfuscated ID is different from the original hash
+            let original_hash = tx.hash();
+            if obfuscated_id == &original_hash {
+                error!("Obfuscated ID matches original hash");
+                return Ok(false);
+            }
+            
+            // Verify the obfuscated ID is properly formatted
+            if obfuscated_id.len() != 32 {
+                error!("Invalid obfuscated ID length");
+                return Ok(false);
+            }
+        } else {
+            error!("Missing obfuscated ID");
+            return Ok(false);
+        }
+        
+        Ok(true)
+    }
+    
+    /// Verify stealth addressing
+    fn verify_stealth_addressing(&self, tx: &Transaction) -> Result<bool, ObscuraError> {
+        // Verify ephemeral pubkey exists
+        if let Some(ephemeral_pubkey) = &tx.ephemeral_pubkey {
+            // Verify ephemeral pubkey is properly formatted
+            if ephemeral_pubkey.len() != 32 {
+                error!("Invalid ephemeral pubkey length");
+                return Ok(false);
+            }
+            
+            // Verify each output has a valid stealth address
+            for (i, output) in tx.outputs.iter().enumerate() {
+                if output.public_key_script.len() != 32 {
+                    error!("Invalid stealth address length for output {}", i);
+                    return Ok(false);
+                }
+                
+                // Verify the stealth address is properly formatted
+                if let None = JubjubPoint::from_bytes(&output.public_key_script) {
+                    error!("Invalid stealth address format for output {}", i);
+                    return Ok(false);
+                }
+            }
+        } else {
+            error!("Missing ephemeral pubkey");
+            return Ok(false);
+        }
+        
+        Ok(true)
+    }
+    
+    /// Verify confidential transactions
+    fn verify_confidential_transactions(&self, tx: &Transaction) -> Result<bool, ObscuraError> {
+        // Verify amount commitments exist
+        if let Some(commitments) = &tx.amount_commitments {
+            // Verify we have a commitment for each output
+            if commitments.len() != tx.outputs.len() {
+                error!("Number of commitments does not match number of outputs");
+                return Ok(false);
+            }
+            
+            // Verify each commitment is valid
+            for (i, commitment) in commitments.iter().enumerate() {
+                if commitment.is_empty() {
+                    error!("Empty commitment for output {}", i);
+                    return Ok(false);
+                }
+                
+                // Verify commitment format
+                if commitment.len() != 32 {
+                    error!("Invalid commitment length for output {}", i);
+                    return Ok(false);
+                }
+            }
+        } else {
+            error!("Missing amount commitments");
+            return Ok(false);
+        }
+        
+        Ok(true)
+    }
+    
+    /// Verify range proofs
+    fn verify_range_proofs(&self, tx: &Transaction) -> Result<bool, ObscuraError> {
+        // Verify range proofs exist
+        if let Some(proofs) = &tx.range_proofs {
+            // Verify we have a proof for each output
+            if proofs.len() != tx.outputs.len() {
+                error!("Number of range proofs does not match number of outputs");
+                return Ok(false);
+            }
+            
+            // Verify each proof is valid
+            for (i, proof) in proofs.iter().enumerate() {
+                if proof.is_empty() {
+                    error!("Empty range proof for output {}", i);
+                    return Ok(false);
+                }
+                
+                // Verify proof format
+                if proof.len() != 64 {
+                    error!("Invalid range proof length for output {}", i);
+                    return Ok(false);
+                }
+            }
+        } else {
+            error!("Missing range proofs");
+            return Ok(false);
+        }
+        
+        Ok(true)
+    }
+    
+    /// Clear the verification cache
+    pub fn clear_cache(&mut self) {
+        self.verified_transactions.clear();
+    }
+}
+
+/// Transaction property preservation module
+pub struct TransactionPropertyPreserver {
+    /// Cache of preserved properties
+    property_cache: HashMap<[u8; 32], HashMap<String, Vec<u8>>>,
+    /// Required properties that must be preserved
+    required_properties: HashSet<String>,
+}
+
+impl TransactionPropertyPreserver {
+    /// Create a new TransactionPropertyPreserver
+    pub fn new() -> Self {
+        let mut required_properties = HashSet::new();
+        required_properties.insert("amount".to_string());
+        required_properties.insert("recipient".to_string());
+        required_properties.insert("timestamp".to_string());
+        required_properties.insert("sequence".to_string());
+        
+        Self {
+            property_cache: HashMap::new(),
+            required_properties,
+        }
+    }
+    
+    /// Preserve transaction properties during privacy operations
+    pub fn preserve_properties(&mut self, tx: &mut Transaction) -> Result<(), ObscuraError> {
+        let tx_hash = tx.hash();
+        
+        // Store original properties
+        let mut properties = HashMap::new();
+        
+        // Preserve amounts
+        for (i, output) in tx.outputs.iter().enumerate() {
+            let amount_key = format!("amount_{}", i);
+            properties.insert(amount_key, output.value.to_le_bytes().to_vec());
+        }
+        
+        // Preserve recipients
+        for (i, output) in tx.outputs.iter().enumerate() {
+            let recipient_key = format!("recipient_{}", i);
+            properties.insert(recipient_key, output.public_key_script.clone());
+        }
+        
+        // Preserve timestamps and sequence numbers
+        if let Some(timestamp) = tx.metadata.get("timestamp") {
+            properties.insert("timestamp".to_string(), timestamp.as_bytes().to_vec());
+        }
+        
+        for (i, input) in tx.inputs.iter().enumerate() {
+            let sequence_key = format!("sequence_{}", i);
+            properties.insert(sequence_key, input.sequence.to_le_bytes().to_vec());
+        }
+        
+        // Store properties in cache
+        self.property_cache.insert(tx_hash, properties);
+        
+        Ok(())
+    }
+    
+    /// Verify that properties have been preserved
+    pub fn verify_properties(&self, tx: &Transaction) -> Result<bool, ObscuraError> {
+        let tx_hash = tx.hash();
+        
+        // Get stored properties
+        let properties = match self.property_cache.get(&tx_hash) {
+            Some(props) => props,
+            None => {
+                error!("No stored properties found for transaction");
+                return Ok(false);
+            }
+        };
+        
+        // Verify amounts
+        for (i, output) in tx.outputs.iter().enumerate() {
+            let amount_key = format!("amount_{}", i);
+            if let Some(stored_amount) = properties.get(&amount_key) {
+                if stored_amount.len() != 8 {
+                    error!("Invalid amount length for output {}", i);
+                    return Ok(false);
+                }
+                let mut amount_bytes = [0u8; 8];
+                amount_bytes.copy_from_slice(stored_amount);
+                let stored_value = u64::from_le_bytes(amount_bytes);
+                if stored_value != output.value {
+                    error!("Amount mismatch for output {}", i);
+                    return Ok(false);
+                }
+            }
+        }
+        
+        // Verify recipients
+        for (i, output) in tx.outputs.iter().enumerate() {
+            let recipient_key = format!("recipient_{}", i);
+            if let Some(stored_recipient) = properties.get(&recipient_key) {
+                if stored_recipient != &output.public_key_script {
+                    error!("Recipient mismatch for output {}", i);
+                    return Ok(false);
+                }
+            }
+        }
+        
+        // Verify timestamps
+        if let Some(stored_timestamp) = properties.get("timestamp") {
+            if let Some(current_timestamp) = tx.metadata.get("timestamp") {
+                if stored_timestamp != current_timestamp.as_bytes() {
+                    error!("Timestamp mismatch");
+                    return Ok(false);
+                }
+            }
+        }
+        
+        // Verify sequence numbers
+        for (i, input) in tx.inputs.iter().enumerate() {
+            let sequence_key = format!("sequence_{}", i);
+            if let Some(stored_sequence) = properties.get(&sequence_key) {
+                if stored_sequence.len() != 4 {
+                    error!("Invalid sequence length for input {}", i);
+                    return Ok(false);
+                }
+                let mut sequence_bytes = [0u8; 4];
+                sequence_bytes.copy_from_slice(stored_sequence);
+                let stored_value = u32::from_le_bytes(sequence_bytes);
+                if stored_value != input.sequence {
+                    error!("Sequence mismatch for input {}", i);
+                    return Ok(false);
+                }
+            }
+        }
+        
+        Ok(true)
+    }
+    
+    /// Restore original properties to a transaction
+    pub fn restore_properties(&self, tx: &mut Transaction) -> Result<(), ObscuraError> {
+        let tx_hash = tx.hash();
+        
+        // Get stored properties
+        let properties = match self.property_cache.get(&tx_hash) {
+            Some(props) => props,
+            None => {
+                error!("No stored properties found for transaction");
+                return Err(ObscuraError::CryptoError("No stored properties found".to_string()));
+            }
+        };
+        
+        // Restore amounts
+        for (i, output) in tx.outputs.iter_mut().enumerate() {
+            let amount_key = format!("amount_{}", i);
+            if let Some(stored_amount) = properties.get(&amount_key) {
+                if stored_amount.len() != 8 {
+                    return Err(ObscuraError::CryptoError(format!("Invalid amount length for output {}", i)));
+                }
+                let mut amount_bytes = [0u8; 8];
+                amount_bytes.copy_from_slice(stored_amount);
+                output.value = u64::from_le_bytes(amount_bytes);
+            }
+        }
+        
+        // Restore recipients
+        for (i, output) in tx.outputs.iter_mut().enumerate() {
+            let recipient_key = format!("recipient_{}", i);
+            if let Some(stored_recipient) = properties.get(&recipient_key) {
+                output.public_key_script = stored_recipient.clone();
+            }
+        }
+        
+        // Restore timestamps
+        if let Some(stored_timestamp) = properties.get("timestamp") {
+            if let Ok(timestamp_str) = String::from_utf8(stored_timestamp.clone()) {
+                tx.metadata.insert("timestamp".to_string(), timestamp_str);
+            }
+        }
+        
+        // Restore sequence numbers
+        for (i, input) in tx.inputs.iter_mut().enumerate() {
+            let sequence_key = format!("sequence_{}", i);
+            if let Some(stored_sequence) = properties.get(&sequence_key) {
+                if stored_sequence.len() != 4 {
+                    return Err(ObscuraError::CryptoError(format!("Invalid sequence length for input {}", i)));
+                }
+                let mut sequence_bytes = [0u8; 4];
+                sequence_bytes.copy_from_slice(stored_sequence);
+                input.sequence = u32::from_le_bytes(sequence_bytes);
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Clear the property cache
+    pub fn clear_cache(&mut self) {
+        self.property_cache.clear();
+    }
+    
+    /// Add a required property to preserve
+    pub fn add_required_property(&mut self, property: &str) {
+        self.required_properties.insert(property.to_string());
+    }
+    
+    /// Remove a required property
+    pub fn remove_required_property(&mut self, property: &str) {
+        self.required_properties.remove(property);
     }
 }
 

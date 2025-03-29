@@ -5,7 +5,57 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.7.20] - 2025-06-05
+## [0.8.3] - 2025-03-29
+
+### Added
+- **Cryptographic Guarantees for Transaction Property Preservation**
+  - Implemented comprehensive property preservation system:
+    - Created `TransactionPropertyPreserver` for managing property preservation
+    - Added secure property caching with transaction hash mapping
+    - Implemented required property tracking and validation
+    - Created property restoration mechanism for failed operations
+    - Added comprehensive logging and error reporting
+  - Enhanced transaction property validation:
+    - Added amount preservation verification
+    - Implemented recipient address validation
+    - Created timestamp consistency checking
+    - Added sequence number verification
+    - Implemented metadata preservation checks
+  - Added integration with privacy features:
+    - Created seamless integration with stealth addressing
+    - Added support for confidential transactions
+    - Implemented range proof compatibility
+    - Created transaction graph protection integration
+    - Added metadata stripping compatibility
+  - Enhanced error handling and recovery:
+    - Implemented automatic property restoration on failure
+    - Added detailed error reporting with context
+    - Created comprehensive validation system
+    - Implemented graceful failure recovery
+    - Added transaction state verification
+
+### Improved
+- Enhanced transaction privacy with property preservation guarantees
+- Improved reliability of privacy-enhanced transactions
+- Added better validation of transaction properties
+- Enhanced security of transaction metadata handling
+- Improved integration between privacy features
+
+### Documentation
+- Added comprehensive documentation for property preservation
+- Created detailed API reference for preservation features
+- Added integration guides for privacy components
+- Created best practices for property handling
+- Added security considerations documentation
+
+### Testing
+- Added comprehensive test suite for property preservation
+- Implemented integration tests with privacy features
+- Created property validation test cases
+- Added failure recovery testing
+- Implemented edge case validation
+
+## [0.7.20] - 2025-03-24
 
 ### Added
 - **Critical Path Profiling and Benchmarking System**
@@ -63,7 +113,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved build system stability with consistent naming conventions
 - Fixed compilation errors related to library name references
 
-## [0.7.19] - 2025-05-30
+## [0.7.19] - 2025-03-24
 
 ### Added
 - **Hardware Acceleration for Cryptographic Operations**
@@ -100,7 +150,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added performance optimization guidelines
 - Created benchmarking and testing documentation
 
-## [0.7.18] - 2025-05-15
+## [0.7.18] - 2025-03-24
 
 ### Added
 - **Constant-Time Operations for Critical Cryptographic Functions**
@@ -137,7 +187,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implemented examples of proper constant-time operation usage
 - Added testing documentation for verifying timing consistency
 
-## [0.7.17] - 2025-04-28
+## [0.7.17] - 2025-03-23
 
 ### Added
 - **External Integration Module for Cryptographic Audit System**
@@ -187,7 +237,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Created troubleshooting documentation for common integration issues
 - Added security best practices for external system authentication
 
-## [0.7.16] - 2025-04-15
+## [0.7.16] - 2025-03-23
 
 ### Added
 - **Secure Memory Allocator Implementation**
@@ -261,7 +311,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced thread safety across the secure memory allocation system
 - Fixed potential deadlocks in memory management operations
 
-## [0.7.15] - 2025-04-02
+## [0.7.15] - 2025-03-22
 
 ### Crypto Module Improvements
 

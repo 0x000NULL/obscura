@@ -1,6 +1,9 @@
 use crate::blockchain::{Transaction, TransactionInput, TransactionOutput, OutPoint};
 use crate::crypto::privacy::{TransactionObfuscator, StealthAddressing, ConfidentialTransactions};
 use crate::crypto::jubjub::{JubjubKeypair, JubjubPoint, generate_keypair};
+use crate::crypto::privacy::PrivacyVerifier;
+use crate::crypto::privacy::TransactionPropertyPreserver;
+use crate::crypto::privacy::SenderPrivacy;
 
 // Helper function to create a basic transaction for testing
 fn create_test_transaction() -> Transaction {
@@ -284,6 +287,233 @@ fn test_transaction_integration() {
     // Verify all privacy features have been applied
     assert_ne!(tx, original_tx);
     assert!(tx.privacy_flags != 0);
+}
+
+#[test]
+fn test_stealth_addressing_metadata_preservation() {
+    let mut tx = create_test_transaction();
+    let mut stealth = StealthAddressing::new();
+    
+    // Add some test metadata
+    tx.metadata.insert("test_key".to_string(), "test_value".to_string());
+    tx.metadata.insert("sensitive_key".to_string(), "sensitive_value".to_string());
+    tx.metadata.insert("private_key".to_string(), "private_value".to_string());
+    
+    // Generate a recipient keypair
+    let recipient_keypair = generate_keypair();
+    let recipient_pubkey = recipient_keypair.public;
+    
+    // Apply stealth addressing
+    tx.apply_stealth_addressing(&mut stealth, &[recipient_pubkey]).unwrap();
+    
+    // Verify that sensitive metadata was removed
+    assert!(!tx.metadata.contains_key("sensitive_key"));
+    assert!(!tx.metadata.contains_key("private_key"));
+    
+    // Verify that non-sensitive metadata was preserved
+    assert_eq!(tx.metadata.get("test_key"), Some(&"test_value".to_string()));
+    
+    // Verify that stealth-specific metadata was added
+    assert!(tx.metadata.contains_key("stealth_version"));
+    assert!(tx.metadata.contains_key("stealth_timestamp"));
+    
+    // Verify that the stealth addressing flag was set
+    assert_eq!(tx.privacy_flags & 0x02, 0x02);
+}
+
+#[test]
+fn test_privacy_verifier_creation() {
+    let verifier = PrivacyVerifier::new();
+    assert!(verifier.verified_transactions.is_empty());
+}
+
+#[test]
+fn test_transaction_verification() {
+    let mut verifier = PrivacyVerifier::new();
+    let mut tx = create_test_transaction();
+    
+    // Test verification of transaction with no privacy features
+    assert!(verifier.verify_transaction(&tx).unwrap());
+    
+    // Add transaction obfuscation
+    tx.privacy_flags |= 0x01;
+    tx.obfuscated_id = Some([1u8; 32]);
+    assert!(verifier.verify_transaction(&tx).unwrap());
+    
+    // Add stealth addressing
+    tx.privacy_flags |= 0x02;
+    tx.ephemeral_pubkey = Some([2u8; 32]);
+    tx.outputs[0].public_key_script = [3u8; 32].to_vec();
+    assert!(verifier.verify_transaction(&tx).unwrap());
+    
+    // Add confidential transactions
+    tx.privacy_flags |= 0x04;
+    tx.amount_commitments = Some(vec![[4u8; 32].to_vec()]);
+    assert!(verifier.verify_transaction(&tx).unwrap());
+    
+    // Add range proofs
+    tx.privacy_flags |= 0x08;
+    tx.range_proofs = Some(vec![[5u8; 64].to_vec()]);
+    assert!(verifier.verify_transaction(&tx).unwrap());
+}
+
+#[test]
+fn test_verification_failures() {
+    let mut verifier = PrivacyVerifier::new();
+    let mut tx = create_test_transaction();
+    
+    // Test missing obfuscated ID
+    tx.privacy_flags |= 0x01;
+    assert!(!verifier.verify_transaction(&tx).unwrap());
+    
+    // Test invalid obfuscated ID
+    tx.obfuscated_id = Some([1u8; 16]); // Wrong length
+    assert!(!verifier.verify_transaction(&tx).unwrap());
+    
+    // Test missing ephemeral pubkey
+    tx.privacy_flags |= 0x02;
+    tx.obfuscated_id = Some([1u8; 32]);
+    assert!(!verifier.verify_transaction(&tx).unwrap());
+    
+    // Test invalid stealth address
+    tx.ephemeral_pubkey = Some([2u8; 32]);
+    tx.outputs[0].public_key_script = [3u8; 16].to_vec(); // Wrong length
+    assert!(!verifier.verify_transaction(&tx).unwrap());
+    
+    // Test missing commitments
+    tx.privacy_flags |= 0x04;
+    tx.outputs[0].public_key_script = [3u8; 32].to_vec();
+    assert!(!verifier.verify_transaction(&tx).unwrap());
+    
+    // Test invalid commitment
+    tx.amount_commitments = Some(vec![[4u8; 16].to_vec()]); // Wrong length
+    assert!(!verifier.verify_transaction(&tx).unwrap());
+    
+    // Test missing range proofs
+    tx.privacy_flags |= 0x08;
+    tx.amount_commitments = Some(vec![[4u8; 32].to_vec()]);
+    assert!(!verifier.verify_transaction(&tx).unwrap());
+    
+    // Test invalid range proof
+    tx.range_proofs = Some(vec![[5u8; 32].to_vec()]); // Wrong length
+    assert!(!verifier.verify_transaction(&tx).unwrap());
+}
+
+#[test]
+fn test_verification_cache() {
+    let mut verifier = PrivacyVerifier::new();
+    let mut tx = create_test_transaction();
+    
+    // First verification should compute the result
+    let first_result = verifier.verify_transaction(&tx).unwrap();
+    
+    // Second verification should use cached result
+    let second_result = verifier.verify_transaction(&tx).unwrap();
+    assert_eq!(first_result, second_result);
+    
+    // Clear cache and verify again
+    verifier.clear_cache();
+    let third_result = verifier.verify_transaction(&tx).unwrap();
+    assert_eq!(first_result, third_result);
+}
+
+#[test]
+fn test_property_preservation() {
+    let mut preserver = TransactionPropertyPreserver::new();
+    let mut tx = create_test_transaction();
+    
+    // Add some test metadata
+    tx.metadata.insert("timestamp".to_string(), "1234567890".to_string());
+    
+    // Preserve properties
+    preserver.preserve_properties(&mut tx).unwrap();
+    
+    // Modify transaction properties
+    tx.outputs[0].value = 200;
+    tx.outputs[0].public_key_script = vec![5, 6, 7, 8];
+    tx.inputs[0].sequence = 1;
+    tx.metadata.insert("timestamp".to_string(), "9876543210".to_string());
+    
+    // Verify properties
+    assert!(!preserver.verify_properties(&tx).unwrap());
+    
+    // Restore properties
+    preserver.restore_properties(&mut tx).unwrap();
+    
+    // Verify restored properties
+    assert_eq!(tx.outputs[0].value, 100);
+    assert_eq!(tx.outputs[0].public_key_script, vec![1, 2, 3, 4]);
+    assert_eq!(tx.inputs[0].sequence, 0);
+    assert_eq!(tx.metadata.get("timestamp"), Some(&"1234567890".to_string()));
+}
+
+#[test]
+fn test_property_preservation_with_privacy_features() {
+    let mut sender_privacy = SenderPrivacy::new();
+    let mut tx = create_test_transaction();
+    
+    // Add test metadata
+    tx.metadata.insert("timestamp".to_string(), "1234567890".to_string());
+    
+    // Apply privacy features
+    let modified_tx = sender_privacy.apply_all_features(&tx).unwrap();
+    
+    // Verify that properties are preserved
+    assert!(sender_privacy.property_preserver.verify_properties(&modified_tx).unwrap());
+    
+    // Verify that privacy features were applied
+    assert!(modified_tx.privacy_flags != 0);
+    assert!(modified_tx.obfuscated_id.is_some());
+    assert!(modified_tx.ephemeral_pubkey.is_some());
+    assert!(modified_tx.amount_commitments.is_some());
+    assert!(modified_tx.range_proofs.is_some());
+}
+
+#[test]
+fn test_property_preservation_failure() {
+    let mut preserver = TransactionPropertyPreserver::new();
+    let mut tx = create_test_transaction();
+    
+    // Try to verify properties before preserving them
+    assert!(!preserver.verify_properties(&tx).unwrap());
+    
+    // Try to restore properties before preserving them
+    assert!(preserver.restore_properties(&mut tx).is_err());
+}
+
+#[test]
+fn test_property_preservation_cache() {
+    let mut preserver = TransactionPropertyPreserver::new();
+    let mut tx = create_test_transaction();
+    
+    // Preserve properties
+    preserver.preserve_properties(&mut tx).unwrap();
+    
+    // Clear cache
+    preserver.clear_cache();
+    
+    // Try to verify properties after clearing cache
+    assert!(!preserver.verify_properties(&tx).unwrap());
+    
+    // Try to restore properties after clearing cache
+    assert!(preserver.restore_properties(&mut tx).is_err());
+}
+
+#[test]
+fn test_required_properties() {
+    let mut preserver = TransactionPropertyPreserver::new();
+    
+    // Add a custom required property
+    preserver.add_required_property("custom_property");
+    
+    // Verify it was added
+    assert!(preserver.required_properties.contains("custom_property"));
+    
+    // Remove the property
+    preserver.remove_required_property("custom_property");
+    
+    // Verify it was removed
+    assert!(!preserver.required_properties.contains("custom_property"));
 }
 
 // Helper extension methods for Transaction to make tests easier
