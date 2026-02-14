@@ -412,7 +412,7 @@ impl FingerprintingProtection {
         
         // Set TTL
         #[cfg(target_family = "unix")]
-        socket.set_ttl(params.ttl)?;
+        socket.set_ttl(params.ttl as u32)?;
         
         // Windows specific options
         #[cfg(target_family = "windows")]

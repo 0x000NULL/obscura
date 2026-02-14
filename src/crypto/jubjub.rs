@@ -173,7 +173,7 @@ impl JubjubPointExt for EdwardsProjective {
     }
 
     fn generator() -> Self {
-        Self::generator()
+        <EdwardsProjective as ark_ec::PrimeGroup>::generator()
     }
 
     fn zero() -> Self {

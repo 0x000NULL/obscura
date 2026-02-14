@@ -355,6 +355,23 @@ impl UnixMemoryProtection {
         Ok(())
     }
     
+    /// Free memory allocated with guard pages
+    pub fn free_guarded_memory(base_ptr: *mut u8, layout: Layout) -> Result<(), MemoryProtectionError> {
+        if base_ptr.is_null() {
+            return Err(MemoryProtectionError::AllocationError(
+                "Cannot free null pointer".to_string()));
+        }
+
+        use libc::{mprotect, PROT_READ, PROT_WRITE};
+        unsafe {
+            // Reset guard page protection before dealloc
+            mprotect(base_ptr as *mut libc::c_void, layout.size(), PROT_READ | PROT_WRITE);
+            std::alloc::dealloc(base_ptr, layout);
+        }
+
+        Ok(())
+    }
+
     /// Check if large pages are supported and available
     pub fn are_large_pages_available() -> bool {
         #[cfg(target_os = "linux")]
