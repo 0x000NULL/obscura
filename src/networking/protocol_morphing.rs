@@ -1269,7 +1269,7 @@ impl ProtocolMorphType {
             
             // For tests, just cycle between the first two for predictability and speed
             let mut bytes = [0u8; 8];
-            rng.try_fill_bytes(&mut bytes);
+            rng.try_fill_bytes(&mut bytes).expect("RNG entropy failure: try_fill_bytes returned Err");
             let value = u64::from_le_bytes(bytes);
             return if value % 2 == 0 {
                 ProtocolMorphType::Http
@@ -1282,7 +1282,7 @@ impl ProtocolMorphType {
         {
             let mut rng = rand::thread_rng();
             let mut bytes = [0u8; 8];
-            rng.try_fill_bytes(&mut bytes);
+            rng.try_fill_bytes(&mut bytes).expect("RNG entropy failure: try_fill_bytes returned Err");
             let value = u64::from_le_bytes(bytes) as usize;
             protocols[value % protocols.len()]
         }

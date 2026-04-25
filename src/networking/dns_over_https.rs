@@ -89,7 +89,7 @@ impl DoHProvider {
         
         let mut rng = rand::thread_rng();
         let mut bytes = [0u8; 8];
-        rng.try_fill_bytes(&mut bytes);
+        rng.try_fill_bytes(&mut bytes).expect("RNG entropy failure: try_fill_bytes returned Err");
         let value = u64::from_le_bytes(bytes) as usize;
         providers[value % providers.len()]
     }

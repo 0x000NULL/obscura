@@ -178,7 +178,7 @@ impl MessagePaddingService {
     fn generate_padding(&self, size: usize) -> Vec<u8> {
         let mut rng = rand::thread_rng();
         let mut padding = vec![0u8; size];
-        rng.try_fill_bytes(&mut padding);
+        rng.try_fill_bytes(&mut padding).expect("RNG entropy failure: try_fill_bytes returned Err");
         padding
     }
     
@@ -195,7 +195,7 @@ impl MessagePaddingService {
                 // Uniform random padding between min and max
                 let range = self.config.message_max_padding_bytes - self.config.message_min_padding_bytes + 1;
                 let mut bytes = [0u8; 8];
-                rng.try_fill_bytes(&mut bytes);
+                rng.try_fill_bytes(&mut bytes).expect("RNG entropy failure: try_fill_bytes returned Err");
                 let value = u64::from_le_bytes(bytes) as usize;
                 self.config.message_min_padding_bytes + (value % range)
             }
@@ -207,7 +207,7 @@ impl MessagePaddingService {
                 
                 // Generate random bytes for normal distribution
                 let mut bytes = [0u8; 8];
-                rng.try_fill_bytes(&mut bytes);
+                rng.try_fill_bytes(&mut bytes).expect("RNG entropy failure: try_fill_bytes returned Err");
                 let u = u64::from_le_bytes(bytes) as f64 / u64::MAX as f64;
                 let v = u64::from_le_bytes(bytes) as f64 / u64::MAX as f64;
                 let z = (-2.0 * u.ln()).sqrt() * (2.0 * std::f64::consts::PI * v).cos();
@@ -497,7 +497,7 @@ impl MessagePaddingService {
         if self.config.message_padding_interval_max_ms > 0 {
             let mut rng = rand::thread_rng();
             let mut bytes = [0u8; 8];
-            rng.try_fill_bytes(&mut bytes);
+            rng.try_fill_bytes(&mut bytes).expect("RNG entropy failure: try_fill_bytes returned Err");
             let value = u64::from_le_bytes(bytes) as u64;
             let range = self.config.message_padding_interval_max_ms - self.config.message_padding_interval_min_ms + 1;
             let jitter_ms = self.config.message_padding_interval_min_ms + (value % range);
@@ -577,7 +577,7 @@ impl MessagePaddingService {
                 
                 // Sleep for a random interval
                 let mut bytes = [0u8; 8];
-                rng.try_fill_bytes(&mut bytes);
+                rng.try_fill_bytes(&mut bytes).expect("RNG entropy failure: try_fill_bytes returned Err");
                 let value = u64::from_le_bytes(bytes) as u64;
                 let range = max_interval - min_interval + 1;
                 let interval_ms = min_interval + (value % range);

@@ -466,7 +466,7 @@ pub fn constant_time_encrypt_decrypt(
 pub fn constant_time_random_scalar() -> JubjubScalar {
     let mut rng = rand::thread_rng();
     let mut random_bytes = [0u8; 32];
-    rng.try_fill_bytes(&mut random_bytes);
+    rng.try_fill_bytes(&mut random_bytes).expect("RNG entropy failure: try_fill_bytes returned Err");
     JubjubScalar::from_le_bytes_mod_order(&random_bytes)
 }
 

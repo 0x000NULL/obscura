@@ -246,7 +246,7 @@ impl PrivacyRouter for TimingObfuscator {
         
         // Generate a new batch ID
         let mut id_bytes = [0u8; 8];
-        rng.try_fill_bytes(&mut id_bytes);
+        rng.try_fill_bytes(&mut id_bytes).expect("RNG entropy failure: try_fill_bytes returned Err");
         let batch_id = u64::from_le_bytes(id_bytes);
         
         // Create a new batch

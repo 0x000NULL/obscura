@@ -359,21 +359,21 @@ impl HardwareAccelerator {
     pub fn generate_random_seed() -> [u8; 32] {
         let mut seed = [0u8; 32];
         let mut rng = rand::thread_rng();
-        rng.try_fill_bytes(&mut seed);
+        rng.try_fill_bytes(&mut seed).expect("RNG entropy failure: try_fill_bytes returned Err");
         seed
     }
 
     pub fn generate_random_nonce() -> [u8; 12] {
         let mut nonce = [0u8; 12];
         let mut rng = rand::thread_rng();
-        rng.try_fill_bytes(&mut nonce);
+        rng.try_fill_bytes(&mut nonce).expect("RNG entropy failure: try_fill_bytes returned Err");
         nonce
     }
 
     pub fn generate_random_delay() -> Duration {
         let mut rng = rand::thread_rng();
         let mut bytes = [0u8; 8];
-        rng.try_fill_bytes(&mut bytes);
+        rng.try_fill_bytes(&mut bytes).expect("RNG entropy failure: try_fill_bytes returned Err");
         let value = u64::from_le_bytes(bytes);
         let range = 100u64; // 0-100ms
         Duration::from_millis(value % range)
@@ -382,7 +382,7 @@ impl HardwareAccelerator {
     pub fn generate_random_batch_size(&self) -> usize {
         let mut rng = rand::thread_rng();
         let mut bytes = [0u8; 8];
-        rng.try_fill_bytes(&mut bytes);
+        rng.try_fill_bytes(&mut bytes).expect("RNG entropy failure: try_fill_bytes returned Err");
         let value = u64::from_le_bytes(bytes) as usize;
         self.config.min_batch_size + (value % (self.config.max_batch_size - self.config.min_batch_size + 1))
     }
