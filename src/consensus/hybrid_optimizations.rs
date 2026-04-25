@@ -236,13 +236,21 @@ impl HybridStateManager {
                     if tx.inputs.is_empty() {
                         return true;
                     }
-                    match tx.verify_range_proofs() {
+                    let range_proofs_valid = match tx.verify_range_proofs() {
                         Ok(valid) => valid,
                         Err(e) => {
                             eprintln!("Range proof verification failed: {}", e);
                             false
                         }
-                    }
+                    };
+                    let confidential_balance_valid = match tx.verify_confidential_balance() {
+                        Ok(valid) => valid,
+                        Err(e) => {
+                            eprintln!("Confidential balance verification failed: {}", e);
+                            false
+                        }
+                    };
+                    range_proofs_valid && confidential_balance_valid
                 })
             })
             .collect();
@@ -436,13 +444,23 @@ impl ValidationManager {
         // Validate that input value >= output value would require UTXO access
         // We'll assume this is checked elsewhere
 
-        match tx.verify_range_proofs() {
+        let range_proofs_valid = match tx.verify_range_proofs() {
             Ok(valid) => valid,
             Err(e) => {
                 eprintln!("Range proof verification failed: {}", e);
                 false
             }
-        }
+        };
+
+        let confidential_balance_valid = match tx.verify_confidential_balance() {
+            Ok(valid) => valid,
+            Err(e) => {
+                eprintln!("Confidential balance verification failed: {}", e);
+                false
+            }
+        };
+
+        range_proofs_valid && confidential_balance_valid
     }
 
     /// Process transactions in parallel for mining a new block
@@ -685,6 +703,31 @@ mod tests {
         // Confidential transactions flag set, but range_proofs is None -> verify_range_proofs returns Err.
         tx.privacy_flags |= 0x04;
         tx.range_proofs = None;
+
+        let block = Block {
+            header: BlockHeader::default(),
+            transactions: vec![tx],
+        };
+
+        let manager = HybridStateManager::new(create_mock_staking_contract());
+        let result = manager.validate_block_parallel(&block, &[]);
+        assert_eq!(result, Ok(false));
+    }
+
+    #[test]
+    fn validate_block_parallel_rejects_tx_with_invalid_confidential_balance() {
+        let mut tx = Transaction::default();
+        tx.inputs.push(make_input(b"confidential_balance_invalid"));
+        tx.outputs.push(TransactionOutput {
+            value: 100,
+            public_key_script: vec![1, 2, 3],
+            commitment: None,
+            range_proof: None,
+        });
+        // Confidential transactions flag set, but amount_commitments is None ->
+        // verify_confidential_balance returns Err("Amount commitments are missing").
+        tx.privacy_flags |= 0x04;
+        tx.amount_commitments = None;
 
         let block = Block {
             header: BlockHeader::default(),
