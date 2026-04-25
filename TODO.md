@@ -127,7 +127,7 @@
 
 ### 2.5 Peer-validate path
 
-- [ ] Add integration test `tests/e2e/tx_peer_validate.rs` covering broadcast → peer accepts
+- [x] Add integration test `tests/e2e/tx_peer_validate.rs` covering broadcast → peer accepts
   - [ ] Two `Node` instances; node A broadcasts a signed tx; node B's mempool receives it after a tokio yield loop
   - [ ] **Verify:** `cargo test --test tx_peer_validate peer_b_receives_tx`
 

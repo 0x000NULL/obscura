@@ -207,3 +207,7 @@ path = "tests/e2e/tx_mempool.rs"
 [[test]]
 name = "tx_broadcast"
 path = "tests/e2e/tx_broadcast.rs"
+
+[[test]]
+name = "tx_peer_validate"
+path = "tests/e2e/tx_peer_validate.rs"
