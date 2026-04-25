@@ -935,3 +935,42 @@ impl CircuitManager {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use std::net::SocketAddr;
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    use crate::networking::privacy::circuit_router::{CircuitPurpose, CircuitRouter};
+    use crate::networking::privacy_config_integration::PrivacySettingsRegistry;
+
+    #[test]
+    fn cleanup_drops_expired() {
+        let registry = Arc::new(PrivacySettingsRegistry::new());
+        let router = CircuitRouter::new(registry);
+
+        let peers: Vec<SocketAddr> = (0..5)
+            .map(|i| format!("127.0.0.1:800{}", i).parse().unwrap())
+            .collect();
+        router.update_available_peers(peers);
+
+        router
+            .create_circuit(CircuitPurpose::General)
+            .expect("circuit creation should succeed");
+
+        assert_eq!(router.cleanup_expired(Duration::ZERO), 1);
+
+        let registry2 = Arc::new(PrivacySettingsRegistry::new());
+        let router2 = CircuitRouter::new(registry2);
+        let peers2: Vec<SocketAddr> = (0..5)
+            .map(|i| format!("127.0.0.1:800{}", i).parse().unwrap())
+            .collect();
+        router2.update_available_peers(peers2);
+        router2
+            .create_circuit(CircuitPurpose::General)
+            .expect("circuit creation should succeed");
+
+        assert_eq!(router2.cleanup_expired(Duration::from_secs(3600)), 0);
+    }
+}
+

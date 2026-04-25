@@ -14,6 +14,7 @@ use hex;
 
 use crate::blockchain::Transaction;
 use crate::networking::circuit::{CircuitError, CircuitManager};
+use crate::networking::dandelion_config::DandelionTimings;
 use crate::networking::privacy::PrivacyLevel;
 use crate::networking::privacy_config_integration::PrivacySettingsRegistry;
 
@@ -565,6 +566,43 @@ impl CircuitRouter {
         let available_peers = self.peer_circuits.lock().unwrap();
         let peers_vec: Vec<SocketAddr> = available_peers.keys().cloned().collect();
         peers_vec
+    }
+
+    /// Drop circuits whose age exceeds `max_age`. Returns the number removed.
+    pub fn cleanup_expired(&self, max_age: Duration) -> usize {
+        let mut circuits = self.circuits.lock().unwrap();
+        let expired_ids: Vec<String> = circuits
+            .iter()
+            .filter(|(_, info)| info.created_at.elapsed() >= max_age)
+            .map(|(id, _)| id.clone())
+            .collect();
+
+        for id in &expired_ids {
+            circuits.remove(id);
+        }
+        drop(circuits);
+
+        if !expired_ids.is_empty() {
+            let mut peer_circuits = self.peer_circuits.lock().unwrap();
+            for (_, id) in peer_circuits.iter_mut() {
+                if expired_ids.iter().any(|expired| expired == id) {
+                    *id = String::new();
+                }
+            }
+        }
+
+        expired_ids.len()
+    }
+
+    /// Spawn a tokio task that periodically cleans up expired circuits.
+    pub fn start(self: Arc<Self>) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                self.cleanup_expired(DandelionTimings::DEFAULT.circuit_max_age);
+            }
+        })
     }
 }
 

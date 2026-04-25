@@ -229,7 +229,7 @@
   - [ ] Derive `Serialize, Deserialize, Clone, Debug`
   - [ ] **Verify:** `cargo check --lib`; `grep -q 'pub struct Circuit' src/networking/circuit.rs`
 
-- [ ] Add `CircuitRouter::cleanup_expired` method
+- [x] Add `CircuitRouter::cleanup_expired` method
   - [ ] Drop circuits whose `created_at + max_age < now()`; `max_age` from `DandelionTimings::DEFAULT.circuit_max_age`
   - [ ] Call from a tokio interval task spawned in `CircuitRouter::start`
   - [ ] **Verify:** `cargo test --lib circuit::tests::cleanup_drops_expired`

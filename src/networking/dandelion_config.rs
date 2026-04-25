@@ -19,6 +19,7 @@ pub struct DandelionTimings {
     pub stem_fluff_transition_min_delay_ms: u64,
     pub stem_fluff_transition_max_delay_ms: u64,
     pub routing_table_refresh_interval_ms: u64,
+    pub circuit_max_age: Duration,
 }
 
 impl DandelionTimings {
@@ -40,6 +41,7 @@ impl DandelionTimings {
         stem_fluff_transition_min_delay_ms: 1000,
         stem_fluff_transition_max_delay_ms: 5000,
         routing_table_refresh_interval_ms: 30000,
+        circuit_max_age: Duration::from_secs(3600),
     };
 }
 
