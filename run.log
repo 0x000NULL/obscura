@@ -40,3 +40,9 @@
 ==> exec  unit-tests-for-miningloop-new-and-miningloop-stop
       exec: 63.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\unit-tests-for-miningloop-new-and-miningloop-stop-execute-20260425T214307477.txt
       notes: - Used `assert_eq!(..., false)` rather than `assert!(!...)` to match the plan's wording ("assert ... == false"). The `clippy::bool_assert_comparison` lint did not fire under the workspace's check. / - The `Arc::strong_count` stability assertion uses `let initial_strong = Arc::strong_count(&m.running);` captured before any `stop()` calls, then asserts equality after each call. The helper holds exactly one `MiningLoop` (and thus one `Arc<AtomicBool>` reference), so `initial_strong` is `1`; using a captured value rather than a hardcoded `1` is conservative against future refactors that might add an internal clone.
+    [7/91] unit-tests-for-miningloop-new-and-miningloop-stop: plan $0.28 / execute $0.28 / verified / committed 38b0028
+==> plan  implement-miningloop-build-template-in-src-mining-mod-rs
+      plan: 95.01s, failure_mode=success, transcript=.claude\todo-runner\transcripts\implement-miningloop-build-template-in-src-mining-mod-rs-plan-20260425T214452771.txt
+==> exec  implement-miningloop-build-template-in-src-mining-mod-rs
+      exec: 96.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\implement-miningloop-build-template-in-src-mining-mod-rs-execute-20260425T214628812.txt
+      notes: - Used a plain `impl Display` / `impl std::error::Error` for `MiningError` (rather than `thiserror`) per the plan's "thiserror... - otherwise plain `impl Display`/`Error`" wording. Plain impls are zero-dependency and a more conservative choice for a single-variant enum, even though `thiserror = "2.0.12"` is in `Cargo.toml`. / - Set `total_fees = 0` exactly as the plan specifies, with no UTXO-aware fee summing.

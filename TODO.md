@@ -67,7 +67,7 @@
 
 ### 1.2 Block-template assembly
 
-- [ ] Implement `MiningLoop::build_template` in `src/mining/mod.rs`
+- [x] Implement `MiningLoop::build_template` in `src/mining/mod.rs`
   - [ ] Pull up to 2000 txs from mempool ordered by fee rate (use existing mempool ordering API)
   - [ ] Build coinbase via existing reward fn (locate via `grep -rn 'fn block_reward' src/`)
   - [ ] Compute merkle root via existing `merkle_root` helper in `src/blockchain/`
