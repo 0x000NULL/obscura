@@ -224,7 +224,7 @@
 
 ### 4.5 CircuitRouter
 
-- [ ] Replace ad-hoc `Circuit` representation with a proper struct in `src/networking/circuit.rs`
+- [x] Replace ad-hoc `Circuit` representation with a proper struct in `src/networking/circuit.rs`
   - [ ] Fields: `id: CircuitId`, `endpoints: Vec<PeerId>`, `relays: Vec<PeerId>`, `created_at: SystemTime`, `version: u16`
   - [ ] Derive `Serialize, Deserialize, Clone, Debug`
   - [ ] **Verify:** `cargo check --lib`; `grep -q 'pub struct Circuit' src/networking/circuit.rs`

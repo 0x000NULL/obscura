@@ -103,3 +103,16 @@
 
 ---
 
+
+## add-custom-variant-handling-to-every-privacylevel-match-in
+- Item: Add `Custom` variant handling to every `PrivacyLevel` match in `src/networking/`
+- Reason: phase-2 infra-error
+- Timestamp: 2026-04-25T23:36:06.1330777Z
+
+### Detail
+```
+{"type":"result","subtype":"error_max_turns","duration_ms":178485,"duration_api_ms":179565,"is_error":true,"num_turns":31,"stop_reason":"tool_use","session_id":"b2273ee0-5a68-4d1c-9838-0328a231b927","total_cost_usd":2.0417949999999996,"usage":{"input_tokens":40,"cache_creation_input_tokens":125730,"cache_read_input_tokens":1886841,"output_tokens":12402,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":125730,"ephemeral_5m_input_tokens":0},"inference_geo":"","iterations":[{"input_tokens":1,"output_tokens":356,"cache_read_input_tokens":82227,"cache_creation_input_tokens":487,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":487},"type":"message"}],"speed":"standard"},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":2232,"outputTokens":16,"cacheReadInputTokens":0,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.002312,"contextWindow":200000,"maxOutputTokens":32000},"claude-opus-4-7[1m]":{"inputTokens":40,"outputTokens":12402,"cacheReadInputTokens":1886841,"cacheCreationInputTokens":125730,"webSearchRequests":0,"costUSD":2.0394829999999997,"contextWindow":1000000,"maxOutputTokens":64000}},"permission_denials":[],"terminal_reason":"max_turns","fast_mode_state":"off","uuid":"b02f5d4a-c7e9-4d6e-a768-be10a7d13649","errors":["Reached maximum number of turns (30)"]}
+```
+
+---
+

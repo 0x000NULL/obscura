@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use std::net::SocketAddr;
 use rand::{rngs::OsRng, Rng, thread_rng};
 use rand::RngCore;
@@ -25,6 +25,9 @@ const CIRCUIT_ROTATION_INTERVAL_MINS: u64 = 15;
 const CHAFF_TRAFFIC_INTERVAL_SECS: u64 = 30;
 const PADDING_MIN_SIZE: usize = 64;
 const PADDING_MAX_SIZE: usize = 4096;
+
+pub type CircuitId = [u8; CIRCUIT_ID_SIZE];
+pub type PeerId = SocketAddr;
 
 /// Errors that can occur during circuit operations
 #[derive(Error, Debug)]
@@ -209,7 +212,7 @@ pub struct CircuitHop {
 
 /// Enhanced Circuit implementation
 #[derive(Debug, Clone)]
-pub struct Circuit {
+pub struct ManagedCircuit {
     /// Unique identifier for the circuit
     pub id: [u8; CIRCUIT_ID_SIZE],
     
@@ -265,6 +268,16 @@ pub struct Circuit {
     pub parameters: HashMap<String, String>,
 }
 
+/// Wire-level / persisted representation of a privacy circuit.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Circuit {
+    pub id: CircuitId,
+    pub endpoints: Vec<PeerId>,
+    pub relays: Vec<PeerId>,
+    pub created_at: SystemTime,
+    pub version: u16,
+}
+
 /// Expanded CircuitStats
 #[derive(Debug, Clone)]
 pub struct CircuitStats {
@@ -317,10 +330,10 @@ pub struct CircuitStats {
 /// Enhanced CircuitManager with privacy features
 pub struct CircuitManager {
     /// Active circuits
-    active_circuits: RwLock<HashMap<[u8; CIRCUIT_ID_SIZE], Circuit>>,
-    
+    active_circuits: RwLock<HashMap<[u8; CIRCUIT_ID_SIZE], ManagedCircuit>>,
+
     /// Relay circuits (where we're an intermediate node)
-    relay_circuits: RwLock<HashMap<[u8; CIRCUIT_ID_SIZE], Circuit>>,
+    relay_circuits: RwLock<HashMap<[u8; CIRCUIT_ID_SIZE], ManagedCircuit>>,
     
     /// Available nodes for circuit creation
     available_nodes: RwLock<Vec<SocketAddr>>,
@@ -422,7 +435,7 @@ impl CircuitManager {
     }
     
     /// Get a circuit by its ID if it exists
-    pub fn get_circuit(&self, circuit_id: &[u8; CIRCUIT_ID_SIZE]) -> Option<Circuit> {
+    pub fn get_circuit(&self, circuit_id: &[u8; CIRCUIT_ID_SIZE]) -> Option<ManagedCircuit> {
         let active_circuits = self.active_circuits.read().unwrap();
         active_circuits.get(circuit_id).cloned()
     }
@@ -655,7 +668,7 @@ impl CircuitManager {
         
         // Create the circuit
         let now = Instant::now();
-        let circuit = Circuit {
+        let circuit = ManagedCircuit {
             id: circuit_id,
             creation_time: now,
             last_used: now,

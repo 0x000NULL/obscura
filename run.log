@@ -167,3 +167,14 @@
 ==> exec  replace-networkprivacylevel-enum-with-config-privacylevel
       exec: 59.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\replace-networkprivacylevel-enum-with-config-privacylevel-execute-20260425T233021512.txt
       notes: - The plan said "Add `pub use crate::config::presets::PrivacyLevel;` at the same location" - I placed it where the deleted enum had been (between the now-removed comment-block and the `ComponentType` enum), which is the only sensible reading. / - The plan referenced "lines 12-18" and "lines 31-41" for the deletions; the file matched those line numbers exactly, so no reinterpretation was needed.
+    [29/91] replace-networkprivacylevel-enum-with-config-privacylevel: plan $0.75 / execute $0.44 / verified / committed cd50c4a
+==> plan  add-custom-variant-handling-to-every-privacylevel-match-in
+      plan: 162.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\add-custom-variant-handling-to-every-privacylevel-match-in-plan-20260425T233306087.txt
+==> exec  add-custom-variant-handling-to-every-privacylevel-match-in
+      exec: 180.02s, failure_mode=infra-error, transcript=.claude\todo-runner\transcripts\add-custom-variant-handling-to-every-privacylevel-match-in-execute-20260425T233606129.txt
+    [30/91] add-custom-variant-handling-to-every-privacylevel-match-in: phase-2 infra-error
+==> plan  replace-ad-hoc-circuit-representation-with-a-proper-struct
+      plan: 167.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\replace-ad-hoc-circuit-representation-with-a-proper-struct-plan-20260425T233853595.txt
+==> exec  replace-ad-hoc-circuit-representation-with-a-proper-struct
+      exec: 72.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\replace-ad-hoc-circuit-representation-with-a-proper-struct-execute-20260425T234005640.txt
+      notes: - Inserted the new `Circuit` struct between the closing `}` of `ManagedCircuit` and the `/// Expanded CircuitStats` comment, separated by a blank line - the plan said "directly below `ManagedCircuit` (so it sits with the other public type definitions)" and this places it adjacent to its sibling structs without disturbing the surrounding doc comment. / - The two new type aliases (`CircuitId`, `PeerId`) are placed on consecutive lines separated from the constants by one blank line, which matches the file's existing block-style spacing.
