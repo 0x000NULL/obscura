@@ -131,7 +131,6 @@ impl NetworkPrivacyFactory {
 impl NetworkPrivacyManager {
     /// Create a new NetworkPrivacyManager
     pub fn new(config_registry: Arc<PrivacySettingsRegistry>) -> Self {
-        let config_registry = config_registry.clone();
         let timing_obfuscator = Arc::new(TimingObfuscator::new(config_registry.clone()));
         let timing_handle = TimingObfuscatorHandle::new(timing_obfuscator);
         

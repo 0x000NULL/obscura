@@ -209,7 +209,7 @@
 
 ### 4.4 NetworkPrivacyManager cleanup
 
-- [ ] `NetworkPrivacyManager::new` accepts `Arc<PrivacySettingsRegistry>`
+- [x] `NetworkPrivacyManager::new` accepts `Arc<PrivacySettingsRegistry>`
   - [ ] Add the parameter; thread it through every call site
   - [ ] **Verify:** `cargo check --lib`
 

@@ -155,3 +155,9 @@
 ==> exec  remove-duplicate-entries-from-featureflag-and
       exec: 58.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\remove-duplicate-entries-from-featureflag-and-execute-20260425T232332344.txt
       notes: - None - followed the plan as written. The `use std::collections::HashSet` was placed locally inside the test function as the plan permitted, since the existing `mod tests` only imports `super::*`.
+    [27/91] remove-duplicate-entries-from-featureflag-and: plan $0.43 / execute $0.32 / verified / committed c36fa42
+==> plan  networkprivacymanager-new-accepts-arc-privacysettingsregistr
+      plan: 149.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\networkprivacymanager-new-accepts-arc-privacysettingsregistr-plan-20260425T232608957.txt
+==> exec  networkprivacymanager-new-accepts-arc-privacysettingsregistr
+      exec: 30.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\networkprivacymanager-new-accepts-arc-privacysettingsregistr-execute-20260425T232638994.txt
+      notes: - None. Steps executed exactly as planned. The orphan test file's pre-existing breakage (canonical-vs-stub registry import, `set_privacy_level` method, `NetworkPrivacyLevel::Maximum` variant) was left untouched per plan scope; `cargo check --lib` does not exercise the file because it isn't declared in any `mod` chain.
