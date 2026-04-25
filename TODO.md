@@ -162,7 +162,7 @@
 
 ### 3.2 Stale tests
 
-- [ ] Add production-parameter consensus test paths
+- [x] Add production-parameter consensus test paths
   - [ ] In `src/consensus/randomx/mod.rs` tests module, add `#[test] fn validate_with_production_difficulty`
   - [ ] Use real difficulty (`0x1d00ffff` mainnet-equivalent) on a precomputed valid block fixture
   - [ ] **Verify:** `cargo test --lib consensus::randomx::tests::validate_with_production_difficulty`

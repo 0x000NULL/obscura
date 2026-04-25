@@ -207,3 +207,29 @@ pub fn verify_difficulty(hash: &[u8; 32], target: u32) -> bool {
 
 #[derive(Debug)]
 pub struct RandomXError;
+
+#[cfg(test)]
+mod tests {
+    use super::verify_difficulty;
+
+    #[test]
+    fn validate_with_production_difficulty() {
+        const MAINNET_TARGET: u32 = 0x1d00ffff;
+
+        let mut valid_fixture = [0u8; 32];
+        valid_fixture[0..4].copy_from_slice(&[0x1c, 0xff, 0xff, 0xfe]);
+        for i in 4..32 {
+            valid_fixture[i] = 0x42;
+        }
+
+        assert!(verify_difficulty(&valid_fixture, MAINNET_TARGET));
+
+        let mut invalid_fixture = [0u8; 32];
+        invalid_fixture[0..4].copy_from_slice(&[0x1d, 0x01, 0x00, 0x00]);
+        for i in 4..32 {
+            invalid_fixture[i] = 0x42;
+        }
+
+        assert!(!verify_difficulty(&invalid_fixture, MAINNET_TARGET));
+    }
+}

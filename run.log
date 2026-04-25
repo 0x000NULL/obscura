@@ -100,3 +100,24 @@
 ==> exec  add-integration-test-tests-e2e-tx-block-include-rs-covering
       exec: 69.01s, failure_mode=success, transcript=.claude\todo-runner\transcripts\add-integration-test-tests-e2e-tx-block-include-rs-covering-execute-20260425T222814020.txt
       notes: - The plan described the driver inline as "captures the first block, then calls `stopper.stop()`" - I implemented this with a captured `Option<Block>` set inside the driver future, then unwrapped after `tokio::join!`. This keeps the block in scope for assertions outside the join, which the plan implies but does not literally spell out. / - Added `use obscura_core::Block;` (re-exported from `lib.rs`) and `use obscura_core::mining::{Blockchain, MiningLoop};` to satisfy the imports the plan calls for. No alternative was specified.
+    [17/91] add-integration-test-tests-e2e-tx-block-include-rs-covering: plan $0.57 / execute $0.51 / verified / committed 83eab64
+==> plan  remove-stub-privacysettingsregistry-from-src-networking
+      plan: 342.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\remove-stub-privacysettingsregistry-from-src-networking-plan-20260425T223406318.txt
+==> exec  remove-stub-privacysettingsregistry-from-src-networking
+      exec: 112.03s, failure_mode=infra-error, transcript=.claude\todo-runner\transcripts\remove-stub-privacysettingsregistry-from-src-networking-execute-20260425T223558366.txt
+    [18/91] remove-stub-privacysettingsregistry-from-src-networking: phase-2 infra-error
+==> plan  tighten-componenttype-enum-in-src-config-component-type-rs
+      plan: 111.03s, failure_mode=success, transcript=.claude\todo-runner\transcripts\tighten-componenttype-enum-in-src-config-component-type-rs-plan-20260425T223749867.txt
+==> exec  tighten-componenttype-enum-in-src-config-component-type-rs
+      exec: 155.02s, failure_mode=infra-error, transcript=.claude\todo-runner\transcripts\tighten-componenttype-enum-in-src-config-component-type-rs-execute-20260425T224024910.txt
+    [19/91] tighten-componenttype-enum-in-src-config-component-type-rs: phase-2 infra-error
+==> plan  replace-string-keyed-settings-in-privacysettingsregistry
+      plan: 202.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\replace-string-keyed-settings-in-privacysettingsregistry-plan-20260425T224347389.txt
+==> exec  replace-string-keyed-settings-in-privacysettingsregistry
+      exec: 285.03s, failure_mode=infra-error, transcript=.claude\todo-runner\transcripts\replace-string-keyed-settings-in-privacysettingsregistry-execute-20260425T224832438.txt
+    [20/91] replace-string-keyed-settings-in-privacysettingsregistry: phase-2 infra-error
+==> plan  add-production-parameter-consensus-test-paths
+      plan: 107.03s, failure_mode=success, transcript=.claude\todo-runner\transcripts\add-production-parameter-consensus-test-paths-plan-20260425T225019948.txt
+==> exec  add-production-parameter-consensus-test-paths
+      exec: 35.03s, failure_mode=success, transcript=.claude\todo-runner\transcripts\add-production-parameter-consensus-test-paths-execute-20260425T225055000.txt
+      notes: - Used a `for i in 4..32` loop with `0x42` as the deterministic filler byte for the remaining 28 bytes of each fixture, matching the plan's `[0x1c, 0xff, 0xff, 0xfe, 0x42, 0x42, .]` example. Applied the same `0x42` filler to the negative-control fixture for symmetry/reproducibility. / - The `verify_difficulty` impl uses `hash_value <= target` (inclusive), but the plan specifies a strictly-less-than fixture (`0x1cfffffe < 0x1d00ffff`), so the positive assertion holds either way. No deviation from plan needed.
