@@ -147,6 +147,7 @@ mod tests {
     mod multi_asset_staking_tests;
     mod pos_tests;
     mod randomx_tests;
+    mod range_proof_regression_tests;
     mod threshold_sig_tests;
     mod vrf_tests;
 }

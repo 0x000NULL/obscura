@@ -7,4 +7,5 @@ pub mod randomx_tests;
 pub mod multi_asset_staking_tests;
 pub mod pos_security_tests;
 pub mod fork_choice_tests;
-pub mod pos_enhancements_tests; 
+pub mod pos_enhancements_tests;
+pub mod range_proof_regression_tests;
