@@ -1,1624 +1,705 @@
-# Obscura (OBX) Development TODO List
-
-## Phase 1: Core Blockchain Implementation (0-6 Months)
-
-### Consensus Implementation
-- [x] Implement RandomX PoW algorithm
-  - [x] Port RandomX from Monero codebase
-  - [x] Implement VM for RandomX execution
-    - [x] Create instruction set
-      - [x] Added basic arithmetic operations (Add, Sub, Mul, Div)
-      - [x] Added memory operations (Load, Store)
-      - [x] Added control flow operations (Jump, JumpIf)
-      - [x] Added cryptographic operations (ChaChaEnc, ChaChaDec)
-    - [x] Implement memory-hard functions
-      - [x] Added 2MB main memory
-      - [x] Added 256KB scratchpad memory
-      - [x] Implemented memory mixing function with ChaCha20 rounds
-    - [x] Add SuperscalarHash algorithm
-      - [x] Implemented in RandomXVM with ChaCha20-based operations
-      - [x] Added register-based computation
-      - [x] Integrated with memory-hard functions
-  - [x] Create ASIC-resistant mining algorithm
-    - [x] Implement random program generation
-    - [x] Add memory-hard computation requirements
-    - [x] Create ChaCha20 encryption layer
-  - [x] Implement difficulty adjustment mechanism
-    - [x] Add moving average calculation
-    - [x] Implement difficulty retargeting algorithm
-    - [x] Add emergency difficulty adjustment rules
-  - [x] Add mining reward distribution logic
-    - [x] Implement coinbase transaction
-    - [x] Create block reward calculation
-    - [x] Add halving mechanism (5-year intervals)
-    - [x] Implement transaction fee calculation
-    - [x] Add mining pool reward distribution
-    - [x] Implement coinbase maturity requirement
-    - [x] Create dynamic fee market
-    - [x] Add Replace-By-Fee (RBF) mechanism
-    - [x] Implement Child-Pays-For-Parent (CPFP) mechanism
-    - [x] Add fee sponsorship for transactions
-    - [x] Implement time-locked fee adjustments
-- [x] Implement PoS mechanism
-  - [x] Create staking contract
-    - [x] Implement stake locking mechanism
-    - [x] Add slashing conditions
-    - [x] Create withdrawal delay mechanism
-  - [x] Implement validator selection algorithm
-    - [x] Add random beacon for selection
-    - [x] Implement VRF for validator selection
-    - [x] Create stake-weighted selection
-  - [x] Design reward distribution for stakers
-    - [x] Implement compound interest calculation
-    - [x] Add delegation mechanism
-    - [x] Create reward distribution schedule
-  - [x] Enhance PoS security
-    - [x] Implement tiered slashing percentages for different violations
-    - [x] Add grace period for unintentional downtime
-    - [x] Create progressive slashing for repeated offenses
-    - [x] Implement stake grinding protection
-    - [x] Add weak subjectivity checkpoints
-    - [x] Create time-based finality mechanism
-  - [x] Improve PoS performance
-    - [x] Optimize validator selection algorithm
-    - [x] Implement caching for validator selection results
-    - [x] Create batched validator set updates
-    - [x] Optimize reward distribution for scale
-    - [x] Implement lazy reward calculation
-    - [x] Add reward claim mechanism
-  - [x] Expand PoS functionality
-    - [x] Implement partial undelegation
-    - [x] Add auto-delegation features
-    - [x] Create delegation caps to prevent centralization
-    - [x] Implement dynamic reward rates based on total staked percentage
-    - [x] Add inflation control mechanisms
-    - [x] Create fee-sharing model for validators
-    - [x] Implement validator reputation system
-    - [x] Add historical performance metrics
-  - [x] Implement advanced staking features
-    - [x] Create liquid staking mechanism
-    - [x] Implement cross-chain staking capabilities
-    - [x] Add governance integration with stake-weighted voting
-    - [x] Create treasury system funded by staking rewards
-    - [x] Implement proposal submission and voting mechanisms
-  - [x] Future PoS Enhancements
-    - [x] Implement sharded validator sets for scalability
-    - [x] Add threshold signature schemes for validator aggregation
-    - [x] Create validator rotation mechanism for security
-    - [x] Implement validator performance-based rewards
-    - [x] Add slashing insurance mechanism
-    - [x] Create validator exit queue for orderly exits
-    - [x] Implement multi-asset staking support
-      - [x] Basic multi-asset staking functionality
-      - [x] Validator selection with multi-asset stakes
-      - [x] Slashing for multi-asset stakes
-      - [x] Oracle integration for exchange rates
-      - [x] Add validator asset constraints
-      - [x] Implement governance for asset addition
-      - [x] Performance optimization for large validator sets
-      - [x] Risk management for exchange rate fluctuations
-      - [x] UI/API integration for multi-asset staking
-    - [x] Add stake delegation marketplace
-    - [x] Create validator reputation oracle
-    - [x] Implement stake compounding automation
-    - [x] Add validator set diversity metrics
-    - [x] Create geographic distribution incentives
-    - [x] Implement hardware security requirements
-    - [x] Add formal verification of staking contracts
-    - [x] Create quantum-resistant staking mechanisms
-- [x] Develop hybrid consensus integration
-  - [x] Create block validation rules
-    - [x] Implement PoW verification
-    - [x] Add PoS signature verification
-    - [x] Create hybrid block scoring system
-  - [x] Implement finality mechanism
-    - [x] Add checkpoint system
-    - [x] Implement BFT finality gadget
-    - [x] Create fork choice rules
-  - [x] Add security measures against 51% attacks
-    - [x] Implement chain reorganization limits
-    - [x] Add economic finality rules
-    - [x] Create attack detection mechanisms
-  - [x] Optimize hybrid consensus
-    - [x] Implement efficient state management for staking data
-    - [x] Add state pruning mechanisms
-    - [x] Create state snapshots for faster synchronization
-    - [x] Optimize for concurrent operations
-    - [x] Implement parallel processing of validation tasks
-
-### Core Blockchain Components
-- [x] Block Structure
-  - [x] Implement 60-second block time mechanism
-    - [x] Create timestamp validation rules
-    - [x] Add block time adjustment algorithm
-    - [x] Implement network time synchronization
-    - [x] Add privacy-preserving timestamp mechanism
-    - [x] Create time-based correlation protection
-  - [x] Create dynamic block size adjustment
-    - [x] Implement median block size calculation
-    - [x] Add growth rate limiting
-    - [x] Create size increase/decrease rules
-    - [x] Implement privacy-enhancing padding
-    - [x] Add transaction batching for privacy
-  - [x] Design transaction merkle tree structure
-    - [x] Implement binary merkle tree
-    - [x] Add transaction commitment scheme
-    - [x] Create merkle proof verification
-    - [x] Implement privacy-enhanced commitments
-    - [x] Add zero-knowledge friendly structures
-- [x] Network Layer
-  - [x] Implement P2P networking protocol
-    - [x] Create node handshake protocol
-      - [x] Version negotiation
-      - [x] Feature negotiation
-      - [x] Connection establishment
-      - [x] Add privacy feature negotiation
-      - [x] Implement connection obfuscation
-    - [x] Implement message serialization
-      - [x] Create message framing
-      - [x] Add checksums and validation
-      - [x] Implement message padding for privacy
-      - [x] Add timing attack protection
-    - [x] Add connection pooling
-      - [x] Implement connection diversity
-      - [x] Add privacy-focused peer selection
-      - [x] Create test-specific connection pool settings
-      - [x] Add comprehensive connection pool tests
-      - [x] Implement network type tracking
-      - [x] Add connection limits per network
-      - [x] Create peer rotation mechanism
-      - [x] Implement ban system for malicious peers
-      - [x] Add feature negotiation tracking
-    - [x] Create node discovery mechanism
-      - [x] Implement Kademlia DHT
-      - [x] Add bootstrap nodes
-      - [x] Create peer scoring system
-      - [x] Implement privacy-preserving discovery
-      - [x] Add network identity protection
-  - [x] Add peer management system
-    - [x] Implement connection limits
-    - [x] Add ban scoring
-    - [x] Create peer prioritization
-    - [x] Implement privacy-focused peer rotation
-    - [x] Add peer reputation privacy
-  - [x] Implement block propagation
-    - [x] Add compact block relay
-    - [x] Create block announcement protocol
-    - [x] Implement fast block sync
-    - [x] Add privacy-preserving block relay
-    - [x] Implement timing attack protection
-- [x] Transaction Pool
-  - [x] Create mempool management
-    - [x] Implement transaction ordering
-    - [x] Add size limits and eviction
-    - [x] Create fee-based prioritization
-    - [x] Implement privacy-preserving transaction ordering
-    - [x] Add transaction timing obfuscation
-  - [x] Implement transaction validation
-    - [x] Add signature verification
-    - [x] Create input/output validation
-    - [x] Implement double-spend checking
-    - [x] Add privacy feature validation
-    - [x] Create zero-knowledge proof verification
-  - [x] Add fee calculation mechanism
-    - [x] Create dynamic fee calculation
-    - [x] Implement fee market
-    - [x] Add minimum fee requirements
-    - [x] Implement privacy-preserving fee structure
-    - [x] Add fee obfuscation mechanism
-
-### Privacy Foundations
-- [x] Basic Transaction Privacy
-  - [x] Implement transaction obfuscation
-    - [x] Create basic transaction mixing mechanism
-    - [x] Add transaction identifier obfuscation
-    - [x] Implement transaction graph protection
-    - [x] Create transaction unlinkability features
-    - [x] Add metadata stripping for transactions
-  - [x] Develop preliminary stealth addressing
-    - [x] Implement basic one-time address generation
-    - [x] Create address derivation mechanism
-    - [x] Add address scanning functionality
-    - [x] Implement address reuse prevention
-    - [x] Create address ownership proof system
-  - [x] Add basic confidential transactions
-    - [x] Implement simple amount hiding mechanism
-    - [x] Create basic commitment scheme
-    - [x] Add transaction balance verification
-    - [x] Implement output value obfuscation
-    - [x] Create simple range proof system
-  - [x] Plan for advanced cryptographic primitives
-    - [x] Research Pedersen commitment implementation
-      - [x] Evaluate elliptic curve options (Selected BLS12-381 as primary and Jubjub as secondary)
-      - [x] Design homomorphic commitment scheme using selected curves
-      - [x] Create blinding factor generation protocol
-      - [x] Implement secure blinding factor storage
-      - [x] Add commitment verification system
-    - [x] Develop bulletproofs integration plan
-      - [x] Evaluate bulletproofs libraries (compatible with BLS12-381/Jubjub) (Will use arkworks-rs\bulletproofs)
-      - [x] Design range proof protocol for transaction amounts
-      - [x] Create efficient verification mechanism
-      - [x] Implement multi-output proofs
-      - [x] Add batch verification optimization
-    - [x] Design proper Diffie-Hellman key exchange for stealth addressing
-      - [x] Implement appropriate key exchange for Jubjub curve
-      - [x] Create secure ephemeral key generation
-      - [x] Design shared secret derivation protocol
-      - [x] Implement key blinding techniques
-      - [x] Add forward secrecy mechanisms
-    - [x] Implement BLS12-381 specific functions
-      - [x] Create optimized BLS12-381 curve operations
-      - [x] Implement Jubjub curve for efficient in-circuit operations
-      - [x] Develop cross-curve operations for atomic swaps
-      - [x] Create test vectors for curve operations
-      - [x] Add benchmarking for cryptographic performance
-- [x] Network Privacy Protections
-    - [x] Create transaction propagation phases
-    - [x] Add transaction stem phase routing
-    - [x] Implement fluff phase broadcasting
-    - [x] Create transaction propagation delay
-    - [x] Add node selection for transaction relay
-  - [x] Implement IP Address Protection
-    - [x] Implement Tor support
-    - [x] Create connection obfuscation configuration
-    - [x] Implement basic connection obfuscation
-    - [x] Create connection padding mechanism
-    - [x] Add traffic pattern obfuscation
-    - [x] Add protocol morphing
-    - [x] Implement I2P support
-    - [x] Add DNS-over-HTTPS for seed node discovery
-    - [x] Implement client fingerprinting countermeasures
-- [x] Implement key privacy mechanisms
-  - [x] Create secure key generation with additional entropy
-  - [x] Add key derivation privacy enhancements
-  - [x] Implement key usage pattern protection
-  - [x] Create key rotation mechanisms
-  - [x] Add key compartmentalization features
-- [x] Develop basic view key system
-  - [x] Implement view key generation
-  - [x] Create transaction scanning with view keys
-  - [x] Add selective disclosure mechanisms
-  - [x] Implement auditing capabilities
-  - [x] Create view key management system
-- [x] Enhance Dandelion Protocol Implementation
-  - [x] Implement adaptive path selection algorithm
-    - [x] Create entropy-based path randomization
-    - [x] Implement node reputation-based routing
-    - [x] Add path length variation based on network conditions
-    - [x] Create route diversity enforcement
-    - [x] Implement anti-fingerprinting measures for path selection
-  - [x] Add advanced timing obfuscation
-    - [x] Implement variable delay scheduling based on network traffic
-    - [x] Create decoy transaction propagation
-    - [x] Add randomized batch propagation
-    - [x] Implement statistical timing analysis resistance
-    - [x] Create timing side-channel protection
-  - [x] Implement advanced anonymity sets
-    - [x] Create dynamic anonymity set sizing
-    - [x] Implement k-anonymity guarantees
-    - [x] Add plausible deniability mechanisms
-    - [x] Create transaction correlation resistance
-    - [x] Implement graph analysis countermeasures
-  - [x] Add Dandelion++ enhancements
-    - [x] Implement transaction aggregation
-    - [x] Create stem transaction batching
-    - [x] Add stem/fluff transition randomization
-    - [x] Implement multiple fluff phase entry points
-    - [x] Create resistant routing against routing table inference
-
-- [x] Implement Advanced Network-Level Privacy
-  - [x] Create circuit-based routing overlay
-    - [x] Implement ephemeral circuit creation
-    - [x] Add multi-hop routing paths
-    - [x] Create circuit isolation mechanisms
-    - [x] Implement circuit rotation strategy
-    - [x] Add padding traffic for circuit obfuscation
-  - [x] Add advanced traffic obfuscation techniques
-    - [x] Implement traffic morphing
-    - [x] Create payload padding with distribution matching
-    - [x] Add timing randomization via chaff traffic
-    - [x] Implement protocol obfuscation
-    - [x] Create traffic pattern normalization
-  - [x] Develop connection fingerprinting resistance
-    - [x] Implement TCP fingerprint randomization
-    - [x] Create TLS parameterization variance
-    - [x] Add handshake pattern diversity
-    - [x] Implement browser-like connection behaviors
-    - [x] Create connection parameter randomization
-
-- [x] Implement Comprehensive Privacy-Enhanced Tor/I2P Integration
-  - [x] Create native Tor integration
-    - [x] Implement Tor stream isolation for transactions
-    - [x] Add Tor circuit management optimized for blockchain
-    - [x] Create .onion service for node operation
-    - [x] Implement multi-circuit transaction propagation
-    - [x] Add Tor consensus parameter optimization
-  - [x] Add I2P network support
-    - [x] Implement native I2P router integration
-    - [x] Create I2P tunnels optimized for blockchain traffic
-    - [x] Add garlic routing for transaction propagation
-    - [x] Implement I2P destination key management
-    - [x] Create I2P-specific peer discovery mechanism
-  - [x] Develop bridge relay support
-    - [x] Implement pluggable transport compatibility
-    - [x] Create obfs4 proxy integration
-    - [x] Add meek transport protocol support
-    - [x] Implement snowflake integration
-    - [x] Create custom obfuscation protocols
-
-- [x] Enhance Privacy Infrastructure with Advanced Techniques
-  - [x] Implement zero-knowledge key management
-    - [x] Create distributed key generation (DKG) protocols
-    - [x] Add threshold signature schemes (TSS)
-    - [x] Implement verifiable secret sharing (VSS)
-    - [x] Create secure multi-party computation for key operations
-    - [x] Add homomorphic key derivation
-  - [x] Develop comprehensive view key system
-    - [x] Implement hierarchical view key structure
-    - [x] Create granular disclosure controls
-    - [x] Add time-bound view key capabilities
-    - [x] Implement context-restricted view keys
-    - [x] Create cryptographic audit logging
-    - [x] Add revocation mechanisms for view keys
-    - [x] Implement multi-signature view key authorization
-  - [x] Add advanced metadata protection
-    - [x] Create perfect forward secrecy for all communications
-    - [x] Implement metadata minimization techniques
-    - [x] Add encrypted storage for sensitive blockchain data
-    - [x] Create zero-knowledge state updates
-    - [x] Implement metadata removal before broadcasting
-
-- [x] Implement Side-Channel Attack Protection
-  - [x] Add cryptographic operation timing protections
-    - [x] Implement constant-time operations for all cryptographic functions
-    - [x] Create operation masking techniques
-    - [x] Add random timing jitter for critical operations
-    - [x] Implement operation batching to hide individual operations
-    - [x] Create CPU cache attack mitigations
-  - [x] Develop memory protection mechanisms
-    - [x] Implement secure memory clearing
-    - [x] Create address space layout randomization (ASLR) integration
-    - [x] Add guard pages around sensitive data
-    - [x] Implement encrypted memory for keys
-    - [x] Create memory access pattern obfuscation
-  - [x] Add power analysis countermeasures
-    - [x] Implement power usage normalization
-    - [x] Create operation balancing for consistent power profiles
-    - [x] Add dummy operations to mask real operations
-    - [x] Implement power analysis resistant implementations
-    - [x] Create hardware-specific countermeasures
-
-### Integration and System Cohesion Tasks
-
-- [x] Configuration Management
-  - [x] Implement unified privacy configuration system
-    - [x] Create centralized privacy settings registry
-    - [x] Add configuration validation framework
-    - [x] Implement configuration presets (low/medium/high privacy)
-    - [x] Create component-specific configuration derivation
-    - [x] Add runtime configuration updates
-  - [x] Develop configuration propagation mechanism
-    - [x] Implement observer pattern for config changes
-    - [x] Create configuration versioning system
-    - [x] Add configuration conflict resolution
-    - [x] Implement configuration migration tools
-    - [x] Add compatibility validation
-  - [x] Create configuration documentation
-    - [x] Document all privacy settings
-    - [x] Create setting interdependency diagrams
-    - [x] Add privacy/performance trade-off documentation
-    - [x] Create configuration troubleshooting guide
-    - [x] Add common configuration recipes for different use cases
-
-- [x] Integration of Test Dependencies
-  - [x] Create Transaction class in blockchain module
-    - [x] Add privacy feature application methods
-    - [x] Implement commitment and range proof setters
-    - [x] Add feature verification methods
-  - [x] Implement Privacy Registry in config module
-    - [x] Create preset configurations (Low/Medium/High)
-    - [x] Add component-specific config getters
-    - [x] Implement config update methods
-  - [x] Create privacy primitives in crypto module
-    - [x] Implement SenderPrivacy and ReceiverPrivacy structs
-    - [x] Add ViewKey with permission management
-    - [x] Create MetadataProtector implementation
-    - [x] Implement SideChannelProtection class
-  - [x] Implement networking privacy components
-    - [x] Create DandelionRouter with stem/fluff phases
-    - [x] Add CircuitRouter with hop management
-    - [x] Implement TimingObfuscator with delay features
-    - [x] Create FingerprintingProtection class
-    - [x] Add TorConnection for anonymous routing
-  - [x] Add StealthAddress implementation in wallet module
-    - [x] Implement address generation
-    - [x] Add transaction scanning functionality
-    - [x] Create amount decryption methods
-
-## Fix Network Privacy Component Implementation Issues
-- [ ] Update NetworkPrivacyManager integration with registry
-  - [ ] Fix constructor to properly use Arc-wrapped registry
-    - [ ] Modify NetworkPrivacyManager::new to accept Arc<PrivacySettingsRegistry>
-    - [ ] Update all constructor calls to properly unwrap or clone the Arc
-    - [ ] Implement appropriate error handling for registry access failures
-    - [ ] Add unit tests to verify correct registry integration
-  - [ ] Replace NetworkPrivacyLevel enum with PrivacyLevel
-    - [ ] Remove NetworkPrivacyLevel enum completely
-    - [ ] Update all function signatures to use config::PrivacyLevel
-    - [ ] Add appropriate imports for PrivacyLevel
-    - [ ] Update all match statements to handle all PrivacyLevel variants
-  - [ ] Update privacy level match statements with Custom variant
-    - [ ] Add Custom variant handling in all privacy level match expressions
-    - [ ] Implement reasonable defaults for custom privacy configurations
-    - [ ] Create helper methods for custom privacy level interpretation
-    - [ ] Add detailed logging for custom privacy settings
-
-- [ ] Fix CircuitRouter structural issues
-  - [ ] Redesign CircuitRouter data structures for proper circuit info storage
-    - [ ] Create proper Circuit struct with all required fields
-    - [ ] Define appropriate types for circuit endpoints and relays
-    - [ ] Implement serialization/deserialization for circuit data
-    - [ ] Add versioning support for circuit structures
-  - [ ] Update HashMap fields to store correct types
-    - [ ] Modify circuit_map to use appropriate key/value types
-    - [ ] Update all HashMap access methods to handle the new types
-    - [ ] Implement type conversion where necessary
-    - [ ] Add validation for stored circuit data
-  - [ ] Improve circuit management logic
-    - [ ] Implement proper circuit cleanup for expired circuits
-    - [ ] Add circuit rotation based on time and usage metrics
-    - [ ] Create circuit health monitoring
-    - [ ] Implement circuit selection algorithm based on privacy needs
-    - [ ] Add fallback mechanisms for circuit failures
-
-- [ ] Update DandelionRouter implementation
-  - [ ] Add missing stem_probability and fluff_probability fields
-    - [ ] Define stem_probability and fluff_probability as configurable parameters
-    - [ ] Add default values based on privacy level
-    - [ ] Implement getters and setters with appropriate validation
-    - [ ] Connect probability fields to privacy settings registry
-  - [ ] Implement probability-based routing decisions
-    - [ ] Create weighted random selection algorithm for stem/fluff decision
-    - [ ] Implement adaptive probability adjustment based on network conditions
-    - [ ] Add entropy sources for randomization
-    - [ ] Create deterministic testing mode for probabilities
-  - [ ] Fix transaction propagation logic
-    - [ ] Update stem phase transaction handling
-    - [ ] Fix fluff phase broadcast implementation
-    - [ ] Implement proper transaction aggregation
-    - [ ] Add timeout handling for stem phase
-    - [ ] Create retry mechanism for failed propagation
-
-- [ ] Fix TorConnection configuration
-  - [ ] Update TorConfig struct with missing fields
-    - [ ] Add circuit_rotation_interval field to TorConfig
-    - [ ] Implement connection timeout configuration
-    - [ ] Add relay selection strategy parameters
-    - [ ] Create bandwidth throttling configuration
-  - [ ] Add circuit_rotation_interval to TorConfig
-    - [ ] Implement time-based circuit rotation
-    - [ ] Create adaptive rotation based on traffic volume
-    - [ ] Add randomization to prevent timing analysis
-    - [ ] Implement circuit preemptive creation
-  - [ ] Improve Tor circuit management
-    - [ ] Create circuit pool with multiple available circuits
-    - [ ] Implement circuit health monitoring
-    - [ ] Add circuit selection based on transaction privacy requirements
-    - [ ] Create fallback mechanisms for circuit failures
-    - [ ] Implement stream isolation for different transaction types
-
-- [ ] Add BurstAndWait connection pattern to FingerprintingProtection
-  - [ ] Implement burst and wait behavior logic
-    - [ ] Create configurable burst size parameter
-    - [ ] Implement variable wait period calculation
-    - [ ] Add randomization to burst timing
-    - [ ] Create traffic volume-based burst adjustments
-  - [ ] Update connection pattern rotation logic
-    - [ ] Add BurstAndWait to rotation options
-    - [ ] Implement appropriate selection probability based on privacy level
-    - [ ] Create smooth transitions between patterns
-    - [ ] Add pattern mixing strategies for improved privacy
-  - [ ] Add proper timing controls for burst patterns
-    - [ ] Implement precise timing mechanism for bursts
-    - [ ] Create adaptive timing based on network conditions
-    - [ ] Add jitter to prevent fingerprinting
-    - [ ] Implement backpressure handling for network congestion
-    - [ ] Create traffic shaping to normalize burst profiles
-
-- [ ] Implement Comprehensive Testing for Privacy Components
-  - [ ] Create unit tests for all privacy components
-    - [ ] Implement NetworkPrivacyManager test suite
-    - [ ] Add CircuitRouter comprehensive tests
-    - [ ] Create DandelionRouter test scenarios
-    - [ ] Implement TorConnection mocked tests
-    - [ ] Add FingerprintingProtection pattern tests
-  - [ ] Develop integration tests for privacy component interactions
-    - [ ] Test NetworkPrivacyManager with real registry
-    - [ ] Create end-to-end transaction privacy tests
-    - [ ] Implement network simulation for privacy routing
-    - [ ] Add cross-component interactions tests
-    - [ ] Create timing and latency tests for privacy features
-  - [ ] Implement privacy metrics collection and verification
-    - [ ] Create anonymity set measurement tests
-    - [ ] Implement traffic pattern analysis
-    - [ ] Add fingerprinting resistance verification
-    - [ ] Create privacy score calculation for network transactions
-    - [ ] Implement transaction graph analysis tests
-
-## Integration Testing
-- [x] Develop comprehensive integration test suite
-  - [x] Create end-to-end privacy workflow tests
-  - [x] Implement cross-component interaction tests
-  - [x] Add boundary condition tests
-  - [x] Create long-running integration scenarios
-  - [x] Implement stress tests for privacy features
-- [ ] Create multi-feature privacy tests
-  - [ ] Implement Dandelion + Tor integration tests
-  - [ ] Add stealth addressing + confidential transactions tests
-  - [ ] Create view key + metadata protection tests
-  - [ ] Implement circuit routing + timing obfuscation tests
-  - [ ] Add multi-hop routing + transaction batching tests
-- [ ] Develop adversarial integration tests
-  - [ ] Create correlation attack simulations
-  - [ ] Implement timing leak tests across boundaries
-  - [ ] Add metadata leakage detection across components
-  - [ ] Create integration fuzzing for privacy boundaries
-  - [ ] Implement adversarial network simulation
-
-## Performance Optimization
-- [ ] Profile privacy feature integration points
-  - [ ] Benchmark cryptographic operations across boundaries
-  - [ ] Measure transaction processing pipeline
-  - [ ] Profile network message propagation
-  - [ ] Analyze memory usage patterns during privacy operations
-  - [ ] Identify concurrency bottlenecks
-- [ ] Implement cross-component optimizations
-  - [ ] Create shared cryptographic operation cache
-  - [ ] Implement batched signature verification across components
-  - [ ] Add parallel processing for privacy-intensive operations
-  - [ ] Create privacy computation scheduling system
-  - [ ] Implement optimized serialization for privacy structures
-- [ ] Develop adaptive performance scaling
-  - [ ] Create load-based privacy level adjustments
-  - [ ] Implement prioritization framework for privacy operations
-  - [ ] Add resource allocation optimization for privacy features
-  - [ ] Create context-aware privacy computation
-  - [ ] Implement predictive resource allocation
-
-## Error Handling
-- [ ] Develop comprehensive error management framework
-  - [ ] Create privacy-specific error taxonomy
-  - [ ] Implement error propagation standards
-  - [ ] Add error severity classification
-  - [ ] Create recovery strategy definitions
-  - [ ] Implement circuit breaker patterns for privacy features
-- [ ] Implement graceful degradation for privacy features
-  - [ ] Create fallback mechanisms for critical privacy components
-  - [ ] Implement partial privacy preservation under failure
-  - [ ] Add privacy level downgrade paths
-  - [ ] Create user notification system for privacy compromises
-  - [ ] Implement automatic recovery mechanisms
-- [ ] Enhance error boundary protection
-  - [ ] Create privacy boundary guardians
-  - [ ] Implement privacy invariant validation
-  - [ ] Add transaction privacy verification before broadcast
-  - [ ] Create metadata leakage prevention under errors
-  - [ ] Implement post-recovery privacy validation
-
-## Metrics and Monitoring
-- [ ] Implement privacy metrics collection system
-  - [ ] Create anonymity set size monitoring
-  - [ ] Add statistical transaction graph monitoring
-  - [ ] Implement timing correlation detection
-  - [ ] Create peer connection privacy metrics
-  - [ ] Add metadata protection effectiveness measurement
-- [ ] Develop privacy health dashboard
-  - [ ] Create real-time privacy status visualization
-  - [ ] Implement historical privacy metrics tracking
-  - [ ] Add privacy regression alerts
-  - [ ] Create component integration health status
-  - [ ] Implement privacy attack early warning system
-- [ ] Create performance impact monitoring
-  - [ ] Implement resource usage tracking for privacy features
-  - [ ] Add transaction processing delay attribution
-  - [ ] Create privacy/performance correlation visualization
-  - [ ] Implement adaptive threshold monitoring
-  - [ ] Add predictive performance impact analysis
-
-## Develop Privacy Testing and Measurement Framework
-- [ ] Create privacy analysis toolkit
-  - [ ] Implement transaction graph analysis tools
-  - [ ] Add network traffic analysis framework
-  - [ ] Create privacy score metrics and reporting
-  - [ ] Implement anonymity set measurement
-  - [ ] Add side-channel vulnerability scanning
-- [ ] Implement privacy regression testing
-  - [ ] Create automated privacy feature verification
-  - [ ] Add differential privacy testing
-  - [ ] Implement transaction unlinkability testing
-  - [ ] Create metadata leakage detection
-  - [ ] Add comprehensive deanonymization attempt simulation
-- [ ] Develop privacy attack simulation
-  - [ ] Implement Sybil attack testing
-  - [ ] Create transaction correlation attacks
-  - [ ] Add timing analysis attack simulation
-  - [ ] Implement network-level deanonymization attempts
-  - [ ] Create long-term correlation attack modeling
-
-## Wallet Development
-- [ ] CLI Wallet
-  - [ ] Basic key generation
-    - [ ] Implement BIP39 mnemonic generation
-    - [ ] Add HD wallet derivation (BIP44)
-    - [ ] Create secure key storage
-    - [ ] Implement privacy-enhanced key generation
-    - [ ] Add entropy augmentation for key security
-  - [ ] Transaction creation and signing
-    - [ ] Implement UTXO selection
-    - [ ] Add multi-signature support
-    - [ ] Create transaction building
-    - [ ] Implement privacy-preserving transaction construction
-    - [ ] Add obfuscated signature mechanism
-  - [ ] Balance management
-    - [ ] Add UTXO tracking
-    - [ ] Implement balance calculation
-    - [ ] Create transaction history
-    - [ ] Add private balance viewing options
-    - [ ] Implement hidden transaction history
-  - [ ] Network synchronization
-    - [ ] Add block header sync
-    - [ ] Implement SPV mode
-    - [ ] Create full node sync
-    - [ ] Add privacy-preserving sync mechanism
-    - [ ] Implement Tor/proxy support for connections
-  - [ ] Add validator functionality
-    - [ ] Implement stake management
-    - [ ] Create validator node setup
-    - [ ] Add delegation management
-    - [ ] Implement validator status monitoring
-    - [ ] Create slashing protection alerts
-    - [ ] Add validator performance analytics
-  - [ ] Add mining functionality
-    - [ ] Implement mining pool configuration
-    - [ ] Create solo mining setup
-    - [ ] Add mining rewards tracking
-    - [ ] Implement hashrate monitoring
-    - [ ] Create mining profitability calculator
-    - [ ] Add mining optimization settings
-  - [ ] Integrate block explorer features
-    - [ ] Implement transaction lookup
-    - [ ] Create block browsing functionality
-    - [ ] Add address history viewing
-    - [ ] Implement network statistics
-    - [ ] Create mempool visualization
-    - [ ] Add custom transaction tracing
-
-- [ ] CLI Validator Tools
-  - [ ] Create validator setup wizard
-    - [ ] Implement key generation for validator
-    - [ ] Add node configuration automation
-    - [ ] Create security configuration checklist
-    - [ ] Implement connection testing utilities
-  - [ ] Add validator management commands
-    - [ ] Implement stake delegation commands
-    - [ ] Create validator status queries
-    - [ ] Add reward claim functionality
-    - [ ] Implement validator metrics reporting
-  - [ ] Create validator security tools
-    - [ ] Implement key backup/restore
-    - [ ] Add slashing protection monitoring
-    - [ ] Create offline signing capabilities
-    - [ ] Implement multi-signature controls
-
-- [ ] CLI Mining Tools
-  - [ ] Create mining setup wizard
-    - [ ] Implement CPU configuration options
-    - [ ] Add GPU mining support
-    - [ ] Create mining pool integration
-    - [ ] Implement benchmarking tools
-  - [ ] Add mining control commands
-    - [ ] Implement start/stop/pause functionality
-    - [ ] Create throttling controls
-    - [ ] Add power management options
-    - [ ] Implement auto-switching based on profitability
-  - [ ] Create mining statistics tools
-    - [ ] Implement hashrate monitoring
-    - [ ] Add earnings calculator
-    - [ ] Create historical performance tracking
-    - [ ] Implement network difficulty monitoring
-
-- [ ] CLI Block Explorer
-  - [ ] Implement basic lookup commands
-    - [ ] Create transaction lookup by hash
-    - [ ] Add block lookup by height or hash
-    - [ ] Implement address balance and history
-    - [ ] Create mempool inspection tools
-  - [ ] Add advanced query capabilities
-    - [ ] Implement rich query language
-    - [ ] Create export functionality
-    - [ ] Add statistical analysis tools
-    - [ ] Implement custom filters and sorting
-  - [ ] Create monitoring commands
-    - [ ] Implement network health checks
-    - [ ] Add new block notifications
-    - [ ] Create custom alert configuration
-    - [ ] Implement scheduled report generation
-
-- [ ] GUI Wallet
-  - [ ] Create cross-platform UI framework
-    - [ ] Implement SLINT UI toolkit
-    - [ ] Create responsive SLINT components
-    - [ ] Implement SLINT component library
-    - [ ] Add native platform integrations
-    - [ ] Create theme system with SLINT stylesheets
-    - [ ] Implement privacy mode UI elements
-    - [ ] Add privacy status indicators
-  - [ ] Implement wallet functionality
-    - [ ] Add transaction visualization with SLINT charts
-    - [ ] Create address management interface
-    - [ ] Implement backup system
-    - [ ] Add privacy settings management
-    - [ ] Create privacy level configuration
-  - [ ] Add backup/restore features
-    - [ ] Create encrypted backup
-    - [ ] Add seed phrase recovery interface
-    - [ ] Implement state recovery
-    - [ ] Add privacy-preserving backup mechanism
-    - [ ] Create secure recovery process
-  - [ ] Create address book management
-    - [ ] Add contact storage
-    - [ ] Implement labels/tags
-    - [ ] Create address validation
-    - [ ] Add private contact management
-    - [ ] Implement encrypted address book
-  - [ ] Add validator functionality in GUI
-    - [ ] Create validator dashboard using SLINT
-    - [ ] Implement visual stake management
-    - [ ] Add delegation visualization
-    - [ ] Create performance charts with SLINT
-    - [ ] Implement earnings projections
-    - [ ] Add alert configuration panel
-  - [ ] Add mining functionality in GUI
-    - [ ] Create mining control panel with SLINT
-    - [ ] Implement visual hashrate monitoring
-    - [ ] Add power/efficiency controls
-    - [ ] Create mining pool selection interface
-    - [ ] Implement profitability calculator with SLINT charts
-    - [ ] Add hardware monitoring integration
-  - [ ] Integrate block explorer features in GUI
-    - [ ] Create SLINT-based block explorer interface
-    - [ ] Implement block visualization
-    - [ ] Add transaction browsing UI
-    - [ ] Create address lookup and tracking
-    - [ ] Implement visual mempool explorer
-    - [ ] Add rich search functionality
-
-## Testing Infrastructure
-- [ ] Testnet Setup
-  - [ ] Create genesis block configuration
-    - [ ] Define initial parameters
-    - [ ] Set test coin distribution
-    - [ ] Create bootstrap nodes
-    - [ ] Configure privacy feature activation
-    - [ ] Set up privacy testing parameters
-  - [ ] Set up initial test nodes
-    - [ ] Deploy seed nodes
-    - [ ] Create monitoring system
-    - [ ] Add logging infrastructure
-    - [ ] Implement privacy-preserving logging
-    - [ ] Add privacy metrics collection
-  - [ ] Implement monitoring tools
-    - [ ] Create block explorer
-    - [ ] Add network statistics
-    - [ ] Implement alert system
-    - [ ] Create privacy feature monitoring
-    - [ ] Add privacy compliance dashboard
-- [ ] Testing Framework
-  - [ ] Unit test suite
-    - [ ] Create mock objects
-    - [ ] Add test vectors
-    - [ ] Implement property-based tests
-    - [ ] Add privacy feature unit tests
-    - [ ] Create cryptographic verification tests
-  - [ ] Integration tests
-    - [ ] Add network simulation
-    - [ ] Create scenario testing
-    - [ ] Implement stress tests
-    - [ ] Add privacy feature integration tests
-    - [ ] Create transaction privacy verification
-  - [ ] Network simulation tests
-    - [ ] Create partition testing
-    - [ ] Add latency simulation
-    - [ ] Implement bandwidth limits
-    - [ ] Add privacy attack simulations
-    - [ ] Create network analysis resistance tests
-  - [ ] Stress testing tools
-    - [ ] Create transaction generator
-    - [ ] Add load testing
-    - [ ] Implement chaos testing
-    - [ ] Add privacy feature stress tests
-    - [ ] Create transaction graph analysis tools
-  - [ ] Test optimization
-    - [ ] Implement test mode for RandomX
-    - [ ] Add deterministic test execution
-    - [ ] Create fast validation paths for tests
-    - [ ] Implement privacy feature test acceleration
-    - [ ] Add privacy regression test suite
-
-## Testing and Quality Assurance
-- [ ] Enhance PoS testing framework
-  - [ ] Implement comprehensive test scenarios for edge cases
-  - [ ] Create simulation tools for staking behaviors
-  - [ ] Add property-based testing for staking contracts
-  - [ ] Implement stress testing for validator selection at scale
-  - [ ] Create attack simulation scenarios
-  - [ ] Add performance benchmarks for staking operations
-  - [ ] Implement integration tests with hybrid consensus
-- [ ] Improve test coverage
-  - [ ] Add unit tests for all PoS components
-  - [ ] Create integration tests for staking workflows
-  - [ ] Implement regression tests for known issues
-  - [ ] Add fuzz testing for security-critical components
-- [ ] Develop testing tools
-  - [ ] Create staking simulation environment
-  - [ ] Implement validator behavior models
-  - [ ] Add network partition simulation
-  - [ ] Create tools for visualizing staking metrics
-
-## Documentation
-- [ ] Create comprehensive PoS documentation
-  - [ ] Write technical specification for the PoS mechanism
-  - [ ] Create user guides for staking and delegation
-  - [ ] Document validator setup and operation procedures
-  - [ ] Create security best practices for validators
-  - [ ] Document slashing conditions and penalties
-  - [ ] Create economic model documentation
-  - [ ] Add API documentation for staking-related endpoints
-- [ ] Develop educational resources
-  - [ ] Create tutorials for staking and delegation
-  - [ ] Add explanatory diagrams for the PoS mechanism
-  - [ ] Create FAQ for common staking questions
-  - [ ] Develop validator onboarding guide
-  - [ ] Create delegation strategy guide
-- [ ] Maintain living documentation
-  - [ ] Implement documentation versioning
-  - [ ] Create changelog for PoS parameter changes
-  - [ ] Add documentation for governance proposals affecting PoS
-  - [ ] Document network upgrades related to PoS
-
-## Monitoring and Analytics
-- [ ] Implement PoS monitoring system
-  - [ ] Create validator performance metrics
-  - [ ] Add staking statistics collection
-  - [ ] Implement slashing event monitoring
-  - [ ] Create reward distribution analytics
-  - [ ] Add delegation relationship tracking
-  - [ ] Implement network participation metrics
-- [ ] Develop analytics dashboard
-  - [ ] Create validator leaderboard
-  - [ ] Add staking return calculator
-  - [ ] Implement historical performance charts
-  - [ ] Create network health indicators
-  - [ ] Add delegation visualization tools
-- [ ] Implement alerting system
-  - [ ] Create validator downtime alerts
-  - [ ] Add slashing risk notifications
-  - [ ] Implement reward distribution alerts
-  - [ ] Create network security monitoring
-  - [ ] Add governance proposal notifications
-
-## Phase 2: Privacy Features (6-12 Months)
-
-### Zero-Knowledge Proofs
-- [ ] Halo 2 Integration
-  - [ ] Implement proof generation
-    - [ ] Create circuit compiler
-    - [ ] Add witness generation
-    - [ ] Implement proving key generation
-  - [ ] Create verification system
-    - [ ] Add verification key generation
-    - [ ] Implement batch verification
-    - [ ] Create proof aggregation
-  - [ ] Optimize performance
-    - [ ] Implement parallel proof generation
-    - [ ] Add proof compression
-    - [ ] Create proof caching
-- [ ] Transaction Privacy
-  - [ ] Hide sender information
-    - [ ] Implement ring signatures
-    - [ ] Add decoy selection
-    - [ ] Create input mixing
-  - [ ] Hide receiver information
-    - [ ] Add stealth addressing
-      - [ ] Implement full Diffie-Hellman key exchange
-      - [ ] Create secure ephemeral key generation
-      - [ ] Implement proper key derivation function (HKDF)
-      - [ ] Add secure shared secret computation
-      - [ ] Create one-time address derivation protocol
-      - [ ] Implement address scanning optimization
-      - [ ] Add secure key management for stealth addresses
-      - [ ] Create wallet integration for stealth addressing
-    - [ ] Implement output encryption
-    - [ ] Create view key system
-  - [ ] Implement amount privacy
-    - [ ] Add Pedersen commitments
-      - [ ] Implement secure elliptic curve operations
-      - [ ] Create blinding factor generation with proper entropy
-      - [ ] Implement homomorphic addition for commitments
-      - [ ] Add commitment verification with zero-knowledge proofs
-      - [ ] Create secure blinding factor management system
-    - [ ] Create range proofs
-      - [ ] Implement bulletproofs for efficient range proofs
-      - [ ] Add multi-output proof generation
-      - [ ] Create optimized verification algorithm
-      - [ ] Implement proof aggregation for efficiency
-      - [ ] Add batch verification for multiple proofs
-    - [ ] Implement bulletproofs
-      - [ ] Create bulletproofs circuit compiler
-      - [ ] Implement constraint system for range proofs
-      - [ ] Add zero-knowledge proof generation
-      - [ ] Create efficient verification system
-      - [ ] Implement proof compression techniques
-      - [ ] Add security measures against side-channel attacks
-      - [ ] Create formal verification of bulletproofs implementation
-
-### Network Privacy
-- [ ] Dandelion++ Implementation
-  - [ ] Create transaction routing protocol
-    - [ ] Implement stem phase
-    - [ ] Add fluff phase
-    - [ ] Create routing table
-  - [ ] Implement stem/fluff phases
-    - [ ] Add anonymity graph
-    - [ ] Create relay selection
-    - [ ] Implement timeout mechanism
-  - [ ] Add network propagation logic
-    - [ ] Create propagation delay
-    - [ ] Add node selection
-    - [ ] Implement fallback routing
-- [ ] Tor/I2P Integration
-  - [ ] Add Tor support
-    - [ ] Create .onion service
-    - [ ] Implement Tor circuits
-    - [ ] Add exit node handling
-  - [ ] Implement I2P networking
-    - [ ] Create I2P tunnels
-    - [ ] Add garlic routing
-    - [ ] Implement destination handling
-  - [ ] Create fallback mechanisms
-    - [ ] Add clearnet fallback
-    - [ ] Implement bridge relays
-    - [ ] Create backup routing
-
-### Enhanced Privacy Features
-- [ ] Stealth Addresses
-  - [ ] Implement one-time addresses
-    - [ ] Create key derivation
-    - [ ] Add address generation
-    - [ ] Implement scanning
-  - [ ] Create viewing key system
-    - [ ] Add key generation
-    - [ ] Implement view key sharing
-    - [ ] Create selective disclosure
-  - [ ] Add address generation mechanism
-    - [ ] Implement dual-key stealth
-    - [ ] Add metadata protection
-    - [ ] Create reusable addresses
-- [ ] Confidential Transactions
-  - [ ] Implement Pedersen commitments
-    - [ ] Create commitment scheme
-    - [ ] Add blinding factors
-    - [ ] Implement homomorphic addition
-  - [ ] Create range proofs
-    - [ ] Implement bulletproofs
-    - [ ] Add proof optimization
-    - [ ] Create batch verification
-  - [ ] Add transaction verification
-    - [ ] Implement balance verification
-    - [ ] Add commitment validation
-    - [ ] Create proof checking
-
-## Phase 3: Private On-Ramp & DEX (12-18 Months)
-
-### Atomic Swaps
-- [ ] Cross-chain Integration
-  - [ ] Bitcoin atomic swaps
-    - [ ] Implement HTLC contracts
-    - [ ] Add Bitcoin script support
-    - [ ] Create swap protocol
-  - [ ] Monero atomic swaps
-    - [ ] Implement cross-chain locks
-    - [ ] Add privacy preservation
-    - [ ] Create atomic protocol
-  - [ ] Create swap protocols
-    - [ ] Implement timeout mechanism
-    - [ ] Add dispute resolution
-    - [ ] Create refund system
-
-### DEX Development
-- [ ] Core DEX Features
-  - [ ] Implement order book
-    - [ ] Create matching engine
-    - [ ] Add order types
-    - [ ] Implement price feeds
-  - [ ] Create matching engine
-    - [ ] Add price-time priority
-    - [ ] Implement order matching
-    - [ ] Create trade settlement
-  - [ ] Add liquidity pools
-    - [ ] Implement AMM
-    - [ ] Add liquidity provision
-    - [ ] Create fee distribution
-- [ ] Privacy Features
-  - [ ] Private order submission
-    - [ ] Add order encryption
-    - [ ] Implement blind bidding
-    - [ ] Create dark pool
-  - [ ] Hidden liquidity pools
-    - [ ] Implement confidential LP
-    - [ ] Add private balances
-    - [ ] Create hidden orders
-  - [ ] Anonymous trading
-    - [ ] Add mixer integration
-    - [ ] Implement private settlement
-    - [ ] Create trade privacy
-
-### Smart Contracts
-- [ ] Basic Contract System
-  - [ ] Implement scripting language
-    - [ ] Create bytecode compiler
-    - [ ] Add standard library
-    - [ ] Implement debugger
-  - [ ] Create VM for execution
-    - [ ] Add instruction set
-    - [ ] Implement stack machine
-    - [ ] Create gas metering
-  - [ ] Add contract validation
-    - [ ] Implement static analysis
-    - [ ] Add security checks
-    - [ ] Create formal verification
-- [ ] Privacy-Preserving Contracts
-  - [ ] Implement private state
-    - [ ] Add state encryption
-    - [ ] Create merkle trees
-    - [ ] Implement witnesses
-  - [ ] Create secure execution environment
-    - [ ] Add TEE support
-    - [ ] Implement MPC
-    - [ ] Create proof generation
-  - [ ] Add verification system
-    - [ ] Implement ZK-proofs
-    - [ ] Add state verification
-    - [ ] Create audit system
-
-## Phase 4: Mainnet & Governance (18-24 Months)
-
-### Mainnet Launch
-- [ ] Final Testing
-  - [ ] Security audits
-    - [ ] Code review
-    - [ ] Penetration testing
-    - [ ] Formal verification
-  - [ ] Performance testing
-    - [ ] Load testing
-    - [ ] Stress testing
-    - [ ] Scalability analysis
-  - [ ] Network stress tests
-    - [ ] Transaction flooding
-    - [ ] Node failure testing
-    - [ ] Network partition tests
-
-### Cryptographic Security Audits and Verification
-- [ ] Conduct comprehensive cryptographic audits
-  - [ ] Audit Pedersen commitment implementation
-    - [ ] Verify correctness of elliptic curve operations
-    - [ ] Validate blinding factor generation
-    - [ ] Verify homomorphic properties
-    - [ ] Test against known attacks
-  - [ ] Audit bulletproofs implementation
-    - [ ] Verify correctness of range proofs
-    - [ ] Validate zero-knowledge properties
-    - [ ] Test proof generation and verification
-    - [ ] Verify batch verification correctness
-  - [ ] Audit stealth addressing implementation
-    - [ ] Verify Diffie-Hellman key exchange
-    - [ ] Validate one-time address generation
-    - [ ] Test address scanning functionality
-    - [ ] Verify forward secrecy properties
-  - [ ] Audit transaction privacy features
-    - [ ] Verify transaction graph protection
-    - [ ] Validate unlinkability properties
-    - [ ] Test metadata stripping effectiveness
-- [ ] Implement formal verification
-  - [ ] Create formal models of cryptographic protocols
-    - [ ] Model Pedersen commitments
-    - [ ] Model bulletproofs
-    - [ ] Model stealth addressing
-  - [ ] Verify security properties
-    - [ ] Prove correctness of commitment scheme
-    - [ ] Verify zero-knowledge properties of range proofs
-    - [ ] Prove unlinkability of stealth addresses
-  - [ ] Conduct automated verification
-    - [ ] Use theorem provers (Coq, Isabelle/HOL)
-    - [ ] Implement symbolic execution
-    - [ ] Create model checking for protocols
-- [ ] Perform side-channel attack analysis
-  - [ ] Test timing attack resistance
-  - [ ] Analyze power consumption patterns
-  - [ ] Verify cache attack resistance
-  - [ ] Test against fault injection attacks
-
-### Launch Preparation
-- [ ] Create genesis block
-  - [ ] Initial distribution
-  - [ ] Parameter setting
-  - [ ] Bootstrap nodes
-- [ ] Set up initial nodes
-  - [ ] Deploy seed nodes
-  - [ ] Add monitoring
-  - [ ] Create backup systems
-- [ ] Prepare launch documentation
-  - [ ] Technical specs
-  - [ ] User guides
-  - [ ] API documentation
-
-### DAO Governance
-- [ ] Governance System
-  - [ ] Implement voting mechanism
-    - [ ] Add proposal creation
-    - [ ] Create voting system
-    - [ ] Implement delegation
-  - [ ] Create proposal system
-    - [ ] Add proposal types
-    - [ ] Implement discussion forum
-    - [ ] Create execution system
-  - [ ] Add execution framework
-    - [ ] Implement timelock
-    - [ ] Add veto mechanism
-    - [ ] Create upgrade system
-- [ ] Treasury Management
-  - [ ] Create funding system
-    - [ ] Add fund allocation
-    - [ ] Implement milestones
-    - [ ] Create reporting
-  - [ ] Implement distribution logic
-    - [ ] Add payment scheduling
-    - [ ] Create vesting
-    - [ ] Implement multisig
-  - [ ] Add accountability measures
-    - [ ] Create reporting system
-    - [ ] Add transparency tools
-    - [ ] Implement auditing
-
-### Ecosystem Development
-- [ ] Documentation
-  - [ ] Technical documentation
-    - [ ] Architecture docs
-    - [ ] API reference
-    - [ ] Protocol specs
-  - [ ] API documentation
-    - [ ] RPC endpoints
-    - [ ] WebSocket API
-    - [ ] REST API
-  - [ ] User guides
-    - [ ] Wallet guides
-    - [ ] Mining guides
-    - [ ] Staking guides
-- [ ] Developer Tools
-  - [ ] SDK development
-    - [ ] Create client libraries
-    - [ ] Add example code
-    - [ ] Implement testing tools
-  - [ ] API clients
-    - [ ] Add language bindings
-    - [ ] Create wrappers
-    - [ ] Implement utilities
-  - [ ] Testing frameworks
-    - [ ] Add unit testing
-    - [ ] Create integration tests
-    - [ ] Implement benchmarks
-
-## Continuous Tasks
-
-### Security
-- [ ] Regular security audits
-  - [ ] Code audits
-  - [ ] Network analysis
-  - [ ] Threat modeling
-- [ ] Bug bounty program
-  - [ ] Create reward tiers
-  - [ ] Add reporting system
-  - [ ] Implement triage
-- [ ] Penetration testing
-  - [ ] Network testing
-  - [ ] Smart contract testing
-  - [ ] Wallet security
-- [ ] Code reviews
-  - [ ] Automated analysis
-  - [ ] Manual review
-  - [ ] Dependency audit
-
-### Community
-- [ ] Developer documentation
-  - [ ] API guides
-  - [ ] Integration tutorials
-  - [ ] Best practices
-- [ ] Community guidelines
-  - [ ] Contribution guide
-  - [ ] Code of conduct
-  - [ ] Governance rules
-- [ ] Contribution framework
-  - [ ] Issue templates
-  - [ ] PR guidelines
-  - [ ] Review process
-- [ ] Regular updates
-  - [ ] Development updates
-  - [ ] Security advisories
-  - [ ] Community calls
-
-### Performance Optimization
-- [ ] Network optimization
-  - [ ] Bandwidth usage
-  - [ ] Latency reduction
-  - [ ] Connection management
-- [ ] Transaction throughput
-  - [ ] Block propagation
-  - [ ] Validation speed
-  - [ ] Mempool management
-- [ ] Storage optimization
-  - [ ] Database indexing
-  - [ ] State pruning
-  - [ ] Archive optimization
-- [ ] Memory usage
-  - [ ] Cache management
-  - [ ] Memory pooling
-  - [ ] Resource limits
-- [ ] Cryptographic operation optimization
-  - [ ] Optimize Pedersen commitment operations
-    - [ ] Implement batch commitment generation
-    - [ ] Add SIMD acceleration for elliptic curve operations
-    - [ ] Create precomputation tables for fixed-base operations
-    - [ ] Implement parallel commitment verification
-    - [ ] Add hardware acceleration support
-  - [ ] Optimize bulletproofs generation and verification
-    - [ ] Implement multi-threaded proof generation
-    - [ ] Create GPU acceleration for proof verification
-    - [ ] Add batch verification optimizations
-    - [ ] Implement proof caching strategies
-    - [ ] Create incremental proof generation
-  - [ ] Optimize stealth address operations
-    - [ ] Implement batch key generation
-    - [ ] Add parallel address scanning
-    - [ ] Create efficient key derivation
-    - [ ] Implement address caching mechanisms
-    - [ ] Add hardware acceleration for key operations
-  - [ ] Benchmark and profile cryptographic operations
-    - [ ] Create performance testing framework
-    - [ ] Implement continuous performance monitoring
-    - [ ] Add regression detection for cryptographic operations
-    - [ ] Create optimization targets for different hardware profiles
-    - [ ] Implement adaptive optimization based on hardware capabilities
-
-## Project Planning & Strategy
-
-### Roadmap Optimization
-- [ ] Re-prioritize Privacy Features
-  - [ ] Move core privacy primitives to Phase 1
-    - [ ] Integrate basic key privacy mechanisms in initial wallet implementation
-    - [ ] Add transaction obfuscation to core transaction structure
-    - [ ] Implement preliminary network privacy protections
-    - [ ] Create foundation for stealth addressing system
-    - [ ] Design initial confidential transaction framework
-  - [ ] Create privacy-first architecture review process
-    - [ ] Develop privacy impact assessment template
-    - [ ] Establish privacy review checklist for all PRs
-    - [ ] Create privacy threat modeling framework
-    - [ ] Implement privacy design review meetings
-    - [ ] Define privacy regression testing requirements
-  - [ ] Establish privacy requirements for all components
-    - [ ] Define wallet privacy requirements
-    - [ ] Create network layer privacy specifications
-    - [ ] Establish transaction privacy standards
-    - [ ] Define block propagation privacy requirements
-    - [ ] Create mining/staking privacy guidelines
-  - [ ] Develop privacy enhancement integration plan
-    - [ ] Create phased implementation roadmap for zk-SNARKs
-    - [ ] Design integration path for Dandelion++
-    - [ ] Plan Tor/I2P integration timeline
-    - [ ] Establish confidential transactions rollout strategy
-    - [ ] Create stealth address deployment plan
-
-### Development Structure
-- [ ] Parallel Development Tracks
-  - [ ] Establish core infrastructure team
-    - [ ] Define core team roles and responsibilities
-    - [ ] Identify key technical leads for consensus mechanism
-    - [ ] Assign blockchain data structure ownership
-    - [ ] Create network protocol development team
-    - [ ] Establish wallet infrastructure team
-  - [ ] Create dedicated privacy features team
-    - [ ] Recruit zk-SNARKs specialists
-    - [ ] Assign stealth address implementation lead
-    - [ ] Identify Dandelion++ implementation experts
-    - [ ] Create confidential transactions development team
-    - [ ] Establish network privacy specialists group
-  - [ ] Implement cross-team coordination framework
-    - [ ] Create weekly synchronization meetings
-    - [ ] Establish shared documentation repository
-    - [ ] Implement feature flag system for parallel development
-    - [ ] Create integration testing framework
-    - [ ] Develop shared component libraries
-  - [ ] Define interface boundaries between tracks
-    - [ ] Document API contracts between components
-    - [ ] Create interface specifications for privacy features
-    - [ ] Establish data flow diagrams for system integration
-    - [ ] Define error handling and recovery procedures
-    - [ ] Create component interaction models
-  - [ ] Create progress synchronization checkpoints
-    - [ ] Establish monthly integration milestones
-    - [ ] Define critical path dependencies
-    - [ ] Create feature readiness assessment process
-    - [ ] Implement progress tracking dashboard
-    - [ ] Develop risk assessment for integration points
-
-### Project Milestones
-- [ ] Milestone Re-evaluation
-  - [ ] Add privacy-related milestones to each development phase
-    - [ ] Phase 1: Basic transaction privacy foundation
-    - [ ] Phase 1: Network identity protection mechanisms
-    - [ ] Phase 2: Full zk-SNARKs implementation
-    - [ ] Phase 2: Complete Dandelion++ integration
-    - [ ] Phase 3: Private DEX with confidential liquidity
-  - [ ] Create privacy testing milestones
-    - [ ] Develop privacy feature test suite
-    - [ ] Establish network privacy simulation framework
-    - [ ] Create transaction privacy verification tools
-    - [ ] Implement automated privacy regression tests
-    - [ ] Develop privacy attack simulation environment
-  - [ ] Implement privacy audit checkpoints
-    - [ ] Schedule external privacy audits
-    - [ ] Create internal privacy review process
-    - [ ] Establish privacy vulnerability disclosure procedure
-    - [ ] Implement privacy enhancement tracking system
-    - [ ] Create privacy audit documentation requirements
-  - [ ] Establish privacy enhancement success metrics
-    - [ ] Define transaction untraceability metrics
-    - [ ] Create network privacy effectiveness measures
-    - [ ] Establish user privacy experience indicators
-    - [ ] Develop privacy-performance balance metrics
-    - [ ] Create privacy adoption tracking system
-  - [ ] Define privacy feature readiness criteria
-    - [ ] Establish cryptographic security requirements
-    - [ ] Create performance benchmarks for privacy features
-    - [ ] Define user experience standards for privacy features
-    - [ ] Establish compatibility requirements with other components
-    - [ ] Create documentation standards for privacy features
-
-## Future Considerations
-
-### Scalability
-- [ ] Layer 2 solutions
-  - [ ] State channels
-  - [ ] Plasma chains
-  - [ ] Rollups
-  - [ ] Implement privacy-preserving Layer 2 solutions
-    - [ ] Create zero-knowledge rollups
-    - [ ] Implement private state channels
-    - [ ] Add confidential transaction batching
-- [ ] Sharding research
-  - [ ] Data sharding
-  - [ ] State sharding
-  - [ ] Transaction sharding
-  - [ ] Implement privacy-preserving sharding
-    - [ ] Create cross-shard private transactions
-    - [ ] Implement confidential state transfers
-    - [ ] Add zero-knowledge proofs for cross-shard validation
-
-### Post-Quantum Cryptography Research
-- [ ] Research post-quantum privacy primitives
-  - [ ] Evaluate lattice-based cryptography
-    - [ ] Research NTRU for encryption
-    - [ ] Evaluate Ring-LWE for key exchange
-    - [ ] Implement lattice-based commitments
-    - [ ] Create lattice-based range proofs
-  - [ ] Investigate isogeny-based cryptography
-    - [ ] Research SIDH/SIKE for key exchange
-    - [ ] Evaluate post-quantum stealth addressing
-    - [ ] Implement isogeny-based commitments
-  - [ ] Explore hash-based signatures
-    - [ ] Evaluate SPHINCS+ for transaction signing
-    - [ ] Implement Merkle tree-based signatures
-    - [ ] Create stateless signature schemes
-  - [ ] Research multivariate cryptography
-    - [ ] Evaluate Rainbow for signatures
-    - [ ] Research HFEv- variants
-- [ ] Develop quantum-resistant privacy protocols
-  - [ ] Create post-quantum confidential transactions
-    - [ ] Implement quantum-resistant commitments
-    - [ ] Design quantum-safe range proofs
-    - [ ] Create hybrid classical/post-quantum schemes
-  - [ ] Design quantum-resistant stealth addressing
-    - [ ] Implement post-quantum key exchange
-    - [ ] Create quantum-resistant one-time addresses
-    - [ ] Design hybrid address schemes
-  - [ ] Research zero-knowledge proofs with post-quantum security
-    - [ ] Evaluate STARKs for post-quantum security
-    - [ ] Research lattice-based zero-knowledge proofs
-    - [ ] Implement quantum-resistant proof systems
-- [ ] Implement migration strategy to post-quantum cryptography
-  - [ ] Design hybrid cryptographic schemes
-  - [ ] Create backward compatibility mechanisms
-  - [ ] Implement gradual transition plan
-  - [ ] Develop quantum-resistant key management
-
-### Integration
-- [ ] Exchange listings
-  - [ ] CEX integration
-  - [ ] DEX support
-  - [ ] Market making
-- [ ] Wallet integrations
-  - [ ] Hardware wallets
-  - [ ] Mobile wallets
-  - [ ] Web wallets with SLINT WebAssembly support
-- [ ] Payment processors
-  - [ ] Merchant tools
-  - [ ] Payment gateways
-  - [ ] Point of sale
-- [ ] DeFi protocols
-  - [ ] Lending platforms
-  - [ ] Yield farming
-  - [ ] Derivatives
-
-### Optimization Tasks
-- [x] Enhance ChaCha20 Performance
-  - [x] Implement SIMD optimizations for parallel block processing
-  - [x] Optimize memory access patterns
-  - [x] Reduce state management overhead
-  - [x] Add vectorized operations support
-- [x] Test Suite Optimization
-  - [x] Implement test-specific RandomX mode
-  - [x] Add deterministic test execution
-  - [x] Create fast validation paths
-  - [x] Optimize test execution time
-  - [ ] Add parallel test execution support
-
-### Security Enhancements
-- [x] Strengthen ChaCha20 Implementation
-  - [x] Add additional entropy sources
-  - [x] Enhance key derivation process
-  - [x] Implement secure error handling
-  - [x] Add timing attack mitigations
-  - [x] Create comprehensive security tests
-
-### Testing Improvements
-- [x] Expand Test Coverage
-  - [x] Add property-based tests for ChaCha20 operations
-  - [x] Create memory pattern analysis tests
-  - [x] Implement stress tests for concurrent operations
-  - [x] Add performance benchmarks
-  - [x] Create security validation suite
-- [ ] Advanced Testing
-  - [ ] Implement fuzzing for RandomX inputs
-  - [ ] Add property-based testing for consensus rules
-  - [ ] Create automated regression test suite
-  - [ ] Implement performance regression detection
-  - [ ] Add coverage-guided testing
-
-### Documentation
-- [x] Core Documentation
-  - [x] Create main documentation index
-  - [x] Add architecture documentation
-  - [x] Create development guide
-  - [x] Add README for documentation structure
-- [x] Feature Documentation
-  - [x] Document consensus mechanisms
-  - [x] Add mining documentation
-  - [x] Create transaction documentation
-  - [x] Document mining rewards and fee market
-  - [x] Add wallet documentation
-  - [ ] Complete smart contract documentation
-  - [ ] Add DEX documentation
-  - [ ] Create governance documentation
-- [ ] API Documentation
-  - [ ] Document RPC API
-  - [ ] Add REST API documentation
-  - [ ] Create WebSocket API documentation
-  - [ ] Document CLI commands
-
-### Future Features
-- [ ] Implement Extended Functionality
-  - [ ] Add configurable ChaCha20 rounds
-  - [ ] Support variable block sizes
-  - [ ] Add advanced mixing modes
-  - [ ] Implement parallel execution support
-
-### Create comprehensive PoS documentation
-  - [ ] Write technical specification for the PoS mechanism
-  - [ ] Create user guides for staking and delegation
-  - [ ] Document validator setup and operation procedures
-  - [ ] Create security best practices for validators
-  - [ ] Document slashing conditions and penalties
-  - [ ] Create economic model documentation
-  - [ ] Add API documentation for staking-related endpoints
-- [ ] Develop educational resources
-  - [ ] Create tutorials for staking and delegation
-  - [ ] Add explanatory diagrams for the PoS mechanism
-  - [ ] Create FAQ for common staking questions
-  - [ ] Develop validator onboarding guide
-  - [ ] Create delegation strategy guide
-- [ ] Maintain living documentation
-  - [ ] Implement documentation versioning
-  - [ ] Create changelog for PoS parameter changes
-  - [ ] Add documentation for governance proposals affecting PoS
-  - [ ] Document network upgrades related to PoS 
-
-
-## Documentation Tasks
-
-### Architecture Documentation
-- [x] Create comprehensive PoS architecture documentation
-  - [x] Add system overview diagrams
-  - [x] Create component interaction diagrams
-  - [x] Add data flow visualizations
-  - [x] Document state management
-  - [x] Create security layer documentation
-  - [x] Add monitoring and metrics documentation
-
-### Implementation Guides
-- [x] Create advanced implementation examples
-  - [x] Add delegation marketplace examples
-  - [x] Create reputation management examples
-  - [x] Add geographic distribution examples
-  - [x] Create security validation examples
-  - [x] Add stake compounding examples
-  - [x] Create contract verification examples
-
-### Security Documentation
-- [x] Create comprehensive security implementation guide
-  - [x] Document hardware security requirements
-  - [x] Add network security configuration
-  - [x] Document cryptographic security measures
-  - [x] Create audit logging documentation
-  - [x] Add security monitoring guide
-  - [x] Document incident response procedures
-
-### Additional Documentation Tasks
-- [ ] Create interactive documentation
-  - [ ] Add interactive code examples using SLINT
-  - [ ] Create live documentation playground with SLINT components
-  - [ ] Add interactive architecture diagrams using SLINT visualizations
-  - [ ] Create interactive security demos with SLINT UI
-- [ ] Add video tutorials
-  - [ ] Create implementation walkthrough videos
-  - [ ] Add security best practices videos
-  - [ ] Create architecture overview videos
-- [ ] Create developer workshops
-  - [ ] Design hands-on implementation workshops
-  - [ ] Create security training materials
-  - [ ] Add architecture design workshops 
-
-### Testing
-- [x] Connection Pool Testing
-  - [x] Add connection management tests
-  - [x] Implement peer rotation tests
-  - [x] Create network diversity tests
-  - [x] Add feature support verification tests
-  - [x] Create mock TCP stream for testing
-  - [x] Add test-specific constants
-  - [x] Implement comprehensive test logging
-  - [x] Fix time overflow issues in tests 
-
-## Elliptic Curve Migration
-
-- [ ] Add new dependencies to Cargo.toml (blstrs, ark-bls12-381, ark-ed-on-bls12-381, etc.)
-- [ ] Create src/crypto/bls12_381.rs for BLS12-381 specific implementations
-- [ ] Create src/crypto/jubjub.rs for Jubjub specific implementations
-- [ ] Update src/crypto/mod.rs to support both curve systems during transition
-- [ ] Reimplement Pedersen commitments using Jubjub in src/crypto/pedersen.rs
-- [ ] Update bulletproofs implementation to work with Jubjub in src/crypto/bulletproofs.rs
-- [ ] Update privacy module to use Jubjub for stealth addressing in src/crypto/privacy.rs
-- [ ] Create comprehensive tests for new cryptographic implementations
-- [ ] Benchmark performance of BLS12-381 and Jubjub operations
-- [ ] Implement zk-SNARK circuits for enhanced privacy features
-- [ ] Update atomic swap functionality for cross-chain compatibility 
+# Obscura (OBX) TODO
+
+> Last audit: 2026-04-24 at v0.7.31. Build currently broken (22 lib errors, 30 all-targets).
+>
+> This file consolidates the former `TODO.md` and `TODOs/*.md` into a single source of truth.
+> Prior checklist marks (especially in crypto) no longer reflect state because the dep upgrade regressed
+> already-completed work. Many "done" items will need re-verification once the build is restored.
 
+---
+
+## 0. CRITICAL — Restore the Build
+
+Blocks everything downstream. All errors in crypto fallout from the rand / ark-ec / ark-ed-on-bls12-381 upgrade.
+
+### Error distribution (file → error-mention count)
+
+| File | Count |
+|---|---|
+| `src/crypto/bulletproofs_impl.rs` | 27 |
+| `src/crypto/privacy.rs` | 24 |
+| `src/crypto/hardware_accel.rs` | 22 |
+| `src/crypto/constant_time.rs` | 21 |
+| `src/crypto/jubjub.rs` | 19 |
+| `src/crypto/examples_standalone.rs` | 15 |
+| `src/networking/privacy/circuit_router.rs` | 12 |
+| `src/networking/dandelion.rs` | 12 |
+| `src/crypto/power_analysis_protection.rs` | 11 |
+| `src/crypto/pedersen.rs` | 11 |
+| `src/networking/privacy/timing_obfuscator.rs` | 9 |
+| `src/crypto/secure_mpc.rs` | 9 |
+| `src/crypto/platform_memory.rs` | 8 |
+| `src/crypto/memory_protection.rs` | 8 |
+| `src/networking/privacy/tor_connection.rs` | 7 |
+| `src/config/privacy_registry.rs` | 7 |
+
+### Error categories
+
+- [ ] **E0576** — `ScalarField` associated type not found on `ark_ec::CurveGroup` (trait surface changed upstream; use new path)
+- [ ] **E0599** — methods missing on `JubjubPoint` / `ark_ec::twisted_edwards::Projective<JubjubConfig>`:
+  - [ ] `serialize_compressed` (3 sites) — migrate to `CanonicalSerialize::serialize_compressed`
+  - [ ] `commit` (2 sites) — re-wire Pedersen commit API
+  - [ ] `double`, `neg`, `into_bigint` (1 site each) — replace with equivalents in new arkworks API
+  - [ ] `Normal<f64>::sample` — `rand_distr` trait bound unsatisfied; fix `rand`/`rand_distr` version coupling
+- [ ] **E0609** — `.0` tuple-field access on `JubjubPoint` and `PedersenCommitment` (types are now named-field or opaque)
+- [ ] **E0277** — `JubjubPoint: Borrow<ark_ec::twisted_edwards::Affine<JubjubConfig>>` missing
+- [ ] **E0308** — type mismatches and `if`/`else` incompatibility (5+2 sites)
+- [ ] **E0034** — ambiguous method resolution between `rand::Rng` and an ark trait
+
+### Actions
+
+- [ ] Reconcile `JubjubPoint` wrapper with the new arkworks API surface
+- [ ] Update `PedersenCommitment` field access to match current struct layout
+- [ ] Pin `rand` / `rand_distr` versions consistently across the workspace
+- [ ] Decide fate of `src/crypto/examples_standalone.rs` (15 errors) — fix or delete
+- [ ] After lib compiles clean, fix the additional 8 errors surfaced by `cargo check --all-targets`
+- [ ] Add CI gate so a green build is required before subsequent merges
+
+---
+
+## 1. Architectural Gaps (newly tracked — previously invisible to TODOs)
+
+### 1.1 Orphaned consensus privacy validators (security hole)
+
+Privacy verifiers exist on `Transaction` but are dead code. `validate_block_hybrid` checks PoW/PoS
+and skips all privacy flags, so invalid range proofs or malformed stealth addresses would be accepted
+into blocks as long as the consensus proof is valid.
+
+- [ ] Wire `Transaction::verify_privacy_features()` into `validate_block_hybrid`
+- [ ] Wire `Transaction::verify_range_proofs()` into hybrid validation
+- [ ] Wire `Transaction::verify_confidential_balance()` into hybrid validation
+- [ ] Add mempool pre-validation of privacy features (reject malformed inputs before block inclusion)
+- [ ] Regression test: consensus must reject a block whose transactions carry invalid range proofs
+
+### 1.2 No runnable node
+
+`src/main.rs` initializes components then exits. `start_network_services` spawns an empty thread.
+There is no P2P loop, no mining loop, no block assembly path.
+
+- [ ] Implement the P2P server loop in `src/main.rs`
+- [ ] Implement a mining loop that assembles blocks from mempool and broadcasts them
+- [ ] End-to-end wire: create tx → sign → mempool → broadcast → peer validates → include in block
+- [ ] Replace placeholder `is_connected` always-false in `src/networking/node.rs`
+- [ ] Merge the multiple `Node` struct definitions into one comprehensive type
+
+### 1.3 Stale / hollow tests
+
+- [ ] `tests/e2e/network_simulation.rs` references nonexistent APIs (`TestNetwork::new`, `wallet.create_test_transaction`, `node.mempool`) — either build them or delete the file
+- [ ] Consensus tests rely on `RandomXContext::new_for_testing()` with `difficulty_target = 0xFFFFFFFF` — add production-parameter test paths before launch
+- [ ] `crypto_audit.log` shows a recurring `CRITICAL [GENERAL] [FAILED]` pattern (Mar 25–26 2025) — confirm this is intentional test injection or suppress it
+- [ ] Replace test-mode-only `RandomX` benches with real-mode benches
+
+### 1.4 Duplicated types
+
+- [ ] Remove the stub `PrivacySettingsRegistry` in `src/networking/privacy_config_integration.rs`; use only `src/config/privacy_registry.rs`
+- [ ] Make `ComponentType` reflect actual module structure
+- [ ] Replace string-keyed settings with type-safe enums
+
+---
+
+## 2. Stealth Addressing Integration
+
+Previously duplicated across `1_todo_crypto.md`, `2_todo_wallet.md`, `3_todo_blockchain.md`,
+`5_todo_networking.md`, `6_todo_config.md`. Consolidated here.
+
+### 2.1 Transaction pipeline property preservation
+
+- [ ] Redesign `create_transaction` to initialize and retain public-key scripts through privacy-feature application
+- [ ] Fix `set_stealth_recipient` to preserve all output properties (value, range proofs, commitments)
+- [ ] Add property-integrity verification after stealth address is set
+- [ ] Ensure `DandelionRouter`, `CircuitRouter`, `TimingObfuscator` each preserve public-key scripts
+- [ ] Add validation checks after each privacy component to verify transaction-property preservation
+- [ ] Reimplement `propagate_transaction` so all transaction properties survive the trip
+
+### 2.2 Privacy flag handling
+
+- [ ] Consistent privacy-flag propagation mechanism across all privacy components
+- [ ] Flag ↔ content consistency validation (flags must match actual transaction content)
+- [ ] Unified privacy flag handling across networking components
+
+### 2.3 Verification
+
+- [ ] Enhance `can_find_transaction` to detect stealth-address inconsistencies
+- [ ] Proper error reporting for stealth-address verification failures
+- [ ] Verification mechanisms for privacy-enhanced transactions
+- [ ] Cryptographic guarantees for transaction property preservation
+
+### 2.4 Config hooks
+
+- [ ] Stealth-address-specific config options with validation rules
+- [ ] Default configurations that guarantee stealth-address preservation
+- [ ] Validation rules for privacy component configuration combinations
+
+### 2.5 Tests and docs
+
+- [ ] End-to-end transaction flow with stealth addresses
+- [ ] Property preservation across all processing stages
+- [ ] Automated regression testing for privacy feature interactions
+- [ ] Document expected behavior for stealth-address handling
+- [ ] Implementation guidelines for privacy-component developers
+- [ ] Architecture documentation explaining privacy integration requirements
+
+---
+
+## 3. Network Privacy Component Integration
+
+### 3.1 NetworkPrivacyManager
+
+- [ ] Constructor accepts `Arc<PrivacySettingsRegistry>`
+- [ ] Replace `NetworkPrivacyLevel` enum with `config::PrivacyLevel` (remove the former entirely)
+- [ ] Handle `Custom` variant in every privacy-level match, with reasonable defaults and logging
+
+### 3.2 CircuitRouter
+
+- [ ] Proper `Circuit` struct with endpoints, relays, serde support, versioning
+- [ ] `circuit_map` uses correct key/value types with validation
+- [ ] Circuit cleanup for expired circuits
+- [ ] Rotation based on time + usage metrics
+- [ ] Health monitoring and selection algorithm driven by privacy needs
+- [ ] Fallback mechanisms for circuit failure
+
+### 3.3 DandelionRouter
+
+- [ ] Add configurable `stem_probability` / `fluff_probability` fields (defaults by privacy level)
+- [ ] Weighted random stem/fluff decision; adaptive adjustment by network conditions
+- [ ] Deterministic test mode for probabilities
+- [ ] Fix stem-phase handling, fluff broadcast, transaction aggregation
+- [ ] Stem-phase timeout + retry for failed propagation
+
+### 3.4 TorConnection
+
+- [ ] Add `circuit_rotation_interval` to `TorConfig`
+- [ ] Connection timeout, relay-selection strategy, bandwidth throttling configs
+- [ ] Preemptive circuit creation with jitter
+- [ ] Circuit pool with health monitoring
+- [ ] Stream isolation per transaction type
+- [ ] Fallback for circuit failures
+
+### 3.5 FingerprintingProtection
+
+- [ ] Add `BurstAndWait` connection pattern (configurable burst size, variable wait, randomized timing)
+- [ ] Pattern rotation with privacy-level-based selection probabilities
+- [ ] Group 24+ config parameters into logical sub-structs
+- [ ] Single reusable RNG instead of frequent `thread_rng()` calls
+- [ ] Thread pool instead of per-task thread creation
+- [ ] Central TCP parameter manager
+
+### 3.6 General networking cleanup
+
+- [ ] Remove duplicate entries from `FeatureFlag` / `PrivacyFeatureFlag` in `p2p.rs`
+- [ ] Centralize timeout and buffer-size constants
+- [ ] Group the 80+ constants in `dandelion.rs` into logical config structs
+- [ ] Document feature-toggle dependencies (e.g. `MULTI_HOP_STEM_PROBABILITY` depends on `MULTI_PATH_ROUTING_PROBABILITY`)
+- [ ] Reconcile `MAX_ROUTING_PATH_LENGTH` (10) vs `MAX_MULTI_HOP_LENGTH` (3)
+- [ ] Resolve `STEM_PHASE_MIN/MAX_TIMEOUT` differences between `mod.rs` and `dandelion.rs`
+- [ ] Proper state machine for `Stem` / `MultiHopStem` / `BatchedStem` transitions
+- [ ] Feature synchronization so all components share one privacy-feature view
+- [ ] Default privacy level from `Standard` → `Medium`
+- [ ] Consistent locking order in `connection_pool.rs` to prevent deadlocks
+- [ ] Simplify encrypted reputation mechanism
+- [ ] Extract duplicate connection logic into helpers
+- [ ] Unify circuit management between `tor.rs` and `circuit.rs`
+- [ ] Fix potential panic in `CloneableTcpStream::clone`
+- [ ] Consolidate `ConnectionObfuscationConfig` options into logical groups
+- [ ] Define clear boundaries between `protocol_morphing.rs` and `traffic_obfuscation.rs`
+- [ ] Reduce 8 protocol transformations to 3–4 most effective
+- [ ] More sophisticated timing obfuscation resistant to traffic analysis
+- [ ] Complete I2P listen-state implementation
+- [ ] Mandatory message authentication (`message.rs`); consider BLAKE3 checksums
+
+### 3.7 Testing
+
+- [ ] Unit test suites for `NetworkPrivacyManager`, `CircuitRouter`, `DandelionRouter`, `TorConnection`, `FingerprintingProtection`
+- [ ] Integration tests across privacy components with real registry
+- [ ] Privacy metric collection and verification (anonymity-set measurement, traffic pattern analysis, fingerprint resistance, privacy score calculation)
+
+---
+
+## 4. Crypto Module
+
+Crypto-module checklist was marked ~all done in the prior `1_todo_crypto.md`, but the module does
+not compile after the dep upgrade. Treat prior ticks as stale and re-verify.
+
+### 4.1 After build restoration — re-verify the claimed-done work
+
+- [ ] Constant-time implementations still constant (not optimized away after toolchain changes)
+- [ ] AES-GCM / ChaCha20-Poly1305 keypair encryption still correct
+- [ ] Argon2 / PBKDF2 key derivation still correct
+- [ ] Memory protection + guard pages still functional on Windows
+- [ ] DKG atomic state transitions still hold
+- [ ] `LocalPedersenCommitment::commit` still produces valid commitments
+
+### 4.2 Outstanding
+
+- [ ] Fuzz testing for all cryptographic primitives
+- [ ] Threat-model document
+- [ ] Cryptographic-guarantees-and-assumptions doc
+- [ ] Usage guidelines for secure implementation patterns
+- [ ] Remove `#[allow(dead_code)]` annotations where work is complete
+
+---
+
+## 5. Wallet Module
+
+### 5.1 Error handling and types
+
+- [ ] Replace `Option<Transaction>` returns with `Result` types carrying context
+- [ ] Structured error types (not generic strings)
+
+### 5.2 Privacy implementation
+
+- [ ] Validation and security checks on stealth addressing
+- [ ] Complete `decrypt_amount` with actual decryption logic
+- [ ] Replace placeholder implementations
+- [ ] Complete confidential-transactions implementation
+- [ ] Proper range proofs for transaction amounts
+
+### 5.3 Security
+
+- [ ] Encrypt private keys in `WalletBackupData`
+- [ ] Improve encryption/decryption for `export_bls_keypair` / `import_bls_keypair`
+- [ ] Remove `Debug` derives from sensitive structures; add safe debug alternatives
+- [ ] Timing-attack mitigations for sensitive crypto ops
+- [ ] Hardware security module / external signer support
+
+### 5.4 Concurrency
+
+- [ ] Consistent lock ordering to prevent deadlocks
+- [ ] Review lock-acquisition patterns in `integration.rs`
+- [ ] Atomic `submit_transaction` with rollback on partial failure
+- [ ] Robust synchronization for concurrent wallet operations
+
+### 5.5 UTXO + fees
+
+- [ ] Clarify dust UTXO handling with consistent threshold policy
+- [ ] Optimize UTXO selection for privacy + fee efficiency; consider UTXO age
+- [ ] Dynamic fee adjustment based on network conditions
+- [ ] Fee estimation API
+- [ ] Remove hardcoded fee parameters
+
+### 5.6 Recovery
+
+- [ ] Clear wallet recovery path if private keys are lost
+- [ ] Emergency functions for extreme situations
+
+### 5.7 Memory
+
+- [ ] Reduce unnecessary cloning of large structures
+- [ ] Explicit management for memory-sensitive data
+
+### 5.8 Tests & docs
+
+- [ ] BLS signing, view-key operations, confidential-transactions tests
+- [ ] Edge-case and failure-scenario tests
+- [ ] Document complex functions and privacy-feature security implications
+
+### 5.9 CLI Wallet (not yet started)
+
+- [ ] BIP39 mnemonic generation, BIP44 HD derivation, secure key storage
+- [ ] Transaction creation / signing with multisig, UTXO selection, privacy-preserving construction
+- [ ] Balance management (UTXO tracking, history, private views)
+- [ ] Sync modes (header sync, SPV, full node) with Tor/proxy support
+- [ ] Validator functionality (stake management, delegation, monitoring, slashing alerts)
+- [ ] Mining functionality (pool config, solo setup, hashrate monitoring)
+- [ ] Embedded block-explorer features
+
+### 5.10 CLI Validator / Mining / Explorer tools
+
+- [ ] Validator setup wizard, stake/delegation commands, key backup, offline signing
+- [ ] Mining setup wizard, CPU/GPU config, pool integration, statistics
+- [ ] Block explorer: lookup, rich queries, monitoring commands
+
+### 5.11 GUI Wallet (SLINT)
+
+- [ ] Cross-platform SLINT UI framework with responsive components
+- [ ] Wallet, validator, mining, block-explorer sub-UIs
+- [ ] Backup / restore with encrypted seed handling
+- [ ] Address book with encrypted storage
+
+---
+
+## 6. Blockchain Module
+
+### 6.1 Security
+
+- [ ] Robust double-spend detection with cryptographic proofs (current: string-based index)
+- [ ] Time-locked transaction support
+- [ ] Enforce penalties (not just logs) for time-based correlation in `block_structure.rs`
+- [ ] Stronger `entry_randomness` in mempool against deep analysis
+- [ ] Complete transaction-graph analysis countermeasures
+- [ ] Transaction unlinkability mechanism
+- [ ] Replay-attack protection for sponsor signatures (add nonce or message ID)
+- [ ] Signature aggregation for validator sets
+- [ ] Threshold signature support with key rotation
+
+### 6.2 State and errors
+
+- [ ] Standardize on `ObscuraError` instead of boolean returns
+- [ ] Fix None-case handling of `UTXOSet` in `Mempool`
+- [ ] Replace `unwrap_or_default()` with proper error handling
+- [ ] Consolidate duplicate `UTXOSet` methods (`get_utxo` / `get`)
+- [ ] Separate validation logic from data structures
+
+### 6.3 Performance
+
+- [ ] Mempool: references instead of clones; memory-pool limits; time/resource-based eviction
+- [ ] Fix fee-ordering rebuild on transaction removal
+- [ ] Incremental merkle-tree updates
+- [ ] Cache expensive crypto; parallel transaction verification
+
+### 6.4 Logic fixes
+
+- [ ] `UTXOSet.validate_transaction` must check value correctness, not just existence
+- [ ] Integer-overflow protection in fee calculation
+- [ ] Division-by-zero guards in `fee_rate` calculation
+- [ ] Block timestamp strictly greater than median time (not equal)
+- [ ] Merkle root calculation handles empty transaction case
+- [ ] Fix floating-point `Ord` in `mempool.rs` line ~90 (non-deterministic ordering)
+
+### 6.5 Implementation specifics
+
+- [ ] `mempool.rs`: strengthen fee obfuscation; consistent constraint verification; sponsor-eligibility validation
+- [ ] `transaction.rs`: privacy-feature precondition validation; stronger obfuscation guarantees; comprehensive range-proof verification
+- [ ] `block_structure.rs`: time-validation edge cases; less-responsive block-size adjustment; stronger timing privacy
+
+---
+
+## 7. Consensus Module
+
+### 7.1 PoS migration
+
+- [ ] Complete migration from `pos_old.rs` to `pos/*.rs`; remove `pos_old` imports
+- [ ] Streamline and document `pos_old`'s ~180 constants (or remove once migrated)
+
+### 7.2 Hybrid consensus
+
+- [ ] Fix inconsistent validator state management
+- [ ] Move snapshot creation and state pruning to a separate process (currently blocks validation)
+- [ ] Fix non-functional `prune_old_state` (only logs intent)
+- [ ] Standardize error handling in `hybrid_optimizations.rs` (replace `Result<(), String>`)
+- [ ] Address thread safety in `HybridStateManager`
+- [ ] Synchronize validator-cache updates with selection
+
+### 7.3 PoS security
+
+- [ ] Nothing-at-stake prevention
+- [ ] Fault detection and slashing consensus
+- [ ] Integrate BFT consensus with hybrid model
+- [ ] Finality mechanism in the hybrid model
+
+### 7.4 PoW
+
+- [ ] Improved difficulty adjustment with anti-volatility / time-warp protections
+- [ ] Parallel mining computation (current: simple `max_attempts`)
+
+### 7.5 Fees and rewards
+
+- [ ] Fee calculation accounts for congestion in hybrid model
+- [ ] Clarify stake-based vs fee-based incentive interaction
+- [ ] RBF accounts for chain reorganizations in hybrid model
+- [ ] Adjust CPFP for hybrid consensus
+
+### 7.6 Multi-asset staking
+
+- [ ] Oracle manipulation protection for exchange rates
+- [ ] Risk management for volatile assets
+- [ ] Validation of external assets
+- [ ] Economic-attack prevention via exchange-rate manipulation
+
+### 7.7 Cleanup
+
+- [ ] Remove `#[allow(dead_code)]` annotations and related dead code
+- [ ] Replace `println!` debug statements with proper logging
+- [ ] Expand test coverage for PoW/PoS interactions
+- [ ] Document consensus-component interactions and security assumptions
+
+---
+
+## 8. Configuration Module
+
+### 8.1 Error handling
+
+- [ ] Systematic change detection in `privacy_registry.rs::apply_preset` (currently checks only a few fields)
+- [ ] Fix deserialization in `propagation.rs` (`ConfigMigration` dummy function that always errors)
+- [ ] Granular error types with context and chaining
+
+### 8.2 Concurrency
+
+- [ ] Fix potential deadlocks with multiple-lock acquisition order
+- [ ] Reduce lock contention (consider RCU for configs with many readers)
+- [ ] Group related fields under single locks; transactional multi-field updates
+
+### 8.3 Security
+
+- [ ] Validation rules against configs that expose sensitive data
+- [ ] Rate limiting for configuration changes
+- [ ] Tamper-evident audit logging with secure transfer
+- [ ] Signature verification for config changes; replay-attack prevention
+
+### 8.4 Logic
+
+- [ ] Deep merge of nested structures in `propagation.rs::merge_configurations`
+- [ ] Weighted shortest-path migration selection (Dijkstra)
+- [ ] Consolidate scattered defaults into a central location
+- [ ] State machine for configuration lifecycle with invariant checks
+
+### 8.5 Missing features
+
+- [ ] Atomic file-based persistence
+- [ ] Configuration templates with inheritance
+- [ ] Backward compatibility for older versions
+- [ ] Distributed configuration synchronization
+- [ ] Environment overlays (dev / test / prod)
+- [ ] Snapshots + rollback
+- [ ] Secrets management integration (encryption for sensitive values, access control)
+- [ ] Hot-reload / dynamic toggles
+- [ ] Configuration versioning with automated schema migrations
+
+### 8.6 Structure
+
+- [ ] Separate `PrivacySettingsRegistry` vs `ConfigPropagator` responsibilities
+- [ ] Standardize error handling across modules
+- [ ] Property-based testing for validation rules
+
+---
+
+## 9. Integration Testing
+
+- [ ] Dandelion + Tor integration tests
+- [ ] Stealth addressing + confidential transactions
+- [ ] View key + metadata protection
+- [ ] Circuit routing + timing obfuscation
+- [ ] Multi-hop routing + transaction batching
+
+### Adversarial
+
+- [ ] Correlation attack simulations
+- [ ] Timing leak tests across module boundaries
+- [ ] Metadata leakage detection across components
+- [ ] Integration fuzzing for privacy boundaries
+- [ ] Adversarial network simulation
+
+---
+
+## 10. Performance, Error Handling, Metrics (cross-cutting)
+
+### 10.1 Performance
+
+- [ ] Profile privacy feature integration points (crypto across boundaries, tx pipeline, network propagation, memory use, concurrency bottlenecks)
+- [ ] Shared cryptographic-operation cache
+- [ ] Batched signature verification across components
+- [ ] Parallel processing for privacy-intensive operations
+- [ ] Load-based privacy-level adjustments with prioritization framework
+- [ ] Optimize Pedersen / bulletproofs / stealth-address operations (SIMD, precomputation, parallelization, HW accel)
+
+### 10.2 Error handling framework
+
+- [ ] Privacy-specific error taxonomy with severity classification
+- [ ] Circuit-breaker patterns for privacy features
+- [ ] Graceful degradation with fallback mechanisms
+- [ ] Privacy-invariant validation at boundaries
+- [ ] Pre-broadcast transaction-privacy verification
+- [ ] Post-recovery privacy validation
+
+### 10.3 Metrics & monitoring
+
+- [ ] Anonymity-set size monitoring
+- [ ] Statistical transaction-graph monitoring
+- [ ] Timing-correlation detection
+- [ ] Peer-connection privacy metrics
+- [ ] Metadata-protection effectiveness measurement
+- [ ] Real-time privacy-status dashboard with historical tracking and regression alerts
+- [ ] Resource-usage tracking attributed to privacy features
+- [ ] Privacy-attack early-warning system
+
+---
+
+## 11. Phase 2 — Advanced Privacy (6–12 months)
+
+### 11.1 Zero-knowledge proofs
+
+- [ ] Halo 2 integration
+  - [ ] Circuit compiler, witness generation, proving-key generation
+  - [ ] Verification-key generation, batch verification, proof aggregation
+  - [ ] Parallel generation, proof compression, caching
+
+### 11.2 Transaction privacy (Phase 2 layer)
+
+- [ ] Ring signatures, decoy selection, input mixing
+- [ ] Output encryption; hierarchical view-key system with selective disclosure
+- [ ] Full stealth addressing (Diffie-Hellman, HKDF, ephemeral keygen, one-time address derivation, wallet integration)
+- [ ] Confidential transactions production readiness (Pedersen + bulletproofs + multi-output proofs + batch verification)
+
+### 11.3 Advanced network privacy
+
+- [ ] Full Dandelion++ (routing table, anonymity graph, relay selection, propagation delay, fallback)
+- [ ] Clearnet fallback and backup routing
+- [ ] Bridge relay support (pluggable transport, obfs4, meek, snowflake, custom obfuscation)
+
+### 11.4 Advanced infrastructure
+
+- [ ] Perfect forward secrecy for all communications
+- [ ] Metadata minimization
+- [ ] Encrypted storage for sensitive blockchain data
+- [ ] Zero-knowledge state updates
+- [ ] Metadata removal before broadcast
+
+---
+
+## 12. Phase 3 — Private On-Ramp & DEX (12–18 months)
+
+### 12.1 Atomic swaps
+
+- [ ] Bitcoin atomic swaps (HTLC, script, protocol)
+- [ ] Monero atomic swaps (cross-chain locks, privacy preservation)
+- [ ] Generic protocol with timeout, dispute resolution, refund
+
+### 12.2 Core DEX
+
+- [ ] Order book, matching engine, price feeds
+- [ ] Price-time priority matching, trade settlement
+- [ ] AMM / liquidity pools with fee distribution
+
+### 12.3 Privacy DEX
+
+- [ ] Private order submission (encryption, blind bidding, dark pool)
+- [ ] Hidden liquidity pools (confidential LP, private balances)
+- [ ] Anonymous trading (mixer integration, private settlement)
+
+### 12.4 Smart contracts
+
+- [ ] Scripting language (compiler, standard library, debugger)
+- [ ] VM (instruction set, stack machine, gas metering)
+- [ ] Validation (static analysis, security checks, formal verification)
+- [ ] Private state (encryption, merkle trees, witnesses)
+- [ ] Secure execution (TEE, MPC, proof generation)
+- [ ] Verification (ZK proofs, state verification, audit)
+
+---
+
+## 13. Phase 4 — Mainnet & Governance (18–24 months)
+
+### 13.1 Final testing
+
+- [ ] Security audits (code review, pentest, formal verification)
+- [ ] Performance (load, stress, scalability)
+- [ ] Network stress (tx flooding, node failure, partition)
+
+### 13.2 Cryptographic security audits
+
+- [ ] Audit Pedersen commitments (correctness, blinding, homomorphism, known attacks)
+- [ ] Audit bulletproofs (range-proof correctness, ZK properties, batch verification)
+- [ ] Audit stealth addressing (DH, one-time addresses, scanning, forward secrecy)
+- [ ] Audit transaction privacy (graph protection, unlinkability, metadata stripping)
+- [ ] Formal verification with theorem provers (Coq, Isabelle/HOL)
+- [ ] Symbolic execution and model checking
+- [ ] Side-channel analysis (timing, power, cache, fault injection)
+
+### 13.3 Launch
+
+- [ ] Genesis block, initial distribution, bootstrap nodes
+- [ ] Seed-node deployment with monitoring and backup systems
+- [ ] Launch documentation (technical specs, user guides, API docs)
+
+### 13.4 DAO governance
+
+- [ ] Voting mechanism (proposals, delegation)
+- [ ] Proposal system (types, discussion, execution)
+- [ ] Execution framework (timelock, veto, upgrades)
+- [ ] Treasury (funding, distribution, accountability)
+
+---
+
+## 14. Developer Experience
+
+### 14.1 Testnet
+
+- [ ] Genesis block config with test coin distribution and privacy feature activation
+- [ ] Bootstrap seed nodes with monitoring and privacy-preserving logging
+- [ ] Block explorer, network stats, alert system, privacy-compliance dashboard
+
+### 14.2 SDK & APIs
+
+- [ ] Client libraries with example code and testing tools
+- [ ] Language bindings / wrappers
+- [ ] RPC, REST, WebSocket API documentation
+- [ ] CLI command documentation
+
+### 14.3 Documentation
+
+- [ ] Smart contract, DEX, governance docs
+- [ ] Complete PoS technical spec, user guides, validator operation procedures
+- [ ] Security best practices, slashing conditions, economic model
+- [ ] Interactive SLINT code examples, architecture diagrams, security demos
+- [ ] Video tutorials, developer workshops
+
+### 14.4 CI/CD & release
+
+- [ ] Evaluate `oranda` and `cargo-dist`; consider custom website (formerly `7_todo_website_CI-CD.md`)
+- [ ] Fuzzing for RandomX inputs
+- [ ] Property-based testing for consensus rules
+- [ ] Automated regression suite with performance-regression detection
+- [ ] Coverage-guided testing
+- [ ] Parallel test execution support
+
+---
+
+## 15. Future / Post-MVP
+
+### 15.1 Scalability
+
+- [ ] Layer-2 (state channels, Plasma, rollups)
+- [ ] Privacy-preserving L2 (ZK rollups, private state channels, confidential batching)
+- [ ] Sharding (data, state, transaction) with privacy-preserving cross-shard
+
+### 15.2 Post-quantum research
+
+- [ ] Lattice-based crypto (NTRU, Ring-LWE, lattice commitments / range proofs)
+- [ ] Isogeny-based (SIDH/SIKE, post-quantum stealth addressing, isogeny commitments)
+- [ ] Hash-based signatures (SPHINCS+, Merkle-tree based, stateless)
+- [ ] Multivariate (Rainbow, HFEv-)
+- [ ] Quantum-resistant confidential transactions and stealth addressing
+- [ ] STARKs and lattice-based ZK proofs
+- [ ] Hybrid classical / PQ migration strategy with backward compatibility
+
+### 15.3 Ecosystem integration
+
+- [ ] Exchange listings (CEX + DEX)
+- [ ] Hardware / mobile / web wallets (SLINT WebAssembly)
+- [ ] Payment processors and POS tools
+- [ ] DeFi (lending, yield farming, derivatives)
+
+---
+
+## 16. Continuous / Recurring
+
+- [ ] Regular security audits (code, network, threat modeling)
+- [ ] Bug-bounty program with reward tiers and triage
+- [ ] Penetration testing (network, contracts, wallet)
+- [ ] Automated code analysis + manual review + dependency audit
+- [ ] Developer documentation updates; community guidelines; contribution framework
+- [ ] Network optimization (bandwidth, latency, connection management)
+- [ ] Transaction throughput (propagation, validation speed, mempool management)
+- [ ] Storage optimization (DB indexing, state pruning, archive)
+- [ ] Memory management (cache, pooling, resource limits)
+
+---
+
+## 17. Reference — Completed Before Dep Upgrade
+
+The items below were checked-off in the prior TODOs. Many depend on crypto code that no longer
+compiles, so several will need re-verification once Section 0 is resolved.
+
+- Core blockchain: 60 s block time, dynamic size, merkle-tree structure
+- Consensus: RandomX PoW, PoS (staking, slashing, rewards, delegation, multi-asset, governance, advanced features), hybrid integration with BFT finality
+- Network layer: P2P protocol, Kademlia DHT, peer management, block propagation
+- Transaction pool: mempool with fee prioritization, validation, fee calculation
+- Privacy foundations: preliminary stealth addressing, basic confidential transactions, view keys
+- Network privacy: Dandelion++ (stem/fluff, anonymity sets, adaptive paths), Tor / I2P integration, bridge relays
+- Advanced privacy: zero-knowledge key management (DKG, TSS, VSS, MPC), hierarchical view keys, metadata protection
+- Side-channel: constant-time ops, memory protection, power-analysis countermeasures
+- Integration scaffolding: `Transaction` class, `PrivacyRegistry`, `SenderPrivacy` / `ReceiverPrivacy`, `StealthAddress` in wallet
+- Crypto primitives: BLS12-381, Jubjub, Pedersen commitments, bulletproofs design, DH key exchange
+- ChaCha20 SIMD optimizations, additional entropy, timing-attack mitigations
+- Connection pool testing, mock TCP streams, comprehensive test logging
+- PoS architecture, implementation, and security documentation
