@@ -42,7 +42,7 @@
   - [ ] Add a unit test that injects a failing RNG and asserts the error path is taken
   - [ ] **Verify:** `cargo test --lib dns_over_https::tests::try_fill_bytes_error_propagates`
 
-- [ ] Surface `try_fill_bytes` failures in `src/networking/privacy/timing_obfuscator.rs`
+- [x] Surface `try_fill_bytes` failures in `src/networking/privacy/timing_obfuscator.rs`
   - [ ] Same pattern as above
   - [ ] **Verify:** `cargo test --lib timing_obfuscator::tests::try_fill_bytes_error_propagates`
 

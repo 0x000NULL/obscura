@@ -167,6 +167,15 @@ impl TimingObfuscator {
         batches.retain(|batch| !batch.is_expired());
         Ok(())
     }
+
+    /// Generate a new batch ID from the supplied RNG, propagating any entropy
+    /// failure as a typed `String` error rather than panicking.
+    pub(crate) fn next_batch_id<R: RngCore>(rng: &mut R) -> Result<u64, String> {
+        let mut id_bytes = [0u8; 8];
+        rng.try_fill_bytes(&mut id_bytes)
+            .map_err(|e| format!("RNG entropy failure: {}", e))?;
+        Ok(u64::from_le_bytes(id_bytes))
+    }
 }
 
 pub struct TimingObfuscatorHandle {
@@ -245,9 +254,7 @@ impl PrivacyRouter for TimingObfuscator {
         let mut rng = self.rng.lock().unwrap();
         
         // Generate a new batch ID
-        let mut id_bytes = [0u8; 8];
-        rng.try_fill_bytes(&mut id_bytes).expect("RNG entropy failure: try_fill_bytes returned Err");
-        let batch_id = u64::from_le_bytes(id_bytes);
+        let batch_id = Self::next_batch_id(&mut *rng)?;
         
         // Create a new batch
         let now = Instant::now();
@@ -385,7 +392,47 @@ impl BatchSizeDistribution {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+    use rand_core::{Error as RandError, RngCore};
+    use std::num::NonZeroU32;
+
+    /// RNG that always fails `try_fill_bytes`, used to exercise the error path
+    /// of `TimingObfuscator::next_batch_id`. The other `RngCore` methods are
+    /// not exercised by the production code under test, so they `unreachable!()`.
+    struct FailingRng;
+
+    impl RngCore for FailingRng {
+        fn next_u32(&mut self) -> u32 {
+            unreachable!("FailingRng::next_u32 should not be called");
+        }
+
+        fn next_u64(&mut self) -> u64 {
+            unreachable!("FailingRng::next_u64 should not be called");
+        }
+
+        fn fill_bytes(&mut self, _dest: &mut [u8]) {
+            unreachable!("FailingRng::fill_bytes should not be called");
+        }
+
+        fn try_fill_bytes(&mut self, _dest: &mut [u8]) -> Result<(), RandError> {
+            let code = NonZeroU32::new(RandError::CUSTOM_START + 1).unwrap();
+            Err(RandError::from(code))
+        }
+    }
+
+    #[test]
+    fn try_fill_bytes_error_propagates() {
+        let mut rng = FailingRng;
+        let result = TimingObfuscator::next_batch_id(&mut rng);
+        assert!(result.is_err(), "expected Err, got {:?}", result);
+        if let Err(s) = result {
+            assert!(
+                s.starts_with("RNG entropy failure"),
+                "expected error message to start with 'RNG entropy failure', got {:?}",
+                s
+            );
+        }
+    }
+
     #[test]
     fn test_timing_obfuscation() {
         let config = TimingConfig::default();
