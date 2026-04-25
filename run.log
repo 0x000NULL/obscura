@@ -127,3 +127,19 @@
 ==> exec  replace-test-mode-only-randomx-benches-with-real-mode-bench
       exec: 221.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\replace-test-mode-only-randomx-benches-with-real-mode-bench-execute-20260425T225604330.txt
       notes: - Placed the `impl Default` block immediately above `impl Drop` (the plan offered "after the existing `impl RandomXContext` block (or alongside the `Drop` impl)"); chose alongside `Drop` for adjacency to other trait impls. / - Set `warm_up_time(Duration::from_secs(1))` since the plan specified "short but non-trivial" warm-up without giving a value; 1s mirrors the conservative side of criterion's defaults while keeping total bench time bounded for real-mode hashing.
+    [22/91] replace-test-mode-only-randomx-benches-with-real-mode-bench: plan $0.48 / execute $0.38 / verified / committed 21a43a1
+==> plan  create-src-networking-constants-rs-collecting-timeout
+      plan: 214.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\create-src-networking-constants-rs-collecting-timeout-plan-20260425T230104248.txt
+==> exec  create-src-networking-constants-rs-collecting-timeout
+      exec: 249.02s, failure_mode=infra-error, transcript=.claude\todo-runner\transcripts\create-src-networking-constants-rs-collecting-timeout-execute-20260425T230513302.txt
+    [23/91] create-src-networking-constants-rs-collecting-timeout: phase-2 infra-error
+==> plan  reconcile-max-routing-path-length-10-vs-max-multi-hop
+      plan: 154.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\reconcile-max-routing-path-length-10-vs-max-multi-hop-plan-20260425T230747803.txt
+    [24/91] reconcile-max-routing-path-length-10-vs-max-multi-hop: 1 cross-item, 0 local blockers -> needs-review
+        [cross-item] Is it acceptable for `PropagationState::MultiHopStem(hops)` to now sample `hops` up to 10 instead of 3, or should multi-hop retain its tighter cap (in which case the two constants are NOT duplicates and should both stay, with this todo reframed as de-duplicating only the redundant declarations across files)?
+          default: Accept the widening - proceed with the literal "pick one constant" reading. If subsequent items fail because multi-hop is now too long, revisit by reintroducing `MAX_MULTI_HOP_LENGTH` solely as the multi-hop cap and documenting the two as deliberately distinct.
+==> plan  resolve-stem-phase-min-timeout-stem-phase-max-timeout
+      plan: 233.01s, failure_mode=success, transcript=.claude\todo-runner\transcripts\resolve-stem-phase-min-timeout-stem-phase-max-timeout-plan-20260425T231140841.txt
+==> exec  resolve-stem-phase-min-timeout-stem-phase-max-timeout
+      exec: 122.03s, failure_mode=success, transcript=.claude\todo-runner\transcripts\resolve-stem-phase-min-timeout-stem-phase-max-timeout-execute-20260425T231342905.txt
+      notes: - **Pre-applied unstage step.** Per the plan's risk section, ran `git restore --staged` on `src/networking/{constants.rs,dandelion.rs,mod.rs,circuit.rs,p2p.rs}` and `run.log` before editing. After unstaging, the worktree-vs-HEAD diff for those Rust files was empty (the previously-staged edits and the worktree reverts netted to zero), confirming the prior broader plan had been fully reverted in the worktree. So my edits are the only Rust delta now. / - **Module-doc style.** Used a short `//!` doc comment plus per-const one-liners (`/// Minimum time spent in the stem phase.` / `/// Maximum time spent in the stem phase.`) - consistent with the plan's "minimal one-liners" assumption.

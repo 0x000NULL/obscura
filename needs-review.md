@@ -75,3 +75,31 @@
 
 ---
 
+
+## create-src-networking-constants-rs-collecting-timeout
+- Item: Create `src/networking/constants.rs` collecting timeout + buffer-size constants
+- Reason: phase-2 infra-error
+- Timestamp: 2026-04-25T23:05:13.3145376Z
+
+### Detail
+```
+{"type":"result","subtype":"error_max_turns","duration_ms":247318,"duration_api_ms":247414,"is_error":true,"num_turns":31,"stop_reason":"tool_use","session_id":"b39409ec-2bc1-4d08-96f4-ac15135ecc60","total_cost_usd":1.97048,"usage":{"input_tokens":40,"cache_creation_input_tokens":94868,"cache_read_input_tokens":1602532,"output_tokens":22939,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":94868,"ephemeral_5m_input_tokens":0},"inference_geo":"","iterations":[{"input_tokens":1,"output_tokens":751,"cache_read_input_tokens":73877,"cache_creation_input_tokens":447,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":447},"type":"message"}],"speed":"standard"},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":2534,"outputTokens":16,"cacheReadInputTokens":0,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.002614,"contextWindow":200000,"maxOutputTokens":32000},"claude-opus-4-7[1m]":{"inputTokens":40,"outputTokens":22939,"cacheReadInputTokens":1602532,"cacheCreationInputTokens":94868,"webSearchRequests":0,"costUSD":1.9678660000000001,"contextWindow":1000000,"maxOutputTokens":64000}},"permission_denials":[],"terminal_reason":"max_turns","fast_mode_state":"off","uuid":"ac280fd7-f679-4e7b-bd89-2514411e57fa","errors":["Reached maximum number of turns (30)"]}
+```
+
+---
+
+
+## reconcile-max-routing-path-length-10-vs-max-multi-hop
+- Item: Reconcile `MAX_ROUTING_PATH_LENGTH` (10) vs `MAX_MULTI_HOP_LENGTH` (3)
+- Reason: blockers
+- Timestamp: 2026-04-25T23:07:47.8117976Z
+
+### Blocker: multi-hop hop count widens from 3 to 10
+- severity: cross-item
+- affects: dandelion, privacy, multi-hop-stem, propagation-state, latency-budget
+- question: Is it acceptable for `PropagationState::MultiHopStem(hops)` to now sample `hops` up to 10 instead of 3, or should multi-hop retain its tighter cap (in which case the two constants are NOT duplicates and should both stay, with this todo reframed as de-duplicating only the redundant declarations across files)?
+- default_assumption: Accept the widening — proceed with the literal "pick one constant" reading. If subsequent items fail because multi-hop is now too long, revisit by reintroducing `MAX_MULTI_HOP_LENGTH` solely as the multi-hop cap and documenting the two as deliberately distinct.
+- Resolution: 
+
+---
+

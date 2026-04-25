@@ -12,10 +12,9 @@ use crate::networking::privacy::PrivacyLevel;
 use crate::networking::privacy_config_integration::PrivacySettingsRegistry;
 use crate::blockchain::Transaction;
 use crate::networking::dandelion::{DandelionManager, PropagationState};
+use crate::networking::constants::{STEM_PHASE_MAX_TIMEOUT, STEM_PHASE_MIN_TIMEOUT};
 
 // Constants for Dandelion routing
-const STEM_PHASE_MIN_TIMEOUT: Duration = Duration::from_secs(10);
-const STEM_PHASE_MAX_TIMEOUT: Duration = Duration::from_secs(30);
 const STEM_PROBABILITY: f64 = 0.9;
 const MIN_ROUTING_PATH_LENGTH: usize = 2;
 const MAX_ROUTING_PATH_LENGTH: usize = 10;

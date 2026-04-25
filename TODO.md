@@ -188,7 +188,7 @@
   - [ ] Add doc comment explaining the choice
   - [ ] **Verify:** `cargo check --lib`; `grep -rn 'MAX_ROUTING_PATH_LENGTH\|MAX_MULTI_HOP_LENGTH' src/ | wc -l` ≤ count of declarations + 1
 
-- [ ] Resolve `STEM_PHASE_MIN_TIMEOUT` / `STEM_PHASE_MAX_TIMEOUT` divergence between `mod.rs` and `dandelion.rs`
+- [x] Resolve `STEM_PHASE_MIN_TIMEOUT` / `STEM_PHASE_MAX_TIMEOUT` divergence between `mod.rs` and `dandelion.rs`
   - [ ] Single declaration in `src/networking/constants.rs`; remove the duplicate
   - [ ] **Verify:** `cargo check --lib`; `grep -rn 'STEM_PHASE_MIN_TIMEOUT\|STEM_PHASE_MAX_TIMEOUT' src/networking/ | wc -l` equals 2 (one each in constants.rs)
 

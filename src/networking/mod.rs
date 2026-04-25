@@ -24,13 +24,13 @@ const STEM_PROBABILITY: f64 = 0.9;
 const MULTI_HOP_STEM_PROBABILITY: f64 = 0.7;
 const MIN_ROUTING_PATH_LENGTH: usize = 2;
 const MAX_MULTI_HOP_LENGTH: usize = 5;
-const STEM_PHASE_MIN_TIMEOUT: Duration = Duration::from_secs(30);
-const STEM_PHASE_MAX_TIMEOUT: Duration = Duration::from_secs(600);
 const STEM_PATH_RECALCULATION_INTERVAL: Duration = Duration::from_secs(600);
 const BATCH_TRANSACTIONS_BEFORE_FLUFF: bool = true;
 const USE_DECOY_TRANSACTIONS: bool = true;
 const MAX_NEW_CONNECTIONS_PER_DISCOVERY: usize = 3;
 
+// Add the canonical constants module
+pub mod constants;
 // Add the p2p module
 pub mod p2p;
 // Add the message module

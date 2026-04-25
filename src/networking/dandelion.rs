@@ -16,12 +16,11 @@ use std::hash::Hasher;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::networking::timing_obfuscation::TimingObfuscation;
+use crate::networking::constants::{STEM_PHASE_MAX_TIMEOUT, STEM_PHASE_MIN_TIMEOUT};
 use crate::blockchain::Transaction;
 use crate::crypto::metadata_protection::BroadcastMetadataCleaner;
 
 // Constants for Dandelion protocol
-pub const STEM_PHASE_MIN_TIMEOUT: Duration = Duration::from_secs(10); // Minimum time in stem phase
-pub const STEM_PHASE_MAX_TIMEOUT: Duration = Duration::from_secs(30); // Maximum time in stem phase
 pub const STEM_PROBABILITY: f64 = 0.9; // Probability to relay in stem phase vs fluff
 pub const MIN_ROUTING_PATH_LENGTH: usize = 2; // Minimum nodes in stem phase path
 pub const MAX_ROUTING_PATH_LENGTH: usize = 10; // Maximum nodes in stem path
