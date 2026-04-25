@@ -203,3 +203,7 @@ path = "tests/e2e/tx_sign.rs"
 [[test]]
 name = "tx_mempool"
 path = "tests/e2e/tx_mempool.rs"
+
+[[test]]
+name = "tx_broadcast"
+path = "tests/e2e/tx_broadcast.rs"

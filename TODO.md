@@ -121,7 +121,7 @@
 
 ### 2.4 Broadcast path
 
-- [ ] Add integration test `tests/e2e/tx_broadcast.rs` covering mempool → broadcast
+- [x] Add integration test `tests/e2e/tx_broadcast.rs` covering mempool → broadcast
   - [ ] Wire mempool to a mock `BroadcastSink`, assert sink received the tx hash
   - [ ] **Verify:** `cargo test --test tx_broadcast mempool_emits_to_broadcast`
 
