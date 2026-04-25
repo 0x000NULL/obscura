@@ -1,63 +1,50 @@
 # Plan: add-ci-gate-so-a-green-cargo-check-all-targets-is-required
 
 ## Goal
-Create a GitHub Actions workflow that runs `cargo check --all-targets` on every pull request so PRs cannot be merged unless the check succeeds.
+Add a GitHub Actions workflow that runs `cargo check --all-targets` on every PR so the result can be set as a required status check.
 
 ## Steps
-1. Create a new workflow `.github/workflows/ci.yml` (the existing `release.yml` only handles tag-driven releases; the pre-existing `build-test.yml.disabled` is disabled and also runs heavier clippy/fmt/tests/bench gates that would likely fail today).
-2. The workflow triggers on `pull_request` to `main` (and `push` to `main` so the default branch has a baseline green run for branch-protection status checks).
-3. Job `check` on `ubuntu-latest`:
-   - `actions/checkout@v4`
-   - `dtolnay/rust-toolchain@stable` (no extra components needed for `cargo check`).
-   - `Swatinem/rust-cache@v2` for `~/.cargo/registry`, `~/.cargo/git`, and `target/` keyed on `Cargo.lock`.
-   - Install the few Linux system dependencies the crate needs for its C-linking deps (pkg-config, libssl-dev, clang, cmake) — mirroring what other Rust crypto projects need; skip only if build proves none are required.
-   - Run `cargo check --all-targets --locked` as the single gate step. (`--locked` protects against drive-by `Cargo.lock` changes.)
-4. Give the job a stable name (`check / cargo check --all-targets`) so it can be selected verbatim as a required status check in GitHub branch-protection settings.
-5. Document in the PR body (not in repo) that the repo admin must enable this job as a required status check on `main` in GitHub branch protection — a workflow alone cannot make itself "required"; that is a repo setting.
-6. Leave `build-test.yml.disabled` alone (out of scope; it additionally enforces fmt/clippy/tests/bench which the repo is not ready for per `needs-review.md` and recent commit `d7c5113` "build restored except ~16 bench errors").
+1. Create a new workflow file `.github/workflows/ci-check.yml` that triggers on `pull_request` (all branches) and on `push` to `main`/`master`, with `workflow_dispatch` for manual runs.
+2. Define a single job `check` (named `cargo check --all-targets` so the status name is stable for branch protection) running on `ubuntu-latest`.
+3. Job steps: `actions/checkout@v4`; install Rust stable via `dtolnay/rust-toolchain@stable`; cache cargo registry/git/target with `actions/cache@v4` keyed on `Cargo.lock`; run `cargo check --all-targets --locked`.
+4. Do NOT mark this workflow `.disabled` — the existing `*.yml.disabled` files (build-test, documentation, format-code) stay untouched; the new workflow is intentionally active so it lands red until the bench-fix item resolves.
+5. Update `needs-review.md` (or the project TODO entry tracking this) to note: branch protection rule must be added manually by an admin in repo Settings → Rules → Branches: require status check `cargo check --all-targets` on PRs to `main`. Include the same instruction in the PR description for whoever merges this.
+6. Do not modify `.github/workflows/release.yml` — release CI is independent of the PR gate.
 
 ## Files
-- `.github/workflows/ci.yml` -- new file; PR + push-to-main trigger, single job running `cargo check --all-targets --locked` on ubuntu-latest with rust-cache.
+- `.github/workflows/ci-check.yml` -- new workflow file with a single `check` job running `cargo check --all-targets --locked` on `pull_request` and `push` to `main`/`master`.
+- `needs-review.md` -- add a one-line note pointing to the manual branch-protection step required after merge (only if this file is the canonical follow-up tracker; otherwise leave to PR description).
 
 ## Risks
-- `cargo check --all-targets` compiles benches too. Recent commit `d7c5113` indicates benches had ~16 errors, and `6a26d3e` only fixed one. If bench errors remain, the CI gate will be red on day one and block all PRs. Mitigation options (listed; will pick per default assumption): (a) also run fmt/clippy-ignoring lib-only check, (b) scope gate to `--lib --bins --tests` instead of `--all-targets`, or (c) ship it red and let the next item clean benches. Item title explicitly says `--all-targets`, so the plan keeps `--all-targets`.
-- Linux-only check will miss Windows-specific breakage (the repo is developed on Windows per git status). Acceptable for a "minimum gate" — can expand to a matrix later.
-- Missing system deps on ubuntu runner could cause spurious failures unrelated to source.
-- `--locked` will fail CI if someone commits a `Cargo.toml` change without regenerating `Cargo.lock`. That is the desired behavior but worth flagging.
-- Branch protection enforcement is a GitHub repo setting that must be toggled manually by an admin — merely adding the workflow file does not make the check "required."
+- The gate lands red by design until the separate bench-fix item merges; any PR opened during that window cannot be merged through the protected path. This is the intended pressure mechanism per the resolved Q&A.
+- Cache key collisions could mask a stale-target false-pass; mitigated by keying on `Cargo.lock` and using `--locked`.
+- `cargo check --all-targets` on Ubuntu may surface platform-specific issues that don't reproduce on Windows dev machines (current dev OS); acceptable since the gate's purpose is to ensure CI-platform buildability.
+- Branch protection is not enforced by this PR — until an admin enables the required status check, the workflow runs but does not block merges. Documented as a manual step.
+- Workflow will run on forks' PRs; `cargo check` is read-only and needs no secrets, so fork PRs will succeed/fail on the same criteria.
 
 ## Verify
 ```
-test -f .github/workflows/ci.yml
-grep -q "cargo check --all-targets" .github/workflows/ci.yml
-grep -Eq "pull_request" .github/workflows/ci.yml
-grep -Eq "actions/checkout@v[0-9]+" .github/workflows/ci.yml
-grep -Eq "dtolnay/rust-toolchain|actions-rs/toolchain|rust-toolchain" .github/workflows/ci.yml
-python -c "import yaml,sys; yaml.safe_load(open('.github/workflows/ci.yml'))"
+test -f .github/workflows/ci-check.yml
+grep -q 'cargo check --all-targets' .github/workflows/ci-check.yml
+grep -qE '^\s*pull_request' .github/workflows/ci-check.yml
+grep -q 'actions/checkout@v4' .github/workflows/ci-check.yml
+grep -q 'dtolnay/rust-toolchain' .github/workflows/ci-check.yml
+test ! -f .github/workflows/ci-check.yml.disabled
 ```
 
 ## Assumptions
-- The item asks to *add the workflow*; configuring GitHub branch-protection "Required status checks" is a separate admin action outside the repo and is not something code changes can do. The plan notes this rather than attempting it.
-- Linux-only is acceptable. No OS matrix — keeps the gate simple and fast.
-- Stable Rust toolchain (matches the disabled workflow's precedent). No pinned MSRV file exists in the tree.
-- Using `--locked` is desired; regressions to `Cargo.lock` should fail the gate.
-- System dependencies (`pkg-config`, `libssl-dev`, `clang`, `cmake`) are added pre-emptively; the disabled workflow did not install them but this repo pulls in crypto FFI deps (rocksdb feature, BLS, etc.). If `cargo check` without them passes, they can be trimmed.
-- Adding the workflow even if `cargo check --all-targets` is currently red is acceptable; the point is to install the gate. Separate todo items are responsible for making it green.
-- The file is placed at `.github/workflows/ci.yml`. No existing `ci.yml` is present to collide with.
+- Workflow filename `ci-check.yml` and job name `check` (display name `cargo check --all-targets`) — chosen so the required status check has a stable, human-readable identifier.
+- Triggers: `pull_request` (no branch filter, so it runs against any base), `push` to `main` and `master` (the disabled workflow listed `develop` too; omitting since `main` is the only active branch in `git status`), and `workflow_dispatch` for manual reruns.
+- Use `--locked` to fail fast if `Cargo.lock` is out of sync, matching the spirit of "green check" being meaningful.
+- Use `actions/checkout@v4` and `actions/cache@v4` (the disabled workflow used `@v3`, which is now deprecated for cache).
+- No `clippy`, `fmt`, `test`, or `bench` steps — the todo asks specifically for `cargo check --all-targets`. Those other gates are separate items.
+- Single OS (`ubuntu-latest`), single toolchain (`stable`) — minimal scope; matrix expansion is a future item.
+- Branch-protection enablement is documented in the PR description per the resolved Q&A; no `gh api` script or rulesets JSON committed.
+- The `needs-review.md` file (currently modified per `git status`) is the appropriate place for the post-merge manual-step reminder; if it's structured differently than expected, the implementer should fall back to PR-description-only.
+- The existing `.disabled` workflows are intentionally inert and should remain untouched — re-enabling `build-test.yml.disabled` is out of scope (it runs `cargo bench` which the bench-fix item is addressing separately).
 
 ## Blockers
-
-### Blocker: benches may currently fail cargo check
-- severity: cross-item
-- affects: benches, ci-gate, todo.md
-- question: Is it acceptable to land this workflow in a red state (blocking all PRs) until the separate bench-fix item merges, or should this plan wait/sequence after that item?
-- default_assumption: Land the workflow as specified (`--all-targets`). The item's explicit wording mandates `--all-targets`, and making the gate red on day one is consistent with the "gate" intent — it simply forces the bench-fix item to land before any other PR can merge. If that is unacceptable, a follow-up can narrow scope to `--lib --bins --tests` in one line.
-
-### Blocker: branch protection is an external admin action
-- severity: local
-- affects: ci-gate enforcement
-- question: Should the plan attempt to codify branch protection via a `gh api` script or rulesets JSON, or leave it as a manual admin step?
-- default_assumption: Leave it manual. `gh api` requires admin auth not available to CI, and GitHub rulesets committed to the repo still need admin-level enablement. Documenting the needed setting in the PR description is sufficient.
+Blockers: none
 
 ## Summary
-Adds `.github/workflows/ci.yml` running `cargo check --all-targets --locked` on PRs and pushes to `main`, creating the status check that can be marked required in branch protection.
+Adds an active GitHub Actions workflow running `cargo check --all-targets --locked` on PRs, intentionally landing red to pressure the bench-fix item, with branch protection enablement documented as a manual admin step.

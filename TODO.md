@@ -28,7 +28,7 @@ for the arkworks API changes that the build-fix commit applied to the library.
 ### Follow-ups
 
 - [ ] Triage the 326 lib warnings — at minimum, fix the `unused Result` from `try_fill_bytes` calls in security-sensitive paths (`networking/dns_over_https.rs`, `networking/privacy/timing_obfuscator.rs`, etc.) since silently dropping RNG fallible-fill can mask entropy failures
-- [ ] Add CI gate so a green `cargo check --all-targets` is required on PRs
+- [x] Add CI gate so a green `cargo check --all-targets` is required on PRs
 - [ ] Run `cargo build` and `cargo test` once benches compile to surface any additional issues
 
 ---
