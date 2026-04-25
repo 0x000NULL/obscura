@@ -6,7 +6,7 @@ use rand::thread_rng;
 use std::time::Duration;
 use std::ops::Mul;
 use group::{Group, ff::Field};
-use ark_ec::Group as ArkGroup;
+use ark_ec::{AdditiveGroup, PrimeGroup};
 
 fn bls12_381_benchmarks(c: &mut Criterion) {
     let mut group = c.benchmark_group("BLS12-381");

@@ -1,17 +1,22 @@
 [33;1mWARNING: Working tree is dirty. Runner will create commits interleaved with your uncommitted work. Consider 'git worktree add ../todo-run' first.[0m
-==> plan  benches-crypto-benchmarks-rs-and-benches-crypto-bench-rs
-      plan: 103.03s, failure_mode=success, transcript=.claude\todo-runner\transcripts\benches-crypto-benchmarks-rs-and-benches-crypto-bench-rs-plan-20260425T022823547.txt
+      [benches-crypto-benchmarks-rs-and-benches-crypto-bench-rs] in needs-review but -SkipPlan: re-queuing
+      [triage-the-326-lib-warnings-at-minimum-fix-the-unused] in needs-review but -SkipPlan: re-queuing
+      [add-ci-gate-so-a-green-cargo-check-all-targets-is-required] resolutions present; re-queuing
+      [run-cargo-build-and-cargo-test-once-benches-compile-to] resolutions present; re-queuing
+      [wire-transaction-verify-privacy-features-into-validate] in needs-review but -SkipPlan: re-queuing
+      [wire-transaction-verify-range-proofs-into-hybrid-validation] resolutions present; re-queuing
+      [wire-transaction-verify-confidential-balance-into-hybrid] resolutions present; re-queuing
+      [add-mempool-pre-validation-of-privacy-features-reject] in needs-review but -SkipPlan: re-queuing
+      [regression-test-consensus-must-reject-a-block-whose] resolutions present; re-queuing
+      [implement-the-p2p-server-loop-in-src-main-rs] resolutions present; re-queuing
+      [implement-a-mining-loop-that-assembles-blocks-from-mempool] resolutions present; re-queuing
+      [end-to-end-wire-create-tx-sign-mempool-broadcast-peer] resolutions present; re-queuing
+      [replace-test-mode-only-randomx-benches-with-real-mode] in needs-review but -SkipPlan: re-queuing
+      [mining-functionality-pool-config-solo-setup-hashrate] in needs-review but -SkipPlan: re-queuing
+      [mining-setup-wizard-cpu-gpu-config-pool-integration] in needs-review but -SkipPlan: re-queuing
+      [wallet-validator-mining-block-explorer-sub-uis] in needs-review but -SkipPlan: re-queuing
+      [parallel-mining-computation-current-simple-max-attempts] in needs-review but -SkipPlan: re-queuing
+      reusing existing plan: .claude\plans\benches-crypto-benchmarks-rs-and-benches-crypto-bench-rs.md
 ==> exec  benches-crypto-benchmarks-rs-and-benches-crypto-bench-rs
-      exec: 85.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\benches-crypto-benchmarks-rs-and-benches-crypto-bench-rs-execute-20260425T022948658.txt
-      notes: - The plan only anticipated `generator()` call-site errors, but `cargo check` also surfaced `double()` method errors on `EdwardsProjective` in both files (line 101 of `crypto_benchmarks.rs`, line 85 of `crypto_bench.rs`). In ark-ec 0.5, `double()` lives on `ark_ec::AdditiveGroup` (confirmed by `src/crypto/jubjub.rs:11` which imports `AdditiveGroup` alongside `PrimeGroup`-equivalent usage). I added `use ark_ec::AdditiveGroup;` to both files - a minimal conservative addition that mirrors the existing pattern in `src/crypto/jubjub.rs` and is strictly in scope (same "restore `cargo check --benches` for the two crypto bench files" goal). Without it, the plan's Verify step would have failed. / - The `critical_paths.rs` error (`JubjubSignature::verify` not found) is in a different file not mentioned by the plan, so I left it alone per the plan's scoping.
-    [1/341] benches-crypto-benchmarks-rs-and-benches-crypto-bench-rs: verify failed on 'cargo check --benches 2>&1 | tee /tmp/bench-check.log && ! grep -E "^error" /tmp/bench-check.log'
-        warning: `obscura` (lib test) generated 414 warnings (303 duplicates) (run `cargo fix --lib -p obscura --tests` to apply 64 suggestions)
-    warning: `obscura` (bin "profiler" test) generated 3 warnings (run `cargo fix --bin "profiler" --tests` to apply 3 suggestions)
-    warning: `obscura` (bin "obscura-bin" test) generated 21 warnings (21 duplicates)
-    error[E0599]: no method named `verify` found for struct `JubjubSignature` in the current scope
-    error: could not compile `obscura` (bench "critical_paths") due to 1 previous error; 1 warning emitted
-==> plan  benches-critical-paths-rs
-      plan: 59.01s, failure_mode=success, transcript=.claude\todo-runner\transcripts\benches-critical-paths-rs-plan-20260425T023052509.txt
-==> exec  benches-critical-paths-rs
-      exec: 24.01s, failure_mode=success, transcript=.claude\todo-runner\transcripts\benches-critical-paths-rs-execute-20260425T023116550.txt
-      notes: - Applied the edit exactly as specified in the plan (line 64: `signature.verify(&keypair.public, message)`  `keypair.verify(message, &signature)`). / - Did not address the two pre-existing warnings (`unused_imports` for `JubjubSignature`, `unused_must_use` at line 99) - both are out of scope for this plan, which was narrowly about restoring compilation of this bench.
+      exec: 122.03s, failure_mode=success, transcript=.claude\todo-runner\transcripts\benches-crypto-benchmarks-rs-and-benches-crypto-bench-rs-execute-20260425T030826271.txt
+      notes: - Plan steps 1-2 said to swap to `use ark_ec::PrimeGroup;` and asserted "no per-site rewrites needed" because only `EdwardsProjective::generator()` was thought to need a trait. In practice, the bench files also call `.double()` on `EdwardsProjective`, which in ark-ec 0.5 lives on the `AdditiveGroup` supertrait (in `ark_ff`, re-exported as `ark_ec::AdditiveGroup`) and must be in scope independently. Without it, `cargo check --benches` failed with `E0599: no method named 'double'`. To satisfy the plan's verify gate (`! grep -E "^error"`) with the smallest, most conservative change, I imported both: `use ark_ec::{AdditiveGroup, PrimeGroup};`. This mirrors the existing pattern at `src/crypto/jubjub.rs:11` (`use ark_ec::AdditiveGroup;`) and still removes the `Group as ArkGroup` alias as required. The `! grep -q "ark_ec::Group as ArkGroup"` verify check still passes.

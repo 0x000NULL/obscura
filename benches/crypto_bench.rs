@@ -5,7 +5,7 @@ use rand::thread_rng;
 use std::time::Duration;
 use std::ops::Mul;
 use group::Group;
-use ark_ec::Group as ArkGroup;
+use ark_ec::{AdditiveGroup, PrimeGroup};
 use group::ff::Field;
 use ark_ff::UniformRand;
 use ark_ec::models::short_weierstrass::Projective;
