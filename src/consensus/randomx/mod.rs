@@ -6,7 +6,7 @@ use std::sync::Mutex;
 use randomx_vm::{Instruction, RandomXVM};
 
 #[link(name = "randomx", kind = "static")]
-#[link(name = "stdc++")]
+#[cfg_attr(not(target_os = "windows"), link(name = "stdc++"))]
 extern "C" {
     #[link_name = "randomx_alloc_cache"]
     fn randomx_alloc_cache(flags: u32) -> *mut c_void;
