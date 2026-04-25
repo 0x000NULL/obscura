@@ -58,3 +58,16 @@
 ==> exec  replace-miningloop-start-stub-with-full-mine-broadcast-loop
       exec: 208.08s, failure_mode=success, transcript=.claude\todo-runner\transcripts\replace-miningloop-start-stub-with-full-mine-broadcast-loop-execute-20260425T215817064.txt
       notes: 1. **Step 2 said `if mempool.is_empty() { sleep; continue; }` but the plan's Risks/Assumptions sections explicitly stated the looser interpretation: "throttle-when-idle, not skip-when-idle . the loop still mines coinbase-only blocks during empty windows."** The test (step 3) requires a block within 5s with empty mempool, which is impossible under the literal `continue` reading. I resolved the contradiction in favor of Risks+Assumptions+test-design (mine when empty, sleep first as throttle) by removing the `continue` and keeping only the 50ms sleep, so each idle iteration sleeps then proceeds to mine a coinbase-only block. / 
+    [10/91] replace-miningloop-start-stub-with-full-mine-broadcast-loop: plan $0.70 / execute $1.14 / verified / committed dd7c95d
+==> plan  wire-miningloop-into-start-network-services-in-src-main-rs
+      plan: 210.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\wire-miningloop-into-start-network-services-in-src-main-rs-plan-20260425T220158946.txt
+    [11/91] wire-miningloop-into-start-network-services-in-src-main-rs: 1 cross-item, 1 local blockers -> needs-review
+        [cross-item] Should `MiningLoop` adopt `Arc<Mutex<Mempool>>` (matching `main.rs` and `WalletIntegration`), or should the rest of the codebase migrate toward `Arc<Mempool>` with internal locking? Future mining items (mempool removal of mined txs, fee accounting) will be shaped by this choice.
+          default: Switch `MiningLoop::new` to `Arc<Mutex<Mempool>>` now (cheapest local change, aligns with the rest of `main.rs`); revisit if a later item demands a different mempool concurrency model.
+        [local] Is `Node::process_block` the intended forwarding target, or should the broadcast forwarder reach into `block_propagation::announce_block` / `relay_block_with_privacy` directly?
+          default: Forward to `Node::process_block` - it is the only `&mut self` block-ingest method publicly exposed on `Node` today; deeper relay wiring belongs to a later item.
+==> plan  add-integration-test-tests-e2e-tx-create-rs-covering-wallet
+      plan: 102.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\add-integration-test-tests-e2e-tx-create-rs-covering-wallet-plan-20260425T220341058.txt
+==> exec  add-integration-test-tests-e2e-tx-create-rs-covering-wallet
+      exec: 82.03s, failure_mode=success, transcript=.claude\todo-runner\transcripts\add-integration-test-tests-e2e-tx-create-rs-covering-wallet-execute-20260425T220503121.txt
+      notes: - None. The plan was unambiguous and execution followed it verbatim. Only conservative interpretation was the placement of the `[[test]]` block: I appended it after the last `[[bench]]` entry (separated by a blank line) rather than interleaving it among the benches, since "alongside" reads either way and trailing-append is the lower-risk edit.

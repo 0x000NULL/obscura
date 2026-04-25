@@ -191,3 +191,7 @@ harness = false
 [[bench]]
 name = "consensus_benchmarks"
 harness = false
+
+[[test]]
+name = "tx_create"
+path = "tests/e2e/tx_create.rs"

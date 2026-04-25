@@ -103,7 +103,7 @@
 
 ### 2.1 Tx creation path
 
-- [ ] Add integration test `tests/e2e/tx_create.rs` covering wallet → tx
+- [x] Add integration test `tests/e2e/tx_create.rs` covering wallet → tx
   - [ ] Build a wallet, call `create_transaction` with a synthetic UTXO, assert returned tx has populated inputs/outputs
   - [ ] **Verify:** `cargo test --test tx_create create_transaction_populates_outputs`
 
