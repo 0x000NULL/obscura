@@ -52,7 +52,7 @@
 
 ### 1.1 Skeleton
 
-- [ ] Add `src/mining/mod.rs` with `MiningLoop` struct + constructor
+- [x] Add `src/mining/mod.rs` with `MiningLoop` struct + constructor
   - [ ] Fields: `mempool: Arc<Mempool>`, `chain: Arc<RwLock<Blockchain>>`, `tx_blocks: tokio::sync::broadcast::Sender<Block>`, `running: Arc<AtomicBool>`
   - [ ] Methods: `pub fn new(...) -> Self`, `pub fn stop(&self)` (flips `running` to false)
   - [ ] `pub async fn start(self: Arc<Self>)` is a stub that loops until `running` flips, sleeping 100ms (filled in 1.2–1.4)

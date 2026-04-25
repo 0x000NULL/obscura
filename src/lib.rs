@@ -5,6 +5,7 @@ pub mod config;
 pub mod consensus;
 pub mod crypto;
 pub mod errors;
+pub mod mining;
 pub mod networking;
 pub mod utils;
 pub mod wallet;
