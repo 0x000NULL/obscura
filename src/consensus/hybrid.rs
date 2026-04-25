@@ -95,6 +95,15 @@ impl HybridValidator {
             }
         }
 
+        // Verify per-transaction privacy features for all non-coinbase transactions.
+        // Rejects blocks containing transactions whose privacy_flags advertise features
+        // (obfuscation, stealth addressing, confidential amounts, range proofs) that
+        // are missing or fail verification.
+        if !Self::verify_block_privacy_features(block) {
+            return false;
+        }
+        println!("Passed privacy feature verification");
+
         // Create state snapshot periodically
         if block.header.height % 1000 == 0 {
             if let Err(e) = self.state_manager.create_snapshot(block.header.height) {
@@ -133,6 +142,33 @@ impl HybridValidator {
         result
     }
 
+    fn verify_block_privacy_features(block: &Block) -> bool {
+        for tx in &block.transactions {
+            // Coinbase transactions (no inputs) carry no meaningful privacy payload.
+            if tx.inputs.is_empty() {
+                continue;
+            }
+            match tx.verify_privacy_features() {
+                Ok(true) => {}
+                Ok(false) => {
+                    println!(
+                        "Privacy feature verification failed for transaction (privacy_flags: {:#x})",
+                        tx.privacy_flags
+                    );
+                    return false;
+                }
+                Err(e) => {
+                    println!(
+                        "Privacy feature verification errored for transaction (privacy_flags: {:#x}): {:?}",
+                        tx.privacy_flags, e
+                    );
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
     fn calculate_stake_factor(&self, stake_amount: u64) -> f64 {
         let base_factor = (stake_amount as f64 / self.pos.minimum_stake as f64).min(2.0);
         // Higher stake = higher factor = easier target
@@ -167,7 +203,67 @@ pub fn validate_block_hybrid(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::blockchain::{OutPoint, Transaction, TransactionInput};
     use crate::consensus::pos_old::StakingContract;
+    use std::collections::HashMap;
+
+    fn make_tx(privacy_flags: u32, obfuscated_id: Option<[u8; 32]>, coinbase: bool) -> Transaction {
+        let inputs = if coinbase {
+            vec![]
+        } else {
+            vec![TransactionInput {
+                previous_output: OutPoint {
+                    transaction_hash: [0u8; 32],
+                    index: 0,
+                },
+                signature_script: vec![],
+                sequence: 0,
+            }]
+        };
+        Transaction {
+            inputs,
+            outputs: vec![],
+            lock_time: 0,
+            fee_adjustments: None,
+            privacy_flags,
+            obfuscated_id,
+            ephemeral_pubkey: None,
+            amount_commitments: None,
+            range_proofs: None,
+            metadata: HashMap::new(),
+            salt: None,
+        }
+    }
+
+    #[test]
+    fn test_privacy_verification_passes_for_clean_block() {
+        let mut block = Block::new([0u8; 32]);
+        block.transactions.push(make_tx(0, None, false));
+        assert!(HybridValidator::verify_block_privacy_features(&block));
+    }
+
+    #[test]
+    fn test_privacy_verification_rejects_invalid_obfuscation() {
+        let mut block = Block::new([0u8; 32]);
+        // Privacy flag 0x01 (obfuscation) set but no obfuscated_id => verifier returns Ok(false).
+        block.transactions.push(make_tx(0x01, None, false));
+        assert!(!HybridValidator::verify_block_privacy_features(&block));
+    }
+
+    #[test]
+    fn test_privacy_verification_skips_coinbase() {
+        let mut block = Block::new([0u8; 32]);
+        // Coinbase tx (no inputs) carries no meaningful privacy payload, so even
+        // mismatched privacy_flags should be ignored.
+        block.transactions.push(make_tx(0x01, None, true));
+        assert!(HybridValidator::verify_block_privacy_features(&block));
+    }
+
+    #[test]
+    fn test_privacy_verification_passes_when_no_transactions() {
+        let block = Block::new([0u8; 32]);
+        assert!(HybridValidator::verify_block_privacy_features(&block));
+    }
 
     #[test]
     fn test_hybrid_validation_with_staking() {
