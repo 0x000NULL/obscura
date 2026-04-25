@@ -22,7 +22,7 @@ for the arkworks API changes that the build-fix commit applied to the library.
 - [ ] `benches/crypto_benchmarks.rs` and `benches/crypto_bench.rs`
   - [ ] **E0432** — `use ark_ec::Group as ArkGroup;` — `Group` moved/renamed in the new ark-ec; update import
   - [ ] **E0599** — `EdwardsProjective::generator()` (10 sites) — replace with the current accessor (e.g. `<EdwardsProjective as PrimeGroup>::generator()` or the curve-specific equivalent used in `src/crypto/jubjub.rs`)
-- [ ] `benches/critical_paths.rs`
+- [x] `benches/critical_paths.rs`
   - [ ] **E0599** — `signature.verify(&keypair.public, message)` — method renamed/moved on `JubjubSignature`; align with the API now used in `src/crypto/jubjub.rs`
 
 ### Follow-ups

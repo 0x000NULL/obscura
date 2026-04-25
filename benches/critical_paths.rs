@@ -61,7 +61,7 @@ fn register_all_critical_paths() {
             let keypair = generate_keypair();
             let message = b"test transaction";
             let signature = keypair.sign(message);
-            let result = signature.verify(&keypair.public, message);
+            let result = keypair.verify(message, &signature);
             criterion::black_box(result);
         },
         Some(200), // Expected < 200μs
