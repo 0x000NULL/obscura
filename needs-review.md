@@ -3634,3 +3634,18 @@ warning: `obscura` (test "privacy_primitive_test") generated 3 warnings (run `ca
 
 ---
 
+
+## consensus-tests-rely-on-randomxcontext-new-for-testing-with
+- Item: Consensus tests rely on `RandomXContext::new_for_testing()` with `difficulty_target = 0xFFFFFFFF` — add production-parameter test paths before launch
+- Reason: blockers
+- Timestamp: 2026-04-25T04:44:03.1775019Z
+
+### Blocker: nonce-cap calibration for production-parameter mining
+- severity: local
+- affects: test_pow_mining_production_parameters, test_hybrid_consensus_validation_production_parameters
+- question: Is real RandomX (with the bundled `randomx` C lib) fast enough on CI to find a `0x207fffff`-satisfying nonce within ~100k attempts per test in well under a minute, or do we need a much easier target like `0x7fffffff` to keep wall-clock under 30s?
+- default_assumption: Use `0x207fffff` and a 100_000-attempt cap. If runtime is excessive in practice, raise the cap or relax the target one nibble at a time; do not fall back to `0xFFFFFFFF` (that would defeat the entire purpose of this todo).
+- Resolution: 
+
+---
+

@@ -62,7 +62,7 @@ There is no P2P loop, no mining loop, no block assembly path.
 
 - [x] `tests/e2e/network_simulation.rs` references nonexistent APIs (`TestNetwork::new`, `wallet.create_test_transaction`, `node.mempool`) — either build them or delete the file
 - [ ] Consensus tests rely on `RandomXContext::new_for_testing()` with `difficulty_target = 0xFFFFFFFF` — add production-parameter test paths before launch
-- [ ] `crypto_audit.log` shows a recurring `CRITICAL [GENERAL] [FAILED]` pattern (Mar 25–26 2025) — confirm this is intentional test injection or suppress it
+- [x] `crypto_audit.log` shows a recurring `CRITICAL [GENERAL] [FAILED]` pattern (Mar 25–26 2025) — confirm this is intentional test injection or suppress it
 - [ ] Replace test-mode-only `RandomX` benches with real-mode benches
 
 ### 1.4 Duplicated types

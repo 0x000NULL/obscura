@@ -39,4 +39,7 @@ coverage/
 
 # Backup files
 *.bak
-*.backup 
+*.backup
+
+# Crypto audit log (written by audit subsystem with a relative path; see StructuredLoggingConfig::default)
+crypto_audit.log

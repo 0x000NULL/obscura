@@ -590,9 +590,13 @@ mod tests {
             enable_analytics: true,
             analytics_max_entries: 100,
             enable_periodic_reports: false,
+            logging_config: StructuredLoggingConfig {
+                destinations: vec![],
+                ..StructuredLoggingConfig::default()
+            },
             ..IntegratedAuditConfig::default()
         };
-        
+
         IntegratedAuditSystem::new(config)
     }
 

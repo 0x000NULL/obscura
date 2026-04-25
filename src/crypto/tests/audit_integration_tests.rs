@@ -3,6 +3,7 @@ mod tests {
     use crate::crypto::audit::{AuditEntry, AuditLevel, CryptoOperationType, OperationStatus};
     use crate::crypto::audit_integration::{IntegratedAuditConfig, IntegratedAuditSystem};
     use crate::crypto::audit_analytics::TimePeriod;
+    use crate::crypto::audit_logging::StructuredLoggingConfig;
     use crate::crypto::{CryptoError, CryptoResult};
     use std::sync::Arc;
     use std::thread;
@@ -13,9 +14,13 @@ mod tests {
             enable_analytics: true,
             analytics_max_entries: 100,
             enable_periodic_reports: false,
+            logging_config: StructuredLoggingConfig {
+                destinations: vec![],
+                ..StructuredLoggingConfig::default()
+            },
             ..IntegratedAuditConfig::default()
         };
-        
+
         IntegratedAuditSystem::new(config)
     }
 
