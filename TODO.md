@@ -133,7 +133,7 @@
 
 ### 2.6 Block-include path
 
-- [ ] Add integration test `tests/e2e/tx_block_include.rs` covering peer mempool → mined block
+- [x] Add integration test `tests/e2e/tx_block_include.rs` covering peer mempool → mined block
   - [ ] Reuse 2.5 setup; on node B, run one mining step; assert the broadcast tx appears in the new block
   - [ ] **Verify:** `cargo test --test tx_block_include block_contains_broadcast_tx`
 

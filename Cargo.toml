@@ -211,3 +211,7 @@ path = "tests/e2e/tx_broadcast.rs"
 [[test]]
 name = "tx_peer_validate"
 path = "tests/e2e/tx_peer_validate.rs"
+
+[[test]]
+name = "tx_block_include"
+path = "tests/e2e/tx_block_include.rs"
