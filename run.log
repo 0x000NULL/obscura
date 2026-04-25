@@ -46,3 +46,9 @@
 ==> exec  implement-miningloop-build-template-in-src-mining-mod-rs
       exec: 96.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\implement-miningloop-build-template-in-src-mining-mod-rs-execute-20260425T214628812.txt
       notes: - Used a plain `impl Display` / `impl std::error::Error` for `MiningError` (rather than `thiserror`) per the plan's "thiserror... - otherwise plain `impl Display`/`Error`" wording. Plain impls are zero-dependency and a more conservative choice for a single-variant enum, even though `thiserror = "2.0.12"` is in `Cargo.toml`. / - Set `total_fees = 0` exactly as the plan specifies, with no UTXO-aware fee summing.
+    [8/91] implement-miningloop-build-template-in-src-mining-mod-rs: plan $0.51 / execute $0.57 / verified / committed d509355
+==> plan  implement-miningloop-find-nonce-in-src-mining-mod-rs
+      plan: 187.03s, failure_mode=success, transcript=.claude\todo-runner\transcripts\implement-miningloop-find-nonce-in-src-mining-mod-rs-plan-20260425T214945884.txt
+==> exec  implement-miningloop-find-nonce-in-src-mining-mod-rs
+      exec: 110.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\implement-miningloop-find-nonce-in-src-mining-mod-rs-execute-20260425T215135928.txt
+      notes: - Loop bound interpreted literally as `0..u64::MAX`, which excludes `u64::MAX` itself. The plan said "0..u64::MAX" so I used that exact half-open range rather than silently widening to `..=u64::MAX` (one extra nonce). / - `serialize_template_prefix` was placed as a free function in `src/mining/mod.rs` (not a `MiningLoop` method) so the test can call it directly without going through `&self`. The plan said "private helper" - I kept it module-private (no `pub`), which is the most conservative reading.

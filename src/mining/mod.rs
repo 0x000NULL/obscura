@@ -8,6 +8,9 @@ use tokio::sync::broadcast;
 use crate::blockchain::mempool::Mempool;
 use crate::blockchain::{Block, Transaction, calculate_merkle_root, create_coinbase_transaction};
 use crate::consensus::mining_reward::calculate_block_reward;
+use crate::consensus::randomx::RandomXContext;
+
+pub type U256 = [u8; 32];
 
 #[derive(Default)]
 pub struct Blockchain {
@@ -50,6 +53,7 @@ pub struct MiningLoop {
     pub chain: Arc<RwLock<Blockchain>>,
     pub tx_blocks: broadcast::Sender<Block>,
     pub running: Arc<AtomicBool>,
+    pub randomx: Arc<RandomXContext>,
 }
 
 impl MiningLoop {
@@ -57,12 +61,14 @@ impl MiningLoop {
         mempool: Arc<Mempool>,
         chain: Arc<RwLock<Blockchain>>,
         tx_blocks: broadcast::Sender<Block>,
+        randomx_context: Arc<RandomXContext>,
     ) -> Self {
         Self {
             mempool,
             chain,
             tx_blocks,
             running: Arc::new(AtomicBool::new(false)),
+            randomx: randomx_context,
         }
     }
 
@@ -113,6 +119,42 @@ impl MiningLoop {
             transactions,
         })
     }
+
+    pub fn find_nonce(&self, template: &BlockTemplate, target: U256) -> Option<u64> {
+        let prefix = serialize_template_prefix(template);
+        let mut buffer = Vec::with_capacity(prefix.len() + 8);
+        buffer.extend_from_slice(&prefix);
+        let mut hash = [0u8; 32];
+
+        for nonce in 0..u64::MAX {
+            if !self.running.load(Ordering::SeqCst) {
+                return None;
+            }
+
+            buffer.truncate(prefix.len());
+            buffer.extend_from_slice(&nonce.to_le_bytes());
+
+            if self.randomx.calculate_hash(&buffer, &mut hash).is_err() {
+                return None;
+            }
+
+            if hash <= target {
+                return Some(nonce);
+            }
+        }
+
+        None
+    }
+}
+
+fn serialize_template_prefix(template: &BlockTemplate) -> Vec<u8> {
+    let mut out = Vec::with_capacity(32 + 32 + 8 + 8 + 4);
+    out.extend_from_slice(&template.previous_hash);
+    out.extend_from_slice(&template.merkle_root);
+    out.extend_from_slice(&template.height.to_le_bytes());
+    out.extend_from_slice(&template.timestamp.to_le_bytes());
+    out.extend_from_slice(&template.difficulty_target.to_le_bytes());
+    out
 }
 
 #[cfg(test)]
@@ -123,7 +165,8 @@ mod tests {
         let mempool = Arc::new(Mempool::new());
         let chain = Arc::new(RwLock::new(Blockchain::default()));
         let (tx_blocks, _rx) = broadcast::channel::<Block>(16);
-        MiningLoop::new(mempool, chain, tx_blocks)
+        let randomx = Arc::new(RandomXContext::new_for_testing(b"obx-test"));
+        MiningLoop::new(mempool, chain, tx_blocks, randomx)
     }
 
     #[test]
@@ -166,7 +209,8 @@ mod tests {
             tip_height: 41,
         }));
         let (tx_blocks, _rx) = broadcast::channel::<Block>(16);
-        let m = MiningLoop::new(mempool, chain, tx_blocks);
+        let randomx = Arc::new(RandomXContext::new_for_testing(b"obx-test"));
+        let m = MiningLoop::new(mempool, chain, tx_blocks, randomx);
 
         let template = m.build_template().expect("build_template should succeed");
 
@@ -182,5 +226,40 @@ mod tests {
             template.merkle_root,
             calculate_merkle_root(&template.transactions)
         );
+    }
+
+    #[test]
+    fn find_nonce_satisfies_target() {
+        let mempool = Arc::new(Mempool::new());
+        let chain = Arc::new(RwLock::new(Blockchain {
+            tip_hash: [1u8; 32],
+            tip_height: 0,
+        }));
+        let (tx_blocks, _rx) = broadcast::channel::<Block>(16);
+        let randomx = Arc::new(RandomXContext::new_for_testing(b"obx-test"));
+        let m = MiningLoop::new(mempool, chain, tx_blocks, randomx);
+
+        let template = m.build_template().expect("build_template should succeed");
+
+        // running == false up front => bail immediately with None.
+        assert!(m.find_nonce(&template, [0xFFu8; 32]).is_none());
+
+        // Now flip running on; with target == max, the very first nonce satisfies.
+        m.running.store(true, Ordering::SeqCst);
+        let nonce = m
+            .find_nonce(&template, [0xFFu8; 32])
+            .expect("low-difficulty target should yield a nonce");
+
+        assert!(nonce < 16, "expected an early nonce, got {}", nonce);
+
+        // Re-hash with the same prefix + nonce bytes and pin the comparison
+        // contract: the returned hash must satisfy hash <= target.
+        let mut buffer = serialize_template_prefix(&template);
+        buffer.extend_from_slice(&nonce.to_le_bytes());
+        let mut hash = [0u8; 32];
+        m.randomx
+            .calculate_hash(&buffer, &mut hash)
+            .expect("test-mode randomx should not fail");
+        assert!(hash <= [0xFFu8; 32]);
     }
 }

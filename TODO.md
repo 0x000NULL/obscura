@@ -77,7 +77,7 @@
 
 ### 1.3 Nonce search
 
-- [ ] Implement `MiningLoop::find_nonce` in `src/mining/mod.rs`
+- [x] Implement `MiningLoop::find_nonce` in `src/mining/mod.rs`
   - [ ] Take `&BlockTemplate` and `target: U256`
   - [ ] Loop nonce 0..u64::MAX; compute RandomX hash via existing `RandomXContext` (`src/consensus/randomx/mod.rs`)
   - [ ] Bail when `running` is false; return `Option<u64>`
