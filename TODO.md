@@ -115,7 +115,7 @@
 
 ### 2.3 Mempool path
 
-- [ ] Add integration test `tests/e2e/tx_mempool.rs` covering signed tx → mempool acceptance
+- [x] Add integration test `tests/e2e/tx_mempool.rs` covering signed tx → mempool acceptance
   - [ ] Submit signed tx to a fresh `Mempool`, assert it appears in `Mempool::contents()`
   - [ ] **Verify:** `cargo test --test tx_mempool mempool_accepts_signed_tx`
 

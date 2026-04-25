@@ -195,3 +195,11 @@ harness = false
 [[test]]
 name = "tx_create"
 path = "tests/e2e/tx_create.rs"
+
+[[test]]
+name = "tx_sign"
+path = "tests/e2e/tx_sign.rs"
+
+[[test]]
+name = "tx_mempool"
+path = "tests/e2e/tx_mempool.rs"

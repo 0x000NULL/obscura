@@ -23,3 +23,16 @@
 
 ---
 
+
+## add-integration-test-tests-e2e-tx-sign-rs-covering-tx
+- Item: Add integration test `tests/e2e/tx_sign.rs` covering tx → signed tx
+- Reason: phase-2 infra-error
+- Timestamp: 2026-04-25T22:12:34.2413426Z
+
+### Detail
+```
+{"type":"result","subtype":"error_max_turns","duration_ms":321105,"duration_api_ms":249284,"is_error":true,"num_turns":31,"stop_reason":"tool_use","session_id":"b401fe91-732e-4a27-94aa-942d088a6ed5","total_cost_usd":1.4417997500000002,"usage":{"input_tokens":35,"cache_creation_input_tokens":51421,"cache_read_input_tokens":1383485,"output_tokens":17055,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":51421,"ephemeral_5m_input_tokens":0},"inference_geo":"","iterations":[{"input_tokens":1,"output_tokens":458,"cache_read_input_tokens":66262,"cache_creation_input_tokens":507,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":507},"type":"message"}],"speed":"standard"},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":2056,"outputTokens":14,"cacheReadInputTokens":0,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.0021260000000000003,"contextWindow":200000,"maxOutputTokens":32000},"claude-opus-4-7[1m]":{"inputTokens":35,"outputTokens":17055,"cacheReadInputTokens":1383485,"cacheCreationInputTokens":51421,"webSearchRequests":0,"costUSD":1.43967375,"contextWindow":1000000,"maxOutputTokens":64000}},"permission_denials":[],"terminal_reason":"max_turns","fast_mode_state":"off","uuid":"7b5320bf-deb3-4d5d-9728-96e5e2bf15df","errors":["Reached maximum number of turns (30)"]}
+```
+
+---
+

@@ -71,3 +71,14 @@
 ==> exec  add-integration-test-tests-e2e-tx-create-rs-covering-wallet
       exec: 82.03s, failure_mode=success, transcript=.claude\todo-runner\transcripts\add-integration-test-tests-e2e-tx-create-rs-covering-wallet-execute-20260425T220503121.txt
       notes: - None. The plan was unambiguous and execution followed it verbatim. Only conservative interpretation was the placement of the `[[test]]` block: I appended it after the last `[[bench]]` entry (separated by a blank line) rather than interleaving it among the benches, since "alongside" reads either way and trailing-append is the lower-risk edit.
+    [12/91] add-integration-test-tests-e2e-tx-create-rs-covering-wallet: plan $0.61 / execute $0.55 / verified / committed 5a7224e
+==> plan  add-integration-test-tests-e2e-tx-sign-rs-covering-tx
+      plan: 114.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\add-integration-test-tests-e2e-tx-sign-rs-covering-tx-plan-20260425T220711186.txt
+==> exec  add-integration-test-tests-e2e-tx-sign-rs-covering-tx
+      exec: 323.03s, failure_mode=infra-error, transcript=.claude\todo-runner\transcripts\add-integration-test-tests-e2e-tx-sign-rs-covering-tx-execute-20260425T221234235.txt
+    [13/91] add-integration-test-tests-e2e-tx-sign-rs-covering-tx: phase-2 infra-error
+==> plan  add-integration-test-tests-e2e-tx-mempool-rs-covering
+      plan: 157.03s, failure_mode=success, transcript=.claude\todo-runner\transcripts\add-integration-test-tests-e2e-tx-mempool-rs-covering-plan-20260425T221511677.txt
+==> exec  add-integration-test-tests-e2e-tx-mempool-rs-covering
+      exec: 88.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\add-integration-test-tests-e2e-tx-mempool-rs-covering-execute-20260425T221639720.txt
+      notes: - The plan flagged that `Cargo.toml` was in `MD` state (staged-modify, working-tree-delete). I conservatively restored the staged version with `git restore Cargo.toml` before editing, since the plan explicitly assumed the runner's execute phase would restore it but the working-tree copy was still missing on disk. / - I left the existing `[[test]] tx_sign` entry in `Cargo.toml` untouched, even though `tests/e2e/tx_sign.rs` is currently deleted in the working tree. Re-staging during `git add` re-staged the staged version of `tx_sign.rs`, so the manifest reference resolves through the staging area and test compilation for `tx_mempool` was unaffected. Out of scope for this plan, so left alone.
