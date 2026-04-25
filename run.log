@@ -121,3 +121,9 @@
 ==> exec  add-production-parameter-consensus-test-paths
       exec: 35.03s, failure_mode=success, transcript=.claude\todo-runner\transcripts\add-production-parameter-consensus-test-paths-execute-20260425T225055000.txt
       notes: - Used a `for i in 4..32` loop with `0x42` as the deterministic filler byte for the remaining 28 bytes of each fixture, matching the plan's `[0x1c, 0xff, 0xff, 0xfe, 0x42, 0x42, .]` example. Applied the same `0x42` filler to the negative-control fixture for symmetry/reproducibility. / - The `verify_difficulty` impl uses `hash_value <= target` (inclusive), but the plan specifies a strictly-less-than fixture (`0x1cfffffe < 0x1d00ffff`), so the positive assertion holds either way. No deviation from plan needed.
+    [21/91] add-production-parameter-consensus-test-paths: plan $0.56 / execute $0.21 / verified / committed 95adf6d
+==> plan  replace-test-mode-only-randomx-benches-with-real-mode-bench
+      plan: 83.01s, failure_mode=success, transcript=.claude\todo-runner\transcripts\replace-test-mode-only-randomx-benches-with-real-mode-bench-plan-20260425T225223289.txt
+==> exec  replace-test-mode-only-randomx-benches-with-real-mode-bench
+      exec: 221.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\replace-test-mode-only-randomx-benches-with-real-mode-bench-execute-20260425T225604330.txt
+      notes: - Placed the `impl Default` block immediately above `impl Drop` (the plan offered "after the existing `impl RandomXContext` block (or alongside the `Drop` impl)"); chose alongside `Drop` for adjacency to other trait impls. / - Set `warm_up_time(Duration::from_secs(1))` since the plan specified "short but non-trivial" warm-up without giving a value; 1s mirrors the conservative side of criterion's defaults while keeping total bench time bounded for real-mode hashing.

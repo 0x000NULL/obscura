@@ -167,7 +167,7 @@
   - [ ] Use real difficulty (`0x1d00ffff` mainnet-equivalent) on a precomputed valid block fixture
   - [ ] **Verify:** `cargo test --lib consensus::randomx::tests::validate_with_production_difficulty`
 
-- [ ] Replace test-mode-only RandomX benches with real-mode bench
+- [x] Replace test-mode-only RandomX benches with real-mode bench
   - [ ] In `benches/`, add `randomx_real_difficulty.rs` benching `RandomXContext::default()` instead of `new_for_testing`
   - [ ] **Verify:** `cargo bench --bench randomx_real_difficulty -- --test`
 

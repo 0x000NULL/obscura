@@ -182,6 +182,12 @@ impl RandomXContext {
     }
 }
 
+impl Default for RandomXContext {
+    fn default() -> Self {
+        Self::new(b"obscura-bench-key")
+    }
+}
+
 impl Drop for RandomXContext {
     fn drop(&mut self) {
         unsafe {
