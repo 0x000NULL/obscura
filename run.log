@@ -4,3 +4,9 @@
 ==> exec  update-benches-crypto-benchmarks-rs-and-benches-crypto
       exec: 57.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\update-benches-crypto-benchmarks-rs-and-benches-crypto-execute-20260425T212858612.txt
       notes: - Steps 3 and 5 (rewriting bare `EdwardsProjective::generator()` to fully-qualified form) were no-ops: both bench files already had all 10 generator call sites in fully-qualified form. The plan acknowledged this possibility for `crypto_benchmarks.rs` but listed 7 bare sites in `crypto_bench.rs`; on inspection those were also already fully-qualified, so no rewrites were needed there either. / - Left the pre-existing `dead_code` and `unused_must_use` warnings on `bench_scalar_mul`, `bench_point_addition`, and the `black_box(result)` lines untouched - the plan's Risks section explicitly scoped these out.
+    [1/91] update-benches-crypto-benchmarks-rs-and-benches-crypto: plan $0.33 / execute $0.39 / verified / committed 607fdbd
+==> plan  update-benches-critical-paths-rs-for-new-jubjubsignature-api
+      plan: 127.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\update-benches-critical-paths-rs-for-new-jubjubsignature-api-plan-20260425T213108182.txt
+==> exec  update-benches-critical-paths-rs-for-new-jubjubsignature-api
+      exec: 19.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\update-benches-critical-paths-rs-for-new-jubjubsignature-api-execute-20260425T213127228.txt
+      notes: - File already reflected the target state (`let result = keypair.verify(message, &signature);` at line 64) from prior commit `6a26d3e`. Per the plan's Note section, this is expected and the edit is idempotent - no file modification was made. / - Pre-existing warnings (`unused_imports` for `JubjubSignature`, `unused_must_use` at line 99 for `accelerated_scalar_mul`'s `Result`) left untouched per plan's Risks/Assumptions: scope is "compile" not "lint clean."

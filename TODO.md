@@ -27,7 +27,7 @@
   - [ ] Replace the 10 `EdwardsProjective::generator()` call sites with the accessor used in `src/crypto/jubjub.rs`
   - [ ] **Verify:** `cargo check --bench crypto_benchmarks --bench crypto_bench`
 
-- [ ] Update `benches/critical_paths.rs` for new JubjubSignature API
+- [x] Update `benches/critical_paths.rs` for new JubjubSignature API
   - [ ] Align `signature.verify(&keypair.public, message)` with the method now used in `src/crypto/jubjub.rs`
   - [ ] **Verify:** `cargo check --bench critical_paths`
 
