@@ -115,9 +115,11 @@ impl crate::networking::Node {
     
     // Helper methods
     
-    fn is_connected(&self, _peer_addr: &SocketAddr) -> bool {
-        // Implementation would check if the peer is in the connected peers list
-        false // Placeholder
+    fn is_connected(&self, peer_addr: &SocketAddr) -> bool {
+        match self.dandelion_manager.lock() {
+            Ok(dandelion_manager) => dandelion_manager.get_outbound_peers().contains(peer_addr),
+            Err(_) => false,
+        }
     }
     
     // Note: Other methods like send_message, process_delayed_messages, etc.

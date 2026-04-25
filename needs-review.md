@@ -3576,3 +3576,61 @@ warning: `obscura` (test "privacy_primitive_test") generated 3 warnings (run `ca
 
 ---
 
+
+## implement-a-mining-loop-that-assembles-blocks-from-mempool
+- Item: Implement a mining loop that assembles blocks from mempool and broadcasts them
+- Reason: blockers
+- Timestamp: 2026-04-25T04:33:31.3861992Z
+
+### Blocker: chain tip / height source
+- severity: cross-item
+- affects: mining, p2p server loop, consensus validation
+- question: Where should the mining loop read the current chain tip (`prev_hash`, `height`) and observe new tips arriving from peers?
+- default_assumption: Maintain mining-local `next_height: AtomicU64` and `prev_hash: Mutex<[u8;32]>` initialized to `(1, [0;32])`. After each solved block, advance both. Do not consume external tip updates until a real chain-tip API exists; document this as a known limitation in the module header.
+- Resolution: 
+
+### Blocker: hybrid validation availability
+- severity: cross-item
+- affects: mining, wire-transaction-verify-* plans
+- question: Should `Miner` call `validate_block_hybrid` (or whatever the hybrid validator is named) before announcing, and is it stable to depend on now?
+- default_assumption: Call it behind a `cfg!(debug_assertions)` guard for now so the mining loop still compiles regardless of the parallel plans' status; promote to an unconditional pre-announce check once those plans merge.
+- Resolution: 
+
+### Blocker: mempool removal of included transactions
+- severity: local
+- affects: mining, mempool
+- question: Does `Mempool` expose a public `remove_transaction(&[u8;32])` (or batch equivalent) suitable for use after a successful mine?
+- default_assumption: If absent, add a minimal `pub fn remove_transactions(&mut self, hashes: &[ [u8;32] ])` to `mempool.rs` that drops them from the primary index and any fee/age secondary indexes that exist. Cover the new method with a focused unit test in `mempool_tests.rs`.
+- Resolution: 
+
+---
+
+
+## end-to-end-wire-create-tx-sign-mempool-broadcast-peer
+- Item: End-to-end wire: create tx → sign → mempool → broadcast → peer validates → include in block
+- Reason: blockers
+- Timestamp: 2026-04-25T04:33:31.3949058Z
+
+### Blocker: ordering vs. five sibling plans
+- severity: cross-item
+- affects: P2P server loop, mining loop, wire-transaction-verify-{privacy_features, range_proofs, confidential_balance}, mempool pre-validation, this todo
+- question: Should this end-to-end wiring land *before* the five sibling plans (with the test `#[ignore]`'d until they land) or *after* them (so the test is unconditionally-on at merge)?
+- default_assumption: Land it now with `#[ignore]` gated behind the `e2e_pipeline` Cargo feature, so the glue module and test scaffolding exist and the seams are visible to the sibling plans as they land. Each sibling PR can flip its piece and remove its TODO marker; the final sibling to land also flips the feature flag default.
+- Resolution: 
+
+### Blocker: test-only synthetic UTXO funding
+- severity: local
+- affects: this todo
+- question: Is it acceptable for the integration test to inject UTXOs directly into `UTXOSet` (no real chain), or must funding come from a mined coinbase first?
+- default_assumption: Direct injection — there is no chain tip or genesis path yet (mining-loop plan tracks this), and existing tests under `tests/integration/` already use direct UTXO injection. A future enhancement when chain persistence lands can swap to "mine-coinbase-first."
+- Resolution: 
+
+### Blocker: shared `pipeline::` module placement
+- severity: local
+- affects: this todo, future SDK / RPC todos
+- question: Should the glue functions live in a new `src/pipeline/` module or be co-located with `wallet::integration`?
+- default_assumption: New `src/pipeline/` module. `wallet::integration` is wallet-scoped; the glue here spans wallet + mempool + networking + mining + consensus, so a top-level module is the cleaner home and gives the future RPC layer one obvious import path.
+- Resolution: 
+
+---
+
