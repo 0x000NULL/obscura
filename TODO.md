@@ -42,7 +42,7 @@ and skips all privacy flags, so invalid range proofs or malformed stealth addres
 into blocks as long as the consensus proof is valid.
 
 - [x] Wire `Transaction::verify_privacy_features()` into `validate_block_hybrid`
-- [ ] Wire `Transaction::verify_range_proofs()` into hybrid validation
+- [x] Wire `Transaction::verify_range_proofs()` into hybrid validation
 - [ ] Wire `Transaction::verify_confidential_balance()` into hybrid validation
 - [ ] Add mempool pre-validation of privacy features (reject malformed inputs before block inclusion)
 - [ ] Regression test: consensus must reject a block whose transactions carry invalid range proofs

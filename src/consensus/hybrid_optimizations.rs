@@ -231,9 +231,18 @@ impl HybridStateManager {
             .transactions
             .par_chunks(num_cpus::get().max(1))
             .map(|chunk| {
-                chunk.iter().all(|_tx| {
-                    // Add your transaction validation logic here
-                    true // Placeholder
+                chunk.iter().all(|tx| {
+                    // Coinbase transactions carry no commitments to range-prove.
+                    if tx.inputs.is_empty() {
+                        return true;
+                    }
+                    match tx.verify_range_proofs() {
+                        Ok(valid) => valid,
+                        Err(e) => {
+                            eprintln!("Range proof verification failed: {}", e);
+                            false
+                        }
+                    }
                 })
             })
             .collect();
@@ -427,7 +436,13 @@ impl ValidationManager {
         // Validate that input value >= output value would require UTXO access
         // We'll assume this is checked elsewhere
 
-        true
+        match tx.verify_range_proofs() {
+            Ok(valid) => valid,
+            Err(e) => {
+                eprintln!("Range proof verification failed: {}", e);
+                false
+            }
+        }
     }
 
     /// Process transactions in parallel for mining a new block
@@ -511,7 +526,7 @@ pub struct ValidatorStateDiff {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::blockchain::{Transaction, TransactionInput, TransactionOutput, OutPoint};
+    use crate::blockchain::{BlockHeader, Transaction, TransactionInput, TransactionOutput, OutPoint};
     use sha2::{Digest, Sha256};
 
     // Create a mock StakingContract for testing
@@ -640,5 +655,65 @@ mod tests {
 
         // Both transactions should be included
         assert_eq!(processed.len(), 2);
+    }
+
+    fn make_input(seed: &[u8]) -> TransactionInput {
+        let mut hasher = Sha256::new();
+        hasher.update(seed);
+        let mut tx_hash = [0u8; 32];
+        tx_hash.copy_from_slice(&hasher.finalize());
+        TransactionInput {
+            previous_output: OutPoint {
+                transaction_hash: tx_hash,
+                index: 0,
+            },
+            signature_script: vec![1, 2, 3],
+            sequence: 0,
+        }
+    }
+
+    #[test]
+    fn validate_block_parallel_rejects_tx_with_invalid_range_proofs() {
+        let mut tx = Transaction::default();
+        tx.inputs.push(make_input(b"range_proofs_invalid"));
+        tx.outputs.push(TransactionOutput {
+            value: 100,
+            public_key_script: vec![1, 2, 3],
+            commitment: None,
+            range_proof: None,
+        });
+        // Confidential transactions flag set, but range_proofs is None -> verify_range_proofs returns Err.
+        tx.privacy_flags |= 0x04;
+        tx.range_proofs = None;
+
+        let block = Block {
+            header: BlockHeader::default(),
+            transactions: vec![tx],
+        };
+
+        let manager = HybridStateManager::new(create_mock_staking_contract());
+        let result = manager.validate_block_parallel(&block, &[]);
+        assert_eq!(result, Ok(false));
+    }
+
+    #[test]
+    fn validate_block_parallel_accepts_vanilla_tx() {
+        let mut tx = Transaction::default();
+        tx.inputs.push(make_input(b"vanilla_tx"));
+        tx.outputs.push(TransactionOutput {
+            value: 100,
+            public_key_script: vec![1, 2, 3],
+            commitment: None,
+            range_proof: None,
+        });
+
+        let block = Block {
+            header: BlockHeader::default(),
+            transactions: vec![tx],
+        };
+
+        let manager = HybridStateManager::new(create_mock_staking_contract());
+        let result = manager.validate_block_parallel(&block, &[]);
+        assert_eq!(result, Ok(true));
     }
 }
