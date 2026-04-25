@@ -213,7 +213,7 @@
   - [ ] Add the parameter; thread it through every call site
   - [ ] **Verify:** `cargo check --lib`
 
-- [ ] Replace `NetworkPrivacyLevel` enum with `config::PrivacyLevel`
+- [x] Replace `NetworkPrivacyLevel` enum with `config::PrivacyLevel`
   - [ ] Delete `NetworkPrivacyLevel` declaration
   - [ ] Update every match arm and import site
   - [ ] **Verify:** `cargo check --lib`; `! grep -rn 'NetworkPrivacyLevel' src/`

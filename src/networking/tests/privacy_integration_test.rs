@@ -7,7 +7,7 @@ mod privacy_integration_tests {
     use crate::config::privacy_registry::PrivacySettingsRegistry;
     use crate::config::presets::PrivacyLevel;
     use crate::networking::privacy::{
-        NetworkPrivacyManager, NetworkPrivacyLevel,
+        NetworkPrivacyManager,
         DandelionRouter, CircuitRouter, TimingObfuscator,
         FingerprintingProtection, TorConnection
     };
@@ -28,7 +28,7 @@ mod privacy_integration_tests {
         assert!(result.is_ok());
         
         // Verify the privacy level
-        assert_eq!(manager.privacy_level(), NetworkPrivacyLevel::Enhanced);
+        assert_eq!(manager.privacy_level(), PrivacyLevel::Enhanced);
         
         // Verify components are initialized
         assert!(manager.dandelion_router().is_initialized());
@@ -54,13 +54,13 @@ mod privacy_integration_tests {
         assert!(result.is_ok());
         
         // Verify initial privacy level
-        assert_eq!(manager.privacy_level(), NetworkPrivacyLevel::Standard);
-        
+        assert_eq!(manager.privacy_level(), PrivacyLevel::Standard);
+
         // Change privacy level to High
-        manager.set_privacy_level(NetworkPrivacyLevel::Maximum);
-        
+        manager.set_privacy_level(PrivacyLevel::Maximum);
+
         // Verify new privacy level
-        assert_eq!(manager.privacy_level(), NetworkPrivacyLevel::Maximum);
+        assert_eq!(manager.privacy_level(), PrivacyLevel::Maximum);
     }
     
     #[test]

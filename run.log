@@ -161,3 +161,9 @@
 ==> exec  networkprivacymanager-new-accepts-arc-privacysettingsregistr
       exec: 30.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\networkprivacymanager-new-accepts-arc-privacysettingsregistr-execute-20260425T232638994.txt
       notes: - None. Steps executed exactly as planned. The orphan test file's pre-existing breakage (canonical-vs-stub registry import, `set_privacy_level` method, `NetworkPrivacyLevel::Maximum` variant) was left untouched per plan scope; `cargo check --lib` does not exercise the file because it isn't declared in any `mod` chain.
+    [28/91] networkprivacymanager-new-accepts-arc-privacysettingsregistr: plan $0.86 / execute $0.26 / verified / committed 3ab0082
+==> plan  replace-networkprivacylevel-enum-with-config-privacylevel
+      plan: 161.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\replace-networkprivacylevel-enum-with-config-privacylevel-plan-20260425T232922474.txt
+==> exec  replace-networkprivacylevel-enum-with-config-privacylevel
+      exec: 59.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\replace-networkprivacylevel-enum-with-config-privacylevel-execute-20260425T233021512.txt
+      notes: - The plan said "Add `pub use crate::config::presets::PrivacyLevel;` at the same location" - I placed it where the deleted enum had been (between the now-removed comment-block and the `ComponentType` enum), which is the only sensible reading. / - The plan referenced "lines 12-18" and "lines 31-41" for the deletions; the file matched those line numbers exactly, so no reinterpretation was needed.

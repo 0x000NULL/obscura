@@ -1,6 +1,5 @@
 use std::sync::{Arc, RwLock};
 use log::{debug, info};
-use std::fmt;
 // Commented out unused imports
 // use crate::networking::privacy::{
 //     DandelionRouter as NetworkDandelionRouter,
@@ -8,14 +7,7 @@ use std::fmt;
 //     TimingObfuscator as NetworkTimingObfuscator
 // };
 
-// Local definitions to avoid import issues
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum PrivacyLevel {
-    Standard,
-    Medium,
-    High,
-    Custom
-}
+pub use crate::config::presets::PrivacyLevel;
 
 // Local component type enum
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -26,18 +18,6 @@ pub enum ComponentType {
     TorConnection,
     FingerprintingProtection,
     Network
-}
-
-// Implement Display for PrivacyLevel
-impl fmt::Display for PrivacyLevel {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            PrivacyLevel::Standard => write!(f, "Standard"),
-            PrivacyLevel::Medium => write!(f, "Medium"),
-            PrivacyLevel::High => write!(f, "High"),
-            PrivacyLevel::Custom => write!(f, "Custom"),
-        }
-    }
 }
 
 // Basic privacy preset structure
