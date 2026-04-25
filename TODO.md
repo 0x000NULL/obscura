@@ -37,7 +37,7 @@
 
 ### 0.2 Silently-dropped Result triage
 
-- [ ] Surface `try_fill_bytes` failures in `src/networking/dns_over_https.rs`
+- [x] Surface `try_fill_bytes` failures in `src/networking/dns_over_https.rs`
   - [ ] Replace any `let _ = rng.try_fill_bytes(...)` or `.unwrap_or_default()` with explicit error propagation via `?`
   - [ ] Add a unit test that injects a failing RNG and asserts the error path is taken
   - [ ] **Verify:** `cargo test --lib dns_over_https::tests::try_fill_bytes_error_propagates`

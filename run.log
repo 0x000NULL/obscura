@@ -16,3 +16,9 @@
 ==> exec  gate-cargo-check-all-targets-in-ci
       exec: 41.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\gate-cargo-check-all-targets-in-ci-execute-20260425T213258812.txt
       notes: - Used `git mv` (rather than `Write` + filesystem delete) so git records the change as a rename, preserving file history. Plan said "rename" without prescribing mechanism; `git mv` is the conservative interpretation. / - Did not stage the untracked `.claude/plans/gate-cargo-check-all-targets-in-ci.md`; only the rename is staged, matching the plan's "Files" section which lists only the two workflow paths.
+    [3/91] gate-cargo-check-all-targets-in-ci: plan $0.26 / execute $0.27 / verified / committed e61a854
+==> plan  surface-try-fill-bytes-failures-in-src-networking-dns-over
+      plan: 67.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\surface-try-fill-bytes-failures-in-src-networking-dns-over-plan-20260425T213410848.txt
+==> exec  surface-try-fill-bytes-failures-in-src-networking-dns-over
+      exec: 100.03s, failure_mode=success, transcript=.claude\todo-runner\transcripts\surface-try-fill-bytes-failures-in-src-networking-dns-over-execute-20260425T213550926.txt
+      notes: - Constructed `rand_core::Error` via `RandError::from(NonZeroU32::new(RandError::CUSTOM_START + 1).unwrap())` as the plan suggested for rand_core 0.6.x; this compiled and ran on first try. / - Left the pre-existing `use rand::{seq::SliceRandom, thread_rng};` import alone even though `thread_rng` and `SliceRandom` appear unused at the module level - outside the plan's scope, and removing them risks unrelated breakage. The `cargo check` output shows no new warnings introduced for them.

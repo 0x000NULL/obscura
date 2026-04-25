@@ -37,6 +37,9 @@ pub enum DoHError {
     
     #[error("Internal error: {0}")]
     InternalError(String),
+
+    #[error("RNG entropy failure: {0}")]
+    RngError(String),
 }
 
 /// DNS-over-HTTPS record types
@@ -79,19 +82,26 @@ impl DoHProvider {
     }
     
     /// Get a random DoH provider
-    pub fn random() -> Self {
+    pub fn random() -> Result<Self, DoHError> {
+        let mut rng = rand::thread_rng();
+        Self::random_with_rng(&mut rng)
+    }
+
+    /// Get a random DoH provider using the supplied RNG, propagating any
+    /// entropy failure as a typed `DoHError::RngError` rather than panicking.
+    pub(crate) fn random_with_rng<R: RngCore>(rng: &mut R) -> Result<Self, DoHError> {
         let providers = [
             DoHProvider::Cloudflare,
             DoHProvider::Google,
             DoHProvider::Quad9,
             DoHProvider::Custom,
         ];
-        
-        let mut rng = rand::thread_rng();
+
         let mut bytes = [0u8; 8];
-        rng.try_fill_bytes(&mut bytes).expect("RNG entropy failure: try_fill_bytes returned Err");
+        rng.try_fill_bytes(&mut bytes)
+            .map_err(|e| DoHError::RngError(format!("{}", e)))?;
         let value = u64::from_le_bytes(bytes) as usize;
-        providers[value % providers.len()]
+        Ok(providers[value % providers.len()])
     }
 }
 
@@ -283,7 +293,7 @@ impl DoHService {
         
         // Get the current resolver
         let resolver = if self.config.randomize_resolver {
-            DoHProvider::random()
+            DoHProvider::random()?
         } else {
             self.current_resolver.lock().map_err(|e| 
                 DoHError::InternalError(format!("Failed to acquire resolver lock: {}", e)))?.clone()
@@ -632,8 +642,45 @@ impl DoHService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand_core::{Error as RandError, RngCore};
+    use std::num::NonZeroU32;
     use tokio::runtime::Runtime;
-    
+
+    /// RNG that always fails `try_fill_bytes`, used to exercise the error path
+    /// of `DoHProvider::random_with_rng`. The other `RngCore` methods are not
+    /// exercised by the production code under test, so they `unreachable!()`.
+    struct FailingRng;
+
+    impl RngCore for FailingRng {
+        fn next_u32(&mut self) -> u32 {
+            unreachable!("FailingRng::next_u32 should not be called");
+        }
+
+        fn next_u64(&mut self) -> u64 {
+            unreachable!("FailingRng::next_u64 should not be called");
+        }
+
+        fn fill_bytes(&mut self, _dest: &mut [u8]) {
+            unreachable!("FailingRng::fill_bytes should not be called");
+        }
+
+        fn try_fill_bytes(&mut self, _dest: &mut [u8]) -> Result<(), RandError> {
+            let code = NonZeroU32::new(RandError::CUSTOM_START + 1).unwrap();
+            Err(RandError::from(code))
+        }
+    }
+
+    #[test]
+    fn try_fill_bytes_error_propagates() {
+        let mut rng = FailingRng;
+        let result = DoHProvider::random_with_rng(&mut rng);
+        assert!(
+            matches!(result, Err(DoHError::RngError(_))),
+            "expected DoHError::RngError, got {:?}",
+            result
+        );
+    }
+
     #[test]
     fn test_doh_provider_url() {
         assert_eq!(DoHProvider::Cloudflare.url(), "https://cloudflare-dns.com/dns-query");
