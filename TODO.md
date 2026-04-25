@@ -56,7 +56,7 @@ There is no P2P loop, no mining loop, no block assembly path.
 - [ ] Implement a mining loop that assembles blocks from mempool and broadcasts them
 - [ ] End-to-end wire: create tx → sign → mempool → broadcast → peer validates → include in block
 - [x] Replace placeholder `is_connected` always-false in `src/networking/node.rs`
-- [ ] Merge the multiple `Node` struct definitions into one comprehensive type
+- [x] Merge the multiple `Node` struct definitions into one comprehensive type
 
 ### 1.3 Stale / hollow tests
 
