@@ -145,6 +145,7 @@ pub struct DandelionThresholds {
     pub max_aggregation_size: usize,
     pub stem_batch_size: usize,
     pub routing_table_inference_resistance_enabled: bool,
+    pub circuit_rotation_threshold: u32,
 }
 
 impl DandelionThresholds {
@@ -210,5 +211,6 @@ impl DandelionThresholds {
         max_aggregation_size: 10,
         stem_batch_size: 5,
         routing_table_inference_resistance_enabled: true,
+        circuit_rotation_threshold: 100,
     };
 }

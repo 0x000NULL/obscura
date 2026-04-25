@@ -234,7 +234,7 @@
   - [ ] Call from a tokio interval task spawned in `CircuitRouter::start`
   - [ ] **Verify:** `cargo test --lib circuit::tests::cleanup_drops_expired`
 
-- [ ] Add `CircuitRouter::rotate` based on usage count
+- [x] Add `CircuitRouter::rotate` based on usage count
   - [ ] Track `usage: u32` per circuit; rotate when `>= rotation_threshold`
   - [ ] **Verify:** `cargo test --lib circuit::tests::rotates_after_usage_threshold`
 

@@ -972,5 +972,43 @@ mod tests {
 
         assert_eq!(router2.cleanup_expired(Duration::from_secs(3600)), 0);
     }
+
+    #[test]
+    fn rotates_after_usage_threshold() {
+        let registry = Arc::new(PrivacySettingsRegistry::new());
+        let router = CircuitRouter::new(registry);
+
+        let peers: Vec<SocketAddr> = (0..5)
+            .map(|i| format!("127.0.0.1:800{}", i).parse().unwrap())
+            .collect();
+        router.update_available_peers(peers);
+
+        let id = router
+            .create_circuit(CircuitPurpose::General)
+            .expect("circuit creation should succeed");
+
+        router.record_use(&id);
+        router.record_use(&id);
+        router.record_use(&id);
+
+        assert_eq!(router.rotate(3).expect("rotate succeeds"), 1);
+
+        let circuits = router.circuits.lock().unwrap();
+        assert_eq!(circuits.len(), 1);
+        let new_id = circuits.keys().next().expect("one circuit").clone();
+        assert_ne!(new_id, id);
+        drop(circuits);
+
+        let registry2 = Arc::new(PrivacySettingsRegistry::new());
+        let router2 = CircuitRouter::new(registry2);
+        let peers2: Vec<SocketAddr> = (0..5)
+            .map(|i| format!("127.0.0.1:800{}", i).parse().unwrap())
+            .collect();
+        router2.update_available_peers(peers2);
+        router2
+            .create_circuit(CircuitPurpose::General)
+            .expect("circuit creation should succeed");
+        assert_eq!(router2.rotate(1).expect("rotate succeeds"), 0);
+    }
 }
 

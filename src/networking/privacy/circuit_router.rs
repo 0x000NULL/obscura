@@ -14,7 +14,7 @@ use hex;
 
 use crate::blockchain::Transaction;
 use crate::networking::circuit::{CircuitError, CircuitManager};
-use crate::networking::dandelion_config::DandelionTimings;
+use crate::networking::dandelion_config::{DandelionThresholds, DandelionTimings};
 use crate::networking::privacy::PrivacyLevel;
 use crate::networking::privacy_config_integration::PrivacySettingsRegistry;
 
@@ -81,6 +81,9 @@ pub struct CircuitInfo {
     
     /// Circuit purpose
     pub purpose: CircuitPurpose,
+
+    /// Number of times this circuit has been used
+    pub usage: u32,
 }
 
 /// Circuit purpose
@@ -108,7 +111,7 @@ pub struct CircuitRouter {
     privacy_level: RwLock<PrivacyLevel>,
     
     /// Circuits (circuit ID -> circuit info)
-    circuits: Mutex<HashMap<String, CircuitInfo>>,
+    pub(crate) circuits: Mutex<HashMap<String, CircuitInfo>>,
     
     /// Mapping of peer IDs to circuit IDs
     peer_circuits: Mutex<HashMap<SocketAddr, String>>,
@@ -301,6 +304,7 @@ impl CircuitRouter {
             last_used: Instant::now(),
             established: true,
             purpose,
+            usage: 0,
         };
         
         self.circuits.lock().unwrap().insert(circuit_id.clone(), circuit_info);
@@ -592,6 +596,39 @@ impl CircuitRouter {
         }
 
         expired_ids.len()
+    }
+
+    /// Record one use of the circuit, bumping its usage counter.
+    pub fn record_use(&self, circuit_id: &str) {
+        let mut circuits = self.circuits.lock().unwrap();
+        if let Some(info) = circuits.get_mut(circuit_id) {
+            info.usage = info.usage.saturating_add(1);
+            info.last_used = Instant::now();
+        }
+    }
+
+    /// Rebuild any circuit whose usage has reached `threshold`. Returns the
+    /// number of circuits rotated.
+    pub fn rotate(&self, threshold: u32) -> Result<usize, CircuitRouterError> {
+        let to_rotate: Vec<(String, CircuitPurpose)> = {
+            let circuits = self.circuits.lock().unwrap();
+            circuits
+                .iter()
+                .filter(|(_, info)| info.usage >= threshold)
+                .map(|(id, info)| (id.clone(), info.purpose))
+                .collect()
+        };
+
+        let rotated = to_rotate.len();
+        for (id, purpose) in to_rotate {
+            let new_id = self.create_circuit(purpose)?;
+            if let Err(e) = self.close_circuit(&id) {
+                warn!("Failed to close circuit {}: {}", id, e);
+            }
+            debug!("Rotated circuit {} -> {} (usage threshold)", id, new_id);
+        }
+
+        Ok(rotated)
     }
 
     /// Spawn a tokio task that periodically cleans up expired circuits.
