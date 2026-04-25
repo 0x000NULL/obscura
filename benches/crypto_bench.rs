@@ -5,12 +5,11 @@ use rand::thread_rng;
 use std::time::Duration;
 use std::ops::Mul;
 use group::Group;
-use ark_ec::{AdditiveGroup, PrimeGroup};
+use ark_ec::{AdditiveGroup, CurveGroup, PrimeGroup};
 use group::ff::Field;
 use ark_ff::UniformRand;
 use ark_ec::models::short_weierstrass::Projective;
 use ark_ec::models::short_weierstrass::Affine;
-use ark_ec::CurveGroup;
 use rand_core::OsRng;
 
 fn bls_bench(c: &mut Criterion) {
@@ -63,7 +62,7 @@ fn jubjub_bench(c: &mut Criterion) {
     group.bench_function("point_mul", |b| {
         let mut rng = thread_rng();
         let scalar = Fr::rand(&mut rng);
-        let point = EdwardsProjective::generator();
+        let point = <EdwardsProjective as ark_ec::PrimeGroup>::generator();
         b.iter(|| {
             let result = point * scalar;
             black_box(result);
@@ -71,8 +70,8 @@ fn jubjub_bench(c: &mut Criterion) {
     });
 
     group.bench_function("point_add", |b| {
-        let p1 = EdwardsProjective::generator();
-        let p2 = EdwardsProjective::generator() * Fr::rand(&mut thread_rng());
+        let p1 = <EdwardsProjective as ark_ec::PrimeGroup>::generator();
+        let p2 = <EdwardsProjective as ark_ec::PrimeGroup>::generator() * Fr::rand(&mut thread_rng());
         b.iter(|| {
             let result = p1 + p2;
             black_box(result);
@@ -80,7 +79,7 @@ fn jubjub_bench(c: &mut Criterion) {
     });
 
     group.bench_function("point_double", |b| {
-        let p = EdwardsProjective::generator();
+        let p = <EdwardsProjective as ark_ec::PrimeGroup>::generator();
         b.iter(|| {
             let result = p.double();
             black_box(result);
@@ -93,8 +92,8 @@ fn jubjub_bench(c: &mut Criterion) {
 fn bench_scalar_mul(c: &mut Criterion) {
     let mut rng = OsRng;
     let scalar = Fr::rand(&mut rng);
-    let point = EdwardsProjective::generator();
-    
+    let point = <EdwardsProjective as ark_ec::PrimeGroup>::generator();
+
     c.bench_function("scalar_mul", |b| {
         b.iter(|| {
             let _ = point * scalar;
@@ -106,8 +105,8 @@ fn bench_point_addition(c: &mut Criterion) {
     let mut rng = OsRng;
     let scalar1 = Fr::rand(&mut rng);
     let scalar2 = Fr::rand(&mut rng);
-    let point1 = EdwardsProjective::generator() * scalar1;
-    let point2 = EdwardsProjective::generator() * scalar2;
+    let point1 = <EdwardsProjective as ark_ec::PrimeGroup>::generator() * scalar1;
+    let point2 = <EdwardsProjective as ark_ec::PrimeGroup>::generator() * scalar2;
     
     c.bench_function("point_addition", |b| {
         b.iter(|| {

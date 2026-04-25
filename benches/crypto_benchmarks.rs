@@ -6,7 +6,7 @@ use rand::thread_rng;
 use std::time::Duration;
 use std::ops::Mul;
 use group::{Group, ff::Field};
-use ark_ec::{AdditiveGroup, PrimeGroup};
+use ark_ec::{AdditiveGroup, CurveGroup, PrimeGroup};
 
 fn bls12_381_benchmarks(c: &mut Criterion) {
     let mut group = c.benchmark_group("BLS12-381");
@@ -75,7 +75,7 @@ fn jubjub_benchmarks(c: &mut Criterion) {
     group.bench_function("point_mul", |b| {
         let mut rng = thread_rng();
         let scalar = Fr::rand(&mut rng);
-        let point = EdwardsProjective::generator();
+        let point = <EdwardsProjective as ark_ec::PrimeGroup>::generator();
         b.iter(|| {
             let result = point.mul(scalar);
             black_box(result);
@@ -84,7 +84,7 @@ fn jubjub_benchmarks(c: &mut Criterion) {
 
     // Point addition 
     group.bench_function("point_add", |b| {
-        let p1 = EdwardsProjective::generator();
+        let p1 = <EdwardsProjective as ark_ec::PrimeGroup>::generator();
         let mut rng = thread_rng();
         let scalar = Fr::rand(&mut rng);
         let p2 = p1.mul(scalar);
@@ -96,7 +96,7 @@ fn jubjub_benchmarks(c: &mut Criterion) {
 
     // Point doubling
     group.bench_function("point_double", |b| {
-        let p = EdwardsProjective::generator();
+        let p = <EdwardsProjective as ark_ec::PrimeGroup>::generator();
         b.iter(|| {
             let result = p.double();
             black_box(result);

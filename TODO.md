@@ -1,681 +1,734 @@
-# Obscura (OBX) TODO
+# Obscura (OBX) TODO — Runner-Ready
 
-> Last audit: 2026-04-24, post-merge of upstream `7c2c7f9` (build-fix) and `0.8.3` (`crypto/privacy.rs` rewrite).
-> `cargo check --lib` is now clean (0 errors, 326 warnings). `cargo check --all-targets` has ~16
-> remaining errors, all in the `benches/` crate.
+> Last restructure: 2026-04-25. Every `- [ ]` below is a single-commit
+> deliverable shaped for the Run-Todos autonomous runner. Out-of-scope work
+> (cryptographic audits, Phase 2+ research, judgment-call design items)
+> lives at the bottom in HTML-commented blocks so the runner's parser
+> never queues it.
 >
-> This file consolidates the former `TODO.md` and `TODOs/*.md` into a single source of truth.
-> The `0.8.3` commit rewrote much of `crypto/privacy.rs` (+596 lines) and the build fix updated
-> `crypto/jubjub.rs`, `crypto/platform_memory_impl.rs`, `consensus/randomx/mod.rs`, and
-> `networking/privacy/fingerprinting_protection.rs`. Some previously "done" items in crypto are
-> genuinely current again; others may need re-verification (see Section 4.1).
+> Baseline: `cargo check --lib` is clean (0 errors); `cargo check --all-targets`
+> has bench errors tracked in §0.1.
+
+**Rules every runner-item obeys**
+- One commit's worth: ~30–400 LOC across 1–3 files
+- Deliverable is a named file or named symbol — never "improve X" or "ensure Y"
+- **Verify** is concrete: `cargo check`, `cargo test --lib <pattern>`, `cargo clippy`, `test -f <path>`, or `grep -q <pat> <source-file>` (never against TODO.md / needs-review.md / .claude/*)
+- Indented sub-bullets are part of the same item — runner bundles them into one plan
+- Items are listed in execution order; later items may depend on earlier ones
 
 ---
 
-## 0. Build — Restore Benches
+## 0. Build sanity
 
-Library and binary targets compile. Only the benchmark crate is broken: bench code wasn't updated
-for the arkworks API changes that the build-fix commit applied to the library.
+### 0.1 Restore benches
 
-### Remaining errors (~16, all in `benches/`)
+- [x] Update `benches/crypto_benchmarks.rs` and `benches/crypto_bench.rs` for new ark-ec API
+  - [ ] Replace `use ark_ec::Group as ArkGroup;` with the current trait path (mirror imports in `src/crypto/jubjub.rs`)
+  - [ ] Replace the 10 `EdwardsProjective::generator()` call sites with the accessor used in `src/crypto/jubjub.rs`
+  - [ ] **Verify:** `cargo check --bench crypto_benchmarks --bench crypto_bench`
 
-- [x] `benches/crypto_benchmarks.rs` and `benches/crypto_bench.rs`
-  - [ ] **E0432** — `use ark_ec::Group as ArkGroup;` — `Group` moved/renamed in the new ark-ec; update import
-  - [ ] **E0599** — `EdwardsProjective::generator()` (10 sites) — replace with the current accessor (e.g. `<EdwardsProjective as PrimeGroup>::generator()` or the curve-specific equivalent used in `src/crypto/jubjub.rs`)
-- [x] `benches/critical_paths.rs`
-  - [ ] **E0599** — `signature.verify(&keypair.public, message)` — method renamed/moved on `JubjubSignature`; align with the API now used in `src/crypto/jubjub.rs`
+- [ ] Update `benches/critical_paths.rs` for new JubjubSignature API
+  - [ ] Align `signature.verify(&keypair.public, message)` with the method now used in `src/crypto/jubjub.rs`
+  - [ ] **Verify:** `cargo check --bench critical_paths`
 
-### Follow-ups
+- [ ] Gate `cargo check --all-targets` in CI
+  - [ ] Add `cargo check --all-targets --locked` step to `.github/workflows/ci.yml`
+  - [ ] **Verify:** `grep -q 'cargo check --all-targets' .github/workflows/ci.yml`
 
-- [x] Triage the 326 lib warnings — at minimum, fix the `unused Result` from `try_fill_bytes` calls in security-sensitive paths (`networking/dns_over_https.rs`, `networking/privacy/timing_obfuscator.rs`, etc.) since silently dropping RNG fallible-fill can mask entropy failures
-- [x] Add CI gate so a green `cargo check --all-targets` is required on PRs
-- [x] Run `cargo build` and `cargo test` once benches compile to surface any additional issues
+### 0.2 Silently-dropped Result triage
 
----
+- [ ] Surface `try_fill_bytes` failures in `src/networking/dns_over_https.rs`
+  - [ ] Replace any `let _ = rng.try_fill_bytes(...)` or `.unwrap_or_default()` with explicit error propagation via `?`
+  - [ ] Add a unit test that injects a failing RNG and asserts the error path is taken
+  - [ ] **Verify:** `cargo test --lib dns_over_https::tests::try_fill_bytes_error_propagates`
 
-## 1. Architectural Gaps (newly tracked — previously invisible to TODOs)
-
-### 1.1 Orphaned consensus privacy validators (security hole)
-
-Privacy verifiers exist on `Transaction` but are dead code. `validate_block_hybrid` checks PoW/PoS
-and skips all privacy flags, so invalid range proofs or malformed stealth addresses would be accepted
-into blocks as long as the consensus proof is valid.
-
-- [x] Wire `Transaction::verify_privacy_features()` into `validate_block_hybrid`
-- [x] Wire `Transaction::verify_range_proofs()` into hybrid validation
-- [x] Wire `Transaction::verify_confidential_balance()` into hybrid validation
-- [x] Add mempool pre-validation of privacy features (reject malformed inputs before block inclusion)
-- [x] Regression test: consensus must reject a block whose transactions carry invalid range proofs
-
-### 1.2 No runnable node
-
-`src/main.rs` initializes components then exits. `start_network_services` spawns an empty thread.
-There is no P2P loop, no mining loop, no block assembly path.
-
-- [x] Implement the P2P server loop in `src/main.rs`
-- [ ] Implement a mining loop that assembles blocks from mempool and broadcasts them
-- [ ] End-to-end wire: create tx → sign → mempool → broadcast → peer validates → include in block
-- [x] Replace placeholder `is_connected` always-false in `src/networking/node.rs`
-- [x] Merge the multiple `Node` struct definitions into one comprehensive type
-
-### 1.3 Stale / hollow tests
-
-- [x] `tests/e2e/network_simulation.rs` references nonexistent APIs (`TestNetwork::new`, `wallet.create_test_transaction`, `node.mempool`) — either build them or delete the file
-- [ ] Consensus tests rely on `RandomXContext::new_for_testing()` with `difficulty_target = 0xFFFFFFFF` — add production-parameter test paths before launch
-- [x] `crypto_audit.log` shows a recurring `CRITICAL [GENERAL] [FAILED]` pattern (Mar 25–26 2025) — confirm this is intentional test injection or suppress it
-- [ ] Replace test-mode-only `RandomX` benches with real-mode benches
-
-### 1.4 Duplicated types
-
-- [ ] Remove the stub `PrivacySettingsRegistry` in `src/networking/privacy_config_integration.rs`; use only `src/config/privacy_registry.rs`
-- [ ] Make `ComponentType` reflect actual module structure
-- [ ] Replace string-keyed settings with type-safe enums
+- [ ] Surface `try_fill_bytes` failures in `src/networking/privacy/timing_obfuscator.rs`
+  - [ ] Same pattern as above
+  - [ ] **Verify:** `cargo test --lib timing_obfuscator::tests::try_fill_bytes_error_propagates`
 
 ---
 
-## 2. Stealth Addressing Integration
+## 1. Mining loop (split from the original mega-item)
 
-Previously duplicated across `1_todo_crypto.md`, `2_todo_wallet.md`, `3_todo_blockchain.md`,
-`5_todo_networking.md`, `6_todo_config.md`. Consolidated here.
+### 1.1 Skeleton
 
-### 2.1 Transaction pipeline property preservation
+- [ ] Add `src/mining/mod.rs` with `MiningLoop` struct + constructor
+  - [ ] Fields: `mempool: Arc<Mempool>`, `chain: Arc<RwLock<Blockchain>>`, `tx_blocks: tokio::sync::broadcast::Sender<Block>`, `running: Arc<AtomicBool>`
+  - [ ] Methods: `pub fn new(...) -> Self`, `pub fn stop(&self)` (flips `running` to false)
+  - [ ] `pub async fn start(self: Arc<Self>)` is a stub that loops until `running` flips, sleeping 100ms (filled in 1.2–1.4)
+  - [ ] Add `pub mod mining;` to `src/lib.rs`
+  - [ ] **Verify:** `cargo check --lib`; `grep -q 'pub struct MiningLoop' src/mining/mod.rs`
 
-- [ ] Redesign `create_transaction` to initialize and retain public-key scripts through privacy-feature application
-- [ ] Fix `set_stealth_recipient` to preserve all output properties (value, range proofs, commitments)
-- [ ] Add property-integrity verification after stealth address is set
-- [ ] Ensure `DandelionRouter`, `CircuitRouter`, `TimingObfuscator` each preserve public-key scripts
-- [ ] Add validation checks after each privacy component to verify transaction-property preservation
-- [ ] Reimplement `propagate_transaction` so all transaction properties survive the trip
+- [ ] Unit tests for `MiningLoop::new` and `MiningLoop::stop`
+  - [ ] Add `#[cfg(test)] mod tests` at end of `src/mining/mod.rs`
+  - [ ] Test: default `running` is false after `new`
+  - [ ] Test: `stop` is idempotent
+  - [ ] **Verify:** `cargo test --lib mining::tests`
 
-### 2.2 Privacy flag handling
+### 1.2 Block-template assembly
 
-- [ ] Consistent privacy-flag propagation mechanism across all privacy components
-- [ ] Flag ↔ content consistency validation (flags must match actual transaction content)
-- [ ] Unified privacy flag handling across networking components
+- [ ] Implement `MiningLoop::build_template` in `src/mining/mod.rs`
+  - [ ] Pull up to 2000 txs from mempool ordered by fee rate (use existing mempool ordering API)
+  - [ ] Build coinbase via existing reward fn (locate via `grep -rn 'fn block_reward' src/`)
+  - [ ] Compute merkle root via existing `merkle_root` helper in `src/blockchain/`
+  - [ ] Pull parent hash + height from `Blockchain::tip()`
+  - [ ] Return `Result<BlockTemplate, MiningError>`; define both types in same file
+  - [ ] **Verify:** `cargo test --lib mining::tests::build_template_well_formed`
 
-### 2.3 Verification
+### 1.3 Nonce search
 
-- [ ] Enhance `can_find_transaction` to detect stealth-address inconsistencies
-- [ ] Proper error reporting for stealth-address verification failures
-- [ ] Verification mechanisms for privacy-enhanced transactions
-- [ ] Cryptographic guarantees for transaction property preservation
+- [ ] Implement `MiningLoop::find_nonce` in `src/mining/mod.rs`
+  - [ ] Take `&BlockTemplate` and `target: U256`
+  - [ ] Loop nonce 0..u64::MAX; compute RandomX hash via existing `RandomXContext` (`src/consensus/randomx/mod.rs`)
+  - [ ] Bail when `running` is false; return `Option<u64>`
+  - [ ] **Verify:** `cargo test --lib mining::tests::find_nonce_satisfies_target` (use `RandomXContext::new_for_testing()` with low difficulty)
 
-### 2.4 Config hooks
+### 1.4 Wire start loop
 
-- [ ] Stealth-address-specific config options with validation rules
-- [ ] Default configurations that guarantee stealth-address preservation
-- [ ] Validation rules for privacy component configuration combinations
+- [ ] Replace `MiningLoop::start` stub with full mine→broadcast loop
+  - [ ] Build template, find nonce, assemble block, push via `tx_blocks.send(block)`
+  - [ ] Refresh template every iteration (mempool may have changed)
+  - [ ] Sleep 50ms when mempool is empty
+  - [ ] **Verify:** `cargo test --lib mining::tests::start_emits_blocks_and_stops`
 
-### 2.5 Tests and docs
-
-- [ ] End-to-end transaction flow with stealth addresses
-- [ ] Property preservation across all processing stages
-- [ ] Automated regression testing for privacy feature interactions
-- [ ] Document expected behavior for stealth-address handling
-- [ ] Implementation guidelines for privacy-component developers
-- [ ] Architecture documentation explaining privacy integration requirements
+- [ ] Wire `MiningLoop` into `start_network_services` in `src/main.rs`
+  - [ ] Construct with shared mempool/chain/broadcast handles already in scope
+  - [ ] Spawn via `tokio::spawn(loop_arc.start())`
+  - [ ] Forward broadcast receiver to existing P2P block-relay path
+  - [ ] **Verify:** `cargo check --bin obscura`; `grep -q 'MiningLoop::new' src/main.rs`
 
 ---
 
-## 3. Network Privacy Component Integration
+## 2. End-to-end tx wire (split from the original mega-item)
 
-### 3.1 NetworkPrivacyManager
+### 2.1 Tx creation path
 
-- [ ] Constructor accepts `Arc<PrivacySettingsRegistry>`
-- [ ] Replace `NetworkPrivacyLevel` enum with `config::PrivacyLevel` (remove the former entirely)
-- [ ] Handle `Custom` variant in every privacy-level match, with reasonable defaults and logging
+- [ ] Add integration test `tests/e2e/tx_create.rs` covering wallet → tx
+  - [ ] Build a wallet, call `create_transaction` with a synthetic UTXO, assert returned tx has populated inputs/outputs
+  - [ ] **Verify:** `cargo test --test tx_create create_transaction_populates_outputs`
 
-### 3.2 CircuitRouter
+### 2.2 Sign path
 
-- [ ] Proper `Circuit` struct with endpoints, relays, serde support, versioning
-- [ ] `circuit_map` uses correct key/value types with validation
-- [ ] Circuit cleanup for expired circuits
-- [ ] Rotation based on time + usage metrics
-- [ ] Health monitoring and selection algorithm driven by privacy needs
-- [ ] Fallback mechanisms for circuit failure
+- [ ] Add integration test `tests/e2e/tx_sign.rs` covering tx → signed tx
+  - [ ] Take the tx from 2.1's path, sign with wallet keypair, assert signature verifies
+  - [ ] **Verify:** `cargo test --test tx_sign signed_tx_verifies`
 
-### 3.3 DandelionRouter
+### 2.3 Mempool path
 
-- [ ] Add configurable `stem_probability` / `fluff_probability` fields (defaults by privacy level)
-- [ ] Weighted random stem/fluff decision; adaptive adjustment by network conditions
-- [ ] Deterministic test mode for probabilities
-- [ ] Fix stem-phase handling, fluff broadcast, transaction aggregation
-- [ ] Stem-phase timeout + retry for failed propagation
+- [ ] Add integration test `tests/e2e/tx_mempool.rs` covering signed tx → mempool acceptance
+  - [ ] Submit signed tx to a fresh `Mempool`, assert it appears in `Mempool::contents()`
+  - [ ] **Verify:** `cargo test --test tx_mempool mempool_accepts_signed_tx`
 
-### 3.4 TorConnection
+### 2.4 Broadcast path
 
-- [ ] Add `circuit_rotation_interval` to `TorConfig`
-- [ ] Connection timeout, relay-selection strategy, bandwidth throttling configs
-- [ ] Preemptive circuit creation with jitter
-- [ ] Circuit pool with health monitoring
-- [ ] Stream isolation per transaction type
-- [ ] Fallback for circuit failures
+- [ ] Add integration test `tests/e2e/tx_broadcast.rs` covering mempool → broadcast
+  - [ ] Wire mempool to a mock `BroadcastSink`, assert sink received the tx hash
+  - [ ] **Verify:** `cargo test --test tx_broadcast mempool_emits_to_broadcast`
 
-### 3.5 FingerprintingProtection
+### 2.5 Peer-validate path
 
-- [ ] Add `BurstAndWait` connection pattern (configurable burst size, variable wait, randomized timing)
-- [ ] Pattern rotation with privacy-level-based selection probabilities
-- [ ] Group 24+ config parameters into logical sub-structs
-- [ ] Single reusable RNG instead of frequent `thread_rng()` calls
-- [ ] Thread pool instead of per-task thread creation
-- [ ] Central TCP parameter manager
+- [ ] Add integration test `tests/e2e/tx_peer_validate.rs` covering broadcast → peer accepts
+  - [ ] Two `Node` instances; node A broadcasts a signed tx; node B's mempool receives it after a tokio yield loop
+  - [ ] **Verify:** `cargo test --test tx_peer_validate peer_b_receives_tx`
 
-### 3.6 General networking cleanup
+### 2.6 Block-include path
 
-- [ ] Remove duplicate entries from `FeatureFlag` / `PrivacyFeatureFlag` in `p2p.rs`
-- [ ] Centralize timeout and buffer-size constants
-- [ ] Group the 80+ constants in `dandelion.rs` into logical config structs
-- [ ] Document feature-toggle dependencies (e.g. `MULTI_HOP_STEM_PROBABILITY` depends on `MULTI_PATH_ROUTING_PROBABILITY`)
+- [ ] Add integration test `tests/e2e/tx_block_include.rs` covering peer mempool → mined block
+  - [ ] Reuse 2.5 setup; on node B, run one mining step; assert the broadcast tx appears in the new block
+  - [ ] **Verify:** `cargo test --test tx_block_include block_contains_broadcast_tx`
+
+---
+
+## 3. Type / module cleanup
+
+### 3.1 Duplicated types
+
+- [ ] Remove stub `PrivacySettingsRegistry` from `src/networking/privacy_config_integration.rs`
+  - [ ] Replace all imports and uses with `crate::config::privacy_registry::PrivacySettingsRegistry`
+  - [ ] Delete the stub struct and its impl block
+  - [ ] **Verify:** `cargo check --lib`; `grep -L 'pub struct PrivacySettingsRegistry' src/networking/privacy_config_integration.rs` (file should NOT contain the stub)
+
+- [ ] Tighten `ComponentType` enum in `src/config/component_type.rs` (locate via grep)
+  - [ ] Match variants 1:1 to actual top-level modules under `src/`
+  - [ ] Remove dead variants; add missing ones
+  - [ ] Update all match arms (`cargo check` will surface every site)
+  - [ ] **Verify:** `cargo check --lib`
+
+- [ ] Replace string-keyed settings in `PrivacySettingsRegistry` with typed enum keys
+  - [ ] New enum `SettingKey` in `src/config/privacy_registry.rs`
+  - [ ] Migrate API: `get(&str)` → `get(SettingKey)`
+  - [ ] Migrate every call site
+  - [ ] **Verify:** `cargo check --lib`; `cargo test --lib privacy_registry::tests`
+
+### 3.2 Stale tests
+
+- [ ] Add production-parameter consensus test paths
+  - [ ] In `src/consensus/randomx/mod.rs` tests module, add `#[test] fn validate_with_production_difficulty`
+  - [ ] Use real difficulty (`0x1d00ffff` mainnet-equivalent) on a precomputed valid block fixture
+  - [ ] **Verify:** `cargo test --lib consensus::randomx::tests::validate_with_production_difficulty`
+
+- [ ] Replace test-mode-only RandomX benches with real-mode bench
+  - [ ] In `benches/`, add `randomx_real_difficulty.rs` benching `RandomXContext::default()` instead of `new_for_testing`
+  - [ ] **Verify:** `cargo bench --bench randomx_real_difficulty -- --test`
+
+---
+
+## 4. Network privacy cleanup (low-risk wins)
+
+### 4.1 Constants centralization
+
+- [ ] Create `src/networking/constants.rs` collecting timeout + buffer-size constants
+  - [ ] Move every `const TIMEOUT_*`, `const BUFFER_SIZE_*`, `const MAX_*_LENGTH` from `p2p.rs`, `dandelion.rs`, `tor.rs`, `circuit.rs` into this single file
+  - [ ] Each constant gets a short doc comment describing the unit (ms / bytes / count)
+  - [ ] Update import sites
+  - [ ] **Verify:** `cargo check --lib`; `grep -c '^pub const' src/networking/constants.rs` is `>= 30`
+
 - [ ] Reconcile `MAX_ROUTING_PATH_LENGTH` (10) vs `MAX_MULTI_HOP_LENGTH` (3)
-- [ ] Resolve `STEM_PHASE_MIN/MAX_TIMEOUT` differences between `mod.rs` and `dandelion.rs`
-- [ ] Proper state machine for `Stem` / `MultiHopStem` / `BatchedStem` transitions
-- [ ] Feature synchronization so all components share one privacy-feature view
-- [ ] Default privacy level from `Standard` → `Medium`
-- [ ] Consistent locking order in `connection_pool.rs` to prevent deadlocks
-- [ ] Simplify encrypted reputation mechanism
-- [ ] Extract duplicate connection logic into helpers
-- [ ] Unify circuit management between `tor.rs` and `circuit.rs`
-- [ ] Fix potential panic in `CloneableTcpStream::clone`
-- [ ] Consolidate `ConnectionObfuscationConfig` options into logical groups
-- [ ] Define clear boundaries between `protocol_morphing.rs` and `traffic_obfuscation.rs`
-- [ ] Reduce 8 protocol transformations to 3–4 most effective
-- [ ] More sophisticated timing obfuscation resistant to traffic analysis
-- [ ] Complete I2P listen-state implementation
-- [ ] Mandatory message authentication (`message.rs`); consider BLAKE3 checksums
+  - [ ] Pick one canonical name; remove the other; align all call sites
+  - [ ] Add doc comment explaining the choice
+  - [ ] **Verify:** `cargo check --lib`; `grep -rn 'MAX_ROUTING_PATH_LENGTH\|MAX_MULTI_HOP_LENGTH' src/ | wc -l` ≤ count of declarations + 1
 
-### 3.7 Testing
+- [ ] Resolve `STEM_PHASE_MIN_TIMEOUT` / `STEM_PHASE_MAX_TIMEOUT` divergence between `mod.rs` and `dandelion.rs`
+  - [ ] Single declaration in `src/networking/constants.rs`; remove the duplicate
+  - [ ] **Verify:** `cargo check --lib`; `grep -rn 'STEM_PHASE_MIN_TIMEOUT\|STEM_PHASE_MAX_TIMEOUT' src/networking/ | wc -l` equals 2 (one each in constants.rs)
 
-- [ ] Unit test suites for `NetworkPrivacyManager`, `CircuitRouter`, `DandelionRouter`, `TorConnection`, `FingerprintingProtection`
-- [ ] Integration tests across privacy components with real registry
-- [ ] Privacy metric collection and verification (anonymity-set measurement, traffic pattern analysis, fingerprint resistance, privacy score calculation)
+### 4.2 Group `dandelion.rs` constants
 
----
+- [ ] Group the 80+ `dandelion.rs` constants into named structs
+  - [ ] Split into `DandelionTimings`, `DandelionThresholds`, `DandelionPaths` structs in `src/networking/dandelion_config.rs`
+  - [ ] Each struct has a `pub const DEFAULT: Self = ...` associated constant
+  - [ ] Update `dandelion.rs` to reference these via the structs
+  - [ ] **Verify:** `cargo check --lib`; `grep -q 'pub struct DandelionTimings' src/networking/dandelion_config.rs`
 
-## 4. Crypto Module
+### 4.3 Feature-flag dedup
 
-Crypto-module checklist was marked ~all done in the prior `1_todo_crypto.md`, but the module does
-not compile after the dep upgrade. Treat prior ticks as stale and re-verify.
+- [ ] Remove duplicate entries from `FeatureFlag` and `PrivacyFeatureFlag` in `src/networking/p2p.rs`
+  - [ ] Identify duplicates by variant name + value
+  - [ ] Keep first occurrence; remove later ones
+  - [ ] **Verify:** `cargo check --lib`; `cargo test --lib networking::p2p::tests::feature_flag_unique`
 
-### 4.1 After build restoration — re-verify the claimed-done work
+### 4.4 NetworkPrivacyManager cleanup
 
-- [ ] Constant-time implementations still constant (not optimized away after toolchain changes)
-- [ ] AES-GCM / ChaCha20-Poly1305 keypair encryption still correct
-- [ ] Argon2 / PBKDF2 key derivation still correct
-- [ ] Memory protection + guard pages still functional on Windows
-- [ ] DKG atomic state transitions still hold
-- [ ] `LocalPedersenCommitment::commit` still produces valid commitments
+- [ ] `NetworkPrivacyManager::new` accepts `Arc<PrivacySettingsRegistry>`
+  - [ ] Add the parameter; thread it through every call site
+  - [ ] **Verify:** `cargo check --lib`
 
-### 4.2 Outstanding
+- [ ] Replace `NetworkPrivacyLevel` enum with `config::PrivacyLevel`
+  - [ ] Delete `NetworkPrivacyLevel` declaration
+  - [ ] Update every match arm and import site
+  - [ ] **Verify:** `cargo check --lib`; `! grep -rn 'NetworkPrivacyLevel' src/`
 
-- [ ] Fuzz testing for all cryptographic primitives
-- [ ] Threat-model document
-- [ ] Cryptographic-guarantees-and-assumptions doc
-- [ ] Usage guidelines for secure implementation patterns
-- [ ] Remove `#[allow(dead_code)]` annotations where work is complete
+- [ ] Add `Custom` variant handling to every `PrivacyLevel` match in `src/networking/`
+  - [ ] For each `match level { Standard => ..., Medium => ..., High => ... }` add a `Custom(_) => /* sensible default + tracing::warn! */` arm
+  - [ ] **Verify:** `cargo check --lib`; `cargo build --lib 2>&1 | grep -c 'non-exhaustive patterns'` is `0`
 
----
+### 4.5 CircuitRouter
 
-## 5. Wallet Module
+- [ ] Replace ad-hoc `Circuit` representation with a proper struct in `src/networking/circuit.rs`
+  - [ ] Fields: `id: CircuitId`, `endpoints: Vec<PeerId>`, `relays: Vec<PeerId>`, `created_at: SystemTime`, `version: u16`
+  - [ ] Derive `Serialize, Deserialize, Clone, Debug`
+  - [ ] **Verify:** `cargo check --lib`; `grep -q 'pub struct Circuit' src/networking/circuit.rs`
 
-### 5.1 Error handling and types
+- [ ] Add `CircuitRouter::cleanup_expired` method
+  - [ ] Drop circuits whose `created_at + max_age < now()`; `max_age` from `DandelionTimings::DEFAULT.circuit_max_age`
+  - [ ] Call from a tokio interval task spawned in `CircuitRouter::start`
+  - [ ] **Verify:** `cargo test --lib circuit::tests::cleanup_drops_expired`
 
-- [ ] Replace `Option<Transaction>` returns with `Result` types carrying context
-- [ ] Structured error types (not generic strings)
+- [ ] Add `CircuitRouter::rotate` based on usage count
+  - [ ] Track `usage: u32` per circuit; rotate when `>= rotation_threshold`
+  - [ ] **Verify:** `cargo test --lib circuit::tests::rotates_after_usage_threshold`
 
-### 5.2 Privacy implementation
+### 4.6 DandelionRouter
 
-- [ ] Validation and security checks on stealth addressing
-- [ ] Complete `decrypt_amount` with actual decryption logic
-- [ ] Replace placeholder implementations
-- [ ] Complete confidential-transactions implementation
-- [ ] Proper range proofs for transaction amounts
+- [ ] Add `stem_probability` and `fluff_probability` fields to `DandelionRouter`
+  - [ ] Default values per privacy level pulled from `DandelionThresholds::DEFAULT`
+  - [ ] Setter methods + validation (0.0..=1.0)
+  - [ ] **Verify:** `cargo test --lib dandelion::tests::probability_validation`
 
-### 5.3 Security
+- [ ] Add deterministic test-mode for stem/fluff selection
+  - [ ] `DandelionRouter::with_seed(seed: u64)` constructor; uses `StdRng::from_seed`
+  - [ ] **Verify:** `cargo test --lib dandelion::tests::with_seed_is_deterministic`
 
-- [ ] Encrypt private keys in `WalletBackupData`
-- [ ] Improve encryption/decryption for `export_bls_keypair` / `import_bls_keypair`
-- [ ] Remove `Debug` derives from sensitive structures; add safe debug alternatives
-- [ ] Timing-attack mitigations for sensitive crypto ops
-- [ ] Hardware security module / external signer support
+- [ ] Add stem-phase timeout + retry
+  - [ ] On timeout, fall back to fluff broadcast with tracing::warn
+  - [ ] Configurable timeout from `DandelionTimings::DEFAULT.stem_timeout`
+  - [ ] **Verify:** `cargo test --lib dandelion::tests::stem_timeout_falls_back_to_fluff`
 
-### 5.4 Concurrency
+### 4.7 TorConnection
 
-- [ ] Consistent lock ordering to prevent deadlocks
-- [ ] Review lock-acquisition patterns in `integration.rs`
-- [ ] Atomic `submit_transaction` with rollback on partial failure
-- [ ] Robust synchronization for concurrent wallet operations
+- [ ] Add `circuit_rotation_interval: Duration` field to `TorConfig`
+  - [ ] Default 10 minutes; doc comment explaining trade-off
+  - [ ] **Verify:** `cargo check --lib`; `grep -q 'circuit_rotation_interval' src/networking/tor.rs`
 
-### 5.5 UTXO + fees
+- [ ] Add `connection_timeout`, `relay_selection_strategy`, `bandwidth_limit` to `TorConfig`
+  - [ ] All with sensible defaults; validate in `TorConfig::validate`
+  - [ ] **Verify:** `cargo test --lib tor::tests::config_validation`
 
-- [ ] Clarify dust UTXO handling with consistent threshold policy
-- [ ] Optimize UTXO selection for privacy + fee efficiency; consider UTXO age
-- [ ] Dynamic fee adjustment based on network conditions
-- [ ] Fee estimation API
-- [ ] Remove hardcoded fee parameters
+### 4.8 FingerprintingProtection
 
-### 5.6 Recovery
+- [ ] Add `BurstAndWait` connection pattern variant
+  - [ ] Enum: `ConnectionPattern { Steady, Burst, BurstAndWait { burst_size, wait_min, wait_max } }`
+  - [ ] Implement send loop honoring the pattern in `src/networking/privacy/fingerprinting_protection.rs`
+  - [ ] **Verify:** `cargo test --lib fingerprinting_protection::tests::burst_and_wait_emits_correct_cadence`
 
-- [ ] Clear wallet recovery path if private keys are lost
-- [ ] Emergency functions for extreme situations
+- [ ] Group 24+ config parameters into 4 sub-structs
+  - [ ] `TimingConfig`, `PatternConfig`, `RngConfig`, `RuntimeConfig`
+  - [ ] Update `FingerprintingProtectionConfig` to compose them
+  - [ ] **Verify:** `cargo check --lib`
 
-### 5.7 Memory
+- [ ] Replace per-task `thread_rng()` with a shared `RngCore` field
+  - [ ] Construct `StdRng::from_entropy()` in `FingerprintingProtection::new`; reuse via `&mut self.rng`
+  - [ ] **Verify:** `cargo check --lib`; `grep -c 'thread_rng()' src/networking/privacy/fingerprinting_protection.rs` is `0`
 
-- [ ] Reduce unnecessary cloning of large structures
-- [ ] Explicit management for memory-sensitive data
+### 4.9 message.rs auth
 
-### 5.8 Tests & docs
-
-- [ ] BLS signing, view-key operations, confidential-transactions tests
-- [ ] Edge-case and failure-scenario tests
-- [ ] Document complex functions and privacy-feature security implications
-
-### 5.9 CLI Wallet (not yet started)
-
-- [ ] BIP39 mnemonic generation, BIP44 HD derivation, secure key storage
-- [ ] Transaction creation / signing with multisig, UTXO selection, privacy-preserving construction
-- [ ] Balance management (UTXO tracking, history, private views)
-- [ ] Sync modes (header sync, SPV, full node) with Tor/proxy support
-- [ ] Validator functionality (stake management, delegation, monitoring, slashing alerts)
-- [ ] Mining functionality (pool config, solo setup, hashrate monitoring)
-- [ ] Embedded block-explorer features
-
-### 5.10 CLI Validator / Mining / Explorer tools
-
-- [ ] Validator setup wizard, stake/delegation commands, key backup, offline signing
-- [ ] Mining setup wizard, CPU/GPU config, pool integration, statistics
-- [ ] Block explorer: lookup, rich queries, monitoring commands
-
-### 5.11 GUI Wallet (SLINT)
-
-- [ ] Cross-platform SLINT UI framework with responsive components
-- [ ] Wallet, validator, mining, block-explorer sub-UIs
-- [ ] Backup / restore with encrypted seed handling
-- [ ] Address book with encrypted storage
+- [ ] Add BLAKE3 checksum to every `Message` variant in `src/networking/message.rs`
+  - [ ] 32-byte field appended at serialization; verified at deserialization; mismatch → `Err(MessageError::ChecksumMismatch)`
+  - [ ] **Verify:** `cargo test --lib message::tests::checksum_round_trip`; `cargo test --lib message::tests::tamper_rejected`
 
 ---
 
-## 6. Blockchain Module
+## 5. Crypto re-verification (post dep upgrade)
 
-### 6.1 Security
+### 5.1 Constant-time re-checks
 
-- [ ] Robust double-spend detection with cryptographic proofs (current: string-based index)
-- [ ] Time-locked transaction support
-- [ ] Enforce penalties (not just logs) for time-based correlation in `block_structure.rs`
-- [ ] Stronger `entry_randomness` in mempool against deep analysis
-- [ ] Complete transaction-graph analysis countermeasures
-- [ ] Transaction unlinkability mechanism
-- [ ] Replay-attack protection for sponsor signatures (add nonce or message ID)
-- [ ] Signature aggregation for validator sets
-- [ ] Threshold signature support with key rotation
+- [ ] Add `tests/timing/constant_time.rs` integration test
+  - [ ] For each constant-time helper in `src/crypto/`, run 10k iterations on min/max/random inputs and assert variance < threshold
+  - [ ] Use `std::hint::black_box` to defeat optimizer
+  - [ ] **Verify:** `cargo test --test constant_time`
 
-### 6.2 State and errors
+### 5.2 Re-verify keypair encryption
 
-- [ ] Standardize on `ObscuraError` instead of boolean returns
-- [ ] Fix None-case handling of `UTXOSet` in `Mempool`
-- [ ] Replace `unwrap_or_default()` with proper error handling
-- [ ] Consolidate duplicate `UTXOSet` methods (`get_utxo` / `get`)
-- [ ] Separate validation logic from data structures
+- [ ] Add `tests/crypto/keypair_encryption_round_trip.rs`
+  - [ ] For both AES-GCM and ChaCha20-Poly1305: encrypt → decrypt → assert equality across 100 random keypairs
+  - [ ] **Verify:** `cargo test --test keypair_encryption_round_trip`
 
-### 6.3 Performance
+### 5.3 Re-verify Argon2 / PBKDF2
 
-- [ ] Mempool: references instead of clones; memory-pool limits; time/resource-based eviction
-- [ ] Fix fee-ordering rebuild on transaction removal
-- [ ] Incremental merkle-tree updates
-- [ ] Cache expensive crypto; parallel transaction verification
+- [ ] Add `tests/crypto/kdf_round_trip.rs`
+  - [ ] For Argon2 + PBKDF2: derive twice from the same password+salt; assert equal output
+  - [ ] Cross-check against published test vectors (RFC 9106 for Argon2id)
+  - [ ] **Verify:** `cargo test --test kdf_round_trip`
 
-### 6.4 Logic fixes
+### 5.4 Re-verify Pedersen commitments
 
-- [ ] `UTXOSet.validate_transaction` must check value correctness, not just existence
-- [ ] Integer-overflow protection in fee calculation
-- [ ] Division-by-zero guards in `fee_rate` calculation
-- [ ] Block timestamp strictly greater than median time (not equal)
-- [ ] Merkle root calculation handles empty transaction case
-- [ ] Fix floating-point `Ord` in `mempool.rs` line ~90 (non-deterministic ordering)
+- [ ] Add `tests/crypto/pedersen_round_trip.rs`
+  - [ ] `commit(value, blinding)` → `open(value, blinding)` succeeds; `open(value+1, blinding)` fails
+  - [ ] Add homomorphism test: `commit(a)+commit(b) == commit(a+b)` for matching blinding sums
+  - [ ] **Verify:** `cargo test --test pedersen_round_trip`
 
-### 6.5 Implementation specifics
+### 5.5 Memory protection
 
-- [ ] `mempool.rs`: strengthen fee obfuscation; consistent constraint verification; sponsor-eligibility validation
-- [ ] `transaction.rs`: privacy-feature precondition validation; stronger obfuscation guarantees; comprehensive range-proof verification
-- [ ] `block_structure.rs`: time-validation edge cases; less-responsive block-size adjustment; stronger timing privacy
+- [ ] Add `tests/crypto/memory_protection_windows.rs` gated `#[cfg(windows)]`
+  - [ ] Allocate guarded page via existing `crypto/platform_memory_impl.rs` API; verify guard triggers on overflow read via `catch_unwind`
+  - [ ] **Verify:** `cargo test --test memory_protection_windows`
+
+### 5.6 Cleanup `dead_code` annotations
+
+- [ ] Remove `#[allow(dead_code)]` from `src/crypto/` items that are now used
+  - [ ] Run `cargo build --lib`; for each remaining `dead_code` warning, decide: keep+annotate-with-reason or delete the item
+  - [ ] **Verify:** `cargo clippy --lib --no-deps -- -D dead_code` (after deletions, this passes)
 
 ---
 
-## 7. Consensus Module
+## 6. Wallet error / type cleanup
 
-### 7.1 PoS migration
+### 6.1 Result migration
 
-- [ ] Complete migration from `pos_old.rs` to `pos/*.rs`; remove `pos_old` imports
-- [ ] Streamline and document `pos_old`'s ~180 constants (or remove once migrated)
+- [ ] Replace `Option<Transaction>` returns with `Result<Transaction, WalletError>` in `src/wallet/mod.rs` API surface
+  - [ ] Define `WalletError` enum in `src/wallet/error.rs` with variants for each failure mode (locate by reading current `Option::None` paths)
+  - [ ] Update every caller
+  - [ ] **Verify:** `cargo check --lib`; `grep -c 'fn.*-> Option<Transaction>' src/wallet/mod.rs` is `0`
 
-### 7.2 Hybrid consensus
+### 6.2 Encrypt private keys in `WalletBackupData`
 
-- [ ] Fix inconsistent validator state management
-- [ ] Move snapshot creation and state pruning to a separate process (currently blocks validation)
-- [ ] Fix non-functional `prune_old_state` (only logs intent)
-- [ ] Standardize error handling in `hybrid_optimizations.rs` (replace `Result<(), String>`)
-- [ ] Address thread safety in `HybridStateManager`
-- [ ] Synchronize validator-cache updates with selection
+- [ ] Add encrypted private-key field
+  - [ ] Existing `private_key: SecretKey` → `private_key_encrypted: Vec<u8>` with `Argon2id`-derived key + AES-GCM
+  - [ ] Add `decrypt(&self, password: &str) -> Result<SecretKey, WalletError>`
+  - [ ] **Verify:** `cargo test --lib wallet::backup::tests::encrypt_decrypt_round_trip`
 
-### 7.3 PoS security
+### 6.3 BLS keypair export hardening
 
-- [ ] Nothing-at-stake prevention
-- [ ] Fault detection and slashing consensus
-- [ ] Integrate BFT consensus with hybrid model
-- [ ] Finality mechanism in the hybrid model
+- [ ] Apply same encrypt-on-export to `export_bls_keypair` / `import_bls_keypair`
+  - [ ] **Verify:** `cargo test --lib wallet::tests::bls_export_import_round_trip_encrypted`
 
-### 7.4 PoW
+### 6.4 Remove `Debug` from sensitive structs
 
-- [ ] Improved difficulty adjustment with anti-volatility / time-warp protections
-- [ ] Parallel mining computation (current: simple `max_attempts`)
+- [ ] Strip `derive(Debug)` from `WalletBackupData`, `SecretKey`, `BlsKeypair` and any other private-key carrier
+  - [ ] Add manual `Debug` impls that print `<redacted>` for the secret field
+  - [ ] **Verify:** `cargo check --lib`; `cargo test --lib wallet::tests::debug_does_not_leak_secret`
 
-### 7.5 Fees and rewards
+### 6.5 Atomic submit
 
-- [ ] Fee calculation accounts for congestion in hybrid model
-- [ ] Clarify stake-based vs fee-based incentive interaction
-- [ ] RBF accounts for chain reorganizations in hybrid model
-- [ ] Adjust CPFP for hybrid consensus
+- [ ] Make `submit_transaction` rollback on partial failure
+  - [ ] Track applied side-effects in a `Vec<Box<dyn FnOnce()>>` undo log; on error, run each in reverse
+  - [ ] **Verify:** `cargo test --lib wallet::tests::submit_rolls_back_on_mempool_reject`
 
-### 7.6 Multi-asset staking
+### 6.6 Fee estimation API
 
-- [ ] Oracle manipulation protection for exchange rates
-- [ ] Risk management for volatile assets
-- [ ] Validation of external assets
-- [ ] Economic-attack prevention via exchange-rate manipulation
+- [ ] Add `WalletApi::estimate_fee(tx_size_bytes: usize, priority: FeePriority) -> u64`
+  - [ ] Replace any hardcoded `const DEFAULT_FEE` lookups in tx-construction paths
+  - [ ] **Verify:** `cargo test --lib wallet::tests::estimate_fee_priority_ordering`
 
-### 7.7 Cleanup
+### 6.7 UTXO selection
 
-- [ ] Remove `#[allow(dead_code)]` annotations and related dead code
-- [ ] Replace `println!` debug statements with proper logging
-- [ ] Expand test coverage for PoW/PoS interactions
-- [ ] Document consensus-component interactions and security assumptions
+- [ ] Add UTXO age into selection in `src/wallet/utxo.rs`
+  - [ ] Tiebreak: prefer older UTXOs when fee-equivalent (privacy + dust avoidance)
+  - [ ] **Verify:** `cargo test --lib wallet::utxo::tests::selection_prefers_older`
 
----
+### 6.8 Dust threshold
 
-## 8. Configuration Module
-
-### 8.1 Error handling
-
-- [ ] Systematic change detection in `privacy_registry.rs::apply_preset` (currently checks only a few fields)
-- [ ] Fix deserialization in `propagation.rs` (`ConfigMigration` dummy function that always errors)
-- [ ] Granular error types with context and chaining
-
-### 8.2 Concurrency
-
-- [ ] Fix potential deadlocks with multiple-lock acquisition order
-- [ ] Reduce lock contention (consider RCU for configs with many readers)
-- [ ] Group related fields under single locks; transactional multi-field updates
-
-### 8.3 Security
-
-- [ ] Validation rules against configs that expose sensitive data
-- [ ] Rate limiting for configuration changes
-- [ ] Tamper-evident audit logging with secure transfer
-- [ ] Signature verification for config changes; replay-attack prevention
-
-### 8.4 Logic
-
-- [ ] Deep merge of nested structures in `propagation.rs::merge_configurations`
-- [ ] Weighted shortest-path migration selection (Dijkstra)
-- [ ] Consolidate scattered defaults into a central location
-- [ ] State machine for configuration lifecycle with invariant checks
-
-### 8.5 Missing features
-
-- [ ] Atomic file-based persistence
-- [ ] Configuration templates with inheritance
-- [ ] Backward compatibility for older versions
-- [ ] Distributed configuration synchronization
-- [ ] Environment overlays (dev / test / prod)
-- [ ] Snapshots + rollback
-- [ ] Secrets management integration (encryption for sensitive values, access control)
-- [ ] Hot-reload / dynamic toggles
-- [ ] Configuration versioning with automated schema migrations
-
-### 8.6 Structure
-
-- [ ] Separate `PrivacySettingsRegistry` vs `ConfigPropagator` responsibilities
-- [ ] Standardize error handling across modules
-- [ ] Property-based testing for validation rules
+- [ ] Define `DUST_THRESHOLD: u64` constant in `src/wallet/constants.rs`
+  - [ ] Replace inline magic numbers in `utxo.rs`, `transaction.rs`
+  - [ ] **Verify:** `cargo check --lib`; `grep -c 'pub const DUST_THRESHOLD' src/wallet/constants.rs` is `1`
 
 ---
 
-## 9. Integration Testing
+## 7. Blockchain cleanup
 
-- [ ] Dandelion + Tor integration tests
-- [ ] Stealth addressing + confidential transactions
-- [ ] View key + metadata protection
-- [ ] Circuit routing + timing obfuscation
-- [ ] Multi-hop routing + transaction batching
+### 7.1 Replace boolean returns with `ObscuraError`
 
-### Adversarial
+- [ ] Migrate `src/blockchain/mod.rs` validation fns from `-> bool` to `-> Result<(), ObscuraError>`
+  - [ ] For each `fn .*-> bool` that represents validation (vs status query), convert
+  - [ ] Update call sites (cargo will surface them)
+  - [ ] **Verify:** `cargo check --lib`
 
-- [ ] Correlation attack simulations
-- [ ] Timing leak tests across module boundaries
-- [ ] Metadata leakage detection across components
-- [ ] Integration fuzzing for privacy boundaries
-- [ ] Adversarial network simulation
+### 7.2 None-handling in mempool's UTXOSet ref
 
----
+- [ ] Replace `.unwrap_or_default()` on `Mempool::utxo_set` with explicit `Result`
+  - [ ] Convert to `&UTXOSet` borrow that's required at construction
+  - [ ] **Verify:** `cargo check --lib`; `grep -c 'unwrap_or_default' src/blockchain/mempool.rs` is `0`
 
-## 10. Performance, Error Handling, Metrics (cross-cutting)
+### 7.3 Consolidate UTXOSet duplicates
 
-### 10.1 Performance
+- [ ] Merge `UTXOSet::get_utxo` and `UTXOSet::get` into one method
+  - [ ] Pick `get(&self, outpoint: &OutPoint) -> Option<&Utxo>`; delete the other; update call sites
+  - [ ] **Verify:** `cargo check --lib`; `grep -c 'fn get_utxo\|fn get' src/blockchain/utxo.rs | head -1`
 
-- [ ] Profile privacy feature integration points (crypto across boundaries, tx pipeline, network propagation, memory use, concurrency bottlenecks)
-- [ ] Shared cryptographic-operation cache
-- [ ] Batched signature verification across components
-- [ ] Parallel processing for privacy-intensive operations
-- [ ] Load-based privacy-level adjustments with prioritization framework
-- [ ] Optimize Pedersen / bulletproofs / stealth-address operations (SIMD, precomputation, parallelization, HW accel)
+### 7.4 Double-spend cryptographic check
 
-### 10.2 Error handling framework
+- [ ] Replace string-indexed double-spend detection with `HashSet<OutPoint>` lookup in `Mempool::contains_spend`
+  - [ ] **Verify:** `cargo test --lib mempool::tests::double_spend_detected`
 
-- [ ] Privacy-specific error taxonomy with severity classification
-- [ ] Circuit-breaker patterns for privacy features
-- [ ] Graceful degradation with fallback mechanisms
-- [ ] Privacy-invariant validation at boundaries
-- [ ] Pre-broadcast transaction-privacy verification
-- [ ] Post-recovery privacy validation
+### 7.5 Float Ord fix
 
-### 10.3 Metrics & monitoring
+- [ ] Replace `f64` ordering in `src/blockchain/mempool.rs:~90` with `OrderedFloat<f64>` from `ordered-float` crate (already in Cargo.toml? check; if not, add it)
+  - [ ] **Verify:** `cargo test --lib mempool::tests::ordering_is_total`
 
-- [ ] Anonymity-set size monitoring
-- [ ] Statistical transaction-graph monitoring
-- [ ] Timing-correlation detection
-- [ ] Peer-connection privacy metrics
-- [ ] Metadata-protection effectiveness measurement
-- [ ] Real-time privacy-status dashboard with historical tracking and regression alerts
-- [ ] Resource-usage tracking attributed to privacy features
-- [ ] Privacy-attack early-warning system
+### 7.6 Integer-overflow guards
 
----
+- [ ] Add `checked_add` / `checked_mul` to fee calculation paths
+  - [ ] In `src/blockchain/transaction.rs`, replace `+` / `*` in fee math with checked ops; on overflow return `Err(ObscuraError::FeeOverflow)`
+  - [ ] **Verify:** `cargo test --lib transaction::tests::fee_overflow_rejected`
 
-## 11. Phase 2 — Advanced Privacy (6–12 months)
+### 7.7 Division-by-zero in fee_rate
 
-### 11.1 Zero-knowledge proofs
+- [ ] Guard `fee / size` in `fee_rate` calc
+  - [ ] Return 0 (or `Err(FeeRateUndefined)`) when size is 0
+  - [ ] **Verify:** `cargo test --lib transaction::tests::fee_rate_size_zero`
 
-- [ ] Halo 2 integration
-  - [ ] Circuit compiler, witness generation, proving-key generation
-  - [ ] Verification-key generation, batch verification, proof aggregation
-  - [ ] Parallel generation, proof compression, caching
+### 7.8 Block timestamp strict ordering
 
-### 11.2 Transaction privacy (Phase 2 layer)
+- [ ] Tighten timestamp validation: strictly greater than median, not equal
+  - [ ] In `src/blockchain/block.rs::validate_timestamp`
+  - [ ] **Verify:** `cargo test --lib block::tests::timestamp_must_strictly_exceed_median`
 
-- [ ] Ring signatures, decoy selection, input mixing
-- [ ] Output encryption; hierarchical view-key system with selective disclosure
-- [ ] Full stealth addressing (Diffie-Hellman, HKDF, ephemeral keygen, one-time address derivation, wallet integration)
-- [ ] Confidential transactions production readiness (Pedersen + bulletproofs + multi-output proofs + batch verification)
+### 7.9 Empty-tx merkle root
 
-### 11.3 Advanced network privacy
+- [ ] Handle empty tx list in `merkle_root` (return well-known sentinel hash)
+  - [ ] Use BLAKE3 of empty input as the sentinel
+  - [ ] **Verify:** `cargo test --lib merkle::tests::empty_tx_returns_sentinel`
 
-- [ ] Full Dandelion++ (routing table, anonymity graph, relay selection, propagation delay, fallback)
-- [ ] Clearnet fallback and backup routing
-- [ ] Bridge relay support (pluggable transport, obfs4, meek, snowflake, custom obfuscation)
+### 7.10 Replay protection
 
-### 11.4 Advanced infrastructure
-
-- [ ] Perfect forward secrecy for all communications
-- [ ] Metadata minimization
-- [ ] Encrypted storage for sensitive blockchain data
-- [ ] Zero-knowledge state updates
-- [ ] Metadata removal before broadcast
+- [ ] Add nonce field to sponsor signatures
+  - [ ] `SponsorSignature { nonce: u64, ... }`; reject duplicate nonces in `Mempool::accept`
+  - [ ] **Verify:** `cargo test --lib mempool::tests::duplicate_sponsor_nonce_rejected`
 
 ---
 
-## 12. Phase 3 — Private On-Ramp & DEX (12–18 months)
+## 8. Consensus cleanup
 
-### 12.1 Atomic swaps
+### 8.1 Remove pos_old imports
 
-- [ ] Bitcoin atomic swaps (HTLC, script, protocol)
-- [ ] Monero atomic swaps (cross-chain locks, privacy preservation)
-- [ ] Generic protocol with timeout, dispute resolution, refund
+- [ ] Replace every `use crate::consensus::pos_old` with the equivalent path under `pos::`
+  - [ ] For each symbol, locate the new home (grep `pub fn <name>` under `src/consensus/pos/`)
+  - [ ] **Verify:** `cargo check --lib`; `! grep -rn 'pos_old' src/`
 
-### 12.2 Core DEX
+### 8.2 Delete pos_old once unused
 
-- [ ] Order book, matching engine, price feeds
-- [ ] Price-time priority matching, trade settlement
-- [ ] AMM / liquidity pools with fee distribution
+- [ ] Delete `src/consensus/pos_old.rs` and its `pub mod pos_old;` line
+  - [ ] **Verify:** `cargo check --lib`; `test ! -f src/consensus/pos_old.rs`
 
-### 12.3 Privacy DEX
+### 8.3 hybrid_optimizations error type
 
-- [ ] Private order submission (encryption, blind bidding, dark pool)
-- [ ] Hidden liquidity pools (confidential LP, private balances)
-- [ ] Anonymous trading (mixer integration, private settlement)
+- [ ] Replace `Result<(), String>` with `Result<(), HybridError>` in `src/consensus/hybrid_optimizations.rs`
+  - [ ] Define `HybridError` enum with the failure modes the existing string messages encode
+  - [ ] **Verify:** `cargo check --lib`
 
-### 12.4 Smart contracts
+### 8.4 prune_old_state
 
-- [ ] Scripting language (compiler, standard library, debugger)
-- [ ] VM (instruction set, stack machine, gas metering)
-- [ ] Validation (static analysis, security checks, formal verification)
-- [ ] Private state (encryption, merkle trees, witnesses)
-- [ ] Secure execution (TEE, MPC, proof generation)
-- [ ] Verification (ZK proofs, state verification, audit)
+- [ ] Implement `prune_old_state` in `src/consensus/hybrid.rs` (currently log-only)
+  - [ ] Drop chain state older than `PRUNE_AFTER_BLOCKS` from the in-memory cache
+  - [ ] **Verify:** `cargo test --lib hybrid::tests::prune_drops_old_entries`
 
----
+### 8.5 Clean up `#[allow(dead_code)]`
 
-## 13. Phase 4 — Mainnet & Governance (18–24 months)
+- [ ] Audit `#[allow(dead_code)]` in `src/consensus/`
+  - [ ] For each: delete the item if truly dead; remove the annotation if now used
+  - [ ] **Verify:** `cargo clippy --lib --no-deps -- -A clippy::all -D dead_code` (consensus crate clean of `dead_code`)
 
-### 13.1 Final testing
+### 8.6 Replace `println!` with tracing
 
-- [ ] Security audits (code review, pentest, formal verification)
-- [ ] Performance (load, stress, scalability)
-- [ ] Network stress (tx flooding, node failure, partition)
+- [ ] Replace `println!` debug statements in `src/consensus/` with `tracing::debug!` / `tracing::info!`
+  - [ ] **Verify:** `cargo check --lib`; `grep -rn 'println!' src/consensus/ | wc -l` is `0`
 
-### 13.2 Cryptographic security audits
+### 8.7 PoW difficulty time-warp protection
 
-- [ ] Audit Pedersen commitments (correctness, blinding, homomorphism, known attacks)
-- [ ] Audit bulletproofs (range-proof correctness, ZK properties, batch verification)
-- [ ] Audit stealth addressing (DH, one-time addresses, scanning, forward secrecy)
-- [ ] Audit transaction privacy (graph protection, unlinkability, metadata stripping)
-- [ ] Formal verification with theorem provers (Coq, Isabelle/HOL)
-- [ ] Symbolic execution and model checking
-- [ ] Side-channel analysis (timing, power, cache, fault injection)
-
-### 13.3 Launch
-
-- [ ] Genesis block, initial distribution, bootstrap nodes
-- [ ] Seed-node deployment with monitoring and backup systems
-- [ ] Launch documentation (technical specs, user guides, API docs)
-
-### 13.4 DAO governance
-
-- [ ] Voting mechanism (proposals, delegation)
-- [ ] Proposal system (types, discussion, execution)
-- [ ] Execution framework (timelock, veto, upgrades)
-- [ ] Treasury (funding, distribution, accountability)
+- [ ] Add time-warp protection to `src/consensus/randomx/difficulty.rs::adjust`
+  - [ ] Cap retarget ratio to 4× per period; clamp negative timestamp deltas
+  - [ ] **Verify:** `cargo test --lib difficulty::tests::time_warp_attack_clamped`
 
 ---
 
-## 14. Developer Experience
+## 9. Configuration cleanup
 
-### 14.1 Testnet
+### 9.1 Granular error types
 
-- [ ] Genesis block config with test coin distribution and privacy feature activation
-- [ ] Bootstrap seed nodes with monitoring and privacy-preserving logging
-- [ ] Block explorer, network stats, alert system, privacy-compliance dashboard
+- [ ] Replace `String` errors in `src/config/` with `ConfigError` enum
+  - [ ] Variants for each existing error category (Parse, Validate, IO, Migration)
+  - [ ] **Verify:** `cargo check --lib`
 
-### 14.2 SDK & APIs
+### 9.2 apply_preset change detection
 
-- [ ] Client libraries with example code and testing tools
-- [ ] Language bindings / wrappers
-- [ ] RPC, REST, WebSocket API documentation
-- [ ] CLI command documentation
+- [ ] Make `PrivacySettingsRegistry::apply_preset` detect changes on every field
+  - [ ] Iterate the full field list (use `serde_json::to_value` for diff), not the existing partial check
+  - [ ] **Verify:** `cargo test --lib privacy_registry::tests::apply_preset_detects_full_diff`
 
-### 14.3 Documentation
+### 9.3 ConfigMigration deserialization fix
 
-- [ ] Smart contract, DEX, governance docs
-- [ ] Complete PoS technical spec, user guides, validator operation procedures
-- [ ] Security best practices, slashing conditions, economic model
-- [ ] Interactive SLINT code examples, architecture diagrams, security demos
-- [ ] Video tutorials, developer workshops
+- [ ] Fix the dummy-erroring `ConfigMigration::deserialize` in `src/config/propagation.rs`
+  - [ ] Implement full deserialize via serde derive; remove the always-error stub
+  - [ ] **Verify:** `cargo test --lib propagation::tests::config_migration_round_trip`
 
-### 14.4 CI/CD & release
+### 9.4 Deep merge
 
-- [ ] Evaluate `oranda` and `cargo-dist`; consider custom website (formerly `7_todo_website_CI-CD.md`)
-- [ ] Fuzzing for RandomX inputs
-- [ ] Property-based testing for consensus rules
-- [ ] Automated regression suite with performance-regression detection
-- [ ] Coverage-guided testing
-- [ ] Parallel test execution support
+- [ ] Implement deep merge in `merge_configurations`
+  - [ ] Recursive merge for nested `Map<String, Value>`; non-map values overwrite
+  - [ ] **Verify:** `cargo test --lib propagation::tests::deep_merge_nested_maps`
 
----
+### 9.5 Atomic file persistence
 
-## 15. Future / Post-MVP
+- [ ] Add `ConfigStore::save_atomic` writing to `<path>.tmp` + `rename`
+  - [ ] **Verify:** `cargo test --lib config_store::tests::atomic_save_survives_kill`
 
-### 15.1 Scalability
+### 9.6 Snapshot + rollback
 
-- [ ] Layer-2 (state channels, Plasma, rollups)
-- [ ] Privacy-preserving L2 (ZK rollups, private state channels, confidential batching)
-- [ ] Sharding (data, state, transaction) with privacy-preserving cross-shard
+- [ ] Add `ConfigStore::snapshot() -> SnapshotId` and `rollback(SnapshotId)`
+  - [ ] Keep last 16 snapshots in memory + disk
+  - [ ] **Verify:** `cargo test --lib config_store::tests::rollback_restores_prior_state`
 
-### 15.2 Post-quantum research
+### 9.7 Environment overlays
 
-- [ ] Lattice-based crypto (NTRU, Ring-LWE, lattice commitments / range proofs)
-- [ ] Isogeny-based (SIDH/SIKE, post-quantum stealth addressing, isogeny commitments)
-- [ ] Hash-based signatures (SPHINCS+, Merkle-tree based, stateless)
-- [ ] Multivariate (Rainbow, HFEv-)
-- [ ] Quantum-resistant confidential transactions and stealth addressing
-- [ ] STARKs and lattice-based ZK proofs
-- [ ] Hybrid classical / PQ migration strategy with backward compatibility
-
-### 15.3 Ecosystem integration
-
-- [ ] Exchange listings (CEX + DEX)
-- [ ] Hardware / mobile / web wallets (SLINT WebAssembly)
-- [ ] Payment processors and POS tools
-- [ ] DeFi (lending, yield farming, derivatives)
+- [ ] Add `ConfigStore::with_overlay(env: Env)` where `Env in { Dev, Test, Prod }`
+  - [ ] Overlay file path: `config.<env>.toml`; merged on top of `config.toml`
+  - [ ] **Verify:** `cargo test --lib config_store::tests::env_overlay_takes_precedence`
 
 ---
 
-## 16. Continuous / Recurring
+## 10. Integration tests (deterministic, no network)
 
-- [ ] Regular security audits (code, network, threat modeling)
-- [ ] Bug-bounty program with reward tiers and triage
-- [ ] Penetration testing (network, contracts, wallet)
-- [ ] Automated code analysis + manual review + dependency audit
-- [ ] Developer documentation updates; community guidelines; contribution framework
-- [ ] Network optimization (bandwidth, latency, connection management)
-- [ ] Transaction throughput (propagation, validation speed, mempool management)
-- [ ] Storage optimization (DB indexing, state pruning, archive)
-- [ ] Memory management (cache, pooling, resource limits)
+### 10.1 Dandelion + Tor
+
+- [ ] `tests/integration/dandelion_tor.rs` — submit a tx through `DandelionRouter` configured to use a mock `TorConnection`; assert tx reaches mock relay
+  - [ ] **Verify:** `cargo test --test dandelion_tor`
+
+### 10.2 Stealth + confidential
+
+- [ ] `tests/integration/stealth_confidential.rs` — build a stealth-addressed tx with a confidential amount; verify both privacy features survive serialize → deserialize
+  - [ ] **Verify:** `cargo test --test stealth_confidential`
+
+### 10.3 View-key metadata
+
+- [ ] `tests/integration/view_key_metadata.rs` — derive a view key; assert it can read tx metadata but not signing material
+  - [ ] **Verify:** `cargo test --test view_key_metadata`
+
+### 10.4 Circuit + timing-obfuscation
+
+- [ ] `tests/integration/circuit_timing.rs` — relay tx through 3-hop circuit + timing obfuscator; assert delivery within bounded time
+  - [ ] **Verify:** `cargo test --test circuit_timing`
+
+### 10.5 Multi-hop + batching
+
+- [ ] `tests/integration/multihop_batch.rs` — submit 10 txs through multi-hop router; assert all delivered, all batched in expected groupings
+  - [ ] **Verify:** `cargo test --test multihop_batch`
 
 ---
 
-## 17. Reference — Completed Before Dep Upgrade
+## 11. Performance helpers
 
-The items below were checked-off in the prior TODOs. Many depend on crypto code that no longer
-compiles, so several will need re-verification once Section 0 is resolved.
+### 11.1 Crypto cache
 
-- Core blockchain: 60 s block time, dynamic size, merkle-tree structure
-- Consensus: RandomX PoW, PoS (staking, slashing, rewards, delegation, multi-asset, governance, advanced features), hybrid integration with BFT finality
+- [ ] Add `CryptoCache` LRU keyed by op-hash in `src/crypto/cache.rs`
+  - [ ] Wraps Pedersen / Schnorr / BLS verify with a `1024`-slot LRU
+  - [ ] **Verify:** `cargo test --lib crypto::cache::tests::lru_evicts_oldest`
+
+### 11.2 Batched signature verification
+
+- [ ] Add `verify_batch(&[(Sig, Pk, Msg)]) -> bool` to `src/crypto/jubjub.rs`
+  - [ ] Use existing batch primitives if ark provides them; otherwise iterate and short-circuit on first fail
+  - [ ] **Verify:** `cargo test --lib jubjub::tests::verify_batch_matches_iter`
+
+### 11.3 Parallel tx verification
+
+- [ ] Add rayon-based parallel tx verifier in `src/blockchain/parallel_verify.rs`
+  - [ ] `verify_block_parallel(block: &Block, utxo: &UTXOSet) -> Result<(), ObscuraError>`
+  - [ ] **Verify:** `cargo test --lib parallel_verify::tests::matches_serial`
+
+---
+
+## 12. Metrics
+
+### 12.1 Prometheus exporter skeleton
+
+- [ ] Add `src/metrics/prometheus.rs` exposing a `/metrics` HTTP endpoint
+  - [ ] Register counters: `obx_tx_received_total`, `obx_blocks_mined_total`, `obx_peers_connected`
+  - [ ] Bind to `127.0.0.1:9090` by default
+  - [ ] **Verify:** `cargo test --lib metrics::prometheus::tests::endpoint_serves_text`
+
+### 12.2 Anonymity-set gauge
+
+- [ ] Add `obx_anonymity_set_size` gauge updated by `DandelionRouter` after each propagation
+  - [ ] **Verify:** `cargo test --lib metrics::tests::anonymity_set_gauge_updates`
+
+### 12.3 Privacy-status snapshot
+
+- [ ] Add `MetricsSnapshot::dump_json` writing all current gauges/counters to `metrics_snapshot.json`
+  - [ ] **Verify:** `cargo test --lib metrics::tests::dump_json_contains_all_keys`
+
+---
+
+<!--
+================================================================================
+Out of scope for autonomous runner
+================================================================================
+
+Items below this line require judgment, design, audit, or research that the
+runner cannot perform safely. They remain visible here as a roadmap but are
+HTML-commented so Get-TodoItems will not queue them. To move one back into
+scope, copy it above this comment block, expand into a single-commit
+deliverable with a concrete Verify gate, and trim aspirational phrasing.
+
+## A. Cryptographic security audits
+
+- Audit Pedersen commitments (correctness, blinding, homomorphism)
+- Audit bulletproofs (range-proof correctness, ZK properties, batch verify)
+- Audit stealth addressing (DH, one-time addresses, scanning, forward secrecy)
+- Audit transaction privacy (graph protection, unlinkability, metadata stripping)
+- Formal verification with Coq / Isabelle / HOL
+- Symbolic execution and model checking
+- Side-channel analysis (timing, power, cache, fault injection)
+
+## B. Architectural redesign
+
+- Redesign `create_transaction` for property preservation through privacy stack
+- Reimplement `propagate_transaction` so all properties survive
+- Property-integrity verification after each privacy stage
+- Cryptographic guarantees framework for transaction property preservation
+- Threat-model document
+- Cryptographic-guarantees-and-assumptions doc
+- "Quality on par with Rust's borrow-check errors" target — too aspirational
+
+## C. Phase 2+ research and ZK
+
+- Halo 2 integration: circuit compiler, witness generation, proving keys
+- Verification-key generation, batch verification, proof aggregation
+- Parallel proof generation, compression, caching
+- Ring signatures, decoy selection, input mixing
+- Hierarchical view-key system with selective disclosure
+- Full Dandelion++ (anonymity graph, relay selection, fallback)
+- Bridge relay support (obfs4, meek, snowflake, custom obfuscation)
+- Perfect forward secrecy across all communications
+
+## D. Phase 3 — Private On-Ramp & DEX
+
+- Bitcoin / Monero atomic swaps (HTLC, cross-chain locks)
+- Order book + matching engine + AMM
+- Private order submission, hidden liquidity pools, anonymous trading
+- Smart contracts (scripting language, VM, validation, private state, secure execution)
+
+## E. Phase 4 — Mainnet & Governance
+
+- Security audits (code review, pentest, formal verification)
+- Performance/load/stress/scalability testing
+- Network stress tests (flooding, node failure, partition)
+- Genesis block, initial distribution, bootstrap-node deployment
+- DAO governance (voting, proposals, execution framework, treasury)
+
+## F. Developer experience
+
+- Testnet bootstrap with monitoring + privacy dashboard
+- SDK + language bindings + RPC/REST/WebSocket docs
+- Block explorer, network stats, alert system
+- Smart-contract / DEX / governance documentation
+- Security best-practices guide, slashing-conditions doc, economic-model doc
+- Interactive SLINT code examples, architecture diagrams
+- Video tutorials, developer workshops
+- Evaluate `oranda` / `cargo-dist` / custom website
+
+## G. CLI / GUI wallets
+
+- BIP39 mnemonic generation, BIP44 HD derivation, secure key storage
+- CLI multisig, UTXO selection, balance/history views
+- Validator setup wizard, stake/delegation, key backup, offline signing
+- Mining setup wizard, CPU/GPU config, pool integration
+- Block-explorer CLI: lookup, rich queries
+- SLINT GUI: wallet, validator, mining, explorer sub-UIs
+- Backup/restore with encrypted seed handling, address book
+
+## H. Future / post-MVP
+
+- Layer-2 (state channels, plasma, rollups, ZK rollups)
+- Sharding (data, state, transaction) with privacy-preserving cross-shard
+- Post-quantum: lattice (NTRU, Ring-LWE), isogeny (SIDH/SIKE), hash-based (SPHINCS+), multivariate (Rainbow, HFEv-)
+- Quantum-resistant confidential transactions and stealth addressing
+- STARKs and lattice-based ZK proofs
+- Hybrid classical / PQ migration strategy
+- Exchange listings, hardware/mobile/web wallets, payment processors, DeFi
+
+## I. Continuous / recurring
+
+- Regular security audits
+- Bug-bounty program
+- Penetration testing
+- Automated code analysis + manual review + dependency audit
+- Developer-doc / community-guideline updates
+- Network optimization (bandwidth, latency, connection management)
+- Storage optimization (DB indexing, state pruning, archive)
+
+================================================================================
+End of out-of-scope appendix
+================================================================================
+-->
+
+---
+
+## Reference — completed before dep upgrade (kept verbatim, do not requeue)
+
+The items below were ticked in the prior TODOs. Many depend on crypto code
+that was rewritten in the 0.8.3 / build-fix commits, so several are
+re-verified above in §5. Do **not** un-tick anything here without first
+ticking the matching §5 re-verification item.
+
+- Core blockchain: 60s block time, dynamic size, merkle-tree structure
+- Consensus: RandomX PoW, PoS (staking, slashing, rewards, delegation, multi-asset, governance), hybrid + BFT finality
 - Network layer: P2P protocol, Kademlia DHT, peer management, block propagation
-- Transaction pool: mempool with fee prioritization, validation, fee calculation
-- Privacy foundations: preliminary stealth addressing, basic confidential transactions, view keys
-- Network privacy: Dandelion++ (stem/fluff, anonymity sets, adaptive paths), Tor / I2P integration, bridge relays
-- Advanced privacy: zero-knowledge key management (DKG, TSS, VSS, MPC), hierarchical view keys, metadata protection
+- Transaction pool: mempool with fee prioritization
+- Privacy foundations: preliminary stealth addressing, basic confidential txs, view keys
+- Network privacy: Dandelion++ stem/fluff baseline, Tor / I2P, bridge relays
+- Advanced privacy: ZK key management (DKG, TSS, VSS, MPC), hierarchical view keys
 - Side-channel: constant-time ops, memory protection, power-analysis countermeasures
-- Integration scaffolding: `Transaction` class, `PrivacyRegistry`, `SenderPrivacy` / `ReceiverPrivacy`, `StealthAddress` in wallet
-- Crypto primitives: BLS12-381, Jubjub, Pedersen commitments, bulletproofs design, DH key exchange
+- Crypto primitives: BLS12-381, Jubjub, Pedersen, bulletproofs, DH key exchange
 - ChaCha20 SIMD optimizations, additional entropy, timing-attack mitigations
-- Connection pool testing, mock TCP streams, comprehensive test logging
-- PoS architecture, implementation, and security documentation
+- Connection pool testing, mock TCP streams
+- PoS architecture / implementation / security documentation
