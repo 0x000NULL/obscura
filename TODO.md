@@ -59,7 +59,7 @@
   - [ ] Add `pub mod mining;` to `src/lib.rs`
   - [ ] **Verify:** `cargo check --lib`; `grep -q 'pub struct MiningLoop' src/mining/mod.rs`
 
-- [ ] Unit tests for `MiningLoop::new` and `MiningLoop::stop`
+- [x] Unit tests for `MiningLoop::new` and `MiningLoop::stop`
   - [ ] Add `#[cfg(test)] mod tests` at end of `src/mining/mod.rs`
   - [ ] Test: default `running` is false after `new`
   - [ ] Test: `stop` is idempotent

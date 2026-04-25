@@ -41,3 +41,47 @@ impl MiningLoop {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_loop() -> MiningLoop {
+        let mempool = Arc::new(Mempool::new());
+        let chain = Arc::new(RwLock::new(Blockchain::default()));
+        let (tx_blocks, _rx) = broadcast::channel::<Block>(16);
+        MiningLoop::new(mempool, chain, tx_blocks)
+    }
+
+    #[test]
+    fn new_starts_with_running_false() {
+        let m = make_loop();
+        assert_eq!(m.running.load(Ordering::SeqCst), false);
+    }
+
+    #[test]
+    fn stop_is_idempotent() {
+        let m = make_loop();
+        assert_eq!(m.running.load(Ordering::SeqCst), false);
+
+        let initial_strong = Arc::strong_count(&m.running);
+
+        m.stop();
+        assert_eq!(m.running.load(Ordering::SeqCst), false);
+        assert_eq!(Arc::strong_count(&m.running), initial_strong);
+
+        m.stop();
+        assert_eq!(m.running.load(Ordering::SeqCst), false);
+        assert_eq!(Arc::strong_count(&m.running), initial_strong);
+
+        m.stop();
+        assert_eq!(m.running.load(Ordering::SeqCst), false);
+        assert_eq!(Arc::strong_count(&m.running), initial_strong);
+
+        m.running.store(true, Ordering::SeqCst);
+        m.stop();
+        assert_eq!(m.running.load(Ordering::SeqCst), false);
+        m.stop();
+        assert_eq!(m.running.load(Ordering::SeqCst), false);
+    }
+}
