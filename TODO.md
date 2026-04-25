@@ -1,59 +1,35 @@
 # Obscura (OBX) TODO
 
-> Last audit: 2026-04-24 at v0.7.31. Build currently broken (22 lib errors, 30 all-targets).
+> Last audit: 2026-04-24, post-merge of upstream `7c2c7f9` (build-fix) and `0.8.3` (`crypto/privacy.rs` rewrite).
+> `cargo check --lib` is now clean (0 errors, 326 warnings). `cargo check --all-targets` has ~16
+> remaining errors, all in the `benches/` crate.
 >
 > This file consolidates the former `TODO.md` and `TODOs/*.md` into a single source of truth.
-> Prior checklist marks (especially in crypto) no longer reflect state because the dep upgrade regressed
-> already-completed work. Many "done" items will need re-verification once the build is restored.
+> The `0.8.3` commit rewrote much of `crypto/privacy.rs` (+596 lines) and the build fix updated
+> `crypto/jubjub.rs`, `crypto/platform_memory_impl.rs`, `consensus/randomx/mod.rs`, and
+> `networking/privacy/fingerprinting_protection.rs`. Some previously "done" items in crypto are
+> genuinely current again; others may need re-verification (see Section 4.1).
 
 ---
 
-## 0. CRITICAL — Restore the Build
+## 0. Build — Restore Benches
 
-Blocks everything downstream. All errors in crypto fallout from the rand / ark-ec / ark-ed-on-bls12-381 upgrade.
+Library and binary targets compile. Only the benchmark crate is broken: bench code wasn't updated
+for the arkworks API changes that the build-fix commit applied to the library.
 
-### Error distribution (file → error-mention count)
+### Remaining errors (~16, all in `benches/`)
 
-| File | Count |
-|---|---|
-| `src/crypto/bulletproofs_impl.rs` | 27 |
-| `src/crypto/privacy.rs` | 24 |
-| `src/crypto/hardware_accel.rs` | 22 |
-| `src/crypto/constant_time.rs` | 21 |
-| `src/crypto/jubjub.rs` | 19 |
-| `src/crypto/examples_standalone.rs` | 15 |
-| `src/networking/privacy/circuit_router.rs` | 12 |
-| `src/networking/dandelion.rs` | 12 |
-| `src/crypto/power_analysis_protection.rs` | 11 |
-| `src/crypto/pedersen.rs` | 11 |
-| `src/networking/privacy/timing_obfuscator.rs` | 9 |
-| `src/crypto/secure_mpc.rs` | 9 |
-| `src/crypto/platform_memory.rs` | 8 |
-| `src/crypto/memory_protection.rs` | 8 |
-| `src/networking/privacy/tor_connection.rs` | 7 |
-| `src/config/privacy_registry.rs` | 7 |
+- [ ] `benches/crypto_benchmarks.rs` and `benches/crypto_bench.rs`
+  - [ ] **E0432** — `use ark_ec::Group as ArkGroup;` — `Group` moved/renamed in the new ark-ec; update import
+  - [ ] **E0599** — `EdwardsProjective::generator()` (10 sites) — replace with the current accessor (e.g. `<EdwardsProjective as PrimeGroup>::generator()` or the curve-specific equivalent used in `src/crypto/jubjub.rs`)
+- [ ] `benches/critical_paths.rs`
+  - [ ] **E0599** — `signature.verify(&keypair.public, message)` — method renamed/moved on `JubjubSignature`; align with the API now used in `src/crypto/jubjub.rs`
 
-### Error categories
+### Follow-ups
 
-- [ ] **E0576** — `ScalarField` associated type not found on `ark_ec::CurveGroup` (trait surface changed upstream; use new path)
-- [ ] **E0599** — methods missing on `JubjubPoint` / `ark_ec::twisted_edwards::Projective<JubjubConfig>`:
-  - [ ] `serialize_compressed` (3 sites) — migrate to `CanonicalSerialize::serialize_compressed`
-  - [ ] `commit` (2 sites) — re-wire Pedersen commit API
-  - [ ] `double`, `neg`, `into_bigint` (1 site each) — replace with equivalents in new arkworks API
-  - [ ] `Normal<f64>::sample` — `rand_distr` trait bound unsatisfied; fix `rand`/`rand_distr` version coupling
-- [ ] **E0609** — `.0` tuple-field access on `JubjubPoint` and `PedersenCommitment` (types are now named-field or opaque)
-- [ ] **E0277** — `JubjubPoint: Borrow<ark_ec::twisted_edwards::Affine<JubjubConfig>>` missing
-- [ ] **E0308** — type mismatches and `if`/`else` incompatibility (5+2 sites)
-- [ ] **E0034** — ambiguous method resolution between `rand::Rng` and an ark trait
-
-### Actions
-
-- [ ] Reconcile `JubjubPoint` wrapper with the new arkworks API surface
-- [ ] Update `PedersenCommitment` field access to match current struct layout
-- [ ] Pin `rand` / `rand_distr` versions consistently across the workspace
-- [ ] Decide fate of `src/crypto/examples_standalone.rs` (15 errors) — fix or delete
-- [ ] After lib compiles clean, fix the additional 8 errors surfaced by `cargo check --all-targets`
-- [ ] Add CI gate so a green build is required before subsequent merges
+- [ ] Triage the 326 lib warnings — at minimum, fix the `unused Result` from `try_fill_bytes` calls in security-sensitive paths (`networking/dns_over_https.rs`, `networking/privacy/timing_obfuscator.rs`, etc.) since silently dropping RNG fallible-fill can mask entropy failures
+- [ ] Add CI gate so a green `cargo check --all-targets` is required on PRs
+- [ ] Run `cargo build` and `cargo test` once benches compile to surface any additional issues
 
 ---
 
