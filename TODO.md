@@ -85,7 +85,7 @@
 
 ### 1.4 Wire start loop
 
-- [ ] Replace `MiningLoop::start` stub with full mine→broadcast loop
+- [x] Replace `MiningLoop::start` stub with full mine→broadcast loop
   - [ ] Build template, find nonce, assemble block, push via `tx_blocks.send(block)`
   - [ ] Refresh template every iteration (mempool may have changed)
   - [ ] Sleep 50ms when mempool is empty

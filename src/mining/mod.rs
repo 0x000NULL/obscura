@@ -6,7 +6,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 
 use crate::blockchain::mempool::Mempool;
-use crate::blockchain::{Block, Transaction, calculate_merkle_root, create_coinbase_transaction};
+use crate::blockchain::{
+    Block, BlockHeader, Transaction, calculate_merkle_root, create_coinbase_transaction,
+};
 use crate::consensus::mining_reward::calculate_block_reward;
 use crate::consensus::randomx::RandomXContext;
 
@@ -77,8 +79,33 @@ impl MiningLoop {
     }
 
     pub async fn start(self: Arc<Self>) {
+        self.running.store(true, Ordering::SeqCst);
+
         while self.running.load(Ordering::SeqCst) {
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            if self.mempool.is_empty() {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+
+            let template = match self.build_template() {
+                Ok(t) => t,
+                Err(_) => {
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                    continue;
+                }
+            };
+
+            // TODO: derive from template.difficulty_target
+            let target: U256 = [0xFFu8; 32];
+
+            let nonce = match self.find_nonce(&template, target) {
+                Some(n) => n,
+                None => continue,
+            };
+
+            let block = assemble_block(&template, nonce);
+            let _ = self.tx_blocks.send(block);
+
+            tokio::task::yield_now().await;
         }
     }
 
@@ -144,6 +171,22 @@ impl MiningLoop {
         }
 
         None
+    }
+}
+
+fn assemble_block(template: &BlockTemplate, nonce: u64) -> Block {
+    Block {
+        header: BlockHeader {
+            version: 1,
+            previous_hash: template.previous_hash,
+            merkle_root: template.merkle_root,
+            timestamp: template.timestamp,
+            difficulty_target: template.difficulty_target,
+            nonce,
+            height: template.height,
+            ..Default::default()
+        },
+        transactions: template.transactions.clone(),
     }
 }
 
@@ -261,5 +304,37 @@ mod tests {
             .calculate_hash(&buffer, &mut hash)
             .expect("test-mode randomx should not fail");
         assert!(hash <= [0xFFu8; 32]);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn start_emits_blocks_and_stops() {
+        let m = Arc::new(make_loop());
+        let mut rx = m.tx_blocks.subscribe();
+
+        let runner = m.clone();
+        let stopper = m.clone();
+
+        let driver = async move {
+            let block = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+                .await
+                .expect("block within 5s")
+                .expect("channel open");
+
+            assert_eq!(block.header.height, 1);
+            assert_eq!(block.header.previous_hash, [0u8; 32]);
+            assert_eq!(block.transactions.len(), 1);
+            assert_eq!(
+                block.header.merkle_root,
+                calculate_merkle_root(&block.transactions)
+            );
+
+            stopper.stop();
+        };
+
+        tokio::time::timeout(Duration::from_secs(7), async {
+            tokio::join!(runner.start(), driver);
+        })
+        .await
+        .expect("start returns within 7s after stop");
     }
 }
