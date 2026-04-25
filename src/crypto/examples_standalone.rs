@@ -72,8 +72,8 @@ pub fn example_protected_pedersen_commitment() {
     
     // Create a Pedersen commitment with side-channel protection
     let commitment = protection.protected_operation(|| {
-        let pedersen = PedersenCommitment::new(JubjubScalar::from(value), blinding);
-        pedersen.commit()
+        let pedersen = PedersenCommitment::new(value, blinding);
+        pedersen.compute_commitment()
     });
     
     println!("Protected Pedersen commitment created");
@@ -547,7 +547,7 @@ pub fn example_pedersen_commitment() {
     let blinding = JubjubScalar::random(&mut rng);
     
     // Create a commitment using the static method
-    let commitment = PedersenCommitment::new(JubjubScalar::from(value), blinding).commit();
+    let commitment = PedersenCommitment::new(JubjubScalar::from(value), blinding).compute_commitment();
     
     println!("Value: {}", value);
     println!("Commitment point: {:?}", commitment);
@@ -818,7 +818,7 @@ pub fn example_pedersen_commitments() {
     println!("Pedersen commitment created for value: {}", value);
     
     // Get the commitment point
-    let commitment_point = pedersen.commit();
+    let commitment_point = pedersen.compute_commitment();
     println!("Commitment point: {:?}", commitment_point);
 }
 

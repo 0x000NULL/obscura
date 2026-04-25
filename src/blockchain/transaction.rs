@@ -10,6 +10,7 @@ use crate::crypto::pedersen::PedersenCommitment;
 use crate::crypto::bulletproofs::Bulletproof;
 use crate::config::privacy_registry::{PrivacySettingsRegistry, ComponentType};
 use crate::errors::ObscuraError;
+use crate::crypto::privacy::PrivacyVerifier;
 
 impl crate::blockchain::Transaction {
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -180,79 +181,8 @@ impl crate::blockchain::Transaction {
     /// 
     /// * `Result<bool, ObscuraError>` - True if all privacy features verify, false otherwise
     pub fn verify_privacy_features(&self) -> Result<bool, ObscuraError> {
-        // Verify transaction obfuscation if applied
-        if self.privacy_flags & 0x01 != 0 {
-            if self.obfuscated_id.is_none() {
-                error!("Transaction has obfuscation flag but no obfuscated ID");
-                return Ok(false);
-            }
-        }
-        
-        // Verify stealth addressing if applied
-        if self.privacy_flags & 0x02 != 0 { // Updated from 0x08 to 0x02
-            if self.ephemeral_pubkey.is_none() {
-                error!("Transaction has stealth addressing flag but no ephemeral pubkey");
-                return Ok(false);
-            }
-        }
-        
-        // Verify confidential transactions if applied
-        if self.privacy_flags & 0x04 != 0 {
-            if self.amount_commitments.is_none() {
-                error!("Confidential transactions flag is set but amount commitments are missing");
-                return Ok(false);
-            }
-            
-            // Verify that we have a commitment for each output
-            if let Some(commitments) = &self.amount_commitments {
-                if commitments.len() != self.outputs.len() {
-                    error!("Number of commitments does not match number of outputs");
-                    return Ok(false);
-                }
-                
-                // Verify each commitment is valid (non-empty)
-                for (i, commitment) in commitments.iter().enumerate() {
-                    if commitment.is_empty() {
-                        error!("Empty commitment for output {}", i);
-                        return Ok(false);
-                    }
-                }
-            }
-        }
-        
-        // Verify range proofs if applied
-        if self.privacy_flags & 0x08 != 0 { // Updated from 0x04 to 0x08
-            if self.range_proofs.is_none() {
-                error!("Transaction has range proofs flag but no proofs");
-                return Ok(false);
-            }
-            
-            // Verify that we have a range proof for each output
-            if let Some(proofs) = &self.range_proofs {
-                if proofs.len() != self.outputs.len() {
-                    error!("Number of range proofs does not match number of outputs");
-                    return Ok(false);
-                }
-                
-                // Verify each range proof is valid (non-empty)
-                for (i, proof) in proofs.iter().enumerate() {
-                    if proof.is_empty() {
-                        error!("Empty range proof for output {}", i);
-                        return Ok(false);
-                    }
-                }
-            }
-        }
-        
-        // Verify stealth addressing if applied
-        if self.privacy_flags & 0x02 != 0 { // Already correct, but keeping for consistency with the other changes
-            if self.ephemeral_pubkey.is_none() {
-                error!("Transaction has stealth addressing flag but no ephemeral pubkey");
-                return Ok(false);
-            }
-        }
-        
-        Ok(true)
+        let mut verifier = PrivacyVerifier::new();
+        verifier.verify_transaction(self)
     }
     
     /// Verifies the range proofs for this transaction
@@ -314,6 +244,16 @@ impl crate::blockchain::Transaction {
         debug!("Confidential balance verification not fully implemented");
         
         Ok(true)
+    }
+
+    /// Apply stealth addressing to transaction outputs
+    pub fn apply_stealth_addressing(
+        &mut self,
+        stealth: &mut crate::crypto::privacy::StealthAddressing,
+        recipient_pubkeys: &[crate::crypto::jubjub::JubjubPoint],
+    ) -> Result<(), &'static str> {
+        stealth.apply_stealth_addressing_to_transaction(self, recipient_pubkeys)
+            .map_err(|_| "Failed to apply stealth addressing")
     }
 }
 

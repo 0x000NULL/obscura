@@ -170,7 +170,7 @@ impl CommitmentVerifier {
         let value_scalar = JubjubScalar::from(value);
         let expected_point = (jubjub_get_g() * value_scalar) + (jubjub_get_h() * *blinding);
 
-        Ok(expected_point == commitment.commit())
+        Ok(expected_point == commitment.compute_commitment())
     }
 
     /// Verify a BlsScalar Pedersen commitment matches a claimed value
@@ -399,8 +399,8 @@ impl CommitmentVerifier {
             let combined_outputs = sum_outputs.add(&fee_commitment);
 
             // JubJub commitment equality
-            let jubjub_equal = sum_inputs.jubjub_commitment.commit()
-                == combined_outputs.jubjub_commitment.commit();
+            let jubjub_equal = sum_inputs.jubjub_commitment.compute_commitment()
+                == combined_outputs.jubjub_commitment.compute_commitment();
 
             // BLS commitment equality
             let bls_equal =
@@ -613,7 +613,7 @@ pub mod utils {
 
     /// Check if two commitments are equal (without knowing their values)
     pub fn are_commitments_equal(a: &DualCurveCommitment, b: &DualCurveCommitment) -> bool {
-        (a.jubjub_commitment.commit() == b.jubjub_commitment.commit())
+        (a.jubjub_commitment.compute_commitment() == b.jubjub_commitment.compute_commitment())
             && (a.bls_commitment.commitment == b.bls_commitment.commitment)
     }
 }

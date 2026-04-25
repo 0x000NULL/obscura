@@ -10,6 +10,7 @@ use log::{debug, error, info, warn};
 use ark_std::{One, UniformRand, Zero};
 use crate::crypto::jubjub::JubjubKeypair;
 use ark_ed_on_bls12_381::{EdwardsProjective, Fr as JubjubFr};
+use ark_ec::CurveGroup;
 
 /// Constants for VSS
 const MAX_VSS_PARTICIPANTS: usize = 100;
@@ -118,7 +119,7 @@ impl VerifiableShare {
         // Compute right side: product of commitments raised to powers
         let mut right_side = <EdwardsProjective as JubjubPointExt>::zero();
         for (i, commitment) in self.commitment.commitments.iter().enumerate() {
-            right_side += *commitment * JubjubFr::from(i as u64);
+            right_side += EdwardsProjective::from(commitment.0.into_affine()) * JubjubScalar::from(i as u64);
         }
         
         left_side == right_side
@@ -745,9 +746,9 @@ impl Share {
         let left_side = EdwardsProjective::generator() * self.value;
         
         // Compute right side: product of commitments raised to powers
-        let mut right_side = EdwardsProjective::zero();
+        let mut right_side = <EdwardsProjective as JubjubPointExt>::zero();
         for (i, commitment) in commitments.iter().enumerate() {
-            right_side += *commitment * JubjubFr::from(i as u64);
+            right_side += EdwardsProjective::from(*commitment) * JubjubFr::from(i as u64);
         }
         
         left_side == right_side
@@ -957,7 +958,7 @@ mod tests {
         }
         
         // Verify the public key matches the secret
-        let expected_public_key = EdwardsProjective::generator() * secret;
+        let expected_public_key = JubjubPoint(EdwardsProjective::generator() * secret);
         assert_eq!(dealer_result.public_key, expected_public_key, "Public key does not match secret");
         
         println!("=== Test completed successfully ===");

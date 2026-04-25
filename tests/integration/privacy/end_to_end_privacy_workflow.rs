@@ -26,6 +26,7 @@ use obscura_core::{
 
 use std::sync::Arc;
 use num_traits::Zero;
+use ark_ed_on_bls12_381::Fr as JubjubScalar;
 
 /// Test fixture for privacy workflow tests
 struct PrivacyWorkflowTest {

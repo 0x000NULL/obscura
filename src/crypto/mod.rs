@@ -5,8 +5,8 @@ use rand_core::RngCore;
 use chacha20poly1305::Nonce;
 use chacha20poly1305::aead::{Aead, AeadCore, KeyInit};
 use chacha20poly1305::ChaCha20Poly1305;
+use chacha20poly1305::Key;
 use ring::pbkdf2;
-use generic_array::GenericArray;
 
 // Add the errors module
 pub mod errors;
@@ -234,7 +234,8 @@ pub fn encrypt_keypair(
     );
     
     // Create a ChaCha20Poly1305 cipher with the derived key
-    let cipher = ChaCha20Poly1305::new(GenericArray::from_slice(derived_key.as_ref()));
+    let key = Key::from_slice(&derived_key);
+    let cipher = ChaCha20Poly1305::new(key);
     
     // Encrypt the serialized keypair with authentication tag
     let ciphertext = cipher
@@ -281,7 +282,8 @@ pub fn decrypt_keypair(
     );
     
     // Create a ChaCha20Poly1305 cipher with the derived key
-    let cipher = ChaCha20Poly1305::new(GenericArray::from_slice(derived_key.as_ref()));
+    let key = Key::from_slice(&derived_key);
+    let cipher = ChaCha20Poly1305::new(key);
     
     // Decrypt the ciphertext
     let plaintext = match cipher.decrypt(nonce, ciphertext) {
@@ -341,7 +343,7 @@ impl LocalPedersenCommitment {
         );
         
         // Convert the commitment to a fixed-size byte array
-        let commitment_point = pedersen_commitment.commit();
+        let commitment_point = pedersen_commitment.compute_commitment();
         let commitment_bytes = commitment_point.to_bytes();
         let mut result = [0u8; 32];
         let bytes_to_copy = commitment_bytes.len().min(32);
@@ -364,7 +366,7 @@ impl LocalPedersenCommitment {
     
     /// Convert from the full PedersenCommitment representation
     pub fn from_pedersen_commitment(commitment: &pedersen::PedersenCommitment, amount: u64, blinding: [u8; 32]) -> Self {
-        let commitment_point = commitment.commit();
+        let commitment_point = commitment.compute_commitment();
         let commitment_bytes = commitment_point.to_bytes();
         let mut result = [0u8; 32];
         let bytes_to_copy = commitment_bytes.len().min(32);
@@ -488,7 +490,7 @@ mod tests {
         // Verify both commitments
         assert!(local_commitment.verify(amount));
         // Convert amount to a commitment point for verification
-        let commitment_point = pedersen_commitment.commit();
+        let commitment_point = pedersen_commitment.compute_commitment();
         assert!(pedersen_commitment.verify(&commitment_point));
     }
 }

@@ -1,7 +1,7 @@
 use obscura_core::crypto::power_analysis_protection::{PowerAnalysisProtection, PowerAnalysisConfig};
-use obscura_core::crypto::jubjub::{self, JubjubPoint, JubjubScalar};
+use obscura_core::crypto::jubjub::{self, JubjubPoint, JubjubScalar, JubjubPointExt};
 use ark_std::UniformRand;
-use ark_ec::Group;
+use group::Group;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use std::time::{Duration, Instant};
@@ -16,8 +16,8 @@ fn test_key_generation_with_power_protection() {
         jubjub::generate_keypair()
     });
     
-    // Verify the keypair is valid
-    let expected_public = <ark_ed_on_bls12_381::EdwardsProjective as Group>::generator() * keypair.secret;
+    // Verify the keypair is valid by computing expected public key
+    let expected_public = JubjubPoint::generator() * keypair.secret;
     assert_eq!(keypair.public, expected_public);
     
     println!("Key generation with power analysis protection works correctly");

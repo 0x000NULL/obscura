@@ -1,6 +1,88 @@
 # Release Notes
 
-## [0.7.20] - 2025-06-05
+## Version 0.8.3 (2025-03-29)
+
+### Cryptographic Guarantees for Transaction Property Preservation
+
+This release introduces a comprehensive system for ensuring cryptographic guarantees of transaction property preservation during privacy-enhancing operations. The new feature ensures that critical transaction properties remain intact and verifiable while applying privacy features like stealth addressing and confidential transactions.
+
+#### Key Features
+
+1. **Property Preservation System**
+   - Secure caching of transaction properties using cryptographic hashes
+   - Required property tracking with configurable validation rules
+   - Automatic property restoration mechanism for failed operations
+   - Comprehensive logging and error reporting system
+   - Thread-safe property management with atomic operations
+
+2. **Transaction Validation**
+   - Amount preservation verification across privacy operations
+   - Recipient address validation with stealth addressing
+   - Timestamp consistency checking for transaction metadata
+   - Sequence number verification for transaction inputs
+   - Metadata preservation checks with privacy-aware filtering
+
+3. **Privacy Feature Integration**
+   - Seamless integration with existing stealth addressing system
+   - Support for confidential transactions and range proofs
+   - Transaction graph protection compatibility
+   - Metadata stripping with property preservation
+   - Cross-feature validation and verification
+
+4. **Error Handling and Recovery**
+   - Automatic property restoration on operation failure
+   - Detailed error reporting with contextual information
+   - Comprehensive validation system with early failure detection
+   - Graceful recovery mechanisms for failed operations
+   - Transaction state verification at multiple stages
+
+#### Technical Details
+
+The property preservation system uses a combination of cryptographic techniques to ensure transaction properties remain intact:
+
+- Transaction properties are cached using the transaction's cryptographic hash as a key
+- Properties are verified before and after privacy operations
+- Failed operations trigger automatic restoration of original properties
+- All operations are atomic and thread-safe
+- Comprehensive logging provides audit trail of all modifications
+
+#### Integration Guidelines
+
+To use the new property preservation features:
+
+1. Create a `TransactionPropertyPreserver` instance
+2. Call `preserve_properties()` before applying privacy features
+3. Apply desired privacy features to the transaction
+4. Use `verify_properties()` to ensure preservation
+5. If verification fails, use `restore_properties()` to recover
+
+#### Security Considerations
+
+- Property preservation adds minimal overhead to transaction processing
+- No sensitive data is exposed during property preservation
+- All property storage is ephemeral and cleared after use
+- Verification failures trigger automatic recovery
+- Comprehensive audit trail for all property modifications
+
+#### Future Enhancements
+
+- Additional property types for preservation
+- Enhanced integration with other privacy features
+- Extended validation rules and checks
+- Improved performance optimizations
+- Additional recovery mechanisms
+
+#### Breaking Changes
+
+None. This release is fully backward compatible with existing implementations.
+
+#### Known Issues
+
+None.
+
+For more information, please refer to the updated documentation in the `docs/` directory. 
+
+## [0.7.20]
 
 ### Critical Path Profiling and Benchmarking System
 
@@ -206,7 +288,7 @@ This release also includes an important fix to resolve a filename collision issu
 
 This fix helps ensure a stable and reliable build process, particularly in environments where multiple output artifacts with the same name could cause conflicts.
 
-## [0.7.19] - 2025-05-30
+## [0.7.19]
 
 ### Hardware Acceleration for Cryptographic Operations
 
@@ -399,7 +481,7 @@ The hardware acceleration framework is designed for future expansion and enhance
 - Testing and validation frameworks for hardware acceleration
 - Benchmarking tools for measuring performance improvements
 
-## [0.7.18] - 2025-05-15
+## [0.7.18]
 
 ### Constant-Time Operations for Critical Cryptographic Functions
 
@@ -639,7 +721,7 @@ pub fn verify_hmac(expected: &[u8], actual: &[u8]) -> bool {
 }
 ```
 
-## [0.7.17] - 2025-04-28
+## [0.7.17]
 
 ### External Integration Module for Cryptographic Audit System
 
@@ -841,7 +923,7 @@ While this release provides comprehensive external integration capabilities, fut
 
 This External Integration Module represents a significant enhancement to Obscura's security infrastructure, enabling enterprise-grade security monitoring and incident response capabilities while maintaining the blockchain's core principles of security and privacy.
 
-## [0.7.16] - 2025-04-15
+## [0.7.16]
 
 ### Secure Memory Allocator Implementation
 
@@ -1142,7 +1224,7 @@ The release includes detailed documentation to help developers understand and us
 
 This cryptographic auditing and logging system represents a significant enhancement to Obscura's security infrastructure, providing comprehensive visibility into cryptographic operations while maintaining the highest standards of security and privacy.
 
-## [0.7.15] - 2025-04-02
+## [0.7.15]
 
 ### Crypto Module Improvements
 

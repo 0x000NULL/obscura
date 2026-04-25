@@ -481,7 +481,7 @@ impl CrossCurveSwap {
             .ok_or(CryptoError::ValidationError("No participant registered for swap".to_string()))?;
 
         // Validate commitment points
-        if !bool::from(self.jubjub_commitment.commit().into_affine().is_on_curve()) {
+        if !bool::from(self.jubjub_commitment.compute_commitment().into_affine().is_on_curve()) {
             return Err(CryptoError::ValidationError("Invalid Jubjub commitment point".to_string()));
         }
         if !bool::from(self.bls_commitment.commitment.is_on_curve()) {
@@ -498,7 +498,7 @@ impl CrossCurveSwap {
         transcript.append_message(b"participant", &participant.to_compressed());
         
         // Add commitment points
-        transcript.append_message(b"jubjub_commitment", &self.jubjub_commitment.commit().to_bytes());
+        transcript.append_message(b"jubjub_commitment", &self.jubjub_commitment.compute_commitment().to_bytes());
         transcript.append_message(b"bls_commitment", &self.bls_commitment.commitment.to_compressed());
 
         // Generate proof bytes

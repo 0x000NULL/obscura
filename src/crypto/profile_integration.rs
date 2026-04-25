@@ -36,8 +36,8 @@ pub fn profile_jubjub_scalar_mul(point: &JubjubPoint, scalar: &JubjubScalar) -> 
     // Start profiling with the "scalar_mul" operation
     let _span = profile("scalar_mul", "crypto.jubjub");
     
-    // The actual operation - need to dereference the point
-    *point * scalar
+    // The actual operation - need to dereference both point and scalar
+    *point * *scalar
 }
 
 /// Profile a constant-time scalar multiplication
@@ -108,7 +108,7 @@ mod tests {
         
         // Perform scalar multiplication with profiling
         let result = profile_jubjub_scalar_mul(&point, &scalar);
-        assert_ne!(result, JubjubPoint::identity());
+        assert_ne!(result, JubjubPoint::zero());
     }
     
     #[test]
@@ -120,7 +120,7 @@ mod tests {
         
         // Perform constant-time scalar multiplication with profiling
         let result = profile_constant_time_scalar_mul(&point, &scalar);
-        assert_ne!(result, JubjubPoint::identity());
+        assert_ne!(result, JubjubPoint::zero());
     }
     
     #[test]

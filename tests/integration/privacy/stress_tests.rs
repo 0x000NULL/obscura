@@ -8,7 +8,7 @@ use obscura_core::{
         view_key::ViewKey,
         metadata_protection::{MetadataProtection, ProtectionConfig, MessageProtection, MessageProtectionExt},
         side_channel_protection::{SideChannelProtection, SideChannelProtectionConfig},
-        jubjub::{generate_keypair, JubjubKeypair},
+        jubjub::{generate_keypair, JubjubKeypair, JubjubScalar, JubjubPointExt},
     },
     networking::{
         privacy::{
@@ -99,7 +99,7 @@ impl PrivacyStressTest {
         // Add random amount commitment
         let blinding_factor = obscura_core::crypto::pedersen::generate_random_jubjub_scalar();
         let commitment = PedersenCommitment::commit(amount, blinding_factor);
-        tx.set_amount_commitment(0, commitment.to_bytes()).unwrap();
+        tx.set_amount_commitment(0, commitment.compute_commitment().to_bytes()).unwrap();
         
         // Add range proof
         let range_proof = RangeProof::new(amount, 64).unwrap();
@@ -231,7 +231,7 @@ fn create_transaction_with_privacy_features(
     // Create Pedersen commitment for the amount
     let blinding_factor = obscura_core::crypto::pedersen::generate_random_jubjub_scalar();
     let commitment = PedersenCommitment::commit(amount, blinding_factor);
-    tx.set_amount_commitment(0, commitment.to_bytes()).unwrap();
+    tx.set_amount_commitment(0, commitment.compute_commitment().to_bytes()).unwrap();
     
     // Create range proof
     let range_proof = RangeProof::new(amount, 64).unwrap();
