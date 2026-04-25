@@ -143,3 +143,9 @@
 ==> exec  resolve-stem-phase-min-timeout-stem-phase-max-timeout
       exec: 122.03s, failure_mode=success, transcript=.claude\todo-runner\transcripts\resolve-stem-phase-min-timeout-stem-phase-max-timeout-execute-20260425T231342905.txt
       notes: - **Pre-applied unstage step.** Per the plan's risk section, ran `git restore --staged` on `src/networking/{constants.rs,dandelion.rs,mod.rs,circuit.rs,p2p.rs}` and `run.log` before editing. After unstaging, the worktree-vs-HEAD diff for those Rust files was empty (the previously-staged edits and the worktree reverts netted to zero), confirming the prior broader plan had been fully reverted in the worktree. So my edits are the only Rust delta now. / - **Module-doc style.** Used a short `//!` doc comment plus per-const one-liners (`/// Minimum time spent in the stem phase.` / `/// Maximum time spent in the stem phase.`) - consistent with the plan's "minimal one-liners" assumption.
+    [25/91] resolve-stem-phase-min-timeout-stem-phase-max-timeout: plan $0.92 / execute $0.71 / verified / committed dae60cc
+==> plan  group-the-80-dandelion-rs-constants-into-named-structs
+      plan: 132.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\group-the-80-dandelion-rs-constants-into-named-structs-plan-20260425T231557561.txt
+==> exec  group-the-80-dandelion-rs-constants-into-named-structs
+      exec: 249.03s, failure_mode=success, transcript=.claude\todo-runner\transcripts\group-the-80-dandelion-rs-constants-into-named-structs-execute-20260425T232006619.txt
+      notes: - Plan said "~17 / ~14 / ~61" with categorization rules; categorization split landed at exactly 17 / 14 / 61 = 92 constants, matching the file's actual count. / - Skipped the optional `pub use dandelion_config::{...}` re-export from `mod.rs` (plan called it "if convenient"); kept the module surface minimal since `dandelion.rs` already re-exports the bare const names that external callers actually use.

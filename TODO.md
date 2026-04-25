@@ -194,7 +194,7 @@
 
 ### 4.2 Group `dandelion.rs` constants
 
-- [ ] Group the 80+ `dandelion.rs` constants into named structs
+- [x] Group the 80+ `dandelion.rs` constants into named structs
   - [ ] Split into `DandelionTimings`, `DandelionThresholds`, `DandelionPaths` structs in `src/networking/dandelion_config.rs`
   - [ ] Each struct has a `pub const DEFAULT: Self = ...` associated constant
   - [ ] Update `dandelion.rs` to reference these via the structs

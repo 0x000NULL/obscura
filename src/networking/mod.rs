@@ -45,6 +45,8 @@ pub mod connection_pool;
 pub mod discovery;
 // Add the dandelion module
 pub mod dandelion;
+// Add the dandelion_config module (named structs grouping the dandelion knobs)
+pub mod dandelion_config;
 // Add the kademlia module
 pub mod kademlia;
 // Add the block_propagation module

@@ -17,119 +17,117 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::networking::timing_obfuscation::TimingObfuscation;
 use crate::networking::constants::{STEM_PHASE_MAX_TIMEOUT, STEM_PHASE_MIN_TIMEOUT};
+use crate::networking::dandelion_config::{DandelionPaths, DandelionThresholds, DandelionTimings};
 use crate::blockchain::Transaction;
 use crate::crypto::metadata_protection::BroadcastMetadataCleaner;
 
-// Constants for Dandelion protocol
-pub const STEM_PROBABILITY: f64 = 0.9; // Probability to relay in stem phase vs fluff
-pub const MIN_ROUTING_PATH_LENGTH: usize = 2; // Minimum nodes in stem phase path
-pub const MAX_ROUTING_PATH_LENGTH: usize = 10; // Maximum nodes in stem path
-pub const FLUFF_PROPAGATION_DELAY_MIN_MS: u64 = 50; // Minimum delay when broadcasting
-pub const FLUFF_PROPAGATION_DELAY_MAX_MS: u64 = 500; // Maximum delay when broadcasting
-pub const STEM_PATH_RECALCULATION_INTERVAL: Duration = Duration::from_secs(600); // 10 minutes
-pub const ENTROPY_SOURCE_REFRESH_INTERVAL: Duration = Duration::from_secs(300); // 5 minutes
+// Constants for Dandelion protocol — values are sourced from
+// `dandelion_config::Dandelion{Timings,Paths,Thresholds}::DEFAULT` so the structs
+// remain the single canonical declaration; the bare names are kept for
+// backwards compatibility with external callers (tests, other modules).
+pub const STEM_PROBABILITY: f64 = DandelionThresholds::DEFAULT.stem_probability;
+pub const MIN_ROUTING_PATH_LENGTH: usize = DandelionPaths::DEFAULT.min_routing_path_length;
+pub const MAX_ROUTING_PATH_LENGTH: usize = DandelionPaths::DEFAULT.max_routing_path_length;
+pub const FLUFF_PROPAGATION_DELAY_MIN_MS: u64 = DandelionTimings::DEFAULT.fluff_propagation_delay_min_ms;
+pub const FLUFF_PROPAGATION_DELAY_MAX_MS: u64 = DandelionTimings::DEFAULT.fluff_propagation_delay_max_ms;
+pub const STEM_PATH_RECALCULATION_INTERVAL: Duration = DandelionTimings::DEFAULT.stem_path_recalculation_interval;
+pub const ENTROPY_SOURCE_REFRESH_INTERVAL: Duration = DandelionTimings::DEFAULT.entropy_source_refresh_interval;
 
-// Enhanced privacy configuration
-pub const MULTI_HOP_STEM_PROBABILITY: f64 = 0.3; // Probability of using multi-hop stem path
-pub const MAX_MULTI_HOP_LENGTH: usize = 3; // Maximum hops in multi-hop mode
-pub const USE_DECOY_TRANSACTIONS: bool = true; // Enable decoy transactions
-pub const DECOY_TRANSACTION_PROBABILITY: f64 = 0.05; // Probability to generate a decoy (5%)
-pub const DECOY_GENERATION_INTERVAL_MS: u64 = 30000; // Generate decoys every 30 seconds
-pub const BATCH_TRANSACTIONS_BEFORE_FLUFF: bool = true; // Batch transactions for fluff phase
-pub const MAX_BATCH_SIZE: usize = 5; // Maximum transactions in a batch
-pub const MAX_BATCH_WAIT_MS: u64 = 5000; // Maximum wait time for batch (5 seconds)
-pub const ADAPTIVE_TIMING_ENABLED: bool = true; // Enable adaptive timing based on network conditions
-pub const MULTI_PATH_ROUTING_PROBABILITY: f64 = 0.15; // Probability of using multiple paths (15%)
-pub const TRAFFIC_ANALYSIS_PROTECTION_ENABLED: bool = true; // Enable traffic analysis countermeasures
-pub const BACKGROUND_NOISE_PROBABILITY: f64 = 0.03; // Probability of sending background noise (3% of time)
-pub const SUSPICIOUS_BEHAVIOR_THRESHOLD: u32 = 5; // Number of suspicious actions before flagging a peer
-pub const SECURE_FAILOVER_ENABLED: bool = true; // Enable secure failover strategies
-pub const PRIVACY_LOGGING_ENABLED: bool = false; // Enable privacy-focused logging
-pub const ENCRYPTED_PEER_COMMUNICATION: bool = true; // Enable encrypted peer communication
+pub const MULTI_HOP_STEM_PROBABILITY: f64 = DandelionThresholds::DEFAULT.multi_hop_stem_probability;
+pub const MAX_MULTI_HOP_LENGTH: usize = DandelionPaths::DEFAULT.max_multi_hop_length;
+pub const USE_DECOY_TRANSACTIONS: bool = DandelionThresholds::DEFAULT.use_decoy_transactions;
+pub const DECOY_TRANSACTION_PROBABILITY: f64 = DandelionThresholds::DEFAULT.decoy_transaction_probability;
+pub const DECOY_GENERATION_INTERVAL_MS: u64 = DandelionTimings::DEFAULT.decoy_generation_interval_ms;
+pub const BATCH_TRANSACTIONS_BEFORE_FLUFF: bool = DandelionThresholds::DEFAULT.batch_transactions_before_fluff;
+pub const MAX_BATCH_SIZE: usize = DandelionThresholds::DEFAULT.max_batch_size;
+pub const MAX_BATCH_WAIT_MS: u64 = DandelionTimings::DEFAULT.max_batch_wait_ms;
+pub const ADAPTIVE_TIMING_ENABLED: bool = DandelionThresholds::DEFAULT.adaptive_timing_enabled;
+pub const MULTI_PATH_ROUTING_PROBABILITY: f64 = DandelionThresholds::DEFAULT.multi_path_routing_probability;
+pub const TRAFFIC_ANALYSIS_PROTECTION_ENABLED: bool = DandelionThresholds::DEFAULT.traffic_analysis_protection_enabled;
+pub const BACKGROUND_NOISE_PROBABILITY: f64 = DandelionThresholds::DEFAULT.background_noise_probability;
+pub const SUSPICIOUS_BEHAVIOR_THRESHOLD: u32 = DandelionThresholds::DEFAULT.suspicious_behavior_threshold;
+pub const SECURE_FAILOVER_ENABLED: bool = DandelionThresholds::DEFAULT.secure_failover_enabled;
+pub const PRIVACY_LOGGING_ENABLED: bool = DandelionThresholds::DEFAULT.privacy_logging_enabled;
+pub const ENCRYPTED_PEER_COMMUNICATION: bool = DandelionThresholds::DEFAULT.encrypted_peer_communication;
 
-// Advanced Privacy Enhancement Configuration
-pub const DYNAMIC_PEER_SCORING_ENABLED: bool = true; // Enable dynamic peer scoring
-pub const REPUTATION_SCORE_MAX: f64 = 100.0; // Maximum reputation score
-pub const REPUTATION_SCORE_MIN: f64 = -100.0; // Minimum reputation score
-pub const REPUTATION_DECAY_FACTOR: f64 = 0.95; // Decay factor for reputation (per hour)
-pub const REPUTATION_PENALTY_SUSPICIOUS: f64 = -10.0; // Penalty for suspicious activity
-pub const REPUTATION_PENALTY_SYBIL: f64 = -20.0; // Penalty for suspected Sybil behavior
-pub const REPUTATION_REWARD_SUCCESSFUL_RELAY: f64 = 2.0; // Reward for successful relay
-pub const REPUTATION_THRESHOLD_STEM: f64 = 0.5; // Minimum score to be used in stem routing
-pub const REPUTATION_CRITICAL_PATH_THRESHOLD: f64 = 50.0; // Threshold for high-privacy transactions
-pub const REPUTATION_WEIGHT_FACTOR: f64 = 2.5; // Weight multiplier for reputation in path selection
-pub const REPUTATION_ADAPTIVE_THRESHOLDS: bool = true; // Use adaptive reputation thresholds
-pub const REPUTATION_MIN_SAMPLE_SIZE: usize = 10; // Minimum number of reputation samples for adaption
-pub const REPUTATION_RELIABILITY_BONUS: f64 = 10.0; // Bonus for consistently reliable peers
-pub const REPUTATION_ENFORCED_RATIO: f64 = 0.7; // Minimum ratio of high-reputation peers in path
-pub const ANONYMITY_SET_MIN_SIZE: usize = 3; // Minimum size of anonymity set
-pub const MIN_PEERS_FOR_SYBIL_DETECTION: usize = 5; // Minimum peers needed for Sybil detection
+pub const DYNAMIC_PEER_SCORING_ENABLED: bool = DandelionThresholds::DEFAULT.dynamic_peer_scoring_enabled;
+pub const REPUTATION_SCORE_MAX: f64 = DandelionThresholds::DEFAULT.reputation_score_max;
+pub const REPUTATION_SCORE_MIN: f64 = DandelionThresholds::DEFAULT.reputation_score_min;
+pub const REPUTATION_DECAY_FACTOR: f64 = DandelionThresholds::DEFAULT.reputation_decay_factor;
+pub const REPUTATION_PENALTY_SUSPICIOUS: f64 = DandelionThresholds::DEFAULT.reputation_penalty_suspicious;
+pub const REPUTATION_PENALTY_SYBIL: f64 = DandelionThresholds::DEFAULT.reputation_penalty_sybil;
+pub const REPUTATION_REWARD_SUCCESSFUL_RELAY: f64 = DandelionThresholds::DEFAULT.reputation_reward_successful_relay;
+pub const REPUTATION_THRESHOLD_STEM: f64 = DandelionThresholds::DEFAULT.reputation_threshold_stem;
+pub const REPUTATION_CRITICAL_PATH_THRESHOLD: f64 = DandelionThresholds::DEFAULT.reputation_critical_path_threshold;
+pub const REPUTATION_WEIGHT_FACTOR: f64 = DandelionThresholds::DEFAULT.reputation_weight_factor;
+pub const REPUTATION_ADAPTIVE_THRESHOLDS: bool = DandelionThresholds::DEFAULT.reputation_adaptive_thresholds;
+pub const REPUTATION_MIN_SAMPLE_SIZE: usize = DandelionThresholds::DEFAULT.reputation_min_sample_size;
+pub const REPUTATION_RELIABILITY_BONUS: f64 = DandelionThresholds::DEFAULT.reputation_reliability_bonus;
+pub const REPUTATION_ENFORCED_RATIO: f64 = DandelionThresholds::DEFAULT.reputation_enforced_ratio;
+pub const ANONYMITY_SET_MIN_SIZE: usize = DandelionThresholds::DEFAULT.anonymity_set_min_size;
+pub const MIN_PEERS_FOR_SYBIL_DETECTION: usize = DandelionThresholds::DEFAULT.min_peers_for_sybil_detection;
 
-pub const ANTI_SNOOPING_ENABLED: bool = true; // Enable anti-snooping measures
-pub const MAX_TX_REQUESTS_BEFORE_PENALTY: u32 = 5; // Max transaction requests before penalty
-pub const DUMMY_RESPONSE_PROBABILITY: f64 = 0.2; // Probability of sending a dummy response
-pub const STEGANOGRAPHIC_HIDING_ENABLED: bool = true; // Enable steganographic hiding
+pub const ANTI_SNOOPING_ENABLED: bool = DandelionThresholds::DEFAULT.anti_snooping_enabled;
+pub const MAX_TX_REQUESTS_BEFORE_PENALTY: u32 = DandelionThresholds::DEFAULT.max_tx_requests_before_penalty;
+pub const DUMMY_RESPONSE_PROBABILITY: f64 = DandelionThresholds::DEFAULT.dummy_response_probability;
+pub const STEGANOGRAPHIC_HIDING_ENABLED: bool = DandelionThresholds::DEFAULT.steganographic_hiding_enabled;
 
-pub const DIFFERENTIAL_PRIVACY_ENABLED: bool = true; // Enable differential privacy noise
-pub const LAPLACE_SCALE_FACTOR: f64 = 10.0; // Scale factor for Laplace noise (higher = more privacy)
+pub const DIFFERENTIAL_PRIVACY_ENABLED: bool = DandelionThresholds::DEFAULT.differential_privacy_enabled;
+pub const LAPLACE_SCALE_FACTOR: f64 = DandelionThresholds::DEFAULT.laplace_scale_factor;
 
-pub const TOR_INTEGRATION_ENABLED: bool = false; // Enable Tor integration (must have Tor installed)
-pub const TOR_SOCKS_PORT: u16 = 9050; // Default Tor SOCKS port
-pub const TOR_CONTROL_PORT: u16 = 9051; // Default Tor control port
-pub const MIXNET_INTEGRATION_ENABLED: bool = false; // Enable Mixnet integration
+pub const TOR_INTEGRATION_ENABLED: bool = DandelionThresholds::DEFAULT.tor_integration_enabled;
+pub const TOR_SOCKS_PORT: u16 = DandelionThresholds::DEFAULT.tor_socks_port;
+pub const TOR_CONTROL_PORT: u16 = DandelionThresholds::DEFAULT.tor_control_port;
+pub const MIXNET_INTEGRATION_ENABLED: bool = DandelionThresholds::DEFAULT.mixnet_integration_enabled;
 
-pub const LAYERED_ENCRYPTION_ENABLED: bool = true; // Enable layered encryption
-pub const POST_QUANTUM_ENCRYPTION_ENABLED: bool = false; // Enable post-quantum encryption
+pub const LAYERED_ENCRYPTION_ENABLED: bool = DandelionThresholds::DEFAULT.layered_encryption_enabled;
+pub const POST_QUANTUM_ENCRYPTION_ENABLED: bool = DandelionThresholds::DEFAULT.post_quantum_encryption_enabled;
 
-pub const ECLIPSE_DEFENSE_IP_DIVERSITY_THRESHOLD: usize = 3; // Minimum number of distinct IP subnets required
-pub const ECLIPSE_DEFENSE_PEER_ROTATION_PERCENT: f64 = 0.2; // Percent of peers to rotate when eclipse detected
-pub const ECLIPSE_ATTACK_THRESHOLD: f64 = 0.6; // Threshold for detecting eclipse attacks (60% from same subnet)
-pub const AUTOMATIC_ATTACK_RESPONSE_ENABLED: bool = true; // Enable automatic attack responses
-pub const SYBIL_DETECTION_CLUSTER_THRESHOLD: usize = 3; // Minimum cluster size for Sybil detection
+pub const ECLIPSE_DEFENSE_IP_DIVERSITY_THRESHOLD: usize = DandelionThresholds::DEFAULT.eclipse_defense_ip_diversity_threshold;
+pub const ECLIPSE_DEFENSE_PEER_ROTATION_PERCENT: f64 = DandelionThresholds::DEFAULT.eclipse_defense_peer_rotation_percent;
+pub const ECLIPSE_ATTACK_THRESHOLD: f64 = DandelionThresholds::DEFAULT.eclipse_attack_threshold;
+pub const AUTOMATIC_ATTACK_RESPONSE_ENABLED: bool = DandelionThresholds::DEFAULT.automatic_attack_response_enabled;
+pub const SYBIL_DETECTION_CLUSTER_THRESHOLD: usize = DandelionThresholds::DEFAULT.sybil_detection_cluster_threshold;
 
-// Add new constants for route diversity
-pub const MIN_AS_DIVERSITY: usize = 2; // Minimum number of different autonomous systems in path
-pub const MIN_COUNTRY_DIVERSITY: usize = 2; // Minimum number of different countries in path
-pub const MIN_SUBNET_DIVERSITY_RATIO: f64 = 0.6; // Minimum ratio of unique subnets in path
-pub const ROUTE_DIVERSITY_CACHE_SIZE: usize = 1000; // Number of recent paths to track
-pub const ROUTE_REUSE_PENALTY: f64 = 0.3; // Penalty factor for reusing recent paths
-pub const DIVERSITY_SCORE_THRESHOLD: f64 = 0.7; // Minimum diversity score for path acceptance
+pub const MIN_AS_DIVERSITY: usize = DandelionPaths::DEFAULT.min_as_diversity;
+pub const MIN_COUNTRY_DIVERSITY: usize = DandelionPaths::DEFAULT.min_country_diversity;
+pub const MIN_SUBNET_DIVERSITY_RATIO: f64 = DandelionPaths::DEFAULT.min_subnet_diversity_ratio;
+pub const ROUTE_DIVERSITY_CACHE_SIZE: usize = DandelionPaths::DEFAULT.route_diversity_cache_size;
+pub const ROUTE_REUSE_PENALTY: f64 = DandelionPaths::DEFAULT.route_reuse_penalty;
+pub const DIVERSITY_SCORE_THRESHOLD: f64 = DandelionPaths::DEFAULT.diversity_score_threshold;
 
-// Add new constants for anti-fingerprinting
-pub const PATH_PATTERN_CACHE_SIZE: usize = 100; // Number of recent path patterns to track
-pub const PATTERN_SIMILARITY_THRESHOLD: f64 = 0.7; // Threshold for pattern similarity detection
-pub const TIMING_JITTER_RANGE_MS: u64 = 100; // Range for timing randomization (±50ms)
-pub const PATTERN_HISTORY_WINDOW: Duration = Duration::from_secs(3600); // 1 hour window for pattern analysis
-pub const MAX_PATTERN_FREQUENCY: f64 = 0.1; // Maximum allowed frequency for similar patterns (10%)
+pub const PATH_PATTERN_CACHE_SIZE: usize = DandelionPaths::DEFAULT.path_pattern_cache_size;
+pub const PATTERN_SIMILARITY_THRESHOLD: f64 = DandelionPaths::DEFAULT.pattern_similarity_threshold;
+pub const TIMING_JITTER_RANGE_MS: u64 = DandelionTimings::DEFAULT.timing_jitter_range_ms;
+pub const PATTERN_HISTORY_WINDOW: Duration = DandelionTimings::DEFAULT.pattern_history_window;
+pub const MAX_PATTERN_FREQUENCY: f64 = DandelionPaths::DEFAULT.max_pattern_frequency;
 
-// Add new constants for advanced anonymity set features (after existing constants around line 61)
-pub const ANONYMITY_SET_MAX_SIZE: usize = 20; // Maximum size of anonymity set
-pub const ANONYMITY_SET_DYNAMIC_SIZING_ENABLED: bool = true; // Enable dynamic sizing of anonymity sets
-pub const ANONYMITY_SET_K_ANONYMITY_LEVEL: usize = 2; // k value for k-anonymity guarantee
-pub const ANONYMITY_SET_TRANSACTION_CORRELATION_RESISTANCE: bool = true; // Enable transaction correlation resistance
-pub const ANONYMITY_SET_ROTATION_INTERVAL: Duration = Duration::from_secs(1800); // Rotate sets every 30 minutes
-pub const PLAUSIBLE_DENIABILITY_ENABLED: bool = true; // Enable plausible deniability mechanisms
-pub const PLAUSIBLE_DENIABILITY_DUMMY_RATE: f64 = 0.15; // Rate of dummy transactions for plausible deniability
-pub const GRAPH_ANALYSIS_COUNTERMEASURES_ENABLED: bool = true; // Enable graph analysis countermeasures
-pub const GRAPH_ENTROPY_THRESHOLD: f64 = 0.7; // Minimum entropy threshold for graph analysis protection
-pub const TRANSACTION_FLOW_RANDOMIZATION_FACTOR: f64 = 0.3; // Factor for transaction flow randomization
-pub const NETWORK_TRAFFIC_ANALYSIS_WINDOW: Duration = Duration::from_secs(3600); // 1 hour window for traffic analysis
-pub const TRANSACTION_GRAPH_SAMPLING_WINDOW: Duration = Duration::from_secs(7200); // 2 hour window for graph sampling
-pub const ENTROPY_MEASUREMENT_INTERVAL: Duration = Duration::from_secs(600); // Measure entropy every 10 minutes
-pub const MIN_ENTROPY_SAMPLES: usize = 5; // Minimum number of entropy samples before taking action
+pub const ANONYMITY_SET_MAX_SIZE: usize = DandelionThresholds::DEFAULT.anonymity_set_max_size;
+pub const ANONYMITY_SET_DYNAMIC_SIZING_ENABLED: bool = DandelionThresholds::DEFAULT.anonymity_set_dynamic_sizing_enabled;
+pub const ANONYMITY_SET_K_ANONYMITY_LEVEL: usize = DandelionThresholds::DEFAULT.anonymity_set_k_anonymity_level;
+pub const ANONYMITY_SET_TRANSACTION_CORRELATION_RESISTANCE: bool = DandelionThresholds::DEFAULT.anonymity_set_transaction_correlation_resistance;
+pub const ANONYMITY_SET_ROTATION_INTERVAL: Duration = DandelionTimings::DEFAULT.anonymity_set_rotation_interval;
+pub const PLAUSIBLE_DENIABILITY_ENABLED: bool = DandelionThresholds::DEFAULT.plausible_deniability_enabled;
+pub const PLAUSIBLE_DENIABILITY_DUMMY_RATE: f64 = DandelionThresholds::DEFAULT.plausible_deniability_dummy_rate;
+pub const GRAPH_ANALYSIS_COUNTERMEASURES_ENABLED: bool = DandelionThresholds::DEFAULT.graph_analysis_countermeasures_enabled;
+pub const GRAPH_ENTROPY_THRESHOLD: f64 = DandelionThresholds::DEFAULT.graph_entropy_threshold;
+pub const TRANSACTION_FLOW_RANDOMIZATION_FACTOR: f64 = DandelionThresholds::DEFAULT.transaction_flow_randomization_factor;
+pub const NETWORK_TRAFFIC_ANALYSIS_WINDOW: Duration = DandelionTimings::DEFAULT.network_traffic_analysis_window;
+pub const TRANSACTION_GRAPH_SAMPLING_WINDOW: Duration = DandelionTimings::DEFAULT.transaction_graph_sampling_window;
+pub const ENTROPY_MEASUREMENT_INTERVAL: Duration = DandelionTimings::DEFAULT.entropy_measurement_interval;
+pub const MIN_ENTROPY_SAMPLES: usize = DandelionThresholds::DEFAULT.min_entropy_samples;
 
-// Constants for Dandelion++ enhancements
-pub const TRANSACTION_AGGREGATION_ENABLED: bool = true;
-pub const MAX_AGGREGATION_SIZE: usize = 10;
-pub const AGGREGATION_TIMEOUT_MS: u64 = 2000;
-pub const STEM_BATCH_SIZE: usize = 5;
-pub const STEM_BATCH_TIMEOUT_MS: u64 = 3000;
-pub const STEM_FLUFF_TRANSITION_MIN_DELAY_MS: u64 = 1000;
-pub const STEM_FLUFF_TRANSITION_MAX_DELAY_MS: u64 = 5000;
-pub const FLUFF_ENTRY_POINTS_MIN: usize = 2;
-pub const FLUFF_ENTRY_POINTS_MAX: usize = 4;
-pub const ROUTING_TABLE_INFERENCE_RESISTANCE_ENABLED: bool = true;
-pub const ROUTING_TABLE_REFRESH_INTERVAL_MS: u64 = 30000;
+pub const TRANSACTION_AGGREGATION_ENABLED: bool = DandelionThresholds::DEFAULT.transaction_aggregation_enabled;
+pub const MAX_AGGREGATION_SIZE: usize = DandelionThresholds::DEFAULT.max_aggregation_size;
+pub const AGGREGATION_TIMEOUT_MS: u64 = DandelionTimings::DEFAULT.aggregation_timeout_ms;
+pub const STEM_BATCH_SIZE: usize = DandelionThresholds::DEFAULT.stem_batch_size;
+pub const STEM_BATCH_TIMEOUT_MS: u64 = DandelionTimings::DEFAULT.stem_batch_timeout_ms;
+pub const STEM_FLUFF_TRANSITION_MIN_DELAY_MS: u64 = DandelionTimings::DEFAULT.stem_fluff_transition_min_delay_ms;
+pub const STEM_FLUFF_TRANSITION_MAX_DELAY_MS: u64 = DandelionTimings::DEFAULT.stem_fluff_transition_max_delay_ms;
+pub const FLUFF_ENTRY_POINTS_MIN: usize = DandelionPaths::DEFAULT.fluff_entry_points_min;
+pub const FLUFF_ENTRY_POINTS_MAX: usize = DandelionPaths::DEFAULT.fluff_entry_points_max;
+pub const ROUTING_TABLE_INFERENCE_RESISTANCE_ENABLED: bool = DandelionThresholds::DEFAULT.routing_table_inference_resistance_enabled;
+pub const ROUTING_TABLE_REFRESH_INTERVAL_MS: u64 = DandelionTimings::DEFAULT.routing_table_refresh_interval_ms;
 
 // Transaction propagation state
 #[derive(Debug, Clone, PartialEq)]
