@@ -240,7 +240,7 @@
 
 ### 4.6 DandelionRouter
 
-- [ ] Add `stem_probability` and `fluff_probability` fields to `DandelionRouter`
+- [x] Add `stem_probability` and `fluff_probability` fields to `DandelionRouter`
   - [ ] Default values per privacy level pulled from `DandelionThresholds::DEFAULT`
   - [ ] Setter methods + validation (0.0..=1.0)
   - [ ] **Verify:** `cargo test --lib dandelion::tests::probability_validation`

@@ -12,10 +12,10 @@ use crate::networking::privacy::PrivacyLevel;
 use crate::networking::privacy_config_integration::PrivacySettingsRegistry;
 use crate::blockchain::Transaction;
 use crate::networking::dandelion::{DandelionManager, PropagationState};
+use crate::networking::dandelion_config::DandelionThresholds;
 use crate::networking::constants::{STEM_PHASE_MAX_TIMEOUT, STEM_PHASE_MIN_TIMEOUT};
 
 // Constants for Dandelion routing
-const STEM_PROBABILITY: f64 = 0.9;
 const MIN_ROUTING_PATH_LENGTH: usize = 2;
 const MAX_ROUTING_PATH_LENGTH: usize = 10;
 const MULTI_HOP_STEM_PROBABILITY: f64 = 0.3;
@@ -116,8 +116,8 @@ impl DandelionRouter {
         DandelionRouter {
             config_registry,
             privacy_level: RwLock::new(PrivacyLevel::Standard),
-            stem_probability: RwLock::new(STEM_PROBABILITY),
-            fluff_probability: RwLock::new(0.5), // Default fluff probability
+            stem_probability: RwLock::new(DandelionThresholds::DEFAULT.stem_probability),
+            fluff_probability: RwLock::new(DandelionThresholds::DEFAULT.fluff_probability),
             transactions: Mutex::new(HashMap::new()),
             outbound_peers: Mutex::new(HashSet::new()),
             transaction_batches: Mutex::new(HashMap::new()),
@@ -300,6 +300,34 @@ impl DandelionRouter {
     pub fn shutdown(&self) {
         debug!("Shutting down DandelionRouter");
         // Perform any cleanup needed
+    }
+
+    /// Current stem probability.
+    pub fn stem_probability(&self) -> f64 {
+        *self.stem_probability.read().unwrap()
+    }
+
+    /// Current fluff probability.
+    pub fn fluff_probability(&self) -> f64 {
+        *self.fluff_probability.read().unwrap()
+    }
+
+    /// Set the stem probability. Accepts values in `0.0..=1.0` (rejects NaN).
+    pub fn set_stem_probability(&self, p: f64) -> Result<(), String> {
+        if p.is_nan() || !(0.0..=1.0).contains(&p) {
+            return Err(format!("stem_probability out of range 0.0..=1.0: {}", p));
+        }
+        *self.stem_probability.write().unwrap() = p;
+        Ok(())
+    }
+
+    /// Set the fluff probability. Accepts values in `0.0..=1.0` (rejects NaN).
+    pub fn set_fluff_probability(&self, p: f64) -> Result<(), String> {
+        if p.is_nan() || !(0.0..=1.0).contains(&p) {
+            return Err(format!("fluff_probability out of range 0.0..=1.0: {}", p));
+        }
+        *self.fluff_probability.write().unwrap() = p;
+        Ok(())
     }
 }
 

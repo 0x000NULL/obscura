@@ -85,6 +85,7 @@ impl DandelionPaths {
 #[derive(Clone, Copy, Debug)]
 pub struct DandelionThresholds {
     pub stem_probability: f64,
+    pub fluff_probability: f64,
     pub multi_hop_stem_probability: f64,
     pub use_decoy_transactions: bool,
     pub decoy_transaction_probability: f64,
@@ -151,6 +152,7 @@ pub struct DandelionThresholds {
 impl DandelionThresholds {
     pub const DEFAULT: Self = Self {
         stem_probability: 0.9,
+        fluff_probability: 0.5,
         multi_hop_stem_probability: 0.3,
         use_decoy_transactions: true,
         decoy_transaction_probability: 0.05,

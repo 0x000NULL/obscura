@@ -3529,3 +3529,38 @@ impl Default for DandelionConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use crate::networking::dandelion_config::DandelionThresholds;
+    use crate::networking::privacy::dandelion_router::DandelionRouter;
+    use crate::networking::privacy_config_integration::PrivacySettingsRegistry;
+
+    #[test]
+    fn probability_validation() {
+        let router = DandelionRouter::new(Arc::new(PrivacySettingsRegistry::new()));
+
+        assert_eq!(
+            router.stem_probability(),
+            DandelionThresholds::DEFAULT.stem_probability
+        );
+        assert_eq!(
+            router.fluff_probability(),
+            DandelionThresholds::DEFAULT.fluff_probability
+        );
+
+        for &p in &[0.0_f64, 0.5, 1.0] {
+            assert!(router.set_stem_probability(p).is_ok());
+            assert_eq!(router.stem_probability(), p);
+            assert!(router.set_fluff_probability(p).is_ok());
+            assert_eq!(router.fluff_probability(), p);
+        }
+
+        for &p in &[-0.1_f64, 1.1, f64::NAN] {
+            assert!(router.set_stem_probability(p).is_err());
+            assert!(router.set_fluff_probability(p).is_err());
+        }
+    }
+}
