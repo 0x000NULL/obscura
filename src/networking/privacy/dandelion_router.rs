@@ -4,6 +4,8 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use log::{debug, info, warn, error};
 use rand::{thread_rng, Rng};
+use rand::rngs::StdRng;
+use rand_core::RngCore;
 use rand_distr::Distribution;
 use rand::distributions::{Bernoulli};
 use rand_chacha::{ChaCha20Rng, rand_core::SeedableRng};
@@ -99,7 +101,7 @@ pub struct DandelionRouter {
     last_decoy_generation: Mutex<Instant>,
     
     /// Cryptographically secure RNG
-    secure_rng: Mutex<ChaCha20Rng>,
+    secure_rng: Mutex<Box<dyn RngCore + Send>>,
     
     /// Underlying Dandelion manager
     dandelion_manager: Option<Arc<Mutex<DandelionManager>>>,
@@ -111,10 +113,32 @@ pub struct DandelionRouter {
 impl DandelionRouter {
     /// Create a new DandelionRouter
     pub fn new(config_registry: Arc<PrivacySettingsRegistry>) -> Self {
-        let secure_rng = ChaCha20Rng::from_entropy();
-        
+        let secure_rng: Box<dyn RngCore + Send> = Box::new(ChaCha20Rng::from_entropy());
+
         DandelionRouter {
             config_registry,
+            privacy_level: RwLock::new(PrivacyLevel::Standard),
+            stem_probability: RwLock::new(DandelionThresholds::DEFAULT.stem_probability),
+            fluff_probability: RwLock::new(DandelionThresholds::DEFAULT.fluff_probability),
+            transactions: Mutex::new(HashMap::new()),
+            outbound_peers: Mutex::new(HashSet::new()),
+            transaction_batches: Mutex::new(HashMap::new()),
+            next_batch_id: Mutex::new(0),
+            last_decoy_generation: Mutex::new(Instant::now()),
+            secure_rng: Mutex::new(secure_rng),
+            dandelion_manager: None,
+            initialized: RwLock::new(false),
+        }
+    }
+
+    /// Create a new DandelionRouter seeded with a deterministic RNG, for tests.
+    pub fn with_seed(seed: u64) -> Self {
+        let mut seed_bytes = [0u8; 32];
+        seed_bytes[..8].copy_from_slice(&seed.to_le_bytes());
+        let secure_rng: Box<dyn RngCore + Send> = Box::new(StdRng::from_seed(seed_bytes));
+
+        DandelionRouter {
+            config_registry: Arc::new(PrivacySettingsRegistry::new()),
             privacy_level: RwLock::new(PrivacyLevel::Standard),
             stem_probability: RwLock::new(DandelionThresholds::DEFAULT.stem_probability),
             fluff_probability: RwLock::new(DandelionThresholds::DEFAULT.fluff_probability),

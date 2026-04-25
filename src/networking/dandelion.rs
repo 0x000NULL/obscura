@@ -3534,6 +3534,8 @@ impl Default for DandelionConfig {
 mod tests {
     use std::sync::Arc;
 
+    use crate::blockchain::Transaction;
+    use crate::networking::dandelion::PropagationState;
     use crate::networking::dandelion_config::DandelionThresholds;
     use crate::networking::privacy::dandelion_router::DandelionRouter;
     use crate::networking::privacy_config_integration::PrivacySettingsRegistry;
@@ -3562,5 +3564,36 @@ mod tests {
             assert!(router.set_stem_probability(p).is_err());
             assert!(router.set_fluff_probability(p).is_err());
         }
+    }
+
+    fn distinct_transactions(n: u32) -> Vec<Transaction> {
+        (0..n)
+            .map(|i| {
+                let mut tx = Transaction::default();
+                tx.lock_time = i;
+                tx
+            })
+            .collect()
+    }
+
+    fn run_seeded(seed: u64, txs: &[Transaction]) -> Vec<PropagationState> {
+        let router = DandelionRouter::with_seed(seed);
+        txs.iter()
+            .map(|tx| router.add_transaction(tx.clone(), None))
+            .collect()
+    }
+
+    #[test]
+    fn with_seed_is_deterministic() {
+        let seed = 0xDEAD_BEEF_CAFE_F00D;
+        let txs = distinct_transactions(16);
+
+        let states_a = run_seeded(seed, &txs);
+        let states_b = run_seeded(seed, &txs);
+
+        assert_eq!(states_a, states_b);
+
+        let states_c = run_seeded(seed.wrapping_add(1), &txs);
+        assert_ne!(states_a, states_c);
     }
 }

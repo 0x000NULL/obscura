@@ -245,7 +245,7 @@
   - [ ] Setter methods + validation (0.0..=1.0)
   - [ ] **Verify:** `cargo test --lib dandelion::tests::probability_validation`
 
-- [ ] Add deterministic test-mode for stem/fluff selection
+- [x] Add deterministic test-mode for stem/fluff selection
   - [ ] `DandelionRouter::with_seed(seed: u64)` constructor; uses `StdRng::from_seed`
   - [ ] **Verify:** `cargo test --lib dandelion::tests::with_seed_is_deterministic`
 
