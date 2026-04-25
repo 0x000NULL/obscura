@@ -533,6 +533,21 @@ impl Mempool {
     }
 
     fn validate_privacy_features(&mut self, tx: &Transaction) -> bool {
+        // Coinbase transactions carry no privacy payload; do not gate them.
+        if tx.inputs.is_empty() {
+            return true;
+        }
+
+        // Cross-flag invariant gate: catches inconsistent flag/field combinations
+        // (e.g. 0x04 without 0x08) that the per-flag checks below cannot detect.
+        match tx.verify_privacy_features() {
+            Ok(true) => {}
+            Ok(false) | Err(_) => {
+                println!("Validation failed: tx.verify_privacy_features() rejected transaction");
+                return false;
+            }
+        }
+
         // Check for obfuscated ID
         if (tx.privacy_flags & 0x01) != 0 && tx.obfuscated_id.is_none() {
             return false;
@@ -606,6 +621,20 @@ impl Mempool {
                     self.zk_proof_cache.insert(tx_hash, false);
                     return false;
                 }
+            }
+
+            // Stacked fail-closed gates from Transaction::verify_*.
+            if !matches!(tx.verify_range_proofs(), Ok(true)) {
+                println!("Validation failed: tx.verify_range_proofs() rejected transaction");
+                self.zk_proof_cache.insert(tx_hash, false);
+                return false;
+            }
+            if !matches!(tx.verify_confidential_balance(), Ok(true)) {
+                println!(
+                    "Validation failed: tx.verify_confidential_balance() rejected transaction"
+                );
+                self.zk_proof_cache.insert(tx_hash, false);
+                return false;
             }
 
             // Cache the verification result
@@ -1745,6 +1774,49 @@ mod tests {
         tx.obfuscated_id = Some([0; 32]);
         tx.ephemeral_pubkey = Some([0; 32]);
         assert!(mempool.validate_privacy_features(&tx));
+    }
+
+    #[test]
+    fn test_validate_privacy_features_rejects_obfuscation_without_id() {
+        let mut mempool = Mempool::new();
+        let mut tx = create_test_transaction(vec![(vec![1; 32], 0)], vec![50000]);
+        tx.privacy_flags = 0x01;
+        tx.obfuscated_id = None;
+        assert!(!mempool.validate_privacy_features(&tx));
+    }
+
+    #[test]
+    fn test_validate_privacy_features_rejects_confidential_without_commitments() {
+        let mut mempool = Mempool::new();
+        let mut tx = create_test_transaction(vec![(vec![1; 32], 0)], vec![50000]);
+        tx.privacy_flags = 0x04;
+        tx.amount_commitments = None;
+        tx.range_proofs = None;
+        assert!(!mempool.validate_privacy_features(&tx));
+    }
+
+    #[test]
+    fn test_validate_privacy_features_rejects_confidential_flag_without_range_proof_flag() {
+        // Cross-flag invariant: 0x04 set but 0x08 missing must be rejected by
+        // tx.verify_privacy_features(), even when commitments and range proofs
+        // are both populated with byte payloads.
+        let mut mempool = Mempool::new();
+        let mut tx = create_test_transaction(vec![(vec![1; 32], 0)], vec![50000]);
+        tx.privacy_flags = 0x04;
+        tx.amount_commitments = Some(vec![vec![0u8; 32]]);
+        tx.range_proofs = Some(vec![vec![0u8; 32]]);
+        assert!(!mempool.validate_privacy_features(&tx));
+    }
+
+    #[test]
+    fn test_validate_privacy_features_rejects_length_mismatched_commitments() {
+        // 0x04 | 0x08 with mismatched commitment / range_proof vector lengths.
+        let mut mempool = Mempool::new();
+        let mut tx = create_test_transaction(vec![(vec![1; 32], 0)], vec![50000]);
+        tx.privacy_flags = 0x04 | 0x08;
+        tx.amount_commitments = Some(vec![vec![0u8; 32], vec![0u8; 32]]);
+        tx.range_proofs = Some(vec![vec![0u8; 32]]);
+        assert!(!mempool.validate_privacy_features(&tx));
     }
 
     #[test]
