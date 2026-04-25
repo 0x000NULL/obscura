@@ -96,8 +96,10 @@ mod main_tests {
     // Test network thread spawning
     #[test]
     fn test_start_network_services() {
+        std::env::set_var("OBSCURA_P2P_LISTEN_ADDR", "127.0.0.1:0");
         let mempool = Arc::new(Mutex::new(Mempool::new()));
-        let _handle = start_network_services(Arc::clone(&mempool));
+        let node = Arc::new(Mutex::new(init_networking_for_tests()));
+        let _handles = start_network_services(Arc::clone(&mempool), Arc::clone(&node));
 
         // This is not a great test since the thread runs indefinitely
         // In a real test, you would mock the function or make it configurable for testing

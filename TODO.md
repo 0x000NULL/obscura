@@ -52,7 +52,7 @@ into blocks as long as the consensus proof is valid.
 `src/main.rs` initializes components then exits. `start_network_services` spawns an empty thread.
 There is no P2P loop, no mining loop, no block assembly path.
 
-- [ ] Implement the P2P server loop in `src/main.rs`
+- [x] Implement the P2P server loop in `src/main.rs`
 - [ ] Implement a mining loop that assembles blocks from mempool and broadcasts them
 - [ ] End-to-end wire: create tx → sign → mempool → broadcast → peer validates → include in block
 - [ ] Replace placeholder `is_connected` always-false in `src/networking/node.rs`

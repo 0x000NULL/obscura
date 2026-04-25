@@ -140,8 +140,11 @@ pub fn process_mempool(_mempool: &std::sync::Arc<std::sync::Mutex<crate::blockch
 }
 
 #[cfg(test)]
-pub fn start_network_services(_mempool: std::sync::Arc<std::sync::Mutex<crate::blockchain::mempool::Mempool>>) -> std::thread::JoinHandle<()> {
-    std::thread::spawn(|| {})
+pub fn start_network_services(
+    _mempool: std::sync::Arc<std::sync::Mutex<crate::blockchain::mempool::Mempool>>,
+    _node: std::sync::Arc<std::sync::Mutex<crate::networking::Node>>,
+) -> Vec<std::thread::JoinHandle<()>> {
+    vec![std::thread::spawn(|| {})]
 }
 
 pub use utils::profiler::{

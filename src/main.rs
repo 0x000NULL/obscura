@@ -21,9 +21,60 @@ use crate::networking::Node;
 use crate::utils::{current_time, format_time_diff, is_timestamp_valid, time_since};
 use crate::wallet::integration::WalletIntegration;
 use log::{debug, error, info, warn};
+use std::env;
+use std::net::{SocketAddr, TcpListener};
+use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::Duration;
+
+const DEFAULT_P2P_LISTEN_ADDR: &str = "0.0.0.0:8333";
+
+fn resolve_listen_addr() -> SocketAddr {
+    let default_addr = SocketAddr::from_str(DEFAULT_P2P_LISTEN_ADDR)
+        .expect("DEFAULT_P2P_LISTEN_ADDR must be a valid SocketAddr");
+    match env::var("OBSCURA_P2P_LISTEN_ADDR") {
+        Ok(raw) => {
+            let trimmed = raw.trim();
+            match SocketAddr::from_str(trimmed) {
+                Ok(addr) => {
+                    info!("P2P listen address resolved to {} (from OBSCURA_P2P_LISTEN_ADDR)", addr);
+                    addr
+                }
+                Err(e) => {
+                    error!(
+                        "Failed to parse OBSCURA_P2P_LISTEN_ADDR={:?}: {}; falling back to {}",
+                        trimmed, e, default_addr
+                    );
+                    default_addr
+                }
+            }
+        }
+        Err(_) => {
+            info!("P2P listen address resolved to {} (default)", default_addr);
+            default_addr
+        }
+    }
+}
+
+fn resolve_bootstrap_peers() -> Vec<SocketAddr> {
+    let raw = match env::var("OBSCURA_BOOTSTRAP_PEERS") {
+        Ok(v) => v,
+        Err(_) => return Vec::new(),
+    };
+    let mut peers = Vec::new();
+    for entry in raw.split(',') {
+        let trimmed = entry.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        match SocketAddr::from_str(trimmed) {
+            Ok(addr) => peers.push(addr),
+            Err(e) => warn!("Skipping invalid bootstrap peer entry {:?}: {}", trimmed, e),
+        }
+    }
+    peers
+}
 
 // Initialize cryptographic components
 fn init_crypto() -> Option<JubjubKeypair> {
@@ -95,29 +146,85 @@ fn init_networking_for_tests() -> Node {
 // Start network services
 fn start_network_services(
     mempool: Arc<Mutex<blockchain::mempool::Mempool>>,
-) -> thread::JoinHandle<()> {
+    node: Arc<Mutex<Node>>,
+) -> Vec<thread::JoinHandle<()>> {
     info!("Starting network services...");
-    // Would normally initialize P2P server and client here
 
-    // Simulate network activity in a background thread
-    let handle = thread::spawn(move || {
+    let mut handles: Vec<thread::JoinHandle<()>> = Vec::new();
+
+    let listen_addr = resolve_listen_addr();
+    match TcpListener::bind(listen_addr) {
+        Ok(listener) => {
+            if let Err(e) = listener.set_nonblocking(false) {
+                warn!("Failed to set listener to blocking mode: {}", e);
+            }
+            info!("P2P listener bound to {}", listen_addr);
+
+            let accept_node = node.clone();
+            let accept_handle = thread::spawn(move || {
+                loop {
+                    match listener.accept() {
+                        Ok((stream, peer_addr)) => {
+                            info!("accepted inbound peer {}", peer_addr);
+                            let worker_node = accept_node.clone();
+                            thread::spawn(move || {
+                                let result = {
+                                    let node_lock = worker_node.lock().unwrap();
+                                    node_lock.handle_incoming_connection(stream)
+                                };
+                                if let Err(e) = result {
+                                    warn!("handle_incoming_connection failed for {}: {:?}", peer_addr, e);
+                                }
+                            });
+                        }
+                        Err(e) => {
+                            warn!("P2P accept error: {}", e);
+                            thread::sleep(Duration::from_secs(1));
+                        }
+                    }
+                }
+            });
+            handles.push(accept_handle);
+        }
+        Err(e) => {
+            error!(
+                "Failed to bind P2P listener to {}: {}; inbound P2P disabled",
+                listen_addr, e
+            );
+        }
+    }
+
+    for peer in resolve_bootstrap_peers() {
+        info!("connecting to bootstrap peer {}", peer);
+        let bootstrap_node = node.clone();
+        thread::spawn(move || {
+            let result = {
+                let node_lock = bootstrap_node.lock().unwrap();
+                node_lock.connect_to_peer(peer)
+            };
+            match result {
+                Ok(()) => info!("bootstrap peer {} connection attempt completed", peer),
+                Err(e) => warn!("bootstrap peer {} connection failed: {:?}", peer, e),
+            }
+        });
+    }
+
+    let mempool_handle = thread::spawn(move || {
         loop {
             thread::sleep(Duration::from_secs(5));
-            // This is where we would process network messages
 
-            // Log timing information using our utility functions
             let start_time = current_time();
             process_mempool(&mempool);
             let elapsed = time_since(start_time);
 
-            // Only log if processing took longer than 1 second
             if elapsed > 1 {
                 info!("Mempool processing took {} seconds", elapsed);
             }
         }
     });
+    handles.push(mempool_handle);
 
-    handle
+    handles
 }
 
 // Process transactions in the mempool
@@ -286,16 +393,16 @@ fn main() {
     let wallet_integration_arc = Arc::new(Mutex::new(wallet_integration));
     
     // Start network services
-    let network_handle = start_network_services(mempool.clone());
-    
+    let network_handles = start_network_services(mempool.clone(), node_arc.clone());
+
     // Start wallet services
     let wallet_handle = start_wallet_services(wallet_integration_arc.clone());
-    
+
     // Run the main application loop
     run_main_loop(mempool, utxo_set, node_arc, wallet_integration_arc);
-    
+
     // Wait for services to complete (they won't in practice)
-    let _ = network_handle.join();
+    for h in network_handles { let _ = h.join(); }
     let _ = wallet_handle.join();
 }
 

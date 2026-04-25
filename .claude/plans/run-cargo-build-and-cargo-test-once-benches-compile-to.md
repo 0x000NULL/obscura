@@ -1,59 +1,51 @@
 # Plan: run-cargo-build-and-cargo-test-once-benches-compile-to
 
 ## Goal
-Now that the bench crate compiles (commit `6a26d3e`), execute `cargo build` and `cargo test` across all targets, capture every distinct error / link failure / test failure, and record them as actionable entries in `TODO.md` Section 0 so subsequent todo items can triage them individually.
+Run `cargo build --all-targets` and `cargo test --no-run --all-targets` from the now-green-on-`cargo check` workspace, then record every surface issue (compile or link) verbatim into the TODO punchlist and `needs-review.md` — without patching the toolchain.
 
 ## Steps
-1. Run `cargo check --all-targets 2>&1 | tee /tmp/check-all.log` to confirm benches actually compile now that `critical_paths.rs` was fixed, and capture any new surface-level errors. (The previous `[1/341]` verify ran this and failed only because of the `critical_paths.rs` error, which `[2/341]` has since fixed.)
-2. Run `cargo build --all-targets 2>&1 | tee /tmp/build-all.log`. This will go beyond `cargo check` by running build scripts and linkers — expect the `stdc++.lib` link failure that the `triage` item already surfaced (see `run.log:27`).
-3. Run `cargo test --no-run 2>&1 | tee /tmp/test-norun.log` to separate "test binary linking" failures from "test execution" failures.
-4. Run `cargo test 2>&1 | tee /tmp/test-run.log` (may be blocked entirely by step 3's link failure; if so, skip to step 5).
-5. Extract distinct issues from the logs:
-   - `grep -E "^error(\[E[0-9]+\])?" /tmp/build-all.log /tmp/test-norun.log /tmp/test-run.log`
-   - `grep -E "FAILED|panicked" /tmp/test-run.log` (if step 4 produced test output)
-   - De-duplicate by error code + file:line
-6. Append a new subsection **`0.1 Post-build / Post-test punchlist`** to `TODO.md` after the existing Section 0. Each distinct issue gets one bullet: short description, error code/kind, file:line, and one-sentence remediation hint. Group by: compile errors, link errors, test-run failures, flaky/environmental.
-7. Re-record the `stdc++.lib` link failure as its own top-level item under 0.1 so it is addressable by a dedicated future todo.
-8. Check off `- [ ] Run \`cargo build\` and \`cargo test\` once benches compile to surface any additional issues` in Section 0 of `TODO.md` (the current item).
+1. Capture a fresh `cargo check --all-targets --locked` to confirm Step-1/Step-2 (item 1 + item 2 in this run) actually left the benches green at the type-check level. Save stdout+stderr to a temp log.
+2. Run `cargo build --all-targets --locked` and tee output to a temp log. This is the first command in this todo; it will progress past type-check and hit the linker for the `obscura-core` binary and any bench/example targets that do link. Record any new compile errors (expected: none) and the first link error encountered (expected: `LNK1181: cannot open input file 'stdc++.lib'` from `run.log:27`, since `build.rs:10` only links `stdc++` on non-Windows but `lib/randomx.lib` evidently carries an embedded `/defaultlib:stdc++` directive).
+3. Run `cargo test --no-run --all-targets --locked` and tee output to a temp log. This is the second command — `--no-run` so we link test binaries without executing them, which is the cheapest way to surface link-time issues without spending hours on a passing test run we can't reach anyway. Record the same `LNK1181` failure from `cargo test --lib --no-run` already visible in `run.log` (the previous item 2 transcript hit it).
+4. Do **not** edit `build.rs`, `.cargo/config.toml`, or any source: the resolution explicitly says option (a) — document, do not patch. The fix for the toolchain belongs to its own scoped item.
+5. Update `TODO.md` Section 0 ("Build — Restore Benches"):
+   - Tick `- [ ] Run cargo build and cargo test once benches compile to surface any additional issues` → `- [x]`, and append a one-line note pointing readers to the new punchlist entry + `needs-review.md` for verbatim output.
+   - Add a new top-level follow-up bullet: `- [ ] Fix stdc++.lib link failure on Windows MSVC toolchain` with a sub-bullet quoting the exact `LNK1181: cannot open input file 'stdc++.lib'` error, noting that `build.rs:10` only links `stdc++` on non-Windows so the dependency is being injected by `lib/randomx.lib` (likely an embedded `/defaultlib:` directive), and that this blocks `cargo build`, `cargo test`, and the new CI `cargo check` gate from being upgraded to `cargo build` / `cargo test` until resolved.
+6. Update `needs-review.md`: append a `### Detail` block to the existing `## run-cargo-build-and-cargo-test-once-benches-compile-to` section with the exact command lines invoked, the `cargo check --all-targets` result (pass/fail), and the verbatim `LNK1181` link line + which targets it affected (lib test binary at minimum, per `run.log`). Do not duplicate the existing `### Blocker` / `- Resolution:` lines.
+7. Do not commit, do not push, do not run `cargo run` or any binary; the runner handles staging and `cargo build` / `cargo test --no-run` is the most we should attempt given the stdc++ block.
 
 ## Files
-- `TODO.md` — add `### 0.1 Post-build / Post-test punchlist` subsection under Section 0 with the distilled findings; tick the corresponding Section 0 follow-up checkbox.
+- `TODO.md` — tick the "Run cargo build and cargo test" item under Section 0 Follow-ups, and add a new follow-up entry for the stdc++.lib MSVC link failure with the verbatim error and a pointer to `build.rs:10`.
+- `needs-review.md` — under the existing `## run-cargo-build-and-cargo-test-once-benches-compile-to` heading, add a `### Detail` block containing the commands run and the captured `LNK1181` error text.
 
 ## Risks
-- **Windows MSVC `stdc++.lib` link failure is near-certain to re-occur.** `run.log:27` shows `LNK1181: cannot open input file 'stdc++.lib'` during the triage item's `cargo test --lib --no-run`. This almost certainly originates from the RandomX or blst build script on the MSVC toolchain and will block `cargo test` end-to-end. Plan must treat this as expected, document it, and not attempt a toolchain fix (out of scope).
-- **Warning noise masking errors.** Lib-test builds emit ~401 warnings (`run.log:28`). Always grep `^error` rather than trust exit code alone — but `cargo` exit code is still authoritative for pass/fail.
-- **Long test run.** A full `cargo test` on this crate may take many minutes and may contain network / timing / RandomX tests that are flaky. Record flakiness as "flaky: rerun" rather than as a hard fix.
-- **Build script side effects.** `cargo build --all-targets` executes build scripts (RandomX, blst) that may download/compile C++ code. Linker errors are expected here, not code errors.
-- **Scope creep.** This item is *surface issues*, not *fix issues*. Resist the urge to fix found issues inline — write them into `TODO.md` so the runner can plan them as discrete items.
+- The verify gate from item 3 (`add-ci-gate`) intentionally lands red because of this same link issue. Verify commands here must therefore avoid `cargo build` / `cargo test` (they will fail on Windows) and instead rely on `cargo check --all-targets`, which is what the new CI gate uses. Anyone running verify on Linux/macOS will still need the same commands to be exit-0; `cargo check` is the safe lowest common denominator.
+- If `cargo check --all-targets` is not actually clean post-item-1/-2 (e.g. a bench file we did not touch still has an error not captured in the previous transcript), our plan misreads the situation. Mitigation: Step 1 explicitly re-runs `cargo check --all-targets` and we record the result; if it's red we add that as a separate punchlist entry rather than burying it.
+- Adding a new bullet to Section 0 risks colliding with Section 0's "Remaining errors (~16, all in `benches/`)" framing (now stale: benches compile). I'm not rewriting Section 0's prose — only appending to its follow-up checklist — to keep blast radius minimal.
+- The `LNK1181` quote is already in `run.log` and `needs-review.md` Blocker section. We're cross-linking, not duplicating verbatim, to avoid drift if the message changes after a toolchain bump.
 
 ## Verify
 ```
-test -f TODO.md && grep -q "0.1 Post-build" TODO.md
-cargo check --all-targets 2>&1 | tee /tmp/verify-check.log; grep -E "^error" /tmp/verify-check.log; test ! -s <(grep -E "^error" /tmp/verify-check.log)
+cargo check --all-targets --locked
+grep -q "Fix stdc++.lib link failure on Windows MSVC" TODO.md
+grep -q "LNK1181" TODO.md
+grep -q "^- \[x\] Run \`cargo build\` and \`cargo test\` once benches compile" TODO.md
+grep -q "LNK1181" needs-review.md
+grep -q "### Detail" needs-review.md
+test ! -f /tmp/should-not-exist-marker
 ```
 
 ## Assumptions
-- The `critical_paths.rs` fix in commit `6a26d3e` + the earlier `crypto_benchmarks.rs`/`crypto_bench.rs` fixes (which the runner already landed per `run.log:6`) are sufficient to make `cargo check --all-targets` green. If not, this item's job is to document the remaining bench errors as new punchlist entries, not to fix them.
-- "Surface any additional issues" means "catalog them in `TODO.md`" — not "fix them." Fixing is for subsequent runner items so each discrete bug gets its own plan+exec cycle with its own reviewer context.
-- The `stdc++.lib` link error is a pre-existing Windows MSVC toolchain / build-script environment issue, not a code defect introduced by any recent commit. Documenting it in `TODO.md` is the correct response here; fixing it needs a separate item (toolchain change or `build.rs` patch).
-- Logs will be written to `/tmp/` (Git Bash on Windows maps `/tmp/` to a usable temp dir). If the runner's bash is different, swap to `./target/tmp/` — both the verify and the logging steps are non-load-bearing paths.
-- I'm using `tee` so the runner can also see streaming output. `grep -E "^error"` is the reliable error filter across cargo versions; `error[E0599]:` etc. all match.
-- `TODO.md` Section 0 currently has three follow-up checkboxes (lines 30–32); the third is this item. I tick it only after 0.1 is populated.
-- Verify's final command uses process substitution (`<(...)`) which is bash-specific but supported by Git Bash. If the runner rejects it, a simpler alternative: `! grep -qE "^error" /tmp/verify-check.log`.
+- "Surface any additional issues" is satisfied by recording the link failure as the surface-level issue and stopping — per the explicit resolution. We do not attempt `cargo test` execution, only `cargo test --no-run` for link-stage discovery.
+- The canonical "punchlist" referenced in the resolution is `TODO.md` Section 0's "Follow-ups" list; the running `needs-review.md` is the per-item detail tracker. Both get updated; neither is replaced.
+- `cargo check --all-targets --locked` is the right verify gate because the new CI workflow (committed in `cb4f38a`) uses exactly that command; matching it keeps verify and CI consistent.
+- `lib/randomx.lib` is the source of the implicit `stdc++.lib` requirement on MSVC — the `build.rs` Windows branch deliberately omits `stdc++`, but the static library evidently embeds a linker directive. I am stating this as the most likely cause in the new TODO entry, marked as a hypothesis; I am not running `dumpbin /directives` to confirm because that's part of the dedicated toolchain-fix item, not this one.
+- We do not need to re-run `cargo build` inside verify — the verify section must exit 0, and `cargo build` will not on Windows. `cargo check` proves the compile-surface state; the link failure itself is captured as documentation, not as a verify gate.
+- No commit is created in this step; the runner handles commit/verify orchestration.
+- The existing `### Blocker:` / `- Resolution:` lines under `## run-cargo-build-and-cargo-test-once-benches-compile-to` in `needs-review.md` remain in place; we append a `### Detail` sibling rather than rewriting them, matching the format already used by `## benches-crypto-benchmarks-rs-...` and `## triage-the-326-lib-warnings-...`.
 
 ## Blockers
-
-### Blocker: stdc++.lib link failure on Windows MSVC
-- severity: cross-item
-- affects: cargo-test, bench-run, ci-gate, windows-build, future-test-items
-- question: The `LNK1181: cannot open input file 'stdc++.lib'` error at `run.log:27` will block `cargo test` from executing. Should this item (a) just document the issue and move on, (b) attempt a `build.rs` / `.cargo/config.toml` patch to remove the stdc++ dependency on MSVC, or (c) stop and wait for a dedicated toolchain-fix item?
-- default_assumption: Option (a) — document the linker error verbatim in the new `TODO.md` 0.1 punchlist as a top-level item titled `Fix stdc++.lib link failure on Windows MSVC toolchain`, skip the full `cargo test` execution (accept that only `cargo check --all-targets` and `cargo build --all-targets` up to the link stage can succeed), and complete the current item. Rationale: this item is about surfacing issues, not fixing infrastructure. Treating the link failure as a found issue fulfills the goal; fixing it needs its own scoped item to avoid cross-contaminating other bug discoveries.
-
-### Blocker: scope of "any additional issues"
-- severity: local
-- affects: this-item-only
-- question: Does "surface any additional issues" include runtime test failures (actually running `cargo test` to completion), or only compile-surface issues?
-- default_assumption: Include both. Attempt `cargo test` once the link failure is documented; if linking blocks it, record that as the surface-level issue and don't attempt to patch around it. If it runs, triage only hard failures (panics / assertion failures), not test `ignored` / `filtered` counts.
+Blockers: none
 
 ## Summary
-Execute the full `cargo check / build / test` sweep now that benches compile, distill the output into a new `TODO.md 0.1 Post-build / Post-test punchlist` so each remaining error becomes its own subsequent todo item, and check off the Section 0 follow-up.
+Document the `LNK1181: stdc++.lib` Windows MSVC link failure in `TODO.md` and `needs-review.md` as the surface-level issue blocking `cargo build` / `cargo test`, tick the corresponding TODO checkbox, and leave `build.rs` / `.cargo/config.toml` untouched per the explicit resolution.

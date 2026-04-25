@@ -1,28 +1,32 @@
 # Plan: wire-transaction-verify-range-proofs-into-hybrid-validation
 
 ## Goal
-Replace the placeholder transaction validation inside hybrid block validation so each non-coinbase transaction's `verify_range_proofs()` result gates block acceptance.
+Replace the placeholder transaction-validation closures in the hybrid validator's parallel paths so each non-coinbase transaction's `verify_range_proofs()` result gates block acceptance.
 
 ## Steps
-1. Open `src/consensus/hybrid_optimizations.rs` and locate the placeholder closure inside `HybridStateManager::validate_block_parallel` at lines ~230-241 (`chunk.iter().all(|_tx| { true // Placeholder })`).
+1. Open `src/consensus/hybrid_optimizations.rs` and locate the placeholder closure inside `HybridStateManager::validate_block_parallel` at lines ~230–241 (`chunk.iter().all(|_tx| { true // Placeholder })`).
 2. Replace the closure body so each `tx` runs:
-   - skip if `tx.inputs.is_empty()` (coinbase has no commitments/range proofs),
-   - else call `tx.verify_range_proofs()`,
-   - treat `Ok(true)` as valid; `Ok(false)` or `Err(_)` as invalid (log the error string for the `Err` case via `eprintln!` or `log::warn!` to match the file's existing reporting style — no new logging facade).
-3. Mirror the same wiring in `ValidationManager::validate_transaction` at line 407 in the same file: after the existing empty-inputs/zero-output checks, return false if `tx.verify_range_proofs()` returns `Err(_)` or `Ok(false)`. Keep the coinbase short-circuit consistent with step 2 (skip the range-proof check when `inputs.is_empty()`). This keeps the two parallel-validator paths in agreement so the standalone `process_transactions_for_mining` path is not silently weaker than block validation.
-4. No new imports needed: `crate::blockchain::Transaction` is already in scope; `verify_range_proofs` is an inherent method on it (the reachable definition lives in `src/blockchain/mod.rs:645`).
-5. Add a unit test in the existing `#[cfg(test)] mod tests` of `src/consensus/hybrid.rs` (or a new `#[cfg(test)] mod tests` in `hybrid_optimizations.rs` if simpler): build a `Transaction` with `privacy_flags |= 0x04` but `range_proofs = None` so `verify_range_proofs` returns `Err`, and assert `validate_block_parallel` returns `Ok(false)`. Also assert a vanilla transaction (no privacy flags set) still validates.
-6. Run `cargo check --lib` and the existing consensus tests.
+   - skip the range-proof gate if `tx.inputs.is_empty()` (coinbase carries no commitments / proofs) — treat as valid for this check,
+   - otherwise call `tx.verify_range_proofs()`,
+   - treat `Ok(true)` as valid; `Ok(false)` or `Err(_)` as invalid (on `Err(_)`, `eprintln!` the static error string to match the file's existing `println!`-style logging — no new logging facade).
+3. Mirror the same wiring in `ValidationManager::validate_transaction` at line ~407 in the same file: after the existing empty-inputs / zero-output checks (which already reject empty-input txs, so for that path range-proof verification only runs on real txs), call `tx.verify_range_proofs()` and return `false` on `Ok(false)` or `Err(_)`. This keeps the standalone `process_transactions_for_mining` path symmetric with block validation so the mining path does not silently pack txs that block validation would later reject.
+4. No new imports are required: `crate::blockchain::Transaction` is already in scope through `crate::blockchain::Block`'s tx field, and `verify_range_proofs` is an inherent method on `Transaction` (the reachable definition lives at `src/blockchain/mod.rs:645`).
+5. Add a unit test in `src/consensus/hybrid_optimizations.rs` (new `#[cfg(test)] mod tests` at the bottom) that:
+   - constructs a `Transaction` with `privacy_flags |= 0x04`, a non-empty `inputs` Vec, and `range_proofs = None` so `verify_range_proofs` returns `Err`,
+   - wraps it in a `Block` with empty `stake_proofs`,
+   - calls `HybridStateManager::validate_block_parallel(&block, &[])` and asserts `Ok(false)`,
+   - and a second case with a vanilla tx (no privacy flags, one input, one non-zero output) asserts `Ok(true)`.
+6. Run `cargo check --lib` and the consensus test modules.
 
 ## Files
-- `src/consensus/hybrid_optimizations.rs` -- replace the two transaction-validation placeholders (`HybridStateManager::validate_block_parallel` ~line 234, `ValidationManager::validate_transaction` ~line 407) with calls to `tx.verify_range_proofs()`, gated on non-coinbase.
-- `src/consensus/hybrid.rs` (or a new test module in `hybrid_optimizations.rs`) -- add a test exercising the new failure path.
+- `src/consensus/hybrid_optimizations.rs` — replace the two transaction-validation placeholders (`HybridStateManager::validate_block_parallel` ~line 234, `ValidationManager::validate_transaction` ~line 407) with calls to `tx.verify_range_proofs()`, gated on non-coinbase via `inputs.is_empty()`. Add a `#[cfg(test)] mod tests` exercising both a rejection case and a passing-vanilla case.
 
 ## Risks
-- The reachable `Transaction::verify_range_proofs()` (defined in `src/blockchain/mod.rs:645`) is a flag-only stub that always returns `Ok(true)` for well-formed inputs and never invokes the bulletproof verifier. The richer real verifier in `src/blockchain/transaction.rs:193` is orphaned because `src/blockchain/mod.rs` does not declare `pub mod transaction;` (only `transaction_ext` is wired in). Wiring the stub gives the structural plumbing this todo requests but no cryptographic guarantee — that gap is tracked by sibling TODOs ("Wire verify_privacy_features", and the broader privacy-verification work) and is intentionally out of scope here.
-- A malformed transaction with `privacy_flags & 0x04` set but no range proofs / commitments will now reject blocks that previously passed; mempool acceptance must already enforce the same invariant or testnets carrying such legacy txs would fail to validate. Mitigation: only convert `Err` to `false`; do not panic.
-- `validate_block_parallel` runs under `par_chunks` / `par_iter`; `verify_range_proofs` (reachable stub) does not allocate or take locks, so this is safe to call inside the rayon closure. The richer impl (if later wired in) constructs a `ConfidentialTransactions` per call — fine to leave for the follow-up todo, not introduced here.
-- Coinbase txs in this codebase are detected via `inputs.is_empty()` (the canonical `is_coinbase` helper in `transaction.rs` is in the orphaned file). Using the inline check avoids depending on the orphan.
+- The reachable `Transaction::verify_range_proofs()` (`src/blockchain/mod.rs:645`) is a flag-only stub: it returns `Ok(true)` whenever flag `0x04` is unset, and otherwise checks structural presence of `range_proofs` and `amount_commitments` and that their lengths match — it does not invoke the bulletproof verifier. Wiring this stub gives the structural plumbing this todo requests but no cryptographic guarantee. The richer verifier in the orphaned `src/blockchain/transaction.rs:193` is intentionally out of scope per the resolved blocker.
+- A malformed transaction with `privacy_flags & 0x04` set but no `range_proofs`/`amount_commitments` will now reject blocks that previously passed; mempool acceptance must enforce the same invariant or carrying such legacy txs would fail to validate. Mitigation: only convert `Err` and `Ok(false)` to "invalid"; never panic.
+- `validate_block_parallel` runs under `par_chunks` / `par_iter`; the reachable `verify_range_proofs` stub does not allocate or take locks, so it is safe inside the rayon closure.
+- Coinbase detection via `inputs.is_empty()` matches existing convention here (the canonical `is_coinbase` helper lives in the orphaned `transaction.rs`); using the inline check avoids depending on the orphan.
+- Test-only failure: per the sibling `regression-test-consensus-must-reject-a-block-whose-...` plan, that regression test depends on this wiring and will go red until this todo lands. After this lands, that test should turn green.
 
 ## Verify
 ```
@@ -33,19 +37,15 @@ cargo test --lib consensus::hybrid_optimizations -- --nocapture
 
 ## Assumptions
 - "Wire into hybrid validation" means the call site reachable from `HybridValidator::validate_block_hybrid` (i.e. `HybridStateManager::validate_block_parallel`'s placeholder), not the higher-level `Block::validate` path in `src/blockchain/mod.rs`.
-- The reachable `verify_range_proofs` method is the one in `src/blockchain/mod.rs:645`; the orphan in `src/blockchain/transaction.rs` is out of scope for this todo (replacing the stub with the real verifier requires un-orphaning `transaction.rs` and resolving the duplicate `verify_privacy_features` / `verify_confidential_balance` / `verify_range_proofs` definitions, which is a separate, larger change).
-- Coinbase detection by `inputs.is_empty()` matches existing convention; range-proof verification is correctly skipped for coinbase since coinbases have no `amount_commitments`.
+- The reachable `verify_range_proofs` is the one at `src/blockchain/mod.rs:645`. Per the resolved blocker, the orphan in `src/blockchain/transaction.rs` is out of scope; un-orphaning that file and de-duplicating the privacy-verification methods is a separate refactor.
+- Coinbase detection by `inputs.is_empty()` is correct because coinbase txs have no `amount_commitments` to range-prove, and the only path needing the skip is `HybridStateManager::validate_block_parallel`. `ValidationManager::validate_transaction` already rejects empty-input txs via a different rule, so the order (empty-input check first, then range-proof check) keeps coinbase behavior consistent there too.
 - Failure mode is "fail closed": both `Err` and `Ok(false)` collapse to "invalid block". No upgrade gate / soft-fork flag is needed — this is pre-network-launch consensus code per the repo state.
-- `ValidationManager::validate_transaction` should be kept symmetric even though it isn't on the live validation path today, to prevent the mining path from packing transactions that block validation will later reject.
-- Tests that don't currently set the `0x04` privacy flag will continue to pass since `verify_range_proofs` short-circuits to `Ok(true)` when the flag is unset.
+- `ValidationManager::validate_transaction` is kept symmetric with `HybridStateManager::validate_block_parallel` even though it isn't on the live block-validation path today, to prevent the mining path from packing txs that block validation will reject.
+- Existing tests that don't set `0x04` continue to pass because `verify_range_proofs` short-circuits to `Ok(true)` when the flag is unset.
+- The new unit test lives in `hybrid_optimizations.rs` (rather than `hybrid.rs`) because `validate_block_parallel` is a method on `HybridStateManager` defined there, and a test there avoids needing to also construct `RandomXContext` / PoW just to exercise the parallel-validation closure.
 
 ## Blockers
-
-### Blocker: orphaned transaction.rs vs reachable stub
-- severity: cross-item
-- affects: verify_range_proofs, verify_privacy_features, verify_confidential_balance, hybrid validation, mempool validation, coinbase detection
-- question: Is the intent of this todo (and the sibling "Wire verify_privacy_features" todo) to wire the *current reachable stub*, or to first un-orphan `src/blockchain/transaction.rs` so the richer cryptographic verifier becomes the implementation?
-- default_assumption: Wire the reachable stub now (this todo). Leave un-orphaning `transaction.rs` and removing the duplicate stubs in `mod.rs` to a separate, explicit refactor todo, since pulling that thread also requires resolving duplicate `verify_privacy_features` / `verify_confidential_balance` / `apply_privacy_features` definitions and is beyond the scope of "wire X into hybrid validation".
+Blockers: none
 
 ## Summary
-Replace the `// Placeholder` transaction-validation closure in the hybrid validator's parallel path with a real call to `Transaction::verify_range_proofs()`, so blocks containing transactions whose declared range proofs do not verify are rejected.
+Replace the `// Placeholder` transaction-validation closure in the hybrid validator's parallel path (and the symmetric `ValidationManager::validate_transaction`) with real calls to `Transaction::verify_range_proofs()`, so blocks containing transactions whose declared range proofs do not verify are rejected at consensus time.
