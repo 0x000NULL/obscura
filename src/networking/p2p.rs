@@ -373,7 +373,6 @@ pub enum PrivacyFeatureFlag {
     DandelionPlusPlus = 0x10,
     Tor = 0x20,
     I2P = 0x40,
-    Dandelion,
 }
 
 // Handshake message structure
@@ -1071,6 +1070,53 @@ mod tests {
             remote_features,
             FeatureFlag::I2PSupport
         ));
+    }
+
+    #[test]
+    fn feature_flag_unique() {
+        use std::collections::HashSet;
+
+        let feature_flags: Vec<(&'static str, u32)> = vec![
+            (stringify!(BasicTransactions), FeatureFlag::BasicTransactions as u32),
+            (stringify!(PrivacyFeatures), FeatureFlag::PrivacyFeatures as u32),
+            (stringify!(Dandelion), FeatureFlag::Dandelion as u32),
+            (stringify!(CompactBlocks), FeatureFlag::CompactBlocks as u32),
+            (stringify!(TorSupport), FeatureFlag::TorSupport as u32),
+            (stringify!(I2PSupport), FeatureFlag::I2PSupport as u32),
+        ];
+
+        let feature_names: HashSet<&'static str> =
+            feature_flags.iter().map(|(name, _)| *name).collect();
+        let feature_values: HashSet<u32> =
+            feature_flags.iter().map(|(_, value)| *value).collect();
+        assert_eq!(feature_names.len(), feature_flags.len());
+        assert_eq!(feature_values.len(), feature_flags.len());
+
+        let privacy_flags: Vec<(&'static str, u32)> = vec![
+            (
+                stringify!(TransactionObfuscation),
+                PrivacyFeatureFlag::TransactionObfuscation as u32,
+            ),
+            (stringify!(StealthAddressing), PrivacyFeatureFlag::StealthAddressing as u32),
+            (
+                stringify!(ConfidentialTransactions),
+                PrivacyFeatureFlag::ConfidentialTransactions as u32,
+            ),
+            (
+                stringify!(ZeroKnowledgeProofs),
+                PrivacyFeatureFlag::ZeroKnowledgeProofs as u32,
+            ),
+            (stringify!(DandelionPlusPlus), PrivacyFeatureFlag::DandelionPlusPlus as u32),
+            (stringify!(Tor), PrivacyFeatureFlag::Tor as u32),
+            (stringify!(I2P), PrivacyFeatureFlag::I2P as u32),
+        ];
+
+        let privacy_names: HashSet<&'static str> =
+            privacy_flags.iter().map(|(name, _)| *name).collect();
+        let privacy_values: HashSet<u32> =
+            privacy_flags.iter().map(|(_, value)| *value).collect();
+        assert_eq!(privacy_names.len(), privacy_flags.len());
+        assert_eq!(privacy_values.len(), privacy_flags.len());
     }
 }
 

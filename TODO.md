@@ -202,7 +202,7 @@
 
 ### 4.3 Feature-flag dedup
 
-- [ ] Remove duplicate entries from `FeatureFlag` and `PrivacyFeatureFlag` in `src/networking/p2p.rs`
+- [x] Remove duplicate entries from `FeatureFlag` and `PrivacyFeatureFlag` in `src/networking/p2p.rs`
   - [ ] Identify duplicates by variant name + value
   - [ ] Keep first occurrence; remove later ones
   - [ ] **Verify:** `cargo check --lib`; `cargo test --lib networking::p2p::tests::feature_flag_unique`

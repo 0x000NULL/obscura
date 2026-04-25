@@ -149,3 +149,9 @@
 ==> exec  group-the-80-dandelion-rs-constants-into-named-structs
       exec: 249.03s, failure_mode=success, transcript=.claude\todo-runner\transcripts\group-the-80-dandelion-rs-constants-into-named-structs-execute-20260425T232006619.txt
       notes: - Plan said "~17 / ~14 / ~61" with categorization rules; categorization split landed at exactly 17 / 14 / 61 = 92 constants, matching the file's actual count. / - Skipped the optional `pub use dandelion_config::{...}` re-export from `mod.rs` (plan called it "if convenient"); kept the module surface minimal since `dandelion.rs` already re-exports the bare const names that external callers actually use.
+    [26/91] group-the-80-dandelion-rs-constants-into-named-structs: plan $0.86 / execute $1.14 / verified / committed 005465a
+==> plan  remove-duplicate-entries-from-featureflag-and
+      plan: 145.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\remove-duplicate-entries-from-featureflag-and-plan-20260425T232234307.txt
+==> exec  remove-duplicate-entries-from-featureflag-and
+      exec: 58.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\remove-duplicate-entries-from-featureflag-and-execute-20260425T232332344.txt
+      notes: - None - followed the plan as written. The `use std::collections::HashSet` was placed locally inside the test function as the plan permitted, since the existing `mod tests` only imports `super::*`.
