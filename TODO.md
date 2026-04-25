@@ -31,7 +31,7 @@
   - [ ] Align `signature.verify(&keypair.public, message)` with the method now used in `src/crypto/jubjub.rs`
   - [ ] **Verify:** `cargo check --bench critical_paths`
 
-- [ ] Gate `cargo check --all-targets` in CI
+- [x] Gate `cargo check --all-targets` in CI
   - [ ] Add `cargo check --all-targets --locked` step to `.github/workflows/ci.yml`
   - [ ] **Verify:** `grep -q 'cargo check --all-targets' .github/workflows/ci.yml`
 
