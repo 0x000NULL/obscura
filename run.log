@@ -226,3 +226,14 @@
 ==> exec  add-burstandwait-connection-pattern-variant
       exec: 98.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\add-burstandwait-connection-pattern-variant-execute-20260426T001131696.txt
       notes: - Defended `send_steps_for_pattern` against `wait_min >= wait_max` (would panic in `gen_range`) by collapsing to `wait_min` in that case. The test uses distinct min/max so the random branch is exercised; this is just a guardrail for callers that pass equal/inverted bounds and is conservative - it doesn't change behavior for the tested path. / - The plan said "on `FingerprintingProtection` (or as a free function in the same module)". I chose the **free function** form since the cadence has no dependence on `&self` state - keeps the helper trivially testable without constructing the whole protection struct.
+    [39/91] add-burstandwait-connection-pattern-variant: plan $0.47 / execute $0.62 / verified / committed 75d4606
+==> plan  group-24-config-parameters-into-4-sub-structs
+      plan: 142.01s, failure_mode=success, transcript=.claude\todo-runner\transcripts\group-24-config-parameters-into-4-sub-structs-plan-20260426T001403186.txt
+==> exec  group-24-config-parameters-into-4-sub-structs
+      exec: 174.02s, failure_mode=infra-error, transcript=.claude\todo-runner\transcripts\group-24-config-parameters-into-4-sub-structs-execute-20260426T001657237.txt
+    [40/91] group-24-config-parameters-into-4-sub-structs: phase-2 infra-error
+==> plan  replace-per-task-thread-rng-with-a-shared-rngcore-field
+      plan: 84.44s, failure_mode=success, transcript=.claude\todo-runner\transcripts\replace-per-task-thread-rng-with-a-shared-rngcore-field-plan-20260426T001822141.txt
+==> exec  replace-per-task-thread-rng-with-a-shared-rngcore-field
+      exec: 97.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\replace-per-task-thread-rng-with-a-shared-rngcore-field-execute-20260426T001959186.txt
+      notes: - Placed the new `rng: Mutex<StdRng>` field at the very end of the struct (after `initialized`) rather than "around line 124, near the other interior-mutability fields." The plan said "around line 124", but inserting mid-struct would split a logically grouped block of `enabled`/`initialized` `RwLock`s; appending preserves grouping. The field initializer in `new` was likewise appended at the end of the struct literal to match field-declaration order, satisfying Rust style without churn. Functionally identical. / - For `send_steps_for_pattern`, used `<R: Rng + ?Sized>` exactly as specified in the plan; the `?Sized` is harmless here (the test passes `&mut StdRng`, which is `Sized`) and matches what the plan wrote verbatim.

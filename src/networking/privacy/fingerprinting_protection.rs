@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use log::debug;
-use rand::{thread_rng, Rng};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 use socket2::Socket;
 use crate::networking::privacy::PrivacyLevel;
 use crate::networking::privacy_config_integration::PrivacySettingsRegistry;
@@ -70,8 +70,7 @@ pub enum SendStep {
 /// Currently only `BurstAndWait` has a meaningful cadence (`burst_size` `Send`s followed by one
 /// `Wait` whose duration is sampled uniformly from `[wait_min, wait_max]`, repeated `cycles`
 /// times). Other variants emit a single `Send` per cycle as a placeholder.
-pub fn send_steps_for_pattern(pattern: ConnectionPattern, cycles: usize) -> Vec<SendStep> {
-    let mut rng = thread_rng();
+pub fn send_steps_for_pattern<R: Rng + ?Sized>(pattern: ConnectionPattern, cycles: usize, rng: &mut R) -> Vec<SendStep> {
     let mut steps = Vec::new();
     for _ in 0..cycles {
         match pattern {
@@ -123,9 +122,11 @@ pub struct FingerprintingProtection {
     
     /// Whether fingerprinting protection is enabled
     enabled: RwLock<bool>,
-    
+
     /// Whether the protection is initialized
     initialized: RwLock<bool>,
+
+    rng: Mutex<StdRng>,
 }
 
 impl FingerprintingProtection {
@@ -159,6 +160,7 @@ impl FingerprintingProtection {
             last_pattern_rotation: Mutex::new(Instant::now()),
             enabled: RwLock::new(false),
             initialized: RwLock::new(false),
+            rng: Mutex::new(StdRng::from_entropy()),
         }
     }
     
@@ -236,7 +238,7 @@ impl FingerprintingProtection {
         let mut current_index = self.current_user_agent.lock().unwrap();
         
         // Randomly select a new user agent
-        let mut rng = thread_rng();
+        let mut rng = self.rng.lock().unwrap();
         *current_index = rng.gen_range(0..user_agents.len());
         
         // Update the last rotation time
@@ -251,7 +253,7 @@ impl FingerprintingProtection {
             return;
         }
         
-        let mut rng = thread_rng();
+        let mut rng = self.rng.lock().unwrap();
         let mut tcp_params = self.tcp_parameters.lock().unwrap();
         
         // Generate random parameters based on privacy level
@@ -297,7 +299,7 @@ impl FingerprintingProtection {
             return;
         }
         
-        let mut rng = thread_rng();
+        let mut rng = self.rng.lock().unwrap();
         let mut pattern = self.connection_pattern.lock().unwrap();
         
         // Based on privacy level, choose a new pattern
@@ -362,7 +364,7 @@ impl FingerprintingProtection {
         
         let pattern = *self.connection_pattern.lock().unwrap();
         let privacy_level = *self.privacy_level.read().unwrap();
-        let mut rng = thread_rng();
+        let mut rng = self.rng.lock().unwrap();
         
         // Base value depends on privacy level
         let base_connections = match privacy_level {
@@ -431,7 +433,7 @@ impl FingerprintingProtection {
         }
         
         let privacy_level = *self.privacy_level.read().unwrap();
-        let mut rng = thread_rng();
+        let mut rng = self.rng.lock().unwrap();
         
         // Amount of jitter depends on privacy level
         let max_jitter_ms = match privacy_level {
@@ -511,7 +513,7 @@ impl FingerprintingProtection {
         }
         
         let privacy_level = *self.privacy_level.read().unwrap();
-        let mut rng = thread_rng();
+        let mut rng = self.rng.lock().unwrap();
         
         // Base padding depends on privacy level
         let base_padding = match privacy_level {
@@ -643,7 +645,8 @@ mod tests {
             wait_max,
         };
 
-        let steps = send_steps_for_pattern(pattern, 2);
+        let mut rng = StdRng::from_entropy();
+        let steps = send_steps_for_pattern(pattern, 2, &mut rng);
 
         assert_eq!(steps.len(), 8);
         for (i, step) in steps.iter().enumerate() {

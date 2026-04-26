@@ -276,7 +276,7 @@
   - [ ] Update `FingerprintingProtectionConfig` to compose them
   - [ ] **Verify:** `cargo check --lib`
 
-- [ ] Replace per-task `thread_rng()` with a shared `RngCore` field
+- [x] Replace per-task `thread_rng()` with a shared `RngCore` field
   - [ ] Construct `StdRng::from_entropy()` in `FingerprintingProtection::new`; reuse via `&mut self.rng`
   - [ ] **Verify:** `cargo check --lib`; `grep -c 'thread_rng()' src/networking/privacy/fingerprinting_protection.rs` is `0`
 

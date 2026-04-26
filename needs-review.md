@@ -116,3 +116,16 @@
 
 ---
 
+
+## group-24-config-parameters-into-4-sub-structs
+- Item: Group 24+ config parameters into 4 sub-structs
+- Reason: phase-2 infra-error
+- Timestamp: 2026-04-26T00:16:57.2424741Z
+
+### Detail
+```
+{"type":"result","subtype":"error_max_turns","duration_ms":171855,"duration_api_ms":172499,"is_error":true,"num_turns":31,"stop_reason":"tool_use","session_id":"913d7fde-19ab-4623-b61f-f8e5f09fd94d","total_cost_usd":1.6320987500000006,"usage":{"input_tokens":35,"cache_creation_input_tokens":55257,"cache_read_input_tokens":1765309,"output_tokens":16002,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":55257,"ephemeral_5m_input_tokens":0},"inference_geo":"","iterations":[{"input_tokens":1,"output_tokens":369,"cache_read_input_tokens":73130,"cache_creation_input_tokens":440,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":440},"type":"message"}],"speed":"standard"},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":3758,"outputTokens":21,"cacheReadInputTokens":0,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.003863,"contextWindow":200000,"maxOutputTokens":32000},"claude-opus-4-7[1m]":{"inputTokens":35,"outputTokens":16002,"cacheReadInputTokens":1765309,"cacheCreationInputTokens":55257,"webSearchRequests":0,"costUSD":1.6282357500000004,"contextWindow":1000000,"maxOutputTokens":64000}},"permission_denials":[],"terminal_reason":"max_turns","fast_mode_state":"off","uuid":"767c5451-f9b0-460c-b927-36181b06c533","errors":["Reached maximum number of turns (30)"]}
+```
+
+---
+
