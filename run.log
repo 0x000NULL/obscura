@@ -237,3 +237,9 @@
 ==> exec  replace-per-task-thread-rng-with-a-shared-rngcore-field
       exec: 97.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\replace-per-task-thread-rng-with-a-shared-rngcore-field-execute-20260426T001959186.txt
       notes: - Placed the new `rng: Mutex<StdRng>` field at the very end of the struct (after `initialized`) rather than "around line 124, near the other interior-mutability fields." The plan said "around line 124", but inserting mid-struct would split a logically grouped block of `enabled`/`initialized` `RwLock`s; appending preserves grouping. The field initializer in `new` was likewise appended at the end of the struct literal to match field-declaration order, satisfying Rust style without churn. Functionally identical. / - For `send_steps_for_pattern`, used `<R: Rng + ?Sized>` exactly as specified in the plan; the `?Sized` is harmless here (the test passes `&mut StdRng`, which is `Sized`) and matches what the plan wrote verbatim.
+    [41/91] replace-per-task-thread-rng-with-a-shared-rngcore-field: plan $0.48 / execute $0.59 / verified / committed 527e2da
+==> plan  add-blake3-checksum-to-every-message-variant-in-src
+      plan: 67.01s, failure_mode=success, transcript=.claude\todo-runner\transcripts\add-blake3-checksum-to-every-message-variant-in-src-plan-20260426T002115583.txt
+==> exec  add-blake3-checksum-to-every-message-variant-in-src
+      exec: 158.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\add-blake3-checksum-to-every-message-variant-in-src-execute-20260426T002353631.txt
+      notes: - **Trailer comparison.** Used plain `!=` on the 32-byte slice/array (per plan's allowance). No `subtle` import needed. / - **`use blake3`.** Used the fully-qualified `blake3::hash(...)` path rather than adding a `use blake3;` line; the plan offered both as acceptable.

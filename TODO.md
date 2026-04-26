@@ -282,7 +282,7 @@
 
 ### 4.9 message.rs auth
 
-- [ ] Add BLAKE3 checksum to every `Message` variant in `src/networking/message.rs`
+- [x] Add BLAKE3 checksum to every `Message` variant in `src/networking/message.rs`
   - [ ] 32-byte field appended at serialization; verified at deserialization; mismatch → `Err(MessageError::ChecksumMismatch)`
   - [ ] **Verify:** `cargo test --lib message::tests::checksum_round_trip`; `cargo test --lib message::tests::tamper_rejected`
 

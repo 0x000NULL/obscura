@@ -10,6 +10,7 @@ const MIN_MESSAGE_SIZE: usize = 64; // Minimum size for any message
 const MAX_MESSAGE_SIZE: usize = 1024 * 1024 * 10; // 10MB max message size
 const CHECKSUM_SIZE: usize = 4; // First 4 bytes of SHA-256 hash
 const HEADER_SIZE: usize = 4 + 4 + 4 + 4; // Magic bytes + command + length + checksum
+const BLAKE3_CHECKSUM_SIZE: usize = 32; // BLAKE3 trailer appended to every serialized frame
 const MIN_PROCESSING_TIME_MS: u64 = 5; // Minimum processing time to prevent timing attacks
 
 // Message types
@@ -77,6 +78,7 @@ pub enum MessageError {
     IoError(io::Error),
     InvalidMagic,
     InvalidChecksum,
+    ChecksumMismatch,
     InvalidMessageType,
     MessageTooLarge,
     MessageTooSmall,
@@ -89,6 +91,7 @@ impl std::fmt::Display for MessageError {
             MessageError::IoError(e) => write!(f, "IO error: {}", e),
             MessageError::InvalidMagic => write!(f, "Invalid magic bytes"),
             MessageError::InvalidChecksum => write!(f, "Invalid message checksum"),
+            MessageError::ChecksumMismatch => write!(f, "Blake3 checksum mismatch"),
             MessageError::InvalidMessageType => write!(f, "Invalid message type"),
             MessageError::MessageTooLarge => write!(f, "Message exceeds maximum size"),
             MessageError::MessageTooSmall => write!(f, "Message is too small"),
@@ -199,6 +202,10 @@ impl Message {
         // Add the padded payload
         buffer.extend_from_slice(&payload_with_padding);
 
+        // Append BLAKE3 trailer covering the entire prior frame
+        let trailer = blake3::hash(&buffer);
+        buffer.extend_from_slice(trailer.as_bytes());
+
         Ok(buffer)
     }
 
@@ -230,7 +237,7 @@ impl Message {
             return Err(MessageError::MessageTooLarge);
         }
 
-        if data.len() < HEADER_SIZE + payload_length {
+        if data.len() < HEADER_SIZE + payload_length + BLAKE3_CHECKSUM_SIZE {
             return Err(MessageError::MessageTooSmall);
         }
 
@@ -244,6 +251,14 @@ impl Message {
         let actual_checksum = Self::calculate_checksum(payload_with_padding);
         if actual_checksum != expected_checksum {
             return Err(MessageError::InvalidChecksum);
+        }
+
+        // Verify BLAKE3 trailer over the framed prefix
+        let trailer_start = HEADER_SIZE + payload_length;
+        let expected_trailer = &data[trailer_start..trailer_start + BLAKE3_CHECKSUM_SIZE];
+        let actual_trailer = blake3::hash(&data[..trailer_start]);
+        if actual_trailer.as_bytes() != expected_trailer {
+            return Err(MessageError::ChecksumMismatch);
         }
 
         // Extract actual payload (without padding)
@@ -292,8 +307,8 @@ impl Message {
             return Err(MessageError::MessageTooLarge);
         }
 
-        // Read the payload
-        let mut buffer = vec![0u8; HEADER_SIZE + payload_length];
+        // Read the payload + BLAKE3 trailer
+        let mut buffer = vec![0u8; HEADER_SIZE + payload_length + BLAKE3_CHECKSUM_SIZE];
         buffer[0..HEADER_SIZE].copy_from_slice(&header);
         stream.read_exact(&mut buffer[HEADER_SIZE..])?;
 
@@ -447,5 +462,27 @@ mod tests {
 
         // The serialized message should be at least MIN_MESSAGE_SIZE + HEADER_SIZE
         assert!(serialized.len() >= MIN_MESSAGE_SIZE + HEADER_SIZE);
+    }
+
+    #[test]
+    fn checksum_round_trip() {
+        let message = Message::new(MessageType::Ping, vec![9, 8, 7, 6]);
+        let serialized = message.serialize().unwrap();
+        let result = Message::deserialize(&serialized);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().message_type, MessageType::Ping);
+    }
+
+    #[test]
+    fn tamper_rejected() {
+        let message = Message::new(MessageType::Ping, vec![9, 8, 7, 6]);
+        let mut serialized = message.serialize().unwrap();
+
+        // Flip a byte inside the BLAKE3 trailer (last 32 bytes).
+        let trailer_byte = serialized.len() - 1;
+        serialized[trailer_byte] ^= 0x01;
+
+        let result = Message::deserialize(&serialized);
+        assert!(matches!(result, Err(MessageError::ChecksumMismatch)));
     }
 }

@@ -525,6 +525,9 @@ impl From<MessageError> for NodeError {
             MessageError::InvalidChecksum => {
                 NodeError::NetworkError("Invalid message checksum".to_string())
             }
+            MessageError::ChecksumMismatch => {
+                NodeError::NetworkError("Blake3 checksum mismatch".to_string())
+            }
             MessageError::InvalidMessageType => {
                 NodeError::NetworkError("Invalid message type".to_string())
             }
