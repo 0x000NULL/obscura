@@ -266,7 +266,7 @@
 
 ### 4.8 FingerprintingProtection
 
-- [ ] Add `BurstAndWait` connection pattern variant
+- [x] Add `BurstAndWait` connection pattern variant
   - [ ] Enum: `ConnectionPattern { Steady, Burst, BurstAndWait { burst_size, wait_min, wait_max } }`
   - [ ] Implement send loop honoring the pattern in `src/networking/privacy/fingerprinting_protection.rs`
   - [ ] **Verify:** `cargo test --lib fingerprinting_protection::tests::burst_and_wait_emits_correct_cadence`

@@ -40,18 +40,56 @@ pub struct TcpParameterSettings {
 pub enum ConnectionPattern {
     /// Maintain a constant number of connections
     Constant,
-    
+
     /// Periodically rotate connections
     Rotating,
-    
+
     /// Gradually increase and decrease connections
     Breathing,
-    
+
     /// Connect in bursts and then wait
-    BurstAndWait,
-    
+    BurstAndWait {
+        burst_size: u32,
+        wait_min: Duration,
+        wait_max: Duration,
+    },
+
     /// Completely random connection pattern
     Random,
+}
+
+/// A single step in a deterministic send loop derived from a connection pattern.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SendStep {
+    Send,
+    Wait(Duration),
+}
+
+/// Build the deterministic send-step sequence for a given pattern over `cycles` cycles.
+///
+/// Currently only `BurstAndWait` has a meaningful cadence (`burst_size` `Send`s followed by one
+/// `Wait` whose duration is sampled uniformly from `[wait_min, wait_max]`, repeated `cycles`
+/// times). Other variants emit a single `Send` per cycle as a placeholder.
+pub fn send_steps_for_pattern(pattern: ConnectionPattern, cycles: usize) -> Vec<SendStep> {
+    let mut rng = thread_rng();
+    let mut steps = Vec::new();
+    for _ in 0..cycles {
+        match pattern {
+            ConnectionPattern::BurstAndWait { burst_size, wait_min, wait_max } => {
+                for _ in 0..burst_size {
+                    steps.push(SendStep::Send);
+                }
+                let wait = if wait_min >= wait_max {
+                    wait_min
+                } else {
+                    rng.gen_range(wait_min..=wait_max)
+                };
+                steps.push(SendStep::Wait(wait));
+            }
+            _ => steps.push(SendStep::Send),
+        }
+    }
+    steps
 }
 
 /// Fingerprinting protection implementation
@@ -281,7 +319,11 @@ impl FingerprintingProtection {
                     0..=3 => ConnectionPattern::Rotating,
                     4..=6 => ConnectionPattern::Breathing,
                     7..=8 => ConnectionPattern::Constant,
-                    _ => ConnectionPattern::BurstAndWait
+                    _ => ConnectionPattern::BurstAndWait {
+                        burst_size: 8,
+                        wait_min: Duration::from_secs(60),
+                        wait_max: Duration::from_secs(120),
+                    }
                 }
             },
             PrivacyLevel::High | PrivacyLevel::Custom => {
@@ -289,7 +331,11 @@ impl FingerprintingProtection {
                 let choice = rng.gen_range(0..10);
                 match choice {
                     0..=2 => ConnectionPattern::Random,
-                    3..=4 => ConnectionPattern::BurstAndWait,
+                    3..=4 => ConnectionPattern::BurstAndWait {
+                        burst_size: 8,
+                        wait_min: Duration::from_secs(60),
+                        wait_max: Duration::from_secs(120),
+                    },
                     5..=6 => ConnectionPattern::Breathing,
                     7..=8 => ConnectionPattern::Rotating, 
                     _ => ConnectionPattern::Constant
@@ -356,7 +402,7 @@ impl FingerprintingProtection {
                     base_connections.saturating_sub(variation)
                 }
             },
-            ConnectionPattern::BurstAndWait => {
+            ConnectionPattern::BurstAndWait { .. } => {
                 // Either very high or very low
                 let now = Instant::now();
                 let cycle_time = now.duration_since(*self.last_pattern_rotation.lock().unwrap()).as_secs() % 300;
@@ -490,7 +536,7 @@ impl FingerprintingProtection {
                     base_padding.saturating_sub(variation)
                 }
             },
-            ConnectionPattern::Breathing | ConnectionPattern::BurstAndWait => {
+            ConnectionPattern::Breathing | ConnectionPattern::BurstAndWait { .. } => {
                 // More significant variation
                 let variation = rng.gen_range(0..base_padding);
                 if rng.gen_bool(0.6) {
@@ -586,4 +632,40 @@ mod tests {
         // If we never got a different pattern after 10 tries, something is wrong
         panic!("Failed to rotate to a different connection pattern after 10 attempts");
     }
-} 
+
+    #[test]
+    fn burst_and_wait_emits_correct_cadence() {
+        let wait_min = Duration::from_millis(10);
+        let wait_max = Duration::from_millis(20);
+        let pattern = ConnectionPattern::BurstAndWait {
+            burst_size: 3,
+            wait_min,
+            wait_max,
+        };
+
+        let steps = send_steps_for_pattern(pattern, 2);
+
+        assert_eq!(steps.len(), 8);
+        for (i, step) in steps.iter().enumerate() {
+            match (i, step) {
+                (0, SendStep::Send)
+                | (1, SendStep::Send)
+                | (2, SendStep::Send)
+                | (4, SendStep::Send)
+                | (5, SendStep::Send)
+                | (6, SendStep::Send) => {}
+                (3, SendStep::Wait(d)) | (7, SendStep::Wait(d)) => {
+                    assert!(
+                        wait_min <= *d && *d <= wait_max,
+                        "wait at index {} = {:?} not in [{:?}, {:?}]",
+                        i,
+                        d,
+                        wait_min,
+                        wait_max
+                    );
+                }
+                _ => panic!("unexpected step at index {}: {:?}", i, step),
+            }
+        }
+    }
+}
