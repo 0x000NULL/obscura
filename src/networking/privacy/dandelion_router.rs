@@ -14,8 +14,7 @@ use crate::networking::privacy::PrivacyLevel;
 use crate::networking::privacy_config_integration::PrivacySettingsRegistry;
 use crate::blockchain::Transaction;
 use crate::networking::dandelion::{DandelionManager, PropagationState};
-use crate::networking::dandelion_config::DandelionThresholds;
-use crate::networking::constants::{STEM_PHASE_MAX_TIMEOUT, STEM_PHASE_MIN_TIMEOUT};
+use crate::networking::dandelion_config::{DandelionThresholds, DandelionTimings};
 
 // Constants for Dandelion routing
 const MIN_ROUTING_PATH_LENGTH: usize = 2;
@@ -105,9 +104,12 @@ pub struct DandelionRouter {
     
     /// Underlying Dandelion manager
     dandelion_manager: Option<Arc<Mutex<DandelionManager>>>,
-    
+
     /// Whether the router is initialized
     initialized: RwLock<bool>,
+
+    /// Configurable stem-phase timeout used as a hard fallback ceiling.
+    stem_timeout: RwLock<Duration>,
 }
 
 impl DandelionRouter {
@@ -128,6 +130,7 @@ impl DandelionRouter {
             secure_rng: Mutex::new(secure_rng),
             dandelion_manager: None,
             initialized: RwLock::new(false),
+            stem_timeout: RwLock::new(DandelionTimings::DEFAULT.stem_timeout),
         }
     }
 
@@ -150,6 +153,7 @@ impl DandelionRouter {
             secure_rng: Mutex::new(secure_rng),
             dandelion_manager: None,
             initialized: RwLock::new(false),
+            stem_timeout: RwLock::new(DandelionTimings::DEFAULT.stem_timeout),
         }
     }
     
@@ -266,12 +270,10 @@ impl DandelionRouter {
         };
         
         debug!("Transaction added with state {:?}: {:?}", state, hex::encode(&tx_hash));
-        
-        // Calculate time for stem->fluff transition
-        let min_delay = STEM_PHASE_MIN_TIMEOUT.as_secs();
-        let max_delay = STEM_PHASE_MAX_TIMEOUT.as_secs();
-        let delay = rng.gen_range(min_delay..=max_delay);
-        let transition_time = Instant::now() + Duration::from_secs(delay);
+
+        // Use the configured stem-phase timeout as the authoritative deadline
+        // for any stem-state transaction; this acts as a hard fallback ceiling.
+        let transition_time = Instant::now() + *self.stem_timeout.read().unwrap();
         
         // Clone state before moving it into the metadata
         let state_clone = state.clone();
@@ -352,6 +354,51 @@ impl DandelionRouter {
         }
         *self.fluff_probability.write().unwrap() = p;
         Ok(())
+    }
+
+    /// Current stem-phase timeout (hard fallback ceiling).
+    pub fn stem_timeout(&self) -> Duration {
+        *self.stem_timeout.read().unwrap()
+    }
+
+    /// Set the stem-phase timeout (hard fallback ceiling).
+    pub fn set_stem_timeout(&self, d: Duration) {
+        *self.stem_timeout.write().unwrap() = d;
+    }
+
+    /// Convert any stem-state transaction whose deadline has elapsed into the
+    /// fluff phase. Returns the hashes that were flipped.
+    pub fn process_stem_timeouts(&self) -> Vec<[u8; 32]> {
+        let now = Instant::now();
+        let mut flipped = Vec::new();
+        let mut transactions = self.transactions.lock().unwrap();
+        for (tx_hash, metadata) in transactions.iter_mut() {
+            let is_stem = matches!(
+                metadata.state,
+                PropagationState::Stem
+                    | PropagationState::MultiHopStem(_)
+                    | PropagationState::MultiPathStem(_)
+                    | PropagationState::BatchedStem
+            );
+            if is_stem && metadata.transition_time <= now {
+                warn!(
+                    "stem phase timeout for {:?}, falling back to fluff broadcast",
+                    tx_hash
+                );
+                metadata.state = PropagationState::Fluff;
+                flipped.push(*tx_hash);
+            }
+        }
+        flipped
+    }
+
+    /// Test seam: read the current propagation state of a transaction.
+    pub fn state_of(&self, tx_hash: &[u8; 32]) -> Option<PropagationState> {
+        self.transactions
+            .lock()
+            .unwrap()
+            .get(tx_hash)
+            .map(|m| m.state.clone())
     }
 }
 

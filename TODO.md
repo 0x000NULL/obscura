@@ -249,7 +249,7 @@
   - [ ] `DandelionRouter::with_seed(seed: u64)` constructor; uses `StdRng::from_seed`
   - [ ] **Verify:** `cargo test --lib dandelion::tests::with_seed_is_deterministic`
 
-- [ ] Add stem-phase timeout + retry
+- [x] Add stem-phase timeout + retry
   - [ ] On timeout, fall back to fluff broadcast with tracing::warn
   - [ ] Configurable timeout from `DandelionTimings::DEFAULT.stem_timeout`
   - [ ] **Verify:** `cargo test --lib dandelion::tests::stem_timeout_falls_back_to_fluff`

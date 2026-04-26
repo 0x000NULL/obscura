@@ -202,3 +202,9 @@
 ==> exec  add-deterministic-test-mode-for-stem-fluff-selection
       exec: 126.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\add-deterministic-test-mode-for-stem-fluff-selection-execute-20260425T235757812.txt
       notes: - The optional "different seed produces different sequence" sanity check from Step 6 was included (asserted via `assert_ne!`). It uses 16 distinct transactions and `seed.wrapping_add(1)`, so the chance of accidental equality is vanishingly small - not flaky in practice. / - Distinguishable transactions are produced by mutating `Transaction::default().lock_time` to the iteration index (Transaction derives `Default` and `lock_time: u32` is publicly accessible), so the `n` transactions hash to `n` distinct values and the RNG is consulted on every `add_transaction` call rather than short-circuiting on the duplicate-hash path.
+    [35/91] add-deterministic-test-mode-for-stem-fluff-selection: plan $0.48 / execute $0.81 / verified / committed 42d42ca
+==> plan  add-stem-phase-timeout-retry
+      plan: 101.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\add-stem-phase-timeout-retry-plan-20260425T235950718.txt
+==> exec  add-stem-phase-timeout-retry
+      exec: 153.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\add-stem-phase-timeout-retry-execute-20260426T000223764.txt
+      notes: - Removed the now-unused `STEM_PHASE_MIN_TIMEOUT`/`STEM_PHASE_MAX_TIMEOUT` import from `dandelion_router.rs` since the random delay computation that referenced them is gone. The conservative alternative (leaving them as unused imports) would generate a new warning in a tree that already has 319 warnings; deleting the dead import is the smaller, more local change. / - Held the `transactions` mutex across the `log::warn!` emission inside `process_stem_timeouts`, as the plan's Risks section explicitly endorses this pattern.

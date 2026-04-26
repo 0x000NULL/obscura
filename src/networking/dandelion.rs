@@ -3533,6 +3533,7 @@ impl Default for DandelionConfig {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use std::time::Duration;
 
     use crate::blockchain::Transaction;
     use crate::networking::dandelion::PropagationState;
@@ -3595,5 +3596,29 @@ mod tests {
 
         let states_c = run_seeded(seed.wrapping_add(1), &txs);
         assert_ne!(states_a, states_c);
+    }
+
+    #[test]
+    fn stem_timeout_falls_back_to_fluff() {
+        let router = DandelionRouter::with_seed(0xA11CE_F00D);
+        router.set_stem_probability(1.0).unwrap();
+        router.set_fluff_probability(0.0).unwrap();
+        router.set_stem_timeout(Duration::from_millis(0));
+
+        let tx = Transaction::default();
+        let tx_hash = tx.hash();
+        let state = router.add_transaction(tx, None);
+
+        match state {
+            PropagationState::Stem
+            | PropagationState::MultiHopStem(_)
+            | PropagationState::MultiPathStem(_)
+            | PropagationState::BatchedStem => {}
+            other => panic!("expected a stem state, got {:?}", other),
+        }
+
+        let flipped = router.process_stem_timeouts();
+        assert_eq!(flipped, vec![tx_hash]);
+        assert_eq!(router.state_of(&tx_hash), Some(PropagationState::Fluff));
     }
 }
