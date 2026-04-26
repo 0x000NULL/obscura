@@ -41,6 +41,19 @@ pub enum TorError {
     OnionAddressError(String),
 }
 
+/// Strategy for selecting relays when building circuits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+pub enum RelaySelectionStrategy {
+    /// Use Tor's built-in relay selection unchanged.
+    Default,
+    /// Prefer relays weighted by their advertised bandwidth.
+    BandwidthWeighted,
+    /// Prefer relays expected to provide the lowest latency.
+    LowLatency,
+    /// Select relays uniformly at random.
+    Random,
+}
+
 /// Tor proxy configuration
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TorConfig {
@@ -57,7 +70,7 @@ pub struct TorConfig {
     pub control_password: Option<String>,
     
     /// Connection timeouts
-    pub connection_timeout_secs: u64,
+    pub connection_timeout: Duration,
     pub circuit_build_timeout_secs: u64,
     
     /// How often to tear down and rebuild Tor circuits.
@@ -92,6 +105,14 @@ pub struct TorConfig {
     /// Consensus optimization parameters
     pub optimize_tor_consensus: bool,
     pub consensus_parallelism: usize,
+
+    /// Strategy used when picking relays for new circuits.
+    pub relay_selection_strategy: RelaySelectionStrategy,
+
+    /// Optional client-side bandwidth cap, measured in bytes per second.
+    /// `None` means no cap. `Some(0)` is rejected by [`TorConfig::validate`]
+    /// because a zero-byte budget is almost certainly a configuration mistake.
+    pub bandwidth_limit: Option<u64>,
 }
 
 impl Default for TorConfig {
@@ -103,7 +124,7 @@ impl Default for TorConfig {
             control_host: "127.0.0.1".to_string(),
             control_port: 9051,
             control_password: None,
-            connection_timeout_secs: 60,
+            connection_timeout: Duration::from_secs(60),
             circuit_build_timeout_secs: 120,
             circuit_rotation_interval: Duration::from_secs(600), // 10 minutes
             hidden_service_enabled: false,
@@ -119,7 +140,68 @@ impl Default for TorConfig {
             tor_binary_path: None,
             optimize_tor_consensus: true,
             consensus_parallelism: 2,
+            relay_selection_strategy: RelaySelectionStrategy::Default,
+            bandwidth_limit: None,
         }
+    }
+}
+
+impl TorConfig {
+    /// Validate the configuration, returning the first error encountered.
+    pub fn validate(&self) -> Result<(), TorError> {
+        if self.connection_timeout == Duration::ZERO {
+            return Err(TorError::ConfigurationError(
+                "connection_timeout must be greater than zero".to_string(),
+            ));
+        }
+        if self.circuit_build_timeout_secs == 0 {
+            return Err(TorError::ConfigurationError(
+                "circuit_build_timeout_secs must be greater than zero".to_string(),
+            ));
+        }
+        if self.min_circuits < 1 {
+            return Err(TorError::ConfigurationError(
+                "min_circuits must be at least 1".to_string(),
+            ));
+        }
+        if self.min_circuits > self.max_circuits {
+            return Err(TorError::ConfigurationError(
+                "min_circuits must not exceed max_circuits".to_string(),
+            ));
+        }
+        if self.circuits_per_transaction < 1 {
+            return Err(TorError::ConfigurationError(
+                "circuits_per_transaction must be at least 1".to_string(),
+            ));
+        }
+        if self.circuits_per_transaction > self.max_circuits {
+            return Err(TorError::ConfigurationError(
+                "circuits_per_transaction must not exceed max_circuits".to_string(),
+            ));
+        }
+        if self.optimize_tor_consensus && self.consensus_parallelism < 1 {
+            return Err(TorError::ConfigurationError(
+                "consensus_parallelism must be at least 1 when optimize_tor_consensus is enabled"
+                    .to_string(),
+            ));
+        }
+        if let Some(0) = self.bandwidth_limit {
+            return Err(TorError::ConfigurationError(
+                "bandwidth_limit must be greater than zero when set; use None for unlimited"
+                    .to_string(),
+            ));
+        }
+        if self.socks_port == 0 {
+            return Err(TorError::ConfigurationError(
+                "socks_port must be non-zero".to_string(),
+            ));
+        }
+        if self.control_port == 0 {
+            return Err(TorError::ConfigurationError(
+                "control_port must be non-zero".to_string(),
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -366,8 +448,8 @@ impl TorService {
     /// Test if the Tor proxy is available
     fn test_tor_proxy(&self) -> Result<(), TorError> {
         let proxy_addr = format!("{}:{}", self.config.socks_host, self.config.socks_port);
-        let timeout = Duration::from_secs(self.config.connection_timeout_secs);
-        
+        let timeout = self.config.connection_timeout;
+
         match TcpStream::connect_timeout(&proxy_addr.parse().unwrap(), timeout) {
             Ok(_) => Ok(()),
             Err(e) => Err(TorError::ConnectionError(
@@ -474,8 +556,8 @@ impl TorService {
         
         // Connect to the Tor SOCKS proxy
         let proxy_addr = format!("{}:{}", self.config.socks_host, self.config.socks_port);
-        let timeout = Duration::from_secs(self.config.connection_timeout_secs);
-        
+        let timeout = self.config.connection_timeout;
+
         let stream = TcpStream::connect_timeout(&proxy_addr.parse().unwrap(), timeout)
             .map_err(|e| TorError::ConnectionError(format!("Failed to connect to Tor proxy: {}", e)))?;
         
@@ -579,4 +661,44 @@ impl Drop for TorService {
     fn drop(&mut self) {
         self.shutdown();
     }
-} 
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_validation() {
+        let default = TorConfig::default();
+        assert!(default.validate().is_ok());
+
+        // Defaults sanity check on the new fields.
+        assert_eq!(default.connection_timeout, Duration::from_secs(60));
+        assert_eq!(default.relay_selection_strategy, RelaySelectionStrategy::Default);
+        assert_eq!(default.bandwidth_limit, None);
+
+        let mut zero_timeout = TorConfig::default();
+        zero_timeout.connection_timeout = Duration::ZERO;
+        assert!(zero_timeout.validate().is_err());
+
+        let mut zero_bandwidth = TorConfig::default();
+        zero_bandwidth.bandwidth_limit = Some(0);
+        assert!(zero_bandwidth.validate().is_err());
+
+        let mut some_bandwidth = TorConfig::default();
+        some_bandwidth.bandwidth_limit = Some(1024);
+        assert!(some_bandwidth.validate().is_ok());
+
+        let mut none_bandwidth = TorConfig::default();
+        none_bandwidth.bandwidth_limit = None;
+        assert!(none_bandwidth.validate().is_ok());
+
+        let mut min_gt_max = TorConfig::default();
+        min_gt_max.min_circuits = min_gt_max.max_circuits + 1;
+        assert!(min_gt_max.validate().is_err());
+
+        let mut zero_per_tx = TorConfig::default();
+        zero_per_tx.circuits_per_transaction = 0;
+        assert!(zero_per_tx.validate().is_err());
+    }
+}

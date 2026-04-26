@@ -260,7 +260,7 @@
   - [ ] Default 10 minutes; doc comment explaining trade-off
   - [ ] **Verify:** `cargo check --lib`; `grep -q 'circuit_rotation_interval' src/networking/tor.rs`
 
-- [ ] Add `connection_timeout`, `relay_selection_strategy`, `bandwidth_limit` to `TorConfig`
+- [x] Add `connection_timeout`, `relay_selection_strategy`, `bandwidth_limit` to `TorConfig`
   - [ ] All with sensible defaults; validate in `TorConfig::validate`
   - [ ] **Verify:** `cargo test --lib tor::tests::config_validation`
 

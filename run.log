@@ -214,3 +214,9 @@
 ==> exec  add-circuit-rotation-interval-duration-field-to-torconfig
       exec: 34.03s, failure_mode=success, transcript=.claude\todo-runner\transcripts\add-circuit-rotation-interval-duration-field-to-torconfig-execute-20260426T000354634.txt
       notes: - Plan acknowledged the field already exists; treated the work as updating the default + doc comment per the plan's Assumptions section, not redeclaring the field. / - Used `Duration::from_secs(600)` with inline `// 10 minutes` comment per Step 2.
+    [37/91] add-circuit-rotation-interval-duration-field-to-torconfig: plan $0.24 / execute $0.25 / verified / committed 1a5c49e
+==> plan  add-connection-timeout-relay-selection-strategy-bandwidth
+      plan: 140.01s, failure_mode=success, transcript=.claude\todo-runner\transcripts\add-connection-timeout-relay-selection-strategy-bandwidth-plan-20260426T000617497.txt
+==> exec  add-connection-timeout-relay-selection-strategy-bandwidth
+      exec: 117.03s, failure_mode=success, transcript=.claude\todo-runner\transcripts\add-connection-timeout-relay-selection-strategy-bandwidth-execute-20260426T000814549.txt
+      notes: - For the `RelaySelectionStrategy` reference inside `privacy_registry.rs`, I used the fully-qualified `networking::tor::RelaySelectionStrategy::Default` rather than adding a new `use` import, since the file already references `TorConfig` via the same fully-qualified `networking::tor::` path - keeping the construction site stylistically consistent. / - For step 7's "round-trip through the `Default` impl" sanity check, I interpreted this as asserting the three new fields hold their expected default values on `TorConfig::default()` (since no serde round-trip was specified in the verify line and `RelaySelectionStrategy` is `Copy + PartialEq`).

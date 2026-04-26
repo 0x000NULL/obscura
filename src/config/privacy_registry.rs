@@ -420,7 +420,7 @@ impl PrivacySettingsRegistry {
             control_host: "127.0.0.1".to_string(),
             control_port: 9051,
             control_password: None,
-            connection_timeout_secs: 30,
+            connection_timeout: std::time::Duration::from_secs(30),
             circuit_build_timeout_secs: 60,
             circuit_rotation_interval: std::time::Duration::from_secs(1800), // 30 minutes
             hidden_service_enabled: false,
@@ -436,6 +436,8 @@ impl PrivacySettingsRegistry {
             tor_binary_path: None,
             optimize_tor_consensus: true,
             consensus_parallelism: 2,
+            relay_selection_strategy: networking::tor::RelaySelectionStrategy::Default,
+            bandwidth_limit: None,
         };
         
         if let Ok(value) = serde_json::to_value(&tor_config) {
