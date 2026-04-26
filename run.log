@@ -208,3 +208,9 @@
 ==> exec  add-stem-phase-timeout-retry
       exec: 153.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\add-stem-phase-timeout-retry-execute-20260426T000223764.txt
       notes: - Removed the now-unused `STEM_PHASE_MIN_TIMEOUT`/`STEM_PHASE_MAX_TIMEOUT` import from `dandelion_router.rs` since the random delay computation that referenced them is gone. The conservative alternative (leaving them as unused imports) would generate a new warning in a tree that already has 319 warnings; deleting the dead import is the smaller, more local change. / - Held the `transactions` mutex across the `log::warn!` emission inside `process_stem_timeouts`, as the plan's Risks section explicitly endorses this pattern.
+    [36/91] add-stem-phase-timeout-retry: plan $0.58 / execute $1.23 / verified / committed a50d197
+==> plan  add-circuit-rotation-interval-duration-field-to-torconfig
+      plan: 46.02s, failure_mode=success, transcript=.claude\todo-runner\transcripts\add-circuit-rotation-interval-duration-field-to-torconfig-plan-20260426T000320587.txt
+==> exec  add-circuit-rotation-interval-duration-field-to-torconfig
+      exec: 34.03s, failure_mode=success, transcript=.claude\todo-runner\transcripts\add-circuit-rotation-interval-duration-field-to-torconfig-execute-20260426T000354634.txt
+      notes: - Plan acknowledged the field already exists; treated the work as updating the default + doc comment per the plan's Assumptions section, not redeclaring the field. / - Used `Duration::from_secs(600)` with inline `// 10 minutes` comment per Step 2.

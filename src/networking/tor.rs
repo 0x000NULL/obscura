@@ -60,7 +60,14 @@ pub struct TorConfig {
     pub connection_timeout_secs: u64,
     pub circuit_build_timeout_secs: u64,
     
-    /// Circuit rotation interval for enhanced security
+    /// How often to tear down and rebuild Tor circuits.
+    ///
+    /// Trade-off: shorter intervals improve unlinkability by limiting how long
+    /// any single circuit (and any exit-side observer of it) can correlate
+    /// traffic to this node, but each rotation costs CPU, latency, and load on
+    /// the Tor relay network because a fresh circuit must be built. Longer
+    /// intervals amortize that cost by reusing circuits, at the price of a
+    /// larger correlation window for an observer watching a given circuit.
     pub circuit_rotation_interval: std::time::Duration,
     
     /// Local hidden service configuration
@@ -98,7 +105,7 @@ impl Default for TorConfig {
             control_password: None,
             connection_timeout_secs: 60,
             circuit_build_timeout_secs: 120,
-            circuit_rotation_interval: Duration::from_secs(300),
+            circuit_rotation_interval: Duration::from_secs(600), // 10 minutes
             hidden_service_enabled: false,
             hidden_service_dir: None,
             hidden_service_port: None,

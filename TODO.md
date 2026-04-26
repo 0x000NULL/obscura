@@ -256,7 +256,7 @@
 
 ### 4.7 TorConnection
 
-- [ ] Add `circuit_rotation_interval: Duration` field to `TorConfig`
+- [x] Add `circuit_rotation_interval: Duration` field to `TorConfig`
   - [ ] Default 10 minutes; doc comment explaining trade-off
   - [ ] **Verify:** `cargo check --lib`; `grep -q 'circuit_rotation_interval' src/networking/tor.rs`
 
