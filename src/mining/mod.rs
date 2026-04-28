@@ -1,6 +1,6 @@
 use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tokio::sync::broadcast;
@@ -51,7 +51,7 @@ impl fmt::Display for MiningError {
 impl std::error::Error for MiningError {}
 
 pub struct MiningLoop {
-    pub mempool: Arc<Mempool>,
+    pub mempool: Arc<Mutex<Mempool>>,
     pub chain: Arc<RwLock<Blockchain>>,
     pub tx_blocks: broadcast::Sender<Block>,
     pub running: Arc<AtomicBool>,
@@ -60,7 +60,7 @@ pub struct MiningLoop {
 
 impl MiningLoop {
     pub fn new(
-        mempool: Arc<Mempool>,
+        mempool: Arc<Mutex<Mempool>>,
         chain: Arc<RwLock<Blockchain>>,
         tx_blocks: broadcast::Sender<Block>,
         randomx_context: Arc<RandomXContext>,
@@ -82,7 +82,10 @@ impl MiningLoop {
         self.running.store(true, Ordering::SeqCst);
 
         while self.running.load(Ordering::SeqCst) {
-            if self.mempool.is_empty() {
+            // Scope the lock so the MutexGuard drops before any `.await`;
+            // holding `std::sync::Mutex` across an await would stall the runtime.
+            let empty = self.mempool.lock().unwrap().is_empty();
+            if empty {
                 tokio::time::sleep(Duration::from_millis(50)).await;
             }
 
@@ -120,7 +123,7 @@ impl MiningLoop {
 
         let height = parent_height + 1;
 
-        let mempool_txs = self.mempool.get_transactions_by_fee(2000);
+        let mempool_txs = self.mempool.lock().unwrap().get_transactions_by_fee(2000);
         let total_fees: u64 = 0;
 
         let reward = calculate_block_reward(height) + total_fees;
@@ -205,7 +208,7 @@ mod tests {
     use super::*;
 
     fn make_loop() -> MiningLoop {
-        let mempool = Arc::new(Mempool::new());
+        let mempool = Arc::new(Mutex::new(Mempool::new()));
         let chain = Arc::new(RwLock::new(Blockchain::default()));
         let (tx_blocks, _rx) = broadcast::channel::<Block>(16);
         let randomx = Arc::new(RandomXContext::new_for_testing(b"obx-test"));
@@ -246,7 +249,7 @@ mod tests {
 
     #[test]
     fn build_template_well_formed() {
-        let mempool = Arc::new(Mempool::new());
+        let mempool = Arc::new(Mutex::new(Mempool::new()));
         let chain = Arc::new(RwLock::new(Blockchain {
             tip_hash: [7u8; 32],
             tip_height: 41,
@@ -273,7 +276,7 @@ mod tests {
 
     #[test]
     fn find_nonce_satisfies_target() {
-        let mempool = Arc::new(Mempool::new());
+        let mempool = Arc::new(Mutex::new(Mempool::new()));
         let chain = Arc::new(RwLock::new(Blockchain {
             tip_hash: [1u8; 32],
             tip_height: 0,

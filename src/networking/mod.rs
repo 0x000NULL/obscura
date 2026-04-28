@@ -23,7 +23,6 @@ const MAX_BROADCAST_PEERS: usize = 8;
 const STEM_PROBABILITY: f64 = 0.9;
 const MULTI_HOP_STEM_PROBABILITY: f64 = 0.7;
 const MIN_ROUTING_PATH_LENGTH: usize = 2;
-const MAX_MULTI_HOP_LENGTH: usize = 5;
 const STEM_PATH_RECALCULATION_INTERVAL: Duration = Duration::from_secs(600);
 const BATCH_TRANSACTIONS_BEFORE_FLUFF: bool = true;
 const USE_DECOY_TRANSACTIONS: bool = true;

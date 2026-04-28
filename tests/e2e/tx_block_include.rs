@@ -1,4 +1,4 @@
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
 use tokio::sync::broadcast;
@@ -55,7 +55,7 @@ async fn block_contains_broadcast_tx() {
 
     assert!(received, "node B's mempool must observe the relayed tx within the yield-loop budget");
 
-    let mempool_b = Arc::new(mempool_b);
+    let mempool_b = Arc::new(Mutex::new(mempool_b));
     let chain = Arc::new(RwLock::new(Blockchain::default()));
     let (tx_blocks, mut rx) = broadcast::channel::<Block>(16);
     let randomx = Arc::new(RandomXContext::new_for_testing(b"obx-test"));

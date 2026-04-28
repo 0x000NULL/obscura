@@ -13,14 +13,12 @@ use rand::seq::SliceRandom;
 use crate::networking::privacy::PrivacyLevel;
 use crate::networking::privacy_config_integration::PrivacySettingsRegistry;
 use crate::blockchain::Transaction;
-use crate::networking::dandelion::{DandelionManager, PropagationState};
+use crate::networking::dandelion::{DandelionManager, MAX_MULTI_HOP_LENGTH, PropagationState};
 use crate::networking::dandelion_config::{DandelionThresholds, DandelionTimings};
 
 // Constants for Dandelion routing
 const MIN_ROUTING_PATH_LENGTH: usize = 2;
-const MAX_ROUTING_PATH_LENGTH: usize = 10;
 const MULTI_HOP_STEM_PROBABILITY: f64 = 0.3;
-const MAX_MULTI_HOP_LENGTH: usize = 3;
 const USE_DECOY_TRANSACTIONS: bool = true;
 const BATCH_TRANSACTIONS_BEFORE_FLUFF: bool = true;
 const MAX_BATCH_SIZE: usize = 5;

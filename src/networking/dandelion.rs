@@ -27,6 +27,10 @@ use crate::crypto::metadata_protection::BroadcastMetadataCleaner;
 // backwards compatibility with external callers (tests, other modules).
 pub const STEM_PROBABILITY: f64 = DandelionThresholds::DEFAULT.stem_probability;
 pub const MIN_ROUTING_PATH_LENGTH: usize = DandelionPaths::DEFAULT.min_routing_path_length;
+/// Maximum length of a stem-phase relay path (the ordered peer list a tx hops
+/// through before fluffing). Bounds privacy/path-diversity. Distinct from
+/// `MAX_MULTI_HOP_LENGTH`, which bounds the hop count of the multi-hop stem
+/// `PropagationState` variant.
 pub const MAX_ROUTING_PATH_LENGTH: usize = DandelionPaths::DEFAULT.max_routing_path_length;
 pub const FLUFF_PROPAGATION_DELAY_MIN_MS: u64 = DandelionTimings::DEFAULT.fluff_propagation_delay_min_ms;
 pub const FLUFF_PROPAGATION_DELAY_MAX_MS: u64 = DandelionTimings::DEFAULT.fluff_propagation_delay_max_ms;
@@ -34,6 +38,10 @@ pub const STEM_PATH_RECALCULATION_INTERVAL: Duration = DandelionTimings::DEFAULT
 pub const ENTROPY_SOURCE_REFRESH_INTERVAL: Duration = DandelionTimings::DEFAULT.entropy_source_refresh_interval;
 
 pub const MULTI_HOP_STEM_PROBABILITY: f64 = DandelionThresholds::DEFAULT.multi_hop_stem_probability;
+/// Maximum hop count for the `PropagationState::MultiHopStem(hops)` variant
+/// (how many forwards the multi-hop stem performs). Bounds latency/anonymity.
+/// Deliberately tighter than `MAX_ROUTING_PATH_LENGTH` and tracked as a
+/// separate field on `DandelionPaths`.
 pub const MAX_MULTI_HOP_LENGTH: usize = DandelionPaths::DEFAULT.max_multi_hop_length;
 pub const USE_DECOY_TRANSACTIONS: bool = DandelionThresholds::DEFAULT.use_decoy_transactions;
 pub const DECOY_TRANSACTION_PROBABILITY: f64 = DandelionThresholds::DEFAULT.decoy_transaction_probability;

@@ -12,7 +12,7 @@
 - affects: mining, mempool, main, future-mining-items
 - question: Should `MiningLoop` adopt `Arc<Mutex<Mempool>>` (matching `main.rs` and `WalletIntegration`), or should the rest of the codebase migrate toward `Arc<Mempool>` with internal locking? Future mining items (mempool removal of mined txs, fee accounting) will be shaped by this choice.
 - default_assumption: Switch `MiningLoop::new` to `Arc<Mutex<Mempool>>` now (cheapest local change, aligns with the rest of `main.rs`); revisit if a later item demands a different mempool concurrency model.
-- Resolution: 
+- Resolution: 2026-04-28 — adopted Option A (`Arc<Mutex<Mempool>>`). `src/mining/mod.rs` field + `new` signature updated; `start` scopes the lock so the `MutexGuard` drops before the `tokio::time::sleep().await`; `build_template` locks inline (sync, no await). All 5 `mining::tests` green. Test fixture in `tests/e2e/tx_block_include.rs` updated. Footgun for future write-side items (e.g., remove mined txs after `tx_blocks.send`): keep `std::sync::Mutex` guards out of any `.await` scope; a later switch to `tokio::sync::Mutex` may be needed if write-side work grows.
 
 ### Blocker: target relay entry point on `Node`
 - severity: local
@@ -99,7 +99,7 @@
 - affects: dandelion, privacy, multi-hop-stem, propagation-state, latency-budget
 - question: Is it acceptable for `PropagationState::MultiHopStem(hops)` to now sample `hops` up to 10 instead of 3, or should multi-hop retain its tighter cap (in which case the two constants are NOT duplicates and should both stay, with this todo reframed as de-duplicating only the redundant declarations across files)?
 - default_assumption: Accept the widening — proceed with the literal "pick one constant" reading. If subsequent items fail because multi-hop is now too long, revisit by reintroducing `MAX_MULTI_HOP_LENGTH` solely as the multi-hop cap and documenting the two as deliberately distinct.
-- Resolution: 
+- Resolution: 2026-04-28 — rejected the widening; adopted Option B (treat as deliberately distinct). Three independent signals supported keeping them separate: `DandelionPaths::DEFAULT` declares them as separate fields, `include/obscura.h:407,415` exports both at distinct values to C consumers, and `docs/privacy/dandelion_protocol.md:533,540` documents both with distinct roles. Changes: added `///` doc comments to `dandelion.rs:30,37` explaining each constant's role; deleted dead `mod.rs:26` (`MAX_MULTI_HOP_LENGTH = 5`, value disagrees, zero callers); deleted dead `dandelion_router.rs:21` (`MAX_ROUTING_PATH_LENGTH = 10` local re-decl); replaced `dandelion_router.rs:23` local `MAX_MULTI_HOP_LENGTH` with `use crate::networking::dandelion::MAX_MULTI_HOP_LENGTH;` so the `gen_range(2..=MAX_MULTI_HOP_LENGTH)` at line 264 keeps the cap=3 behavior. No semantic change; `cargo check --all-targets` clean.
 
 ---
 
